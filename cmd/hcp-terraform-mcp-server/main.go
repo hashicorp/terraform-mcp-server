@@ -137,6 +137,7 @@ func runStdioServer(cfg runConfig) error {
 			}
 		}
 	}
+	hcServer := hashicorp.NewServer(version)
 
 	tfeToken := viper.GetString("HCP_TFE_TOKEN")
 	if tfeToken != "" {
@@ -145,35 +146,36 @@ func runStdioServer(cfg runConfig) error {
 			tfeAddress = "https://app.terraform.io"
 			cfg.logger.Warnf("HCP_TFE_ADDRESS not set, defaulting to %s", tfeAddress)
 		}
-		tfenterprise.Init(tfeToken, tfeAddress, enabled, cfg)
+		tfenterprise.Init(hcServer, tfeToken, tfeAddress, enabled, cfg.readOnly, t)
 	} else {
 		cfg.logger.Warnf("HCP_TFE_TOKEN not set, defaulting to non-authenticated client")
 	}
 
-	// TODO: Update server creation to use TFE client or a generic server type.
-	// This likely requires changes in github.NewServer or using a different server constructor.
-	hcpServer := hashicorp.NewServer(version)
+	// Initialize default service discovery and http client for registry
+	// discoClient := disco.New() // Restore disco client initialization
+	// httpClient := http.DefaultClient
+	// registryClient := registry.NewClient(discoClient, httpClient) // Restore registry client initialization
 
 	// Initialize toolsets that are used for TF Registry - no auth is needed
-	toolsets, err := tfregistry.InitToolsets(enabled, cfg.readOnly, registryClient, t)
-	context := tfregistry.InitContextToolset(registryClient, t)
+	// toolsets, err := tfregistry.InitToolsets(enabled, cfg.readOnly, registryClient, t) // Restore toolset initialization
+	// context := tfregistry.InitContextToolset(registryClient, t)                        // Restore context initialization
 
-	if err != nil {
-		stdlog.Fatal("Failed to initialize toolsets:", err) // This error check might need adjustment based on refactoring
-	}
+	// if err != nil { // Restore error check
+	// 	stdlog.Fatal("Failed to initialize toolsets:", err) // This error check might need adjustment based on refactoring
+	// } // Restore error check
 
-	// Register resources with the server
-	tfregistry.RegisterResources(hcpServer, registryClient, t)
-	// Register the tools with the server
-	toolsets.RegisterTools(hcpServer)
-	context.RegisterTools(hcpServer)
+	// // Register resources with the server
+	// tfregistry.RegisterResources(hcServer, registryClient, t) // Restore resource registration
+	// // Register the tools with the server
+	// toolsets.RegisterTools(hcServer) // Restore tool registration
+	// context.RegisterTools(hcServer)  // Restore context registration
 
-	if dynamic {
-		dynamic := tfregistry.InitDynamicToolset(hcpServer, toolsets, t)
-		dynamic.RegisterTools(hcpServer)
-	}
+	// if dynamic {
+	// 	dynamic := tfregistry.InitDynamicToolset(hcServer, toolsets, t) // Restore dynamic toolset initialization
+	// 	dynamic.RegisterTools(hcServer)                                 // Restore dynamic tool registration
+	// }
 
-	stdioServer := server.NewStdioServer(hcpServer)
+	stdioServer := server.NewStdioServer(hcServer)
 
 	stdLogger := stdlog.New(cfg.logger.Writer(), "stdioserver", 0)
 	stdioServer.SetErrorLogger(stdLogger)
