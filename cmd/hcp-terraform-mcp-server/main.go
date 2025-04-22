@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"hcp-terraform-mcp-server/pkg/hashicorp"
+	"hcp-terraform-mcp-server/pkg/hashicorp/tfenterprise"
+	"hcp-terraform-mcp-server/pkg/hashicorp/tfregistry"
 	"io"
 	stdlog "log"
 	"os"
@@ -14,7 +16,6 @@ import (
 
 	iolog "github.com/github/github-mcp-server/pkg/log"
 	"github.com/github/github-mcp-server/pkg/translations"
-	"github.com/hashicorp/go-tfe"
 
 	// gogithub "github.com/google/go-github/v69/github" // Removed GitHub client import
 
@@ -72,6 +73,7 @@ func init() {
 	rootCmd.SetVersionTemplate("{{.Short}}\n{{.Version}}\n")
 
 	// Add global flags that will be shared by all commands
+	rootCmd.PersistentFlags().StringSlice("toolsets", tfregistry.DefaultTools, "An optional comma separated list of groups of tools to allow, defaults to enabling all")
 	rootCmd.PersistentFlags().Bool("dynamic-toolsets", false, "Enable dynamic toolsets")
 	rootCmd.PersistentFlags().Bool("read-only", false, "Restrict the server to read-only operations")
 	rootCmd.PersistentFlags().String("log-file", "", "Path to log file")
@@ -91,8 +93,6 @@ func init() {
 }
 
 func initConfig() {
-	// Initialize Viper configuration
-	viper.SetEnvPrefix("hcp")
 	viper.AutomaticEnv()
 }
 
@@ -125,43 +125,7 @@ func runStdioServer(cfg runConfig) error {
 	// Create app context
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
-
-	// Create TFE client
-	tfeAddress := viper.GetString("tfe_address") // Example: "https://app.terraform.io"
-	if tfeAddress == "" {
-		// Default or handle error
-		tfeAddress = "https://app.terraform.io" // Or cfg.logger.Fatal("HCP_TFE_ADDRESS not set")
-		cfg.logger.Warnf("HCP_TFE_ADDRESS not set, defaulting to %s", tfeAddress)
-	}
-	tfeToken := viper.GetString("tfe_token")
-	if tfeToken == "" {
-		cfg.logger.Fatal("HCP_TFE_TOKEN not set")
-	}
-
-	config := &tfe.Config{
-		Address:           tfeAddress,
-		Token:             tfeToken,
-		RetryServerErrors: true, // Example configuration, adjust as needed
-	}
-
-	tfeClient, err := tfe.NewClient(config)
-	if err != nil {
-		cfg.logger.Fatalf("failed to create TFE client: %v", err)
-	}
-	cfg.logger.Info("TFE Client Initialized")
-	// TODO: Set UserAgent if applicable/desired for TFE client
-
-	// getClient function now returns the TFE client
 	t, dumpTranslations := translations.TranslationHelper()
-
-	getClient := func(_ context.Context) (*tfe.Client, error) {
-		return tfeClient, nil // closing over client
-	}
-
-	// TODO: Update server creation to use TFE client or a generic server type.
-	// This likely requires changes in github.NewServer or using a different server constructor.
-	hcpServer := hashicorp.NewServer(version)
-
 	enabled := cfg.enabledToolsets
 	dynamic := viper.GetBool("dynamic_toolsets")
 	if dynamic {
@@ -174,30 +138,39 @@ func runStdioServer(cfg runConfig) error {
 		}
 	}
 
-	// TODO: The following functions expect a getClient func returning *gogithub.Client.
-	// They need to be refactored to accept and use *tfe.Client.
-	// Create default toolsets
-	toolsets, err := hashicorp.InitToolsets(enabled, cfg.readOnly, getClient, t)
-	context := hashicorp.InitContextToolset(getClient, t)
+	tfeToken := viper.GetString("HCP_TFE_TOKEN")
+	if tfeToken != "" {
+		tfeAddress := viper.GetString("HCP_TFE_ADDRESS") // Example: "https://app.terraform.io"
+		if tfeAddress == "" {
+			tfeAddress = "https://app.terraform.io"
+			cfg.logger.Warnf("HCP_TFE_ADDRESS not set, defaulting to %s", tfeAddress)
+		}
+		tfenterprise.Init(tfeToken, tfeAddress, enabled, cfg)
+	} else {
+		cfg.logger.Warnf("HCP_TFE_TOKEN not set, defaulting to non-authenticated client")
+	}
+
+	// TODO: Update server creation to use TFE client or a generic server type.
+	// This likely requires changes in github.NewServer or using a different server constructor.
+	hcpServer := hashicorp.NewServer(version)
+
+	// Initialize toolsets that are used for TF Registry - no auth is needed
+	toolsets, err := tfregistry.InitToolsets(enabled, cfg.readOnly, registryClient, t)
+	context := tfregistry.InitContextToolset(registryClient, t)
 
 	if err != nil {
 		stdlog.Fatal("Failed to initialize toolsets:", err) // This error check might need adjustment based on refactoring
 	}
 
 	// Register resources with the server
-	hashicorp.RegisterResources(hcpServer, getClient, t)
+	tfregistry.RegisterResources(hcpServer, registryClient, t)
 	// Register the tools with the server
 	toolsets.RegisterTools(hcpServer)
 	context.RegisterTools(hcpServer)
 
 	if dynamic {
-		dynamic := hashicorp.InitDynamicToolset(hcpServer, toolsets, t)
+		dynamic := tfregistry.InitDynamicToolset(hcpServer, toolsets, t)
 		dynamic.RegisterTools(hcpServer)
-	}
-
-	if cfg.exportTranslations {
-		// Once server is initialized, all translations are loaded
-		dumpTranslations()
 	}
 
 	stdioServer := server.NewStdioServer(hcpServer)
@@ -220,6 +193,11 @@ func runStdioServer(cfg runConfig) error {
 
 	// Output github-mcp-server string // TODO: Update this message?
 	_, _ = fmt.Fprintf(os.Stderr, "HCP Terraform MCP Server running on stdio\n")
+
+	if cfg.exportTranslations {
+		// Once server is initialized, all translations are loaded
+		dumpTranslations()
+	}
 
 	// Wait for shutdown signal
 	select {

@@ -1,4 +1,4 @@
-package hashicorp
+package tfregistry
 
 import (
 	"github.com/github/github-mcp-server/pkg/translations"
@@ -6,7 +6,7 @@ import (
 )
 
 func RegisterResources(s *server.MCPServer, getClient GetClientFn, t translations.TranslationHelperFunc) {
-	// s.AddResourceTemplate(GetRepositoryResourceContent(getClient, t))
+	s.AddResourceTemplate(GetTerraformWorkspaceResourceContent(getClient, t))
 	// s.AddResourceTemplate(GetRepositoryResourceBranchContent(getClient, t))
 	// s.AddResourceTemplate(GetRepositoryResourceCommitContent(getClient, t))
 	// s.AddResourceTemplate(GetRepositoryResourceTagContent(getClient, t))
