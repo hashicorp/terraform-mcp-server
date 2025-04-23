@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"net/http"
 
 	// TODO: Refactor dependent packages to use TFE client instead of GitHub client
 
@@ -157,7 +158,18 @@ func runStdioServer(cfg runConfig) error {
 	// registryClient := registry.NewClient(discoClient, httpClient) // Restore registry client initialization
 
 	// Initialize toolsets that are used for TF Registry - no auth is needed
-	// toolsets, err := tfregistry.InitToolsets(enabled, cfg.readOnly, registryClient, t) // Restore toolset initialization
+	registryClient := &http.Client{}
+	toolsets, err := tfregistry.InitToolsets(enabled, cfg.readOnly, registryClient, t) // Restore toolset initialization
+	if err != nil {
+		return fmt.Errorf("failed to initialize registry toolset: %v", err)
+	}
+	dynamicToolSet := tfregistry.InitDynamicToolset(hcServer, toolsets, t)
+	if err != nil {
+		return fmt.Errorf("failed to initialize dynamic toolset: %v", err)
+	}
+
+	toolsets.RegisterTools(hcServer)
+	dynamicToolSet.RegisterTools(hcServer)
 	// context := tfregistry.InitContextToolset(registryClient, t)                        // Restore context initialization
 
 	// if err != nil { // Restore error check
@@ -165,7 +177,7 @@ func runStdioServer(cfg runConfig) error {
 	// } // Restore error check
 
 	// // Register resources with the server
-	// tfregistry.RegisterResources(hcServer, registryClient, t) // Restore resource registration
+	tfregistry.RegisterResources(hcServer, registryClient, t)// Restore resource registration
 	// // Register the tools with the server
 	// toolsets.RegisterTools(hcServer) // Restore tool registration
 	// context.RegisterTools(hcServer)  // Restore context registration
