@@ -159,9 +159,6 @@ func runStdioServer(cfg runConfig) error {
 		return fmt.Errorf("failed to initialize registry toolset: %v", err)
 	}
 	dynamicToolSet := tfregistry.InitDynamicToolset(hcServer, toolsets, t)
-	if err != nil {
-		return fmt.Errorf("failed to initialize dynamic toolset: %v", err)
-	}
 
 	toolsets.RegisterTools(hcServer)
 	dynamicToolSet.RegisterTools(hcServer)
