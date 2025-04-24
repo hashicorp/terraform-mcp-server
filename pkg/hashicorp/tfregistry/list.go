@@ -5,15 +5,9 @@ import (
 	"strings"
 	"net/http"
 
-	// "io"
-
-	"github.com/github/github-mcp-server/pkg/translations"
-
-	// "github.com/google/go-github/v69/github" // Removed github client
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
-
-	// "hcp-terraform-mcp-server/pkg/hashicorp" // Add import for hashicorp package
+	"github.com/github/github-mcp-server/pkg/translations"
 )
 
 // ListProviders creates a tool to list Terraform providers.
@@ -29,20 +23,11 @@ func ListProviders(registryClient *http.Client, t translations.TranslationHelper
 			// TODO: Parse pagination options
 			// pageNumber, _ := OptionalParam[int](request, "page_number")
 			// pageSize, _ := OptionalParam[int](request, "page_size")
-			
+
 			commonProviders := []string{
 				"aws", "google", "azurerm", "kubernetes", 
 				"github", "docker", "null", "random",
 			}
-
-			// resources := make([]map[string]interface{}, 0, len(commonProviders))
-			// for _, provider := range commonProviders {
-			// 	resources = append(resources, map[string]interface{}{
-			// 		"uri":         fmt.Sprintf("registry://providers/hashicorp/%s", provider),
-			// 		"title":       provider,
-			// 		"description": fmt.Sprintf("Terraform provider for %s", provider),
-			// 	})
-			// }
 
 			return mcp.NewToolResultText(strings.Join(commonProviders, ", ")), nil
 		}

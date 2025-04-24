@@ -20,6 +20,7 @@ import (
 
 	// gogithub "github.com/google/go-github/v69/github" // Removed GitHub client import
 
+	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
@@ -152,14 +153,8 @@ func runStdioServer(cfg runConfig) error {
 		cfg.logger.Warnf("HCP_TFE_TOKEN not set, defaulting to non-authenticated client")
 	}
 
-	// Initialize default service discovery and http client for registry
-	// discoClient := disco.New() // Restore disco client initialization
-	// httpClient := http.DefaultClient
-	// registryClient := registry.NewClient(discoClient, httpClient) // Restore registry client initialization
-
-	// Initialize toolsets that are used for TF Registry - no auth is needed
 	registryClient := &http.Client{}
-	toolsets, err := tfregistry.InitToolsets(enabled, cfg.readOnly, registryClient, t) // Restore toolset initialization
+	toolsets, err := tfregistry.InitToolsets(enabled, cfg.readOnly, registryClient, t)
 	if err != nil {
 		return fmt.Errorf("failed to initialize registry toolset: %v", err)
 	}
@@ -170,23 +165,8 @@ func runStdioServer(cfg runConfig) error {
 
 	toolsets.RegisterTools(hcServer)
 	dynamicToolSet.RegisterTools(hcServer)
-	// context := tfregistry.InitContextToolset(registryClient, t)                        // Restore context initialization
-
-	// if err != nil { // Restore error check
-	// 	stdlog.Fatal("Failed to initialize toolsets:", err) // This error check might need adjustment based on refactoring
-	// } // Restore error check
-
-	// // Register resources with the server
-	tfregistry.RegisterResources(hcServer, registryClient, t)// Restore resource registration
-	// // Register the tools with the server
-	// toolsets.RegisterTools(hcServer) // Restore tool registration
-	// context.RegisterTools(hcServer)  // Restore context registration
-
-	// if dynamic {
-	// 	dynamic := tfregistry.InitDynamicToolset(hcServer, toolsets, t) // Restore dynamic toolset initialization
-	// 	dynamic.RegisterTools(hcServer)                                 // Restore dynamic tool registration
-	// }
-
+  
+	tfregistry.RegisterResources(hcServer, registryClient, t)
 	stdioServer := server.NewStdioServer(hcServer)
 
 	stdLogger := stdlog.New(cfg.logger.Writer(), "stdioserver", 0)

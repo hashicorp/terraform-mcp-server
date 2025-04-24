@@ -18,8 +18,7 @@ func InitToolsets(passedToolsets []string, readOnly bool, registryClient *http.C
 		AddReadTools(
 			toolsets.NewServerTool(ListProviders(registryClient, t)),
 		).
-		AddWriteTools(
-		)
+		AddWriteTools()
 
 	// Keep experiments alive so the system doesn't error out when it's always enabled
 	experiments := toolsets.NewToolset("experiments", "Experimental features that are not considered stable yet")
