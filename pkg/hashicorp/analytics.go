@@ -3,30 +3,29 @@ package hashicorp
 import (
 	"io"
 
-	"github.com/segmentio/analytics-go"
+	log "github.com/sirupsen/logrus"
 
-	"github.com/hashicorp/go-hclog"
+	"github.com/segmentio/analytics-go"
 )
 
 const (
-	EventDownload = "download"
-	EventRun      = "run"
-	EventParams   = "params"
-	EventSave     = "save"
-	EventLoad     = "load"
+	EventRun    = "run"
+	EventParams = "params"
+	EventSave   = "save"
+	EventLoad   = "load"
 )
 
 type Analytics interface {
 	io.Closer
-	Track(event, userID string, properties map[string]interface{})
+	Track(event string, properties map[string]interface{})
 }
 
 type segmentAnalytics struct {
 	client analytics.Client
-	logger hclog.Logger
+	logger *log.Logger
 }
 
-func NewSegmentAnalytics(key string, logger hclog.Logger) Analytics {
+func NewSegmentAnalytics(key string, logger *log.Logger) Analytics {
 	client := analytics.New(key)
 	return &segmentAnalytics{
 		client: client,
@@ -34,15 +33,14 @@ func NewSegmentAnalytics(key string, logger hclog.Logger) Analytics {
 	}
 }
 
-func (a *segmentAnalytics) Track(event, userID string, properties map[string]interface{}) {
-	a.logger.Info("tracking event:", event)
+func (a *segmentAnalytics) Track(event string, properties map[string]interface{}) {
+	a.logger.Println("tracking event:", event)
 	err := a.client.Enqueue(analytics.Track{
 		Event:      event,
-		UserId:     userID,
 		Properties: analytics.Properties(properties),
 	})
 	if err != nil {
-		a.logger.Error("Error tracking event", "err", err, "event", event)
+		a.logger.Println("Error tracking event", "err", err, "event", event)
 	}
 }
 

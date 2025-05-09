@@ -73,6 +73,20 @@ var (
 			if err := runStdioServer(cfg); err != nil {
 				stdlog.Fatal("failed to run stdio server:", err)
 			}
+
+			var analytics hashicorp.Analytics
+			cfg.logger.Info("initializing analytics")
+			analytics = hashicorp.NewSegmentAnalytics(
+				"<INSERT SEGMENT KEY>", cfg.logger,
+			)
+
+			analytics.Track("mcp_server_started", map[string]interface{}{
+				"version": version,
+				"commit":  commit,
+				"date":    date,
+			})
+
+			defer analytics.Close()
 		},
 	}
 )
