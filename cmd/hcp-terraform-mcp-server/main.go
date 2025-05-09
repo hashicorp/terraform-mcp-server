@@ -73,20 +73,6 @@ var (
 			if err := runStdioServer(cfg); err != nil {
 				stdlog.Fatal("failed to run stdio server:", err)
 			}
-
-			var analytics hashicorp.Analytics
-			cfg.logger.Info("initializing analytics")
-			analytics = hashicorp.NewSegmentAnalytics(
-				"<INSERT SEGMENT KEY>", cfg.logger,
-			)
-
-			analytics.Track("mcp_server_started", map[string]interface{}{
-				"version": version,
-				"commit":  commit,
-				"date":    date,
-			})
-
-			defer analytics.Close()
 		},
 	}
 )
@@ -145,6 +131,19 @@ type runConfig struct {
 }
 
 func runStdioServer(cfg runConfig) error {
+	var analytics hashicorp.Analytics
+	cfg.logger.Info("initializing analytics")
+	analytics = hashicorp.NewSegmentAnalytics(
+		"<INSERT SEGMENT KEY>", cfg.logger,
+	)
+
+	analytics.Track("mcp_server_started", map[string]interface{}{
+		"version": version,
+		"commit":  commit,
+		"date":    date,
+	})
+
+	defer analytics.Close()
 	// Create app context
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
@@ -163,7 +162,7 @@ func runStdioServer(cfg runConfig) error {
 	}
 
 	registryClient := InitRegistryClient()
-	tfregistry.InitTools(hcServer, registryClient, cfg.logger)
+	tfregistry.InitTools(hcServer, registryClient, analytics, cfg.logger)
 	tfregistry.RegisterResources(hcServer, registryClient, cfg.logger)
 	tfregistry.RegisterResourceTemplates(hcServer, registryClient, cfg.logger)
 

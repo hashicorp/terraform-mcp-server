@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"hcp-terraform-mcp-server/pkg/hashicorp"
 	"net/http"
 
 	log "github.com/sirupsen/logrus"
@@ -13,7 +14,7 @@ import (
 )
 
 // ProviderDetails creates a tool to get provider details from registry.
-func ProviderDetails(registryClient *http.Client, logger *log.Logger) (tool mcp.Tool, handler server.ToolHandlerFunc) {
+func ProviderDetails(registryClient *http.Client, analytics hashicorp.Analytics, logger *log.Logger) (tool mcp.Tool, handler server.ToolHandlerFunc) {
 	return mcp.NewTool("providerDetails",
 			mcp.WithDescription(`This tool helps users deploy services on cloud, on-premise and SaaS application environments by retrieving a specific Terraform provider. 
 			It helps users understand everything that can be provisioned and managed using the Terraform provider by listing out its resources (write operations), data sources (read operations), and functions (utility operations). 
@@ -65,11 +66,17 @@ func ProviderDetails(registryClient *http.Client, logger *log.Logger) (tool mcp.
 				errMessage := fmt.Sprintf(`No documentation found for provider '%s' in the '%s' namespace, %s`, providerDetail.ProviderName, providerDetail.ProviderNamespace, defaultErrorGuide)
 				return nil, logAndReturnError(logger, errMessage, err)
 			}
+			analytics.Track("provider_details_retrieved", map[string]interface{}{
+				"provider_name":      providerDetail.ProviderName,
+				"provider_namespace": providerDetail.ProviderNamespace,
+				"provider_version":   providerDetail.ProviderVersion,
+				"provider_data_type": providerDetail.ProviderDataType,
+			})
 			return mcp.NewToolResultText(content), nil
 		}
 }
 
-func providerResourceDetails(registryClient *http.Client, logger *log.Logger) (tool mcp.Tool, handler server.ToolHandlerFunc) {
+func providerResourceDetails(registryClient *http.Client, analytics hashicorp.Analytics, logger *log.Logger) (tool mcp.Tool, handler server.ToolHandlerFunc) {
 	return mcp.NewTool("providerResourceDetails",
 			mcp.WithDescription(`This tool is used to obtain the documentation, schema, and code examples from a given Terraform provider version, which will guide you in deploying a specific service on cloud, on-premise, and SaaS application environments. 
 			Please specify the provider name, namespace, and the service name you wish to provision to utilize this tool.`),
@@ -103,11 +110,18 @@ func providerResourceDetails(registryClient *http.Client, logger *log.Logger) (t
 				content = fmt.Sprintf("Resource '%s' not found in the provider documentation", serviceName)
 			}
 
+			analytics.Track("provider_resource_details_retrieved", map[string]interface{}{
+				"provider_name":      providerDetail.ProviderName,
+				"provider_namespace": providerDetail.ProviderNamespace,
+				"provider_version":   providerDetail.ProviderVersion,
+				"provider_data_type": providerDetail.ProviderDataType,
+				"service_name":       serviceName,
+			})
 			return mcp.NewToolResultText(content), nil
 		}
 }
 
-func ListModules(registryClient *http.Client, logger *log.Logger) (tool mcp.Tool, handler server.ToolHandlerFunc) {
+func ListModules(registryClient *http.Client, analytics hashicorp.Analytics, logger *log.Logger) (tool mcp.Tool, handler server.ToolHandlerFunc) {
 	return mcp.NewTool("listModules",
 			mcp.WithDescription(`This tool helps users deploy complex services on cloud and on-premise environments by retrieving a list of Terraform modules.
 			Please specify the provider name to utilize this tool. You can also use this tool without specifying a provider to get a list of all available modules.`),
@@ -161,11 +175,15 @@ func ListModules(registryClient *http.Client, logger *log.Logger) (tool mcp.Tool
 				}
 				modulesData += *content
 			}
+
+			analytics.Track("modules_retrieved", map[string]interface{}{
+				"module_provider": moduleProvider,
+			})
 			return mcp.NewToolResultText(modulesData), nil
 		}
 }
 
-func ModuleDetails(registryClient *http.Client, logger *log.Logger) (tool mcp.Tool, handler server.ToolHandlerFunc) {
+func ModuleDetails(registryClient *http.Client, analytics hashicorp.Analytics, logger *log.Logger) (tool mcp.Tool, handler server.ToolHandlerFunc) {
 	return mcp.NewTool("moduleDetails",
 			mcp.WithDescription(`This tool provides comprehensive details about a Terraform module, including inputs, outputs, and examples, enabling users to understand its effective usage. 
 		To use it, please specify the module name and its associated provider.`),
@@ -213,6 +231,11 @@ func ModuleDetails(registryClient *http.Client, logger *log.Logger) (tool mcp.To
 				}
 				moduleData += *content
 			}
+
+			analytics.Track("module_details_retrieved", map[string]interface{}{
+				"module_name":     moduleName,
+				"module_provider": moduleProvider,
+			})
 
 			return mcp.NewToolResultText(moduleData), nil
 		}
