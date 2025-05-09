@@ -12,7 +12,7 @@ can you help me deploy stuff with the azure provider?
 
 ### Build from Docker
 ```
-docker build -t hcp-terraform-mcp-server .
+docker build -t terraform-mcp-server .
 ```
 
 If you plan to push the Docker image to a Docker registry, update the image reference accordingly. The current configuration is designed for local use.
@@ -21,7 +21,7 @@ If you plan to push the Docker image to a Docker registry, update the image refe
 ```JSON
 {
   "mcpServers": {
-    "hcp-terraform": {
+    "terraform": {
       "command": "docker",
       "args": [
         "run",
@@ -29,7 +29,7 @@ If you plan to push the Docker image to a Docker registry, update the image refe
         "--rm",
         "-e",
         "HCP_TFE_TOKEN",
-        "docker.io/library/hcp-terraform-mcp-server"
+        "docker.io/library/terraform-mcp-server"
       ],
       "env": {
         "HCP_TFE_TOKEN": "<YOUR_TOKEN>"
@@ -52,7 +52,7 @@ If you plan to push the Docker image to a Docker registry, update the image refe
       }
     ],
     "servers": {
-      "hcp-terraform": {
+      "terraform": {
         "command": "docker",
         "args": [
           "run",
@@ -60,7 +60,7 @@ If you plan to push the Docker image to a Docker registry, update the image refe
           "--rm",
           "-e",
           "HCP_TFE_TOKEN",
-          "docker.io/library/hcp-terraform-mcp-server"
+          "docker.io/library/terraform-mcp-server"
         ],
         "env": {
           "HCP_TFE_TOKEN": "${input:hcp_tfe_token}"
@@ -74,14 +74,14 @@ If you plan to push the Docker image to a Docker registry, update the image refe
 ### Build from source
 
 If you don't have Docker, you can use `go build` to build the binary in the
-`cmd/hcp-terraform-mcp-server` directory, and use the `hcp-terraform-mcp-server stdio` command with the `HCP_TFE_TOKEN` environment variable set to your token. To specify the output location of the build, use the `-o` flag. You should configure your server to use the built executable as its `command`. For example:
+`cmd/terraform-mcp-server` directory, and use the `terraform-mcp-server stdio` command with the `HCP_TFE_TOKEN` environment variable set to your token. To specify the output location of the build, use the `-o` flag. You should configure your server to use the built executable as its `command`. For example:
 
 #### Usage with Claude Desktop
 ```JSON
 {
   "mcpServers": {
-    "hcp-terraform": {
-      "command": "/path/to/hcp-terraform-mcp-server",
+    "terraform": {
+      "command": "/path/to/terraform-mcp-server",
       "args": ["stdio"],
       "env": {
         "HCP_TFE_TOKEN": "<YOUR_TOKEN>"
@@ -96,8 +96,8 @@ If you don't have Docker, you can use `go build` to build the binary in the
 {
   "mcp": {
     "servers": {
-      "hcp-terraform": {
-        "command": "/path/to/hcp-terraform-mcp-server",
+      "terraform": {
+        "command": "/path/to/terraform-mcp-server",
         "args": ["stdio"],
         "env": {
           "HCP_TFE_TOKEN": "<YOUR_TOKEN>"
