@@ -3,3 +3,5 @@ terraform-mcp-server
 cmd/mcpcurl/mcpcurl
 *.log
 .vscode/
+dist/
+

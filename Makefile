@@ -1,20 +1,33 @@
-# Variables
-BINARY_NAME=terraform-mcp-server
-VERSION?=dev
+SHELL := /usr/bin/env bash -euo pipefail -c
+
+BINARY_NAME ?= terraform-mcp-server
+VERSION ?= $(if $(shell printenv VERSION),$(shell printenv VERSION),dev)
+
 GO=go
 DOCKER=docker
 
-# Build flags
-LDFLAGS=-ldflags="-s -w -X main.version=${VERSION} -X main.commit=$(shell git rev-parse HEAD) -X main.date=$(shell date -u +%Y-%m-%dT%H:%M:%SZ)"
+TARGET_DIR ?= $(CURDIR)/dist
 
-.PHONY: all build test clean docker-build help
+# Build flags
+LDFLAGS=-ldflags="-s -w -X terraform-mcp-server/version.GitCommit=$(shell git rev-parse HEAD) -X terraform-mcp-server/version.BuildDate=$(shell git show --no-show-signature -s --format=%cd --date=format:"%Y-%m-%dT%H:%M:%SZ" HEAD)"
+
+.PHONY: all build crt-build test test-e2e clean deps docker-build help
 
 # Default target
 all: build
 
 # Build the binary
+# Get local ARCH; on Intel Mac, 'uname -m' returns x86_64 which we turn into amd64.
+# Not using 'go env GOOS/GOARCH' here so 'make docker' will work without local Go install.
+ARCH     = $(shell A=$$(uname -m); [ $$A = x86_64 ] && A=amd64; echo $$A)
+OS       = $(shell uname | tr [[:upper:]] [[:lower:]])
 build:
-	$(GO) build $(LDFLAGS) -o $(BINARY_NAME) ./cmd/terraform-mcp-server
+	GOARCH=$(ARCH) GOOS=$(OS) $(GO) build $(LDFLAGS) -o $(BINARY_NAME) ./cmd/terraform-mcp-server
+
+crt-build:
+	@mkdir -p $(TARGET_DIR)
+	@$(CURDIR)/scripts/crt-build.sh build
+	@cp $(CURDIR)/LICENSE $(TARGET_DIR)/LICENSE.txt
 
 # Run tests
 test:

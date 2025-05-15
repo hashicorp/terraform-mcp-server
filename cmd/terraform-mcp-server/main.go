@@ -11,21 +11,19 @@ import (
 	"os/signal"
 	"syscall"
 
+	"terraform-mcp-server/version"
+
 	"github.com/mark3labs/mcp-go/server"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 )
 
-var version = "version"
-var commit = "commit"
-var date = "date"
-
 var (
 	rootCmd = &cobra.Command{
-		Use:     "server",
+		Use:     "terraform-mcp-server",
 		Short:   "Terraform MCP Server",
 		Long:    `A Terraform MCP server that handles various tools and resources.`,
-		Version: fmt.Sprintf("Version: %s\nCommit: %s\nBuild Date: %s", version, commit, date),
+		Version: fmt.Sprintf("Version: %s\nCommit: %s\nBuild Date: %s", version.GetHumanVersion(), version.GitCommit, version.BuildDate),
 	}
 
 	stdioCmd = &cobra.Command{
@@ -53,7 +51,7 @@ func runStdioServer(logger *log.Logger) error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	hcServer := NewServer(version)
+	hcServer := NewServer(version.Version)
 	registryInit(hcServer, logger)
 
 	return serverInit(ctx, hcServer, logger)
