@@ -56,8 +56,8 @@ ARG PRODUCT_NAME=$BIN_NAME
 ARG TARGETOS TARGETARCH
 LABEL version=$PRODUCT_VERSION
 LABEL revision=$PRODUCT_REVISION
-COPY dist/$TARGETOS/$TARGETARCH/$BIN_NAME /bin/
-CMD ["/bin/$BIN_NAME", "stdio"]
+COPY dist/$TARGETOS/$TARGETARCH/$BIN_NAME /bin/terraform-mcp-server
+CMD ["/bin/terraform-mcp-server", "stdio"]
 
 # ===================================
 #
