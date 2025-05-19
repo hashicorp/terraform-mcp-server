@@ -61,7 +61,7 @@ jobs:
         with:
           repository: "$PWD"
         env:
-          SECURITY_SCANNER_CONFIG_FILE: .github/scan.hcl
+          SECURITY_SCANNER_CONFIG_FILE: scan.hcl
           # See scan.hcl at repository .github location for config.
 
       - name: SARIF Output
