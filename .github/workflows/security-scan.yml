@@ -33,7 +33,7 @@ concurrency:
 
 jobs:
   scan:
-    runs-on: ["self-hosted", "linux", "ondemand", "m6a.xlarge"]
+    runs-on: ["self-hosted", "linux"]
     # The first check ensures this doesn't run on community-contributed PRs, who
     # won't have the permissions to run this job.
     if: ${{ (github.repository != 'hashicorp/terraform-mcp-server' || (github.event.pull_request.head.repo.full_name == github.event.pull_request.base.repo.full_name))

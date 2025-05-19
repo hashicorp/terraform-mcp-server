@@ -12,7 +12,7 @@ permissions:
 
 jobs:
   e2e-test:
-    runs-on: ["self-hosted", "linux", "ondemand"]
+    runs-on: ["self-hosted", "linux"]
 
     steps:
       - name: Check out code
