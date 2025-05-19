@@ -6,8 +6,9 @@ schema = "2"
 project "terraform-mcp-server" {
   team = "team-proj-mcp-servers"
 
+  # slack channel : feed-terraform-mcp-server-releases
   slack {
-    notification_channel = "C08QFU5CWG1"
+    notification_channel = "C08TEJWRXDX"
   }
 
   github {
