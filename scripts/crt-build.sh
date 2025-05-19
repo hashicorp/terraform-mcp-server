@@ -77,8 +77,9 @@ function build() {
   fi
 
   # Build terraform-mcp-server
+  # Always use CGO_ENABLED=0 to ensure a statically linked binary is built
   echo "$msg"
-  go build -o "$BIN_PATH" -tags "$GO_TAGS" -ldflags "$ldflags" -trimpath -buildvcs=false ./cmd/terraform-mcp-server
+  CGO_ENABLED=0 go build -o "$BIN_PATH" -tags "$GO_TAGS" -ldflags "$ldflags" -trimpath -buildvcs=false ./cmd/terraform-mcp-server
 }
 
 # Run the CRT Builder
