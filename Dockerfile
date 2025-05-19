@@ -28,7 +28,7 @@ RUN --mount=type=cache,target=/root/.cache/go-build CGO_ENABLED=0 go build -ldfl
 # dev runs the binary from devbuild
 # -----------------------------------
 # Make a stage to run the app
-FROM gcr.io/distroless/base-debian12 AS dev
+FROM docker.mirror.hashicorp.services/alpine:3.21 AS dev
 ARG VERSION="dev"
 # Set the working directory
 WORKDIR /server
@@ -45,7 +45,7 @@ CMD ["./terraform-mcp-server", "stdio"]
 
 # default release image (refereced in .github/workflows/build.yml)
 # -----------------------------------
-FROM gcr.io/distroless/base-debian12 AS release-default
+FROM docker.mirror.hashicorp.services/alpine:3.21 AS release-default
 ARG BIN_NAME
 # Export BIN_NAME for the CMD below, it can't see ARGs directly.
 ENV BIN_NAME=$BIN_NAME

@@ -1,3 +1,6 @@
+# Copyright (c) HashiCorp, Inc.
+# SPDX-License-Identifier: MPL-2.0
+
 name: build
 
 # We now default to running this workflow on every push to every branch.
@@ -118,8 +121,8 @@ jobs:
     strategy:
       matrix:
         include:
-        #   - { arch: "386" }
-        #   - { arch: "arm" }
+          - { arch: "386" }
+          - { arch: "arm" }
           - { arch: "amd64" }
           - { arch: "arm64" }
       fail-fast: false # recommended during development

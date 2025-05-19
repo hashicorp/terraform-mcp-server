@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# Copyright (c) HashiCorp, Inc.
+# SPDX-License-Identifier: MPL-2.0
+
 
 # The crt-build script is used to detemine build metadata and create terraform-mcp-server builds.
 # We use it in build.yml for building release artifacts with CRT in the Go Build step. 
