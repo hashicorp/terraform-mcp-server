@@ -12,7 +12,7 @@
 
 # devbuild compiles the binary
 # -----------------------------------
-FROM golang:1.24.2 AS devbuild
+FROM golang:1.24.3-alpine AS devbuild
 ARG VERSION="dev"
 # Set the working directory
 WORKDIR /build

@@ -12,15 +12,23 @@ name: build
 #
 #   https://docs.github.com/en/actions/using-workflows/workflow-syntax-for-github-actions#onpushbranchestagsbranches-ignoretags-ignore
 #
-on: [workflow_dispatch, push]
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+      - release/**
 
 env:
   PKG_NAME: "terraform-mcp-server"
 
+permissions:
+  contents: read
+
 jobs:
   get-go-version:
     name: "Determine Go toolchain version"
-    runs-on: ubuntu-latest
+    runs-on: ["self-hosted", "linux", "ondemand"]
     outputs:
       go-version: ${{ steps.get-go-version.outputs.go-version }}
     steps:
@@ -39,7 +47,7 @@ jobs:
           echo "go-version=$(cat .go-version)" >> "$GITHUB_OUTPUT"
 
   set-product-version:
-    runs-on: ubuntu-latest
+    runs-on: ["self-hosted", "linux", "ondemand"]
     outputs:
       product-version: ${{ steps.set-product-version.outputs.product-version }}
       product-base-version: ${{ steps.set-product-version.outputs.base-product-version }}
@@ -53,7 +61,7 @@ jobs:
 
   generate-metadata-file:
     needs: set-product-version
-    runs-on: ubuntu-latest
+    runs-on: ["self-hosted", "linux", "ondemand"]
     outputs:
       filepath: ${{ steps.generate-metadata-file.outputs.filepath }}
     steps:
@@ -75,7 +83,7 @@ jobs:
     needs:
       - get-go-version
       - set-product-version
-    runs-on: ubuntu-latest
+    runs-on: ["self-hosted", "linux", "ondemand"]
     strategy:
       fail-fast: false
       matrix:
@@ -117,7 +125,7 @@ jobs:
     needs:
       - set-product-version
       - build
-    runs-on: ubuntu-latest
+    runs-on: ["self-hosted", "linux", "ondemand"]
     strategy:
       matrix:
         include:

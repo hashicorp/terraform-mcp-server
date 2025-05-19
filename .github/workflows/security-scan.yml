@@ -1,0 +1,75 @@
+name: Security Scan
+
+on:
+  push:
+    branches:
+      - main
+      - release/**
+    paths-ignore:
+      - 'LICENSE'
+      - 'CODEOWNERS'
+      - 'README.md'
+      - 'CHANGELOG.md'
+      - '.changelog/**'
+      - '.tours/**'
+      - 'contributing/**'
+  pull_request:
+    branches:
+      - main
+      - release/**
+    paths-ignore:
+      - 'LICENSE'
+      - 'CODEOWNERS'
+      - 'README.md'
+      - 'CHANGELOG.md'
+      - '.changelog/**'
+      - '.tours/**'
+      - 'contributing/**'
+
+# cancel existing runs of the same workflow on the same ref
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  scan:
+    runs-on: ["self-hosted", "linux", "ondemand", "m6a.xlarge"]
+    # The first check ensures this doesn't run on community-contributed PRs, who
+    # won't have the permissions to run this job.
+    if: ${{ (github.repository != 'hashicorp/terraform-mcp-server' || (github.event.pull_request.head.repo.full_name == github.event.pull_request.base.repo.full_name))
+      && (github.actor != 'dependabot[bot]') && (github.actor != 'team-proj-mcp-servers') }}
+
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
+        with:
+          cache: ${{ contains(runner.name, 'Github Actions') }}
+          go-version-file: .go-version
+          cache-dependency-path: '**/go.sum'
+
+      - name: Clone Security Scanner repo
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          repository: hashicorp/security-scanner
+          token: ${{ secrets.PRODSEC_SCANNER_READ_ONLY }}
+          path: security-scanner
+          ref: main
+
+      - name: Scan
+        id: scan
+        uses: ./security-scanner
+        with:
+          repository: "$PWD"
+        env:
+          SECURITY_SCANNER_CONFIG_FILE: .github/scan.hcl
+          # See scan.hcl at repository .github location for config.
+
+      - name: SARIF Output
+        shell: bash
+        run: |
+          jq . < results.sarif
+
+      - name: Upload SARIF file
+        uses: github/codeql-action/upload-sarif@15bce5bb14748fcfd6fe32738ca1cba36e5f218f # codeql-bundle-v2.21.3
+        with:
+          sarif_file: results.sarif

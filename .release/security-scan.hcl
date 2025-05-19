@@ -2,15 +2,23 @@
 # SPDX-License-Identifier: MPL-2.0
 
 container {
-	dependencies = true
-	osv          = true
-	secrets      = true
+  dependencies    = true
+  osv             = true
+  alpine_security = true
+  go_modules      = true
+  local_daemon    = true
+
+  secrets {
+    all = true
+  }
 }
 
 binary {
-	secrets      = true
-	go_modules   = true
-	osv          = true
-	oss_index    = false
-	nvd          = false
+  go_modules = true
+  osv        = true
+  go_stdlib  = true
+
+  secrets {
+    all = true
+  }
 }
