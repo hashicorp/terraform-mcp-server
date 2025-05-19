@@ -16,7 +16,6 @@
 
 repository {
   go_modules             = true
-  npm                    = true
   osv                    = true
   go_stdlib_version_file = ".go-version"
 
