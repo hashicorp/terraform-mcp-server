@@ -66,14 +66,6 @@ event "promote-staging" {
     on = "always"
   }
 
-  promotion-events {
-
-    pre-promotion {
-      organization = "hashicorp"
-      repository   = "terraform-mcp-server"
-      workflow     = "enos-run"
-    }
-  }
 }
 
 event "trigger-production" {
@@ -94,8 +86,4 @@ event "promote-production" {
     on = "always"
   }
 
-  promotion-events {
-    bump-version-patch = true
-    update-ironbank    = true
-  }
 }
