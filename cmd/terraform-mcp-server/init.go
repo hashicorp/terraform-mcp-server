@@ -10,6 +10,7 @@ import (
 	stdlog "log"
 	"net/http"
 	"os"
+	"terraform-mcp-server/pkg/hashicorp/tfenterprise"
 	"terraform-mcp-server/pkg/hashicorp/tfregistry"
 
 	"github.com/mark3labs/mcp-go/server"
@@ -60,6 +61,24 @@ func registryInit(hcServer *server.MCPServer, logger *log.Logger) {
 	tfregistry.InitTools(hcServer, registryClient, logger)
 	tfregistry.RegisterResources(hcServer, registryClient, logger)
 	tfregistry.RegisterResourceTemplates(hcServer, registryClient, logger)
+}
+
+func tfeInit(hcServer *server.MCPServer, logger *log.Logger) {
+	tfeToken := viper.GetString("HCP_TFE_TOKEN")
+	tfeAddress := viper.GetString("HCP_TFE_ADDRESS")
+
+	if tfeAddress == "" {
+		tfeAddress = "https://app.terraform.io"
+		logger.Warnf("HCP_TFE_ADDRESS not set, defaulting to %s", tfeAddress)
+	}
+
+	if tfeToken != "" {
+		if err := tfenterprise.Init(hcServer, logger, tfeToken, tfeAddress); err != nil {
+			logger.Errorf("TFE client init failed, falling back to unauthenticated client: %v", err)
+		}
+	} else {
+		logger.Warnf("HCP_TFE_TOKEN not set, defaulting to non-authenticated client")
+	}
 }
 
 func serverInit(ctx context.Context, hcServer *server.MCPServer, logger *log.Logger) error {
