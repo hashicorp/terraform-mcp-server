@@ -10,6 +10,6 @@ import (
 )
 
 func InitOrganizationTools(hcServer *server.MCPServer, tfeClient *tfe.Client, logger *log.Logger) {
-	hcServer.AddTool(ListOrganizations(tfeClient, logger))
+	hcServer.AddTool(SearchOrganizations(tfeClient, logger))
 	hcServer.AddTool(GetOrganizationDetails(tfeClient, logger))
 }

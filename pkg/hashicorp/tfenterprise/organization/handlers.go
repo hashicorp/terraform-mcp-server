@@ -14,10 +14,10 @@ import (
 	"terraform-mcp-server/pkg/hashicorp/tfenterprise/util"
 )
 
-func ListOrganizations(tfeClient *tfe.Client, logger *log.Logger) (tool mcp.Tool, handler server.ToolHandlerFunc) {
-	return mcp.NewTool("listOrganizations",
-			mcp.WithDescription("This tool lists all organizations the authenticated user has access to in Terraform cloud/ enterprise. An optional query can be passed, which helps match organizations by name or email."),
-			mcp.WithTitleAnnotation("List organizations accessible to the authenticated Terraform user"),
+func SearchOrganizations(tfeClient *tfe.Client, logger *log.Logger) (tool mcp.Tool, handler server.ToolHandlerFunc) {
+	return mcp.NewTool("searchOrganizations",
+			mcp.WithDescription("This tool searches for all organizations the authenticated user has access to in Terraform cloud/ enterprise. An optional query can be passed, which helps match organizations by name or email."),
+			mcp.WithTitleAnnotation("Search for organizations accessible to the authenticated Terraform user"),
 			mcp.WithReadOnlyHintAnnotation(true),
 			mcp.WithOpenWorldHintAnnotation(false),
 			mcp.WithString("query", mcp.Description("Optional: Filter organizations by name or email")),
@@ -65,7 +65,7 @@ func ListOrganizations(tfeClient *tfe.Client, logger *log.Logger) (tool mcp.Tool
 func GetOrganizationDetails(tfeClient *tfe.Client, logger *log.Logger) (tool mcp.Tool, handler server.ToolHandlerFunc) {
 	return mcp.NewTool("getOrganizationDetails",
 			mcp.WithDescription("This tool retrieves details about a specific organization the authenticated user has access to in Terraform cloud/ enterprise. "+
-				"If no such organization is found, search for a relevant organization using the `ListOrganizations` tool."),
+				"If no such organization is found, search for a relevant organization using the `SearchOrganizations` tool."),
 			mcp.WithTitleAnnotation("Get details of a specific organization accessible to the authenticated Terraform user"),
 			mcp.WithReadOnlyHintAnnotation(true),
 			mcp.WithOpenWorldHintAnnotation(false),
@@ -80,7 +80,7 @@ func GetOrganizationDetails(tfeClient *tfe.Client, logger *log.Logger) (tool mcp
 			orgDetails, err := tfeClient.Organizations.Read(ctx, organizationName)
 			if err != nil {
 				if errors.Is(err, tfe.ErrResourceNotFound) {
-					return nil, util.LogAndWrapError(logger, fmt.Sprintf("organizationName %s not found, search for a relevant organization using the `ListOrganizations` tool with the provided organizationName as query", organizationName), nil)
+					return nil, util.LogAndWrapError(logger, fmt.Sprintf("organizationName %s not found, search for a relevant organization using the `SearchOrganizations` tool with the provided organizationName as query", organizationName), nil)
 				}
 				return nil, util.LogAndWrapError(logger, fmt.Sprintf("getting organization details for %s", organizationName), err)
 			}

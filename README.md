@@ -134,10 +134,10 @@ The following sets of tools are available:
 
 #### Terraform Enterprise Tools
 
-| Toolset        | Tool                     | Description                                                                                                                                                                                           |
-|----------------|--------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `organization` | `listOrganizations`      | Lists all organizations the authenticated user has access to in Terraform Cloud/Enterprise. An optional query can be passed to filter organizations by name or email.                                   |
-| `organization` | `getOrganizationDetails` | Retrieves detailed information about a specific organization the authenticated user has access to in Terraform Cloud/Enterprise using the provided organization name.                                  |
+| Toolset        | Tool                     | Description                                                                                                                                                              |
+|----------------|--------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `organization` | `searchOrganizations`    | Searches for organizations the authenticated user has access to in Terraform Cloud/Enterprise. An optional query can be passed to filter organizations by name or email. |
+| `organization` | `getOrganizationDetails` | Retrieves detailed information about a specific organization the authenticated user has access to in Terraform Cloud/Enterprise using the provided organization name.    |
 
 ### Build from source
 
