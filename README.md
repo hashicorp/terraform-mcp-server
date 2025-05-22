@@ -1,4 +1,4 @@
-# Terraform MCP Server
+# <img src="public/images/Terraform-LogoMark_onDark.svg" width="30" align="left" style="margin-right: 12px;"/> Terraform MCP Server
 
 The Terraform MCP Server is a [Model Context Protocol (MCP)](https://modelcontextprotocol.io/introduction)
 server that provides seamless integration with Terraform Registry APIs, enabling advanced
