@@ -28,7 +28,7 @@ permissions:
 jobs:
   get-go-version:
     name: "Determine Go toolchain version"
-    runs-on: ${{ github.repository == 'hashicorp/terraform-mcp-server' && 'ubuntu-latest' || fromJSON('["self-hosted","ondemand","os=linux"]') }}
+    runs-on: ubuntu-latest
     outputs:
       go-version: ${{ steps.get-go-version.outputs.go-version }}
     steps:
@@ -47,7 +47,7 @@ jobs:
           echo "go-version=$(cat .go-version)" >> "$GITHUB_OUTPUT"
 
   set-product-version:
-    runs-on: ${{ github.repository == 'hashicorp/terraform-mcp-server' && 'ubuntu-latest' || fromJSON('["self-hosted","ondemand","os=linux"]') }}
+    runs-on: ubuntu-latest
     outputs:
       product-version: ${{ steps.set-product-version.outputs.product-version }}
       product-base-version: ${{ steps.set-product-version.outputs.base-product-version }}
@@ -61,7 +61,7 @@ jobs:
 
   generate-metadata-file:
     needs: set-product-version
-    runs-on: ${{ github.repository == 'hashicorp/terraform-mcp-server' && 'ubuntu-latest' || fromJSON('["self-hosted","ondemand","os=linux"]') }}
+    runs-on: ubuntu-latest
     outputs:
       filepath: ${{ steps.generate-metadata-file.outputs.filepath }}
     steps:
@@ -83,7 +83,7 @@ jobs:
     needs:
       - get-go-version
       - set-product-version
-    runs-on: ${{ github.repository == 'hashicorp/terraform-mcp-server' && 'ubuntu-latest' || fromJSON('["self-hosted","ondemand","os=linux"]') }}
+    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
@@ -125,7 +125,7 @@ jobs:
     needs:
       - set-product-version
       - build
-    runs-on: ${{ github.repository == 'hashicorp/terraform-mcp-server' && 'ubuntu-latest' || fromJSON('["self-hosted","ondemand","os=linux"]') }}
+    runs-on: ubuntu-latest
     strategy:
       matrix:
         include:

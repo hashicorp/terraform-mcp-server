@@ -12,7 +12,7 @@ permissions:
 
 jobs:
   e2e-test:
-    runs-on: ${{ github.repository == 'hashicorp/terraform-mcp-server' && 'ubuntu-latest' || fromJSON('["self-hosted","ondemand","os=linux"]') }}
+    runs-on: ubuntu-latest
 
     steps:
       - name: Check out code
