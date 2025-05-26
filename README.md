@@ -1,4 +1,5 @@
 # <img src="public/images/Terraform-LogoMark_onDark.svg" width="30" align="left" style="margin-right: 12px;"/> Terraform MCP Server
+[![smithery badge](https://smithery.ai/badge/@hashicorp/terraform-mcp-server)](https://smithery.ai/server/@hashicorp/terraform-mcp-server)
 
 The Terraform MCP Server is a [Model Context Protocol (MCP)](https://modelcontextprotocol.io/introduction)
 server that provides seamless integration with Terraform Registry APIs, enabling advanced
@@ -19,6 +20,14 @@ automation and interaction capabilities for Infrastructure as Code (IaC) develop
 2. Once Docker is installed, you will need to ensure Docker is running.
 
 ## Installation
+
+### Installing via Smithery
+
+To install Terraform MCP Server for Claude Desktop automatically via [Smithery](https://smithery.ai/server/@hashicorp/terraform-mcp-server):
+
+```bash
+npx -y @smithery/cli install @hashicorp/terraform-mcp-server --client claude
+```
 
 ### Usage with VS Code
 
