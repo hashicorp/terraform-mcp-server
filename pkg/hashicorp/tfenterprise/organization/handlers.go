@@ -29,9 +29,9 @@ func SearchOrganizations(tfeClient *tfe.Client, logger *log.Logger) (tool mcp.To
 				}
 			}
 
-			var allOrgs []*tfe.Organization
+			var fetchedOrgList []*tfe.Organization
 			pageNumber := 1
-			totalCount := 0
+			totalOrgCount := 0
 
 			// Iterate through all pages to collect all organizations
 			for {
@@ -46,15 +46,15 @@ func SearchOrganizations(tfeClient *tfe.Client, logger *log.Logger) (tool mcp.To
 				if err != nil {
 					return nil, util.LogAndWrapError(logger, "listing organizations", err)
 				}
-				allOrgs = append(allOrgs, orgList.Items...)
-				totalCount = orgList.TotalCount
+				fetchedOrgList = append(fetchedOrgList, orgList.Items...)
+				totalOrgCount = orgList.TotalCount
 
-				if len(allOrgs) >= totalCount || len(orgList.Items) == 0 {
+				if len(fetchedOrgList) >= totalOrgCount || len(orgList.Items) == 0 {
 					break
 				}
 				pageNumber++
 			}
-			orgSummary, err := renderOrganizationsSummary(allOrgs, query)
+			orgSummary, err := renderOrganizationsSummary(fetchedOrgList, query)
 			if err != nil {
 				return nil, util.LogAndWrapError(logger, fmt.Sprintf("getting organizations(s), none found! query used: %s", query), nil)
 			}
