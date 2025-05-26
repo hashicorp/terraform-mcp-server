@@ -18,6 +18,35 @@ automation and interaction capabilities for Infrastructure as Code (IaC) develop
 1. To run the server in a container, you will need to have [Docker](https://www.docker.com/) installed.
 2. Once Docker is installed, you will need to ensure Docker is running.
 
+## Terraform Cloud Integration
+
+To use the Terraform Cloud tools, you need to provide authentication credentials in your configuration. 
+Add the following environment variables to any configuration:
+
+- `HCP_TFE_TOKEN`: Your Terraform Cloud API token
+- `HCP_TFE_ADDRESS`: The address of your Terraform Cloud/Enterprise instance (optional, defaults to "https://app.terraform.io")
+
+Example environment configuration:
+```json
+{
+  "mcpServers": {
+    "terraform": {
+      "command": "docker",
+      "args": [
+        "run",
+        "-i",
+        "--rm",
+        "hashicorp/terraform-mcp-server"
+      ], 
+      "env": {
+        "HCP_TFE_TOKEN": "your_terraform_cloud_token",
+        "HCP_TFE_ADDRESS": "https://app.terraform.io"
+      }
+    }
+  }
+}
+```
+
 ## Installation
 
 ### Usage with VS Code
@@ -44,6 +73,8 @@ More about using MCP server tools in VS Code's [agent mode documentation](https:
 }
 ```
 
+To use Terraform Cloud features, add the environment variables as described in the [Terraform Cloud Integration](#terraform-cloud-integration) section.
+
 Optionally, you can add a similar example (i.e. without the mcp key) to a file called `.vscode/mcp.json` in your workspace. This will allow you to share the configuration with others.
 
 ```json
@@ -61,6 +92,8 @@ Optionally, you can add a similar example (i.e. without the mcp key) to a file c
   }
 }
 ```
+
+For Terraform Cloud integration, add the environment variables as described in the [Terraform Cloud Integration](#terraform-cloud-integration) section.
 
 More about using MCP server tools in Claude Desktop [user documentation](https://code.visualstudio.com/docs/copilot/chat/mcp-servers).
 
@@ -82,11 +115,15 @@ More about using MCP server tools in Claude Desktop [user documentation](https:/
 }
 ```
 
+For Terraform Cloud integration, add the environment variables as described in the [Terraform Cloud Integration](#terraform-cloud-integration) section.
+
 ## Tool Configuration
 
 ### Available Toolsets
 
 The following sets of tools are available:
+
+#### Terraform Registry Tools
 
 | Toolset     | Tool                   | Description                                                                                                                                                                                                                                                    |
 |-------------|------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
@@ -94,6 +131,13 @@ The following sets of tools are available:
 | `providers` | `getProviderDocs`      | Fetches the complete documentation content for a specific provider resource, data source, or function using a document ID obtained from the `resolveProviderDocID` tool. Returns the raw documentation in markdown format.                                     |
 | `modules`   | `searchModules`        | Searches the Terraform Registry for modules based on specified `moduleQuery` with pagination. Returns a list of module IDs with their names, descriptions, download counts, verification status, and publish dates                                             |
 | `modules`   | `moduleDetails`        | Retrieves detailed documentation for a module using a module ID obtained from the `searchModules` tool including inputs, outputs, configuration, submodules, and examples.                                                                                     |
+
+#### Terraform Enterprise Tools
+
+| Toolset        | Tool                     | Description                                                                                                                                                              |
+|----------------|--------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `organization` | `searchOrganizations`    | Searches for organizations the authenticated user has access to in Terraform Cloud/Enterprise. An optional query can be passed to filter organizations by name or email. |
+| `organization` | `getOrganizationDetails` | Retrieves detailed information about a specific organization the authenticated user has access to in Terraform Cloud/Enterprise using the provided organization name.    |
 
 ### Build from source
 
@@ -122,6 +166,8 @@ make build
   }
 }
 ```
+
+To use Terraform Cloud features with the locally built binary, add the environment variables as described in the [Terraform Cloud Integration](#terraform-cloud-integration) section.
 
 ## Building the Docker Image locally
 
@@ -155,6 +201,8 @@ This will create a local Docker image that you can use in the following configur
   }
 }
 ```
+
+For Terraform Cloud integration with locally built image, add the environment variables as described in the [Terraform Cloud Integration](#terraform-cloud-integration) section.
 
 ## Development
 
