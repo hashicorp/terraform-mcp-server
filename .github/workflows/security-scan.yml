@@ -49,10 +49,12 @@ jobs:
 
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          path: code
       - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
         with:
           cache: ${{ contains(runner.name, 'Github Actions') }}
-          go-version-file: .go-version
+          go-version-file: "code/.go-version"
           cache-dependency-path: '**/go.sum'
 
       - name: Clone Security Scanner repo
@@ -67,8 +69,10 @@ jobs:
         id: scan
         uses: ./security-scanner
         with:
-          repository: "$PWD"
+          repository: "code"
           plugins: "codeql"
+        env:
+          SECURITY_SCANNER_CONFIG_FILE: "code/scan.hcl"
 
       - name: SARIF Output
         shell: bash
