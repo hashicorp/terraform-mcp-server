@@ -10,6 +10,10 @@
 #
 # ===================================
 
+# certbuild captures the ca-certificates
+FROM docker.mirror.hashicorp.services/alpine:3.22 AS certbuild
+RUN apk add --no-cache ca-certificates
+
 # devbuild compiles the binary
 # -----------------------------------
 FROM golang:1.24.2 AS devbuild
@@ -28,7 +32,7 @@ FROM scratch AS dev
 ARG VERSION="dev"
 WORKDIR /server
 COPY --from=devbuild /build/terraform-mcp-server .
-COPY --from=devbuild /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
+COPY --from=certbuild /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
 CMD ["./terraform-mcp-server", "stdio"]
 
 # ===================================
@@ -51,7 +55,7 @@ ARG TARGETOS TARGETARCH
 LABEL version=$PRODUCT_VERSION
 LABEL revision=$PRODUCT_REVISION
 COPY dist/$TARGETOS/$TARGETARCH/$BIN_NAME /bin/terraform-mcp-server
-COPY --from=devbuild /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
+COPY --from=certbuild /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
 CMD ["/bin/terraform-mcp-server", "stdio"]
 
 # ===================================
