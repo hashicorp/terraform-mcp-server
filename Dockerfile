@@ -37,6 +37,8 @@ CMD ["./terraform-mcp-server", "stdio"]
 #
 # ===================================
 
+# default release image (refereced in .github/workflows/build.yml)
+# -----------------------------------
 FROM scratch AS release-default
 ARG BIN_NAME
 # Export BIN_NAME for the CMD below, it can't see ARGs directly.
