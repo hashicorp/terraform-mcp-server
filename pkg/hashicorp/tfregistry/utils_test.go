@@ -427,7 +427,7 @@ func TestGetLatestProviderVersion(t *testing.T) {
 			namespace:            "hashicorp",
 			providerName:         "aws",
 			mockServerResponse:   `not json`,
-			mockStatusCode:       http.StatusOK,
+			mockStatusCode:       http.StatusNotFound,
 			expectedVersion:      "",
 			expectError:          true,
 			expectedErrorContent: "provider versions request unmarshalling", // Error from logAndReturnError
