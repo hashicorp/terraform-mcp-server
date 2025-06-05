@@ -1,6 +1,9 @@
 # Copyright (c) HashiCorp, Inc.
 # SPDX-License-Identifier: MPL-2.0
 
+# This Dockerfile contains multiple targets.
+# Use 'docker build --target=<name> .' to build one.
+
 # ===================================
 #
 #   Non-release images.
@@ -46,6 +49,7 @@ ARG TARGETOS TARGETARCH
 LABEL version=$PRODUCT_VERSION
 LABEL revision=$PRODUCT_REVISION
 COPY dist/$TARGETOS/$TARGETARCH/$BIN_NAME /bin/terraform-mcp-server
+COPY --from=devbuild /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
 CMD ["/bin/terraform-mcp-server", "stdio"]
 
 # ===================================
