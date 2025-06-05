@@ -1,9 +1,6 @@
 # Copyright (c) HashiCorp, Inc.
 # SPDX-License-Identifier: MPL-2.0
 
-# This Dockerfile contains multiple targets.
-# Use 'docker build --target=<name> .' to build one.
-
 # ===================================
 #
 #   Non-release images.
@@ -14,27 +11,21 @@
 # -----------------------------------
 FROM golang:1.24.2 AS devbuild
 ARG VERSION="dev"
-# Set the working directory
 WORKDIR /build
 RUN go env -w GOMODCACHE=/root/.cache/go-build
-# Install dependencies
 COPY go.mod go.sum ./
 RUN --mount=type=cache,target=/root/.cache/go-build go mod download
 COPY . ./
-# Build the server
 RUN --mount=type=cache,target=/root/.cache/go-build CGO_ENABLED=0 go build -ldflags="-s -w -X terraform-mcp-server/version.GitCommit=$(shell git rev-parse HEAD) -X terraform-mcp-server/version.BuildDate=$(shell git show --no-show-signature -s --format=%cd --date=format:'%Y-%m-%dT%H:%M:%SZ' HEAD)" \
     -o terraform-mcp-server ./cmd/terraform-mcp-server
 
-# dev runs the binary from devbuild
+# dev runs the binary from devbuild using SCRATCH
 # -----------------------------------
-# Make a stage to run the app
-FROM docker.mirror.hashicorp.services/alpine:3.21 AS dev
+FROM scratch AS dev
 ARG VERSION="dev"
-# Set the working directory
 WORKDIR /server
-# Copy the binary from the build stage
 COPY --from=devbuild /build/terraform-mcp-server .
-# Command to run the server
+COPY --from=devbuild /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
 CMD ["./terraform-mcp-server", "stdio"]
 
 # ===================================
@@ -43,9 +34,7 @@ CMD ["./terraform-mcp-server", "stdio"]
 #
 # ===================================
 
-# default release image (refereced in .github/workflows/build.yml)
-# -----------------------------------
-FROM docker.mirror.hashicorp.services/alpine:3.21 AS release-default
+FROM scratch AS release-default
 ARG BIN_NAME
 # Export BIN_NAME for the CMD below, it can't see ARGs directly.
 ENV BIN_NAME=$BIN_NAME
