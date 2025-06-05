@@ -445,8 +445,7 @@ func TestGetLatestProviderVersion(t *testing.T) {
 				fmt.Fprint(w, tc.mockServerResponse)
 			}))
 			defer server.Close()
-
-			version, err := GetLatestProviderVersion(server.Client(), tc.namespace, tc.providerName, logger, server.URL)
+			version, err := GetLatestProviderVersion(server.Client(), tc.namespace, tc.providerName, logger)
 
 			if tc.expectError {
 				require.Error(t, err, "Expected an error")
