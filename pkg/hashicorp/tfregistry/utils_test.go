@@ -351,3 +351,52 @@ func TestIsV2ProviderDataType(t *testing.T) {
 		}
 	}
 }
+
+func TestLogAndReturnError(t *testing.T) {
+	tests := []struct {
+		name                string
+		logger              *log.Logger
+		context             string
+		inputErr            error
+		expectedErrContains []string
+	}{
+		{
+			name:                "NilError_WithLogger",
+			logger:              logger,
+			context:             "test context nil error",
+			inputErr:            nil,
+			expectedErrContains: []string{"test context nil error"},
+		},
+		{
+			name:                "NonNilError_WithLogger",
+			logger:              logger,
+			context:             "test context with error",
+			inputErr:            fmt.Errorf("original error"),
+			expectedErrContains: []string{"test context with error", "original error"},
+		},
+		{
+			name:                "NilError_NilLogger",
+			logger:              nil,
+			context:             "nil logger context",
+			inputErr:            nil,
+			expectedErrContains: []string{"nil logger context"},
+		},
+		{
+			name:                "NonNilError_NilLogger",
+			logger:              nil,
+			context:             "nil logger with error",
+			inputErr:            fmt.Errorf("original nil logger error"),
+			expectedErrContains: []string{"nil logger with error", "original nil logger error"},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			err := logAndReturnError(tc.logger, tc.context, tc.inputErr)
+			require.Error(t, err, "Expected an error to be returned")
+			for _, expected := range tc.expectedErrContains {
+				assert.Contains(t, err.Error(), expected, "Error message mismatch")
+			}
+		})
+	}
+}
