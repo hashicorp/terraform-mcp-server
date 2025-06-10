@@ -79,7 +79,7 @@ func GetProviderOverviewDocs(registryClient *http.Client, providerVersionID stri
 
 	resourceContent := ""
 	for _, providerOverviewPage := range providerOverview.Data {
-		resourceContentNew, err := GetProviderResouceDocs(registryClient, providerOverviewPage.ID, logger)
+		resourceContentNew, err := GetProviderResourceDocs(registryClient, providerOverviewPage.ID, logger)
 		resourceContent += resourceContentNew
 		if err != nil {
 			return "", logAndReturnError(logger, "getting provider resource docs looping", err)
@@ -89,7 +89,7 @@ func GetProviderOverviewDocs(registryClient *http.Client, providerVersionID stri
 	return resourceContent, nil
 }
 
-func GetProviderResouceDocs(registryClient *http.Client, providerDocsID string, logger *log.Logger) (string, error) {
+func GetProviderResourceDocs(registryClient *http.Client, providerDocsID string, logger *log.Logger) (string, error) {
 	// https://registry.terraform.io/v2/provider-docs/8862001
 	uri := fmt.Sprintf("provider-docs/%s", providerDocsID)
 	response, err := sendRegistryCall(registryClient, "GET", uri, logger, "v2")
@@ -477,10 +477,10 @@ func sendPaginatedRegistryCall[T any](client *http.Client, uriPrefix string, log
 }
 
 func logAndReturnError(logger *log.Logger, context string, err error) error {
-    err = fmt.Errorf("%s, %w", context, err)
-    if logger != nil {
-        logger.Errorf("Error in %s, %v", context, err)
-    }
+	err = fmt.Errorf("%s, %w", context, err)
+	if logger != nil {
+		logger.Errorf("Error in %s, %v", context, err)
+	}
 	return err
 }
 
