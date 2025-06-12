@@ -512,7 +512,11 @@ func GetProviderDocsV2(client *http.Client, providerDetail ProviderDetail, logge
 	builder.WriteString("Each result includes:\n- providerDocID: tfprovider-compatible identifier\n- Title: Service or resource name\n- Category: Type of document\n")
 	builder.WriteString("For best results, select libraries based on the serviceSlug match and category of information requested.\n\n---\n\n")
 	for _, doc := range docs {
-		builder.WriteString(fmt.Sprintf("- providerDocID: %s\n- Title: %s\n- Category: %s\n---\n", doc.ID, doc.Attributes.Title, doc.Attributes.Category))
+		contentSnippet, err := getContentSnippet(client, doc.ID, logger)
+		if err != nil {
+			return "", logAndReturnError(logger, fmt.Sprintf("error fetching provider-docs/%s within GetProviderDocsV2", doc.ID), err)
+		}
+		builder.WriteString(fmt.Sprintf("- providerDocID: %s\n- Content: %s\n---\n", doc.ID, contentSnippet))
 	}
 
 	return builder.String(), nil
