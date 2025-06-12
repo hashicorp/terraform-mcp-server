@@ -269,6 +269,58 @@ var searchModulesTestCases = []RegistryTestCase{
 			"moduleQuery": "vertex ai",
 		},
 	},
+	{
+		TestShouldFail:  false,
+		TestDescription: "Testing searchModules with moduleQuery and namespace",
+		TestPayload: map[string]interface{}{
+			"moduleQuery": "resourcegroup",
+			"namespace":   "Azure",
+		},
+	},
+	{
+		TestShouldFail:  false,
+		TestDescription: "Testing searchModules with moduleQuery and provider",
+		TestPayload: map[string]interface{}{
+			"moduleQuery": "resourcegroup",
+			"provider":    "azurerm",
+		},
+	},
+	{
+		TestShouldFail:  false,
+		TestDescription: "Testing searchModules with moduleQuery and verified true",
+		TestPayload: map[string]interface{}{
+			"moduleQuery": "resourcegroup",
+			"verified":    true,
+		},
+	},
+	{
+		TestShouldFail:  false,
+		TestDescription: "Testing searchModules with moduleQuery, provider, namespace",
+		TestPayload: map[string]interface{}{
+			"moduleQuery": "resourcegroup",
+			"provider":    "azurerm",
+			"namespace":   "azure",
+		},
+	},
+	{
+		TestShouldFail:  false,
+		TestDescription: "Testing searchModules with moduleQuery, provider, namespace, verified",
+		TestPayload: map[string]interface{}{
+			"moduleQuery": "resourcegroup",
+			"provider":    "azurerm",
+			"namespace":   "azure",
+			"verified":    false,
+		},
+	},
+	{
+		TestShouldFail:  false,
+		TestDescription: "Testing searchModules with moduleQuery = '', currentOffset = 10 and provider",
+		TestPayload: map[string]interface{}{
+			"moduleQuery":   "",
+			"currentOffset": 10,
+			"provider":      "azurerm",
+		},
+	},
 }
 
 var moduleDetailsTestCases = []RegistryTestCase{

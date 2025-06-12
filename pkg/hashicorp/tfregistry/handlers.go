@@ -149,6 +149,18 @@ func SearchModules(registryClient *http.Client, logger *log.Logger) (tool mcp.To
 				mcp.Min(0),
 				mcp.DefaultNumber(0),
 			),
+			mcp.WithString("provider",
+				mcp.Description("The Terraform provide to filter the search on."),
+				mcp.DefaultString(""),
+			),
+			mcp.WithString("namespace",
+				mcp.Description("The Terraform namespace to filter the search on."),
+				mcp.DefaultString(""),
+			),
+			mcp.WithBoolean("verified",
+				mcp.Description("True when searching only for parnter modules. False, otherwise."),
+				mcp.DefaultBool(false),
+			),
 		), func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			moduleQuery := request.Params.Arguments["moduleQuery"]
 			currentOffset := request.Params.Arguments["currentOffset"]
@@ -156,12 +168,29 @@ func SearchModules(registryClient *http.Client, logger *log.Logger) (tool mcp.To
 			if val, ok := currentOffset.(float64); ok {
 				currentOffsetValue = int(val)
 			}
+			provider := request.Params.Arguments["provider"]
+			providerValue := ""
+			if pVal, ok := provider.(string); ok {
+				providerValue = string(pVal)
+			}
+
+			namespace := request.Params.Arguments["namespace"]
+			namespaceValue := ""
+			if nsVal, ok := namespace.(string); ok {
+				namespaceValue = string(nsVal)
+			}
+
+			verified := request.Params.Arguments["verified"]
+			verifiedValue := false
+			if vVal, ok := verified.(bool); ok {
+				verifiedValue = bool(vVal)
+			}
 
 			if mq, ok := moduleQuery.(string); !ok {
 				return nil, logAndReturnError(logger, "error finding the module name;", nil)
 			} else {
 				var modulesData, errMsg string
-				response, err := searchModules(registryClient, mq, currentOffsetValue, logger)
+				response, err := searchModules(registryClient, mq, currentOffsetValue, providerValue, namespaceValue, verifiedValue, logger)
 				if err != nil {
 					return nil, logAndReturnError(logger, fmt.Sprintf("no module(s) found for moduleName: %s", mq), err)
 				} else {
