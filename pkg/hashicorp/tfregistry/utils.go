@@ -257,12 +257,22 @@ func resolveProviderDetails(request mcp.CallToolRequest, registryClient *http.Cl
 
 const MODULE_BASE_PATH = "registry://modules"
 
-func searchModules(providerClient *http.Client, moduleQuery string, currentOffset int, logger *log.Logger) ([]byte, error) {
+func searchModules(providerClient *http.Client, moduleQuery string, currentOffset int, provider string, namespace string, verified bool, logger *log.Logger) ([]byte, error) {
 	uri := "modules"
+
 	if moduleQuery != "" {
-		uri = fmt.Sprintf("%s/search?q='%s'&offset=%v", uri, url.PathEscape(moduleQuery), currentOffset)
+		uri = fmt.Sprintf("%s/search?q='%s'&offset=%v&verified=%t", uri, url.PathEscape(moduleQuery), currentOffset, verified)
+		if provider != "" {
+			uri = fmt.Sprintf("%s&provider=%s", uri, url.PathEscape(provider))
+		}
+		if namespace != "" {
+			uri = fmt.Sprintf("%s&namespace=%s", uri, url.PathEscape(namespace))
+		}
 	} else {
-		uri = fmt.Sprintf("%s?offset=%v", uri, currentOffset)
+		uri = fmt.Sprintf("%s?offset=%v&verified=%t", uri, currentOffset, verified)
+		//if provider != "" {
+		//	uri = fmt.Sprintf("%s&provider=%s", uri, url.PathEscape(provider))
+		//	}
 	}
 
 	response, err := sendRegistryCall(providerClient, "GET", uri, logger)
