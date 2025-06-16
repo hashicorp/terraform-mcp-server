@@ -18,6 +18,17 @@ on:
     branches:
       - main
       - release/**
+      - feature/**
+  pull_request:
+    branches:
+      - main
+      - release/**
+      - feature/**
+    types:
+      - opened
+      - synchronize
+      - reopened
+      - ready_for_review
 
 env:
   PKG_NAME: "terraform-mcp-server"
