@@ -351,3 +351,66 @@ func TestIsV2ProviderDataType(t *testing.T) {
 		}
 	}
 }
+
+func TestExtractReadme(t *testing.T) {
+	tests := []struct {
+		name     string
+		readme   string
+		expected string
+	}{
+		{
+			name:     "SingleSection",
+			readme:   "# Title\nSome content here.",
+			expected: "",
+		},
+		{
+			name:     "TwoSections",
+			readme:   "# Title\nSome content here.\n# Section2\nMore content.",
+			expected: "Title\nSome content here.",
+		},
+		{
+			name:     "NoHash",
+			readme:   "No hash at all",
+			expected: "",
+		},
+		{
+			name:     "MultipleHashes",
+			readme:   "# First\nContent1\n# Second\nContent2\n# Third\nContent3",
+			expected: "First\nContent1",
+		},
+		{
+			name:     "HashAtEnd",
+			readme:   "Some intro\n# OnlySection",
+			expected: "",
+		},
+		{
+			name:     "HashInMiddleOfLine",
+			readme:   "Some intro\nSection #1\n# Section2\nContent",
+			expected: "Section2\nContent",
+		},
+		{
+			name:     "EmptyString",
+			readme:   "",
+			expected: "",
+		},
+		{
+			name:     "HashButNoSecond",
+			readme:   "# OnlySection\nContent here.",
+			expected: "",
+		},
+		{
+			name:     "SecondHashImmediatelyAfterFirst",
+			readme:   "# First## Second",
+			expected: "First",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			result := extractReadme(tc.readme)
+			if result != tc.expected {
+				t.Errorf("extractReadme(%q) = %q; want %q", tc.readme, result, tc.expected)
+			}
+		})
+	}
+}

@@ -477,10 +477,10 @@ func sendPaginatedRegistryCall[T any](client *http.Client, uriPrefix string, log
 }
 
 func logAndReturnError(logger *log.Logger, context string, err error) error {
-    err = fmt.Errorf("%s, %w", context, err)
-    if logger != nil {
-        logger.Errorf("Error in %s, %v", context, err)
-    }
+	err = fmt.Errorf("%s, %w", context, err)
+	if logger != nil {
+		logger.Errorf("Error in %s, %v", context, err)
+	}
 	return err
 }
 
@@ -521,4 +521,16 @@ func GetProviderDocsV2(client *http.Client, providerDetail ProviderDetail, logge
 func isV2ProviderDataType(dataType string) bool {
 	v2Categories := []string{"guides", "functions", "overview"}
 	return slices.Contains(v2Categories, dataType)
+}
+
+func extractReadme(readme string) string {
+	start := strings.Index(readme, "#")
+	if start == -1 {
+		return ""
+	}
+	end := strings.Index(readme[start+1:], "#")
+	if end == -1 {
+		return ""
+	}
+	return strings.TrimSpace(readme[start+1 : start+1+end])
 }
