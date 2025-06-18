@@ -62,6 +62,25 @@ Optionally, you can add a similar example (i.e. without the mcp key) to a file c
 }
 ```
 
+If you are running vscode server remotely (e.g. WSL2 on Windows) then use the Remote Settings (JSON) file instead. You can do this by pressing `Ctrl + Shift + P` and typing `Preferences: Open Remote Settings (JSON)`. Default location is `~/.vscode-server/data/Machine/settings.json`.
+
+```json
+{
+  "mcp": {
+    "servers": {
+      "terraform": {
+        "command": "docker",
+        "args": [
+          "run",
+          "-i",
+          "--rm",
+          "hashicorp/terraform-mcp-server"
+        ]
+      }
+    }
+  }
+}
+```
 
 ### Usage with Claude Desktop
 
