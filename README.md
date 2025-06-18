@@ -62,9 +62,10 @@ Optionally, you can add a similar example (i.e. without the mcp key) to a file c
 }
 ```
 
-More about using MCP server tools in Claude Desktop [user documentation](https://code.visualstudio.com/docs/copilot/chat/mcp-servers).
 
 ### Usage with Claude Desktop
+
+More about using MCP server tools in Claude Desktop [user documentation](https://modelcontextprotocol.io/quickstart/user).
 
 ```json
 {
