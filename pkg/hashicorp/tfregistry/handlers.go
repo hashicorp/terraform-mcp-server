@@ -320,7 +320,7 @@ module "%s" {
 			}
 			builder.WriteString("---\n")
 			builder.WriteString("## Usage\n\n")
-			builder.WriteString("To use any of the policies in your Terraform configuration, use the following template, use multiple blocks for applying multiple policies:\n")
+			builder.WriteString("Generate the content for a HashiCorp Configuration Language (HCL) file named policies.hcl. This file should define a set of policies. For each policy provided, create a distinct policy block using the following template.\n")
 			builder.WriteString("\n```hcl\n")
 			builder.WriteString(moduleList)
 			builder.WriteString(fmt.Sprintf(`
