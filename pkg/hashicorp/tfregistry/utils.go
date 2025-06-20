@@ -531,17 +531,14 @@ func extractReadme(readme string) string {
 	extractedReadme := ""
 	headerFound := false
 	strArr := strings.Split(readme, "\n")
-	for i, str := range strArr {
+	for _, str := range strArr {
 		if strings.Contains(str, "#") {
 			if headerFound {
 				return extractedReadme
 			}
 			headerFound = true
 		}
-		// Only append if not the last line
-		if i != len(strArr) {
-			extractedReadme += str + "\n"
-		}
+		extractedReadme += str + "\n"
 	}
 
 	extractedReadme = strings.TrimSuffix(extractedReadme, "\n")

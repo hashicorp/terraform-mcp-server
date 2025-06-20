@@ -384,6 +384,11 @@ func TestExtractReadme(t *testing.T) {
 			expected: "Some intro\n# OnlySection",
 		},
 		{
+			name:     "HashWithoutNextLine",
+			readme:   "Some intro\n# OnlySection ## More Content",
+			expected: "Some intro\n# OnlySection ## More Content",
+		},
+		{
 			name:     "EmptyString",
 			readme:   "",
 			expected: "",
