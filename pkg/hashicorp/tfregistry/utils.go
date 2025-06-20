@@ -522,3 +522,25 @@ func isV2ProviderDataType(dataType string) bool {
 	v2Categories := []string{"guides", "functions", "overview"}
 	return slices.Contains(v2Categories, dataType)
 }
+
+func extractReadme(readme string) string {
+	if readme == "" {
+		return ""
+	}
+
+	extractedReadme := ""
+	headerFound := false
+	strArr := strings.Split(readme, "\n")
+	for _, str := range strArr {
+		if strings.Contains(str, "#") {
+			if headerFound {
+				return extractedReadme
+			}
+			headerFound = true
+		}
+		extractedReadme += str + "\n"
+	}
+
+	extractedReadme = strings.TrimSuffix(extractedReadme, "\n")
+	return extractedReadme
+}
