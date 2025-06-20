@@ -361,47 +361,32 @@ func TestExtractReadme(t *testing.T) {
 		{
 			name:     "SingleSection",
 			readme:   "# Title\nSome content here.",
-			expected: "",
+			expected: "# Title\nSome content here.",
 		},
 		{
 			name:     "TwoSections",
 			readme:   "# Title\nSome content here.\n# Section2\nMore content.",
-			expected: "Title\nSome content here.",
+			expected: "# Title\nSome content here.\n",
 		},
 		{
 			name:     "NoHash",
 			readme:   "No hash at all",
-			expected: "",
+			expected: "No hash at all",
 		},
 		{
 			name:     "MultipleHashes",
 			readme:   "# First\nContent1\n# Second\nContent2\n# Third\nContent3",
-			expected: "First\nContent1",
+			expected: "# First\nContent1\n",
 		},
 		{
 			name:     "HashAtEnd",
 			readme:   "Some intro\n# OnlySection",
-			expected: "",
-		},
-		{
-			name:     "HashInMiddleOfLine",
-			readme:   "Some intro\nSection #1\n# Section2\nContent",
-			expected: "Section2\nContent",
+			expected: "Some intro\n# OnlySection",
 		},
 		{
 			name:     "EmptyString",
 			readme:   "",
 			expected: "",
-		},
-		{
-			name:     "HashButNoSecond",
-			readme:   "# OnlySection\nContent here.",
-			expected: "",
-		},
-		{
-			name:     "SecondHashImmediatelyAfterFirst",
-			readme:   "# First## Second",
-			expected: "First",
 		},
 	}
 

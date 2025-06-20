@@ -524,13 +524,26 @@ func isV2ProviderDataType(dataType string) bool {
 }
 
 func extractReadme(readme string) string {
-	start := strings.Index(readme, "#")
-	if start == -1 {
+	if readme == "" {
 		return ""
 	}
-	end := strings.Index(readme[start+1:], "#")
-	if end == -1 {
-		return ""
+
+	extractedReadme := ""
+	headerFound := false
+	strArr := strings.Split(readme, "\n")
+	for i, str := range strArr {
+		if strings.Contains(str, "#") {
+			if headerFound {
+				return extractedReadme
+			}
+			headerFound = true
+		}
+		// Only append if not the last line
+		if i != len(strArr) {
+			extractedReadme += str + "\n"
+		}
 	}
-	return strings.TrimSpace(readme[start+1 : start+1+end])
+
+	extractedReadme = strings.TrimSuffix(extractedReadme, "\n")
+	return extractedReadme
 }

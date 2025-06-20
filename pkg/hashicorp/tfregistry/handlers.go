@@ -291,7 +291,7 @@ func PolicyDetails(registryClient *http.Client, logger *log.Logger) (tool mcp.To
 
 			policyResp, err := sendRegistryCall(registryClient, "GET", fmt.Sprintf("%s?include=policies,policy-modules,policy-library", terraformPolicyID), logger, "v2")
 			if err != nil {
-				return nil, logAndReturnError(logger, "Failed to fetch policied details: registry API did not return a successful response", err)
+				return nil, logAndReturnError(logger, "Failed to fetch policy details: registry API did not return a successful response", err)
 			}
 
 			var policyDetails TerraformPolicyDetails
