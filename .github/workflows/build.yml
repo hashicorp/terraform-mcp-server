@@ -171,6 +171,7 @@ jobs:
           arch: ${{ matrix.arch }}
           tags: |
             docker.io/hashicorp/${{ env.repo }}:${{ env.product_version }}
+            public.ecr.aws/hashicorp/${{ env.repo }}:${{ env.product_version }}
           # dev_tags are tags that get automatically pushed whenever successful
           # builds make it to the stable channel. The intention is for these tags
           # to be used for early testing of new code prior to official releases
@@ -191,5 +192,6 @@ jobs:
           # will fail to any other DockerHub org or registry. You can optionally
           # prepend docker.io
           dev_tags: |
+            docker.io/hashicorppreview/${{ env.repo }}:latest
             docker.io/hashicorppreview/${{ env.repo }}:${{ env.product_version }}-dev
             docker.io/hashicorppreview/${{ env.repo }}:${{ env.product_version }}-${{ github.sha }}
