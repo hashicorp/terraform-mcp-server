@@ -18,6 +18,18 @@ automation and interaction capabilities for Infrastructure as Code (IaC) develop
 1. To run the server in a container, you will need to have [Docker](https://www.docker.com/) installed.
 2. Once Docker is installed, you will need to ensure Docker is running.
 
+## Transport Support
+
+The Terraform MCP Server supports multiple transport protocols:
+
+### 1. Stdio Transport (Default)
+Standard input/output communication using JSON-RPC messages.
+
+### 2. StreamableHTTP Transport
+Modern HTTP-based transport supporting both direct HTTP requests and Server-Sent Events (SSE) streams. This is the recommended transport for remote/distributed setups.
+
+**Endpoint**: `http://localhost:8080/mcp`
+
 ## Installation
 
 ### Usage with VS Code

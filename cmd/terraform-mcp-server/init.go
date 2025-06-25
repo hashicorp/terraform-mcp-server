@@ -31,7 +31,13 @@ func init() {
 	cobra.OnInitialize(initConfig)
 	rootCmd.SetVersionTemplate("{{.Short}}\n{{.Version}}\n")
 	rootCmd.PersistentFlags().String("log-file", "", "Path to log file")
+	
+	// Add HTTP command flags (avoid 'h' shorthand conflict with help)
+	httpCmd.Flags().StringP("port", "p", "8080", "Port to listen on")
+	httpCmd.Flags().String("host", "0.0.0.0", "Host to bind to")
+	
 	rootCmd.AddCommand(stdioCmd)
+	rootCmd.AddCommand(httpCmd)
 }
 
 func initConfig() {

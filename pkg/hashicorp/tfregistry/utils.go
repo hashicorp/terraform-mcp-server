@@ -202,24 +202,24 @@ func isValidProviderDataType(providerDataType string) bool {
 
 func resolveProviderDetails(request mcp.CallToolRequest, registryClient *http.Client, defaultErrorGuide string, logger *log.Logger) (ProviderDetail, error) {
 	providerDetail := ProviderDetail{}
-	providerName, ok := request.Params.Arguments["providerName"].(string)
-	if !ok || providerName == "" {
+	providerName := request.GetString("providerName", "")
+	if providerName == "" {
 		return providerDetail, fmt.Errorf("providerName is required and must be a string")
 	}
 
-	providerNamespace, ok := request.Params.Arguments["providerNamespace"].(string)
-	if !ok || providerNamespace == "" {
+	providerNamespace := request.GetString("providerNamespace", "")
+	if providerNamespace == "" {
 		logger.Debugf(`Error getting latest provider version in "%s" namespace, trying the hashicorp namespace`, providerNamespace)
 		providerNamespace = "hashicorp"
 	}
 
-	providerVersion := request.Params.Arguments["providerVersion"]
-	providerDataType := request.Params.Arguments["providerDataType"]
+	providerVersion := request.GetString("providerVersion", "latest")
+	providerDataType := request.GetString("providerDataType", "resources")
 
 	var err error
 	providerVersionValue := ""
-	if v, ok := providerVersion.(string); ok && isValidProviderVersionFormat(v) {
-		providerVersionValue = v
+	if isValidProviderVersionFormat(providerVersion) {
+		providerVersionValue = providerVersion
 	} else {
 		providerVersionValue, err = GetLatestProviderVersion(registryClient, providerNamespace, providerName, logger)
 		if err != nil {
@@ -244,8 +244,8 @@ func resolveProviderDetails(request mcp.CallToolRequest, registryClient *http.Cl
 	}
 
 	providerDataTypeValue := ""
-	if pdt, ok := providerDataType.(string); ok && isValidProviderDataType(pdt) {
-		providerDataTypeValue = pdt
+	if isValidProviderDataType(providerDataType) {
+		providerDataTypeValue = providerDataType
 	}
 
 	providerDetail.ProviderName = providerName
