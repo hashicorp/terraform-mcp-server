@@ -9,6 +9,7 @@ SECURITY
 FEATURES
 
 * Added support for publishing Docker images to Amazon ECR
+* Added support for searching and getting documentation for policies from the Terraform Registry
 * Enhanced toolset for resolving provider documentation, fetching provider docs, searching modules, and retrieving module details from the Terraform Registry.
 
 IMPROVEMENTS
@@ -32,4 +33,3 @@ FEATURES
 - Provides seamless integration with Terraform Registry APIs for provider and module discovery, documentation retrieval, and advanced IaC automation.
 - Initial support for VS Code and Claude Desktop integration.
 - Includes basic CI/CD, Docker build, and test infrastructure.
-
