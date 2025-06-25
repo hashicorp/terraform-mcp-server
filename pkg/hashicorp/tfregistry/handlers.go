@@ -229,7 +229,7 @@ func SearchPolicies(registryClient *http.Client, logger *log.Logger) (tool mcp.T
 		), func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			var terraformPolicies TerraformPolicyList
 			policyQuery := request.Params.Arguments["policyQuery"]
-			if pq, ok := policyQuery.(string); !ok {
+			if pq, ok := policyQuery.(string); !ok || policyQuery == "" {
 				return nil, logAndReturnError(logger, "error finding the policy based on that name;", nil)
 			} else {
 
@@ -241,7 +241,7 @@ func SearchPolicies(registryClient *http.Client, logger *log.Logger) (tool mcp.T
 
 				err = json.Unmarshal(policyResp, &terraformPolicies)
 				if err != nil {
-					return nil, logAndReturnError(nil, "unmarshalling policy list", err)
+					return nil, logAndReturnError(nil, "Unmarshalling policy list", err)
 				}
 
 				var builder strings.Builder
@@ -250,8 +250,9 @@ func SearchPolicies(registryClient *http.Client, logger *log.Logger) (tool mcp.T
 
 				contentAvailable := false
 				for _, policy := range terraformPolicies.Data {
-					if strings.Contains(strings.ToLower(policy.Attributes.Name), strings.ToLower(pq)) ||
-						strings.Contains(strings.ToLower(policy.Attributes.Title), strings.ToLower(pq)) {
+					cs, err := containsSlug(strings.ToLower(policy.Attributes.Title), strings.ToLower(pq))
+					cs_pn, err_pn := containsSlug(strings.ToLower(policy.Attributes.Name), strings.ToLower(pq))
+					if (cs || cs_pn) && err == nil && err_pn == nil {
 						contentAvailable = true
 						ID := strings.ReplaceAll(policy.Relationships.LatestVersion.Links.Related, "/v2/", "")
 						builder.WriteString(fmt.Sprintf(
@@ -266,7 +267,8 @@ func SearchPolicies(registryClient *http.Client, logger *log.Logger) (tool mcp.T
 
 				policyData := builder.String()
 				if !contentAvailable {
-					policyData = fmt.Sprintf("No policies found matching the query: %s. Try a different policyQuery.", pq)
+					errMessage := fmt.Sprintf("No policies found matching the query: %s. Try a different policyQuery.", pq)
+					return nil, logAndReturnError(logger, errMessage, nil)
 				}
 
 				return mcp.NewToolResultText(policyData), nil

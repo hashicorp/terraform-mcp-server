@@ -95,7 +95,8 @@ The following sets of tools are available:
 | `providers` | `getProviderDocs`      | Fetches the complete documentation content for a specific provider resource, data source, or function using a document ID obtained from the `resolveProviderDocID` tool. Returns the raw documentation in markdown format.                                     |
 | `modules`   | `searchModules`        | Searches the Terraform Registry for modules based on specified `moduleQuery` with pagination. Returns a list of module IDs with their names, descriptions, download counts, verification status, and publish dates                                             |
 | `modules`   | `moduleDetails`        | Retrieves detailed documentation for a module using a module ID obtained from the `searchModules` tool including inputs, outputs, configuration, submodules, and examples.                                                                                     |
-
+| `policies`   | `searchPolicies`        | Queries the Terraform Registry to find and list the appropriate Sentinel Policy based on the provided query `policyQuery`. Returns a list of matching policies with terraformPolicyIDs with their name, title and download counts.                                                                                    |
+| `policies`   | `policyDetails`        | Retrieves detailed documentation for a policy set using a terraformPolicyID obtained from the `searchPolicies` tool including policy readme and implementation details.                                                                                     |
 ### Install from source
 
 Use the latest release version:
