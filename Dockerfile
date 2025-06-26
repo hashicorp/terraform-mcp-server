@@ -39,8 +39,6 @@ WORKDIR /server
 # Copy the binary from the build stage
 COPY --from=devbuild /build/terraform-mcp-server .
 COPY --from=certbuild /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
-# Expose port 8080 for HTTP mode
-EXPOSE 8080
 # Command to run the server (default to stdio for backward compatibility)
 CMD ["./terraform-mcp-server", "stdio"]
 
@@ -65,8 +63,7 @@ LABEL version=$PRODUCT_VERSION
 LABEL revision=$PRODUCT_REVISION
 COPY dist/$TARGETOS/$TARGETARCH/$BIN_NAME /bin/terraform-mcp-server
 COPY --from=certbuild /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
-# Expose port 8080 for HTTP mode
-EXPOSE 8080
+# Command to run the server (default to stdio for backward compatibility)
 CMD ["/bin/terraform-mcp-server", "stdio"]
 
 # ===================================
