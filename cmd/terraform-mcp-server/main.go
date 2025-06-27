@@ -26,6 +26,7 @@ var (
 		Short:   "Terraform MCP Server",
 		Long:    `A Terraform MCP server that handles various tools and resources.`,
 		Version: fmt.Sprintf("Version: %s\nCommit: %s\nBuild Date: %s", version.GetHumanVersion(), version.GitCommit, version.BuildDate),
+		Run:     runDefaultCommand,
 	}
 
 	stdioCmd = &cobra.Command{
@@ -168,9 +169,57 @@ func NewServer(version string, opts ...server.ServerOption) *server.MCPServer {
 	return s
 }
 
+// runDefaultCommand handles the default behavior when no subcommand is provided
+func runDefaultCommand(cmd *cobra.Command, _ []string) {
+	// Default to stdio mode when no subcommand is provided
+	logFile, err := cmd.PersistentFlags().GetString("log-file")
+	if err != nil {
+		stdlog.Fatal("Failed to get log file:", err)
+	}
+	logger, err := initLogger(logFile)
+	if err != nil {
+		stdlog.Fatal("Failed to initialize logger:", err)
+	}
+
+	if err := runStdioServer(logger); err != nil {
+		stdlog.Fatal("failed to run stdio server:", err)
+	}
+}
+
 func main() {
+	// Check environment variables first - they override command line args
+	if shouldUseHTTPMode() {
+		port := getHTTPPort()
+		host := "0.0.0.0"
+		
+		logFile, _ := rootCmd.PersistentFlags().GetString("log-file")
+		logger, err := initLogger(logFile)
+		if err != nil {
+			stdlog.Fatal("Failed to initialize logger:", err)
+		}
+		
+		if err := runHTTPServer(logger, host, port); err != nil {
+			stdlog.Fatal("failed to run HTTP server:", err)
+		}
+		return
+	}
+	
+	// Fall back to normal CLI behavior
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Println(err)
 		os.Exit(1)
 	}
+}
+
+// shouldUseHTTPMode checks if environment variables indicate HTTP mode
+func shouldUseHTTPMode() bool {
+	return os.Getenv("MODE") == "http" || os.Getenv("PORT") != ""
+}
+
+// getHTTPPort returns the port from environment variables or default
+func getHTTPPort() string {
+	if port := os.Getenv("PORT"); port != "" {
+		return port
+	}
+	return "8080"
 }

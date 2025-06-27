@@ -11,7 +11,7 @@ TARGET_DIR ?= $(CURDIR)/dist
 # Build flags
 LDFLAGS=-ldflags="-s -w -X terraform-mcp-server/version.GitCommit=$(shell git rev-parse HEAD) -X terraform-mcp-server/version.BuildDate=$(shell git show --no-show-signature -s --format=%cd --date=format:"%Y-%m-%dT%H:%M:%SZ" HEAD)"
 
-.PHONY: all build crt-build test test-e2e clean deps docker-build run-http docker-run-http test-http help
+.PHONY: all build crt-build test test-e2e clean deps docker-build run-http docker-run-http test-http cleanup-test-containers help
 
 # Default target
 all: build
@@ -36,7 +36,7 @@ test:
 
 # Run e2e tests
 test-e2e:
-	$(GO) test -v --tags e2e ./e2e
+	@trap '$(MAKE) cleanup-test-containers' EXIT; $(GO) test -v --tags e2e ./e2e
 
 # Clean build artifacts
 clean:
@@ -69,6 +69,13 @@ test-http:
 # docker-run:
 # 	$(DOCKER) run -it --rm $(BINARY_NAME):$(VERSION)
 
+# Clean up test containers
+cleanup-test-containers:
+	@echo "Cleaning up test containers..."
+	@$(DOCKER) ps -q --filter "ancestor=$(BINARY_NAME):test-e2e" | xargs -r $(DOCKER) stop
+	@$(DOCKER) ps -aq --filter "ancestor=$(BINARY_NAME):test-e2e" | xargs -r $(DOCKER) rm
+	@echo "Test container cleanup complete"
+
 # Show help
 help:
 	@echo "Available targets:"
@@ -82,4 +89,5 @@ help:
 	@echo "  run-http       - Run StreamableHTTP server locally on port 8080"
 	@echo "  docker-run-http - Run StreamableHTTP server in Docker on port 8080"
 	@echo "  test-http      - Test StreamableHTTP health endpoint"
+	@echo "  cleanup-test-containers - Stop and remove all test containers"
 	@echo "  help           - Show this help message"
