@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -18,6 +19,10 @@ import (
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/stretchr/testify/require"
 )
+
+var initOnce sync.Once
+var globalClient mcpClient.MCPClient
+var globalCleanup func()
 
 func TestE2E(t *testing.T) {
 	buildDockerImage(t)
@@ -42,6 +47,26 @@ func TestE2E(t *testing.T) {
 			runTestSuite(t, client, tc.name)
 		})
 	}
+}
+
+// ensureClientInitialized ensures the MCP client is initialized before running tool tests
+func ensureClientInitialized(t *testing.T, client mcpClient.MCPClient) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	request := mcp.InitializeRequest{}
+	request.Params.ProtocolVersion = mcp.LATEST_PROTOCOL_VERSION
+	request.Params.ClientInfo = mcp.Implementation{
+		Name:    "e2e-test-client",
+		Version: "0.0.1",
+	}
+
+	result, err := client.Initialize(ctx, request)
+	if err != nil {
+		t.Fatalf("Failed to initialize MCP client: %v", err)
+	}
+	t.Logf("Initialized with server: %s %s", result.ServerInfo.Name, result.ServerInfo.Version)
+	require.Equal(t, "terraform-mcp-server", result.ServerInfo.Name)
 }
 
 // runTestSuite executes all test cases against the provided client
@@ -70,7 +95,8 @@ func runTestSuite(t *testing.T, client mcpClient.MCPClient, transportName string
 	})
 
 	for _, testCase := range providerTestCases {
-		t.Run(fmt.Sprintf("%s_resolveProviderDocID", transportName), func(t *testing.T) {
+		t.Run(fmt.Sprintf("%s_resolveProviderDocID/%s", transportName, testCase.TestName), func(t *testing.T) {
+			ensureClientInitialized(t, client)
 			t.Logf("TOOL resolveProviderDocID %s", testCase.TestDescription)
 			t.Logf("Test payload: %v", testCase.TestPayload)
 
@@ -108,7 +134,8 @@ func runTestSuite(t *testing.T, client mcpClient.MCPClient, transportName string
 	}
 
 	for _, testCase := range providerDocsTestCases {
-		t.Run(fmt.Sprintf("%s_getProviderDocs", transportName), func(t *testing.T) {
+		t.Run(fmt.Sprintf("%s_getProviderDocs/%s", transportName, testCase.TestName), func(t *testing.T) {
+			ensureClientInitialized(t, client)
 			t.Logf("TOOL getProviderDocs %s", testCase.TestDescription)
 			t.Logf("Test payload: %v", testCase.TestPayload)
 
@@ -138,7 +165,8 @@ func runTestSuite(t *testing.T, client mcpClient.MCPClient, transportName string
 	}
 
 	for _, testCase := range searchModulesTestCases {
-		t.Run(fmt.Sprintf("%s_searchModules", transportName), func(t *testing.T) {
+		t.Run(fmt.Sprintf("%s_searchModules/%s", transportName, testCase.TestName), func(t *testing.T) {
+			ensureClientInitialized(t, client)
 			t.Logf("TOOL searchModules %s", testCase.TestDescription)
 			t.Logf("Test payload: %v", testCase.TestPayload)
 
@@ -168,7 +196,8 @@ func runTestSuite(t *testing.T, client mcpClient.MCPClient, transportName string
 	}
 
 	for _, testCase := range moduleDetailsTestCases {
-		t.Run(fmt.Sprintf("%s_moduleDetails", transportName), func(t *testing.T) {
+		t.Run(fmt.Sprintf("%s_moduleDetails/%s", transportName, testCase.TestName), func(t *testing.T) {
+			ensureClientInitialized(t, client)
 			t.Logf("TOOL moduleDetails %s", testCase.TestDescription)
 			t.Logf("Test payload: %v", testCase.TestPayload)
 
