@@ -217,7 +217,7 @@ func ModuleDetails(registryClient *http.Client, logger *log.Logger) (tool mcp.To
 func SearchPolicies(registryClient *http.Client, logger *log.Logger) (tool mcp.Tool, handler server.ToolHandlerFunc) {
 	return mcp.NewTool("searchPolicies",
 			mcp.WithDescription(`Searches for Terraform policies based on a query string. This tool returns a list of matching policies, which can be used to retrieve detailed policy information using the 'policyDetails' tool. 
-			You MUST call this function before 'providerDetails' to obtain a valid terraformPolicyID.
+			You MUST call this function before 'policyDetails' to obtain a valid terraformPolicyID.
 			When selecting the best match, consider: - Name similarity to the query - Title relevance - Verification status (verified) - Download counts (popularity) Return the selected policyID and explain your choice. 
 			If there are multiple good matches, mention this but proceed with the most relevant one. If no policies were found, reattempt the search with a new policyQuery.`),
 			mcp.WithTitleAnnotation("Search and match Terraform policies based on name and relevance"),
@@ -230,7 +230,7 @@ func SearchPolicies(registryClient *http.Client, logger *log.Logger) (tool mcp.T
 			var terraformPolicies TerraformPolicyList
 			policyQuery := request.Params.Arguments["policyQuery"]
 			if pq, ok := policyQuery.(string); !ok || policyQuery == "" {
-				return nil, logAndReturnError(logger, "error finding the policy based on that name;", nil)
+				return nil, logAndReturnError(logger, "error finding the policy based on that name", nil)
 			} else {
 
 				// static list of 100 is fine for now
@@ -241,7 +241,7 @@ func SearchPolicies(registryClient *http.Client, logger *log.Logger) (tool mcp.T
 
 				err = json.Unmarshal(policyResp, &terraformPolicies)
 				if err != nil {
-					return nil, logAndReturnError(nil, "Unmarshalling policy list", err)
+					return nil, logAndReturnError(logger, "Unmarshalling policy list", err)
 				}
 
 				var builder strings.Builder

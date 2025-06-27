@@ -310,6 +310,9 @@ type ProviderDocData struct {
 	} `json:"links"`
 }
 
+// TerraformPolicyList represents the response structure for a list of Terraform policies
+// retrieved from the HashiCorp Terraform Registry API.
+// https://registry.terraform.io/v2/policies?page%5Bsize%5D=100&include=latest-version
 type TerraformPolicyList struct {
 	Data []struct {
 		Type       string `json:"type"`
@@ -374,6 +377,9 @@ type TerraformPolicyList struct {
 	} `json:"meta"`
 }
 
+// TerraformPolicyDetails represents the detailed response structure for a Terraform policy
+// as returned by the Terraform Registry API.
+// https://registry.terraform.io/v2/policies/hashicorp/CIS-Policy-Set-for-AWS-Terraform/1.0.1?include=policies,policy-modules,policy-library
 type TerraformPolicyDetails struct {
 	Data struct {
 		Type       string `json:"type"`

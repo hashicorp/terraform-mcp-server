@@ -357,7 +357,7 @@ var searchPoliciesTestCases = []RegistryTestCase{
 	},
 	{
 		TestShouldFail:  false,
-		TestDescription: "Testing searchPolicies with policy name containing special characters",
+		TestDescription: "Testing searchPolicies with policy name containing spaces",
 		TestPayload: map[string]interface{}{
 			"policyQuery": "FSBP Foundations benchmark",
 		},

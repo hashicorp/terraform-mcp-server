@@ -531,7 +531,8 @@ func extractReadme(readme string) string {
 	headerFound := false
 	strArr := strings.Split(readme, "\n")
 	for _, str := range strArr {
-		if strings.Contains(str, "#") {
+		matched, _ := regexp.MatchString(`^#+\s`, str)
+		if matched {
 			if headerFound {
 				return extractedReadme
 			}
