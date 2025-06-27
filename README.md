@@ -12,13 +12,6 @@ automation and interaction capabilities for Infrastructure as Code (IaC) develop
 - **Registry Integration**: Direct integration with Terraform Registry APIs
 - **Container Ready**: Docker support for easy deployment
 
-## Use Cases
-
-- Automating Terraform provider and module discovery
-- Extracting and analyzing data from Terraform Registry
-- Getting detailed information about provider resources and data sources
-- Exploring and understanding Terraform modules
-
 > **Caution:** The outputs and recommendations provided by the MCP server are generated dynamically and may vary based on the query, model, and the connected MCP server. Users should **thoroughly review all outputs/recommendations** to ensure they align with their organization's **security best practices**, **cost-efficiency goals**, and **compliance requirements** before implementation.
 
 ## Prerequisites
@@ -102,28 +95,9 @@ Optionally, you can add a similar example (i.e. without the mcp key) to a file c
 }
 ```
 
-### Usage with Claude Desktop
+### Usage with Claude Desktop / Amazon Q Developer / Amazon Q CLI
 
 More about using MCP server tools in Claude Desktop [user documentation](https://modelcontextprotocol.io/quickstart/user).
-
-```json
-{
-  "mcpServers": {
-    "terraform": {
-      "command": "docker",
-      "args": [
-        "run",
-        "-i",
-        "--rm",
-        "hashicorp/terraform-mcp-server"
-      ]
-    }
-  }
-}
-```
-
-### Usage with Amazon Q Developer / Amazon Q CLI
-
 Read more about using MCP server in Amazon Q from the [documentation](https://docs.aws.amazon.com/amazonq/latest/qdeveloper-ug/qdev-mcp.html).
 
 ```json
@@ -179,14 +153,17 @@ Use the main branch:
 go install github.com/hashicorp/terraform-mcp-server/cmd/terraform-mcp-server@main
 ```
 
-Run in stdio mode (default)
-```bash
-terraform-mcp-server
-```
-
-Run in HTTP mode
-```bash
-terraform-mcp-server http --port 8080
+```json
+{
+  "mcp": {
+    "servers": {
+      "terraform": {
+        "command": "/path/to/terraform-mcp-server",
+        "args": ["stdio"]
+      }
+    }
+  }
+}
 ```
 
 ## Building the Docker Image locally
