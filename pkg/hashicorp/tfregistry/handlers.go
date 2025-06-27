@@ -43,9 +43,12 @@ func ResolveProviderDocID(registryClient *http.Client, logger *log.Logger) (tool
 				return nil, err
 			}
 
-			serviceSlug := request.GetString("serviceSlug", "")
+			serviceSlug, err := request.RequireString("serviceSlug")
+			if err != nil {
+				return nil, logAndReturnError(logger, "serviceSlug is required", err)
+			}
 			if serviceSlug == "" {
-				return nil, logAndReturnError(logger, "serviceSlug is required and must be a string", nil)
+				return nil, logAndReturnError(logger, "serviceSlug cannot be empty", nil)
 			}
 
 			providerDataType := request.GetString("providerDataType", "resources")
@@ -114,9 +117,12 @@ func GetProviderDocs(registryClient *http.Client, logger *log.Logger) (tool mcp.
 			mcp.WithString("providerDocID", mcp.Required(), mcp.Description("Exact tfprovider-compatible providerDocID, (e.g., '8894603', '8906901') retrieved from 'resolveProviderDocID'")),
 		),
 		func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-			providerDocID := request.GetString("providerDocID", "")
+			providerDocID, err := request.RequireString("providerDocID")
+			if err != nil {
+				return nil, logAndReturnError(logger, "providerDocID is required", err)
+			}
 			if providerDocID == "" {
-				return nil, fmt.Errorf("providerDocID is required and must be a string")
+				return nil, logAndReturnError(logger, "providerDocID cannot be empty", nil)
 			}
 
 			detailResp, err := sendRegistryCall(registryClient, "GET", fmt.Sprintf("provider-docs/%s", providerDocID), logger, "v2")
@@ -147,29 +153,28 @@ func SearchModules(registryClient *http.Client, logger *log.Logger) (tool mcp.To
 				mcp.DefaultNumber(0),
 			),
 		), func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-			moduleQuery := request.GetString("moduleQuery", "")
+			moduleQuery, err := request.RequireString("moduleQuery")
+			if err != nil {
+				return nil, logAndReturnError(logger, "moduleQuery is required", err)
+			}
 			currentOffsetValue := request.GetInt("currentOffset", 0)
 
-			if moduleQuery == "" {
-				return nil, logAndReturnError(logger, "moduleQuery is required and must be a string", nil)
+			var modulesData, errMsg string
+			response, err := searchModules(registryClient, moduleQuery, currentOffsetValue, logger)
+			if err != nil {
+				return nil, logAndReturnError(logger, fmt.Sprintf("no module(s) found for moduleName: %s", moduleQuery), err)
 			} else {
-				var modulesData, errMsg string
-				response, err := searchModules(registryClient, moduleQuery, currentOffsetValue, logger)
+				modulesData, err = UnmarshalTFModulePlural(response, moduleQuery)
 				if err != nil {
-					return nil, logAndReturnError(logger, fmt.Sprintf("no module(s) found for moduleName: %s", moduleQuery), err)
-				} else {
-					modulesData, err = UnmarshalTFModulePlural(response, moduleQuery)
-					if err != nil {
-						return nil, logAndReturnError(logger, fmt.Sprintf("unmarshalling modules for moduleName: %s", moduleQuery), err)
-					}
+					return nil, logAndReturnError(logger, fmt.Sprintf("unmarshalling modules for moduleName: %s", moduleQuery), err)
 				}
-
-				if modulesData == "" {
-					errMsg = fmt.Sprintf("getting module(s), none found! query used: %s; error: %s", moduleQuery, errMsg)
-					return nil, logAndReturnError(logger, errMsg, nil)
-				}
-				return mcp.NewToolResultText(modulesData), nil
 			}
+
+			if modulesData == "" {
+				errMsg = fmt.Sprintf("getting module(s), none found! query used: %s; error: %s", moduleQuery, errMsg)
+				return nil, logAndReturnError(logger, errMsg, nil)
+			}
+			return mcp.NewToolResultText(modulesData), nil
 		}
 }
 
@@ -183,26 +188,28 @@ func ModuleDetails(registryClient *http.Client, logger *log.Logger) (tool mcp.To
 				mcp.Description("Exact valid and compatible moduleID retrieved from searchModules (e.g., 'squareops/terraform-kubernetes-mongodb/mongodb/2.1.1', 'GoogleCloudPlatform/vertex-ai/google/0.2.0')"),
 			),
 		), func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-			moduleID := request.GetString("moduleID", "")
-
-			if moduleID == "" {
-				return nil, logAndReturnError(logger, "moduleID is required and must be a valid string. It represents the ID of the module to retrieve detailed information about", nil)
-			} else {
-				var errMsg string
-				response, err := GetModuleDetails(registryClient, moduleID, 0, logger)
-				if err != nil {
-					errMsg = fmt.Sprintf("no module(s) found for %v,", moduleID)
-					return nil, logAndReturnError(logger, errMsg, nil)
-				}
-				moduleData, err := UnmarshalModuleSingular(response)
-				if err != nil {
-					return nil, logAndReturnError(logger, "unmarshalling module details", err)
-				}
-				if moduleData == "" {
-					errMsg = fmt.Sprintf("getting module(s), none found! %s please provider a different moduleProvider", errMsg)
-					return nil, logAndReturnError(logger, errMsg, nil)
-				}
-				return mcp.NewToolResultText(moduleData), nil
+			moduleID, err := request.RequireString("moduleID")
+			if err != nil {
+				return nil, logAndReturnError(logger, "moduleID is required", err)
 			}
+			if moduleID == "" {
+				return nil, logAndReturnError(logger, "moduleID cannot be empty", nil)
+			}
+
+			var errMsg string
+			response, err := GetModuleDetails(registryClient, moduleID, 0, logger)
+			if err != nil {
+				errMsg = fmt.Sprintf("no module(s) found for %v,", moduleID)
+				return nil, logAndReturnError(logger, errMsg, nil)
+			}
+			moduleData, err := UnmarshalModuleSingular(response)
+			if err != nil {
+				return nil, logAndReturnError(logger, "unmarshalling module details", err)
+			}
+			if moduleData == "" {
+				errMsg = fmt.Sprintf("getting module(s), none found! %s please provider a different moduleProvider", errMsg)
+				return nil, logAndReturnError(logger, errMsg, nil)
+			}
+			return mcp.NewToolResultText(moduleData), nil
 		}
 }
