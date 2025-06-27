@@ -181,7 +181,7 @@ cd terraform-mcp-server
 make docker-build
 ```
 
-This will create a local Docker image that you can use in the following configuration.
+3. This will create a local Docker image that you can use in the following configuration.
 
 ```bash
 # Run in stdio mode
@@ -189,6 +189,24 @@ docker run -i --rm terraform-mcp-server:dev
 
 # Run in http mode
 docker run -p 8080:8080 --rm -e MODE=http terraform-mcp-server:dev
+```
+
+4. You can use it on your AI assistant as follow:
+
+```json
+{
+  "mcpServers": {
+    "terraform": {
+      "command": "docker",
+      "args": [
+        "run",
+        "-i",
+        "--rm",
+        "terraform-mcp-server:dev"
+      ]
+    }
+  }
+}
 ```
 
 ## Development

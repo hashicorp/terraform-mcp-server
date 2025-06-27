@@ -10,6 +10,7 @@ FEATURES
 
 * Added support for publishing Docker images to Amazon ECR
 * Enhanced toolset for resolving provider documentation, fetching provider docs, searching modules, and retrieving module details from the Terraform Registry.
+* Added support for Streamable HTTP, see [#99](https://github.com/hashicorp/terraform-mcp-server/pull/99)
 
 IMPROVEMENTS
 
@@ -17,6 +18,8 @@ IMPROVEMENTS
 * Improved and expanded README with installation, usage, and development instructions.
 * Refined GitHub Actions workflows for more reliable builds, security scanning, and dependency management.
 * Updated and pinned dependencies for improved reliability and security.
+* Upgraded `mcp-go` from 0.27.0 to 0.32.0 to support streamable HTTP, update how tool arguments are accesseed. see [#99](https://github.com/hashicorp/terraform-mcp-server/pull/99)
+* Updated e2e test to accomodate both stdio and HTTP mode, improve test report by adding test name and improve clean up process. see [#99](https://github.com/hashicorp/terraform-mcp-server/pull/99)
 
 FIXES
 
