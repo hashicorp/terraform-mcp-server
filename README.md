@@ -4,6 +4,14 @@ The Terraform MCP Server is a [Model Context Protocol (MCP)](https://modelcontex
 server that provides seamless integration with Terraform Registry APIs, enabling advanced
 automation and interaction capabilities for Infrastructure as Code (IaC) development.
 
+## Features
+
+- **Dual Transport Support**: Both Stdio and StreamableHTTP transports
+- **Terraform Provider Discovery**: Query and explore Terraform providers and their documentation
+- **Module Search & Analysis**: Search and retrieve detailed information about Terraform modules
+- **Registry Integration**: Direct integration with Terraform Registry APIs
+- **Container Ready**: Docker support for easy deployment
+
 ## Use Cases
 
 - Automating Terraform provider and module discovery
@@ -23,12 +31,32 @@ automation and interaction capabilities for Infrastructure as Code (IaC) develop
 The Terraform MCP Server supports multiple transport protocols:
 
 ### 1. Stdio Transport (Default)
-Standard input/output communication using JSON-RPC messages.
+Standard input/output communication using JSON-RPC messages. Ideal for local development and direct integration with MCP clients.
 
 ### 2. StreamableHTTP Transport
 Modern HTTP-based transport supporting both direct HTTP requests and Server-Sent Events (SSE) streams. This is the recommended transport for remote/distributed setups.
 
-**Endpoint**: `http://localhost:8080/mcp`
+**Features:**
+- **Endpoint**: `http://{hostname}:8080/mcp`
+- **Health Check**: `http://{hostname}:8080/health`
+- **Environment Configuration**: Set `MODE=http` or `PORT=8080` to enable
+
+**Environment Variables:**
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `MODE` | Set to `http` to enable HTTP transport | `stdio` |
+| `PORT` | HTTP server port | `8080` |
+
+## Command Line Options
+
+```bash
+# Stdio mode
+terraform-mcp-server stdio [--log-file /path/to/log]
+
+# HTTP mode
+terraform-mcp-server http [--port 8080] [--host 0.0.0.0] [--log-file /path/to/log]
+```
 
 ## Installation
 
@@ -74,7 +102,6 @@ Optionally, you can add a similar example (i.e. without the mcp key) to a file c
 }
 ```
 
-
 ### Usage with Claude Desktop
 
 More about using MCP server tools in Claude Desktop [user documentation](https://modelcontextprotocol.io/quickstart/user).
@@ -95,6 +122,36 @@ More about using MCP server tools in Claude Desktop [user documentation](https:/
 }
 ```
 
+### Usage with Amazon Q Developer / Amazon Q CLI
+
+Read more about using MCP server in Amazon Q from the [documentation](https://docs.aws.amazon.com/amazonq/latest/qdeveloper-ug/qdev-mcp.html).
+
+```json
+{
+  "mcpServers": {
+    "terraform": {
+      "command": "docker",
+      "args": [
+        "run",
+        "-i",
+        "--rm",
+        "hashicorp/terraform-mcp-server"
+      ]
+    }
+  }
+}
+```
+
+### Running StreamableHTTP in Docker
+
+```bash
+# Start the server
+docker run -p 8080:8080 --rm -e MODE=http hashicorp/terraform-mcp-server
+
+# Test the connection
+curl http://localhost:8080/health
+```
+
 ## Tool Configuration
 
 ### Available Toolsets
@@ -108,7 +165,7 @@ The following sets of tools are available:
 | `modules`   | `searchModules`        | Searches the Terraform Registry for modules based on specified `moduleQuery` with pagination. Returns a list of module IDs with their names, descriptions, download counts, verification status, and publish dates                                             |
 | `modules`   | `moduleDetails`        | Retrieves detailed documentation for a module using a module ID obtained from the `searchModules` tool including inputs, outputs, configuration, submodules, and examples.                                                                                     |
 
-### Install from source
+## Install from source
 
 Use the latest release version:
 
@@ -122,17 +179,14 @@ Use the main branch:
 go install github.com/hashicorp/terraform-mcp-server/cmd/terraform-mcp-server@main
 ```
 
-```json
-{
-  "mcp": {
-    "servers": {
-      "terraform": {
-        "command": "/path/to/terraform-mcp-server",
-        "args": ["stdio"]
-      }
-    }
-  }
-}
+Run in stdio mode (default)
+```bash
+terraform-mcp-server
+```
+
+Run in HTTP mode
+```bash
+terraform-mcp-server http --port 8080
 ```
 
 ## Building the Docker Image locally
@@ -152,20 +206,12 @@ make docker-build
 
 This will create a local Docker image that you can use in the following configuration.
 
-```json
-{
-  "servers": {
-    "terraform": {
-      "command": "docker",
-      "args": [
-        "run",
-        "-i",
-        "--rm",
-        "terraform-mcp-server"
-      ]
-    }
-  }
-}
+```bash
+# Run in stdio mode
+docker run -i --rm terraform-mcp-server:dev
+
+# Run in http mode
+docker run -p 8080:8080 --rm -e MODE=http terraform-mcp-server:dev
 ```
 
 ## Development
@@ -173,6 +219,13 @@ This will create a local Docker image that you can use in the following configur
 ### Prerequisites
 - Go (check [go.mod](./go.mod) file for specific version)
 - Docker (optional, for container builds)
+
+### Build
+To build the MCP server:
+
+```bash
+make build
+```
 
 ### Running Tests
 ```bash
@@ -184,14 +237,18 @@ make test-e2e
 ```
 
 ### Available Make Commands
-```bash
-make build        # Build the binary
-make test         # Run all tests
-make test-e2e     # Run end-to-end tests
-make clean        # Remove build artifacts
-make deps         # Download dependencies
-make docker-build # Build docker image
-```
+
+| Command | Description |
+|---------|-------------|
+| `make build` | Build the binary |
+| `make test` | Run all tests |
+| `make test-e2e` | Run end-to-end tests |
+| `make docker-build` | Build Docker image |
+| `make run-http` | Run HTTP server locally |
+| `make docker-run-http` | Run HTTP server in Docker |
+| `make test-http` | Test HTTP health endpoint |
+| `make clean` | Remove build artifacts |
+| `make help` | Show all available commands |
 
 ## Contributing
 
