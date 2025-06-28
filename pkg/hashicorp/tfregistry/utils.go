@@ -530,7 +530,7 @@ func extractReadme(readme string) string {
 	var builder strings.Builder
 	headerFound := false
 	strArr := strings.Split(readme, "\n")
-	headerRegex := regexp.MustCompile(`^#+\s`)
+	headerRegex := regexp.MustCompile(`^#+\s?`)
 	for _, str := range strArr {
 		matched := headerRegex.MatchString(str)
 		if matched {
