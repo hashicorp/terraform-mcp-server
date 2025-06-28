@@ -116,16 +116,6 @@ Read more about using MCP server in Amazon Q from the [documentation](https://do
 }
 ```
 
-### Running StreamableHTTP in Docker
-
-```bash
-# Start the server
-docker run -p 8080:8080 --rm -e MODE=http hashicorp/terraform-mcp-server
-
-# Test the connection
-curl http://localhost:8080/health
-```
-
 ## Tool Configuration
 
 ### Available Toolsets
@@ -192,7 +182,14 @@ docker run -i --rm terraform-mcp-server:dev
 docker run -p 8080:8080 --rm -e MODE=http terraform-mcp-server:dev
 ```
 
-4. You can use it on your AI assistant as follow:
+4. (Optional) Test connection in http mode
+  
+```bash
+# Test the connection
+curl http://localhost:8080/health
+```
+
+5. You can use it on your AI assistant as follow:
 
 ```json
 {
@@ -215,22 +212,6 @@ docker run -p 8080:8080 --rm -e MODE=http terraform-mcp-server:dev
 ### Prerequisites
 - Go (check [go.mod](./go.mod) file for specific version)
 - Docker (optional, for container builds)
-
-### Build
-To build the MCP server:
-
-```bash
-make build
-```
-
-### Running Tests
-```bash
-# Run all tests
-make test
-
-# Run e2e tests
-make test-e2e
-```
 
 ### Available Make Commands
 
