@@ -1,9 +1,9 @@
 module github.com/hashicorp/terraform-mcp-server
 
-go 1.24.4
+go 1.24
 
 require (
-	github.com/mark3labs/mcp-go v0.27.0
+	github.com/mark3labs/mcp-go v0.32.0
 	github.com/sirupsen/logrus v1.9.3
 	github.com/spf13/cobra v1.9.1
 	github.com/spf13/viper v1.20.1

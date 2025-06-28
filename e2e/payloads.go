@@ -14,6 +14,7 @@ const (
 )
 
 type RegistryTestCase struct {
+	TestName        string                 `json:"testName"`
 	TestShouldFail  bool                   `json:"testShouldFail"`
 	TestDescription string                 `json:"testDescription"`
 	TestContentType ContentType            `json:"testContentType,omitempty"`
@@ -22,16 +23,19 @@ type RegistryTestCase struct {
 
 var providerTestCases = []RegistryTestCase{
 	{
+		TestName:        "empty_payload",
 		TestShouldFail:  true,
 		TestDescription: "Testing with empty payload",
 		TestPayload:     map[string]interface{}{},
 	},
 	{
+		TestName:        "missing_namespace_and_version",
 		TestShouldFail:  true,
 		TestDescription: "Testing without providerNamespace and providerVersion",
 		TestPayload:     map[string]interface{}{"ProviderName": "google"},
 	},
 	{
+		TestName:        "without_version",
 		TestShouldFail:  false,
 		TestDescription: "Testing without providerVersion",
 		TestPayload: map[string]interface{}{
@@ -41,6 +45,7 @@ var providerTestCases = []RegistryTestCase{
 		},
 	},
 	{
+		TestName:        "hashicorp_without_namespace",
 		TestShouldFail:  false,
 		TestDescription: "Testing without providerNamespace, but owned by hashicorp",
 		TestPayload: map[string]interface{}{
@@ -50,6 +55,7 @@ var providerTestCases = []RegistryTestCase{
 		},
 	},
 	{
+		TestName:        "third_party_without_namespace",
 		TestShouldFail:  true,
 		TestDescription: "Testing without providerNamespace, but not-owned by hashicorp",
 		TestPayload: map[string]interface{}{
@@ -58,6 +64,7 @@ var providerTestCases = []RegistryTestCase{
 		},
 	},
 	{
+		TestName:        "required_values_resource",
 		TestShouldFail:  false,
 		TestDescription: "Testing only with required values",
 		TestContentType: CONST_TYPE_RESOURCE,
@@ -68,6 +75,7 @@ var providerTestCases = []RegistryTestCase{
 		},
 	},
 	{
+		TestName:        "data_source_with_prefix",
 		TestShouldFail:  false,
 		TestDescription: "Testing only with required values with the providerName prefix",
 		TestContentType: CONST_TYPE_DATA_SOURCE,
@@ -79,6 +87,7 @@ var providerTestCases = []RegistryTestCase{
 		},
 	},
 	{
+		TestName:        "third_party_resource",
 		TestShouldFail:  false,
 		TestDescription: "Testing resources with all values for non-hashicorp providerNamespace",
 		TestContentType: CONST_TYPE_RESOURCE,
@@ -91,6 +100,7 @@ var providerTestCases = []RegistryTestCase{
 		},
 	},
 	{
+		TestName:        "third_party_data_source",
 		TestShouldFail:  false,
 		TestDescription: "Testing data-sources for non-hashicorp providerNamespace",
 		TestContentType: CONST_TYPE_DATA_SOURCE,
@@ -102,6 +112,7 @@ var providerTestCases = []RegistryTestCase{
 		},
 	},
 	{
+		TestName:        "malformed_namespace",
 		TestShouldFail:  false,
 		TestDescription: "Testing payload with malformed providerNamespace",
 		TestPayload: map[string]interface{}{
@@ -112,6 +123,7 @@ var providerTestCases = []RegistryTestCase{
 		},
 	},
 	{
+		TestName:        "malformed_provider_name",
 		TestShouldFail:  true,
 		TestDescription: "Testing payload with malformed providerName",
 		TestPayload: map[string]interface{}{
@@ -121,6 +133,7 @@ var providerTestCases = []RegistryTestCase{
 		},
 	},
 	{
+		TestName:        "guides_documentation",
 		TestShouldFail:  false,
 		TestDescription: "Testing guides documentation with v2 API",
 		TestContentType: CONST_TYPE_GUIDES,
@@ -133,6 +146,7 @@ var providerTestCases = []RegistryTestCase{
 		},
 	},
 	{
+		TestName:        "functions_documentation",
 		TestShouldFail:  false,
 		TestDescription: "Testing functions documentation with v2 API",
 		TestContentType: CONST_TYPE_FUNCTIONS,
@@ -145,6 +159,7 @@ var providerTestCases = []RegistryTestCase{
 		},
 	},
 	{
+		TestName:        "overview_documentation",
 		TestShouldFail:  false,
 		TestDescription: "Testing overview documentation with v2 API",
 		TestContentType: CONST_TYPE_OVERVIEW,
@@ -160,11 +175,13 @@ var providerTestCases = []RegistryTestCase{
 
 var providerDocsTestCases = []RegistryTestCase{
 	{
+		TestName:        "empty_payload",
 		TestShouldFail:  true,
 		TestDescription: "Testing providerDocs with empty payload",
 		TestPayload:     map[string]interface{}{},
 	},
 	{
+		TestName:        "empty_doc_id",
 		TestShouldFail:  true,
 		TestDescription: "Testing providerDocs with empty providerDocID",
 		TestPayload: map[string]interface{}{
@@ -172,6 +189,7 @@ var providerDocsTestCases = []RegistryTestCase{
 		},
 	},
 	{
+		TestName:        "invalid_doc_id",
 		TestShouldFail:  true,
 		TestDescription: "Testing providerDocs with invalid providerDocID",
 		TestPayload: map[string]interface{}{
@@ -179,12 +197,14 @@ var providerDocsTestCases = []RegistryTestCase{
 		},
 	},
 	{
+		TestName:        "valid_doc_id",
 		TestShouldFail:  false,
 		TestDescription: "Testing providerDocs with all correct providerDocID value",
 		TestPayload: map[string]interface{}{
 			"providerDocID": "8894603",
 		},
 	}, {
+		TestName:        "incorrect_numeric_doc_id",
 		TestShouldFail:  true,
 		TestDescription: "Testing providerDocs with incorrect numeric providerDocID value",
 		TestPayload: map[string]interface{}{
@@ -194,16 +214,19 @@ var providerDocsTestCases = []RegistryTestCase{
 }
 var searchModulesTestCases = []RegistryTestCase{
 	{
+		TestName:        "no_parameters",
 		TestShouldFail:  true,
 		TestDescription: "Testing searchModules with no parameters",
 		TestPayload:     map[string]interface{}{},
 	},
 	{
+		TestName:        "empty_query_all_modules",
 		TestShouldFail:  false,
 		TestDescription: "Testing searchModules with empty moduleQuery - all modules",
 		TestPayload:     map[string]interface{}{"moduleQuery": ""},
 	},
 	{
+		TestName:        "aws_query_no_offset",
 		TestShouldFail:  false,
 		TestDescription: "Testing searchModules with moduleQuery 'aws' - no offset",
 		TestPayload: map[string]interface{}{
@@ -211,6 +234,7 @@ var searchModulesTestCases = []RegistryTestCase{
 		},
 	},
 	{
+		TestName:        "empty_query_with_offset",
 		TestShouldFail:  false,
 		TestDescription: "Testing searchModules with moduleQuery '' and currentOffset 10",
 		TestPayload: map[string]interface{}{
@@ -219,6 +243,7 @@ var searchModulesTestCases = []RegistryTestCase{
 		},
 	},
 	{
+		TestName:        "offset_only",
 		TestShouldFail:  false,
 		TestDescription: "Testing searchModules with currentOffset 5 only - all modules",
 		TestPayload: map[string]interface{}{
@@ -227,6 +252,7 @@ var searchModulesTestCases = []RegistryTestCase{
 		},
 	},
 	{
+		TestName:        "negative_offset",
 		TestShouldFail:  false,
 		TestDescription: "Testing searchModules with invalid currentOffset (negative)",
 		TestPayload: map[string]interface{}{
@@ -235,6 +261,7 @@ var searchModulesTestCases = []RegistryTestCase{
 		},
 	},
 	{
+		TestName:        "unknown_provider",
 		TestShouldFail:  true,
 		TestDescription: "Testing searchModules with a moduleQuery not in the map (e.g., 'unknownprovider')",
 		TestPayload: map[string]interface{}{
@@ -242,6 +269,7 @@ var searchModulesTestCases = []RegistryTestCase{
 		},
 	},
 	{
+		TestName:        "vsphere_capitalized",
 		TestShouldFail:  false,
 		TestDescription: "Testing searchModules with vSphere (capitalized)",
 		TestPayload: map[string]interface{}{
@@ -249,6 +277,7 @@ var searchModulesTestCases = []RegistryTestCase{
 		},
 	},
 	{
+		TestName:        "aviatrix_provider",
 		TestShouldFail:  false,
 		TestDescription: "Testing searchModules with Aviatrix (handle terraform-provider-modules)",
 		TestPayload: map[string]interface{}{
@@ -256,6 +285,7 @@ var searchModulesTestCases = []RegistryTestCase{
 		},
 	},
 	{
+		TestName:        "oci_provider",
 		TestShouldFail:  false,
 		TestDescription: "Testing searchModules with oci",
 		TestPayload: map[string]interface{}{
@@ -263,6 +293,7 @@ var searchModulesTestCases = []RegistryTestCase{
 		},
 	},
 	{
+		TestName:        "query_with_spaces",
 		TestShouldFail:  false,
 		TestDescription: "Testing searchModules with vertex ai - query with spaces",
 		TestPayload: map[string]interface{}{
@@ -273,6 +304,7 @@ var searchModulesTestCases = []RegistryTestCase{
 
 var moduleDetailsTestCases = []RegistryTestCase{
 	{
+		TestName:        "valid_module_id",
 		TestShouldFail:  false,
 		TestDescription: "Testing moduleDetails with valid moduleID",
 		TestPayload: map[string]interface{}{
@@ -280,11 +312,13 @@ var moduleDetailsTestCases = []RegistryTestCase{
 		},
 	},
 	{
+		TestName:        "missing_module_id",
 		TestShouldFail:  true,
 		TestDescription: "Testing moduleDetails missing moduleID",
 		TestPayload:     map[string]interface{}{},
 	},
 	{
+		TestName:        "empty_module_id",
 		TestShouldFail:  true,
 		TestDescription: "Testing moduleDetails with empty moduleID",
 		TestPayload: map[string]interface{}{
@@ -292,6 +326,7 @@ var moduleDetailsTestCases = []RegistryTestCase{
 		},
 	},
 	{
+		TestName:        "nonexistent_module_id",
 		TestShouldFail:  true,
 		TestDescription: "Testing moduleDetails with non-existent moduleID",
 		TestPayload: map[string]interface{}{
@@ -299,6 +334,7 @@ var moduleDetailsTestCases = []RegistryTestCase{
 		},
 	},
 	{
+		TestName:        "invalid_format",
 		TestShouldFail:  true, // Expecting empty or error, tool call might succeed but return no useful data
 		TestDescription: "Testing moduleDetails with invalid moduleID format",
 		TestPayload: map[string]interface{}{

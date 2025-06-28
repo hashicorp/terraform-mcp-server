@@ -4,12 +4,13 @@ The Terraform MCP Server is a [Model Context Protocol (MCP)](https://modelcontex
 server that provides seamless integration with Terraform Registry APIs, enabling advanced
 automation and interaction capabilities for Infrastructure as Code (IaC) development.
 
-## Use Cases
+## Features
 
-- Automating Terraform provider and module discovery
-- Extracting and analyzing data from Terraform Registry
-- Getting detailed information about provider resources and data sources
-- Exploring and understanding Terraform modules
+- **Dual Transport Support**: Both Stdio and StreamableHTTP transports
+- **Terraform Provider Discovery**: Query and explore Terraform providers and their documentation
+- **Module Search & Analysis**: Search and retrieve detailed information about Terraform modules
+- **Registry Integration**: Direct integration with Terraform Registry APIs
+- **Container Ready**: Docker support for easy deployment
 
 > **Caution:** The outputs and recommendations provided by the MCP server are generated dynamically and may vary based on the query, model, and the connected MCP server. Users should **thoroughly review all outputs/recommendations** to ensure they align with their organization's **security best practices**, **cost-efficiency goals**, and **compliance requirements** before implementation.
 
@@ -17,6 +18,38 @@ automation and interaction capabilities for Infrastructure as Code (IaC) develop
 
 1. To run the server in a container, you will need to have [Docker](https://www.docker.com/) installed.
 2. Once Docker is installed, you will need to ensure Docker is running.
+
+## Transport Support
+
+The Terraform MCP Server supports multiple transport protocols:
+
+### 1. Stdio Transport (Default)
+Standard input/output communication using JSON-RPC messages. Ideal for local development and direct integration with MCP clients.
+
+### 2. StreamableHTTP Transport
+Modern HTTP-based transport supporting both direct HTTP requests and Server-Sent Events (SSE) streams. This is the recommended transport for remote/distributed setups.
+
+**Features:**
+- **Endpoint**: `http://{hostname}:8080/mcp`
+- **Health Check**: `http://{hostname}:8080/health`
+- **Environment Configuration**: Set `MODE=http` or `PORT=8080` to enable
+
+**Environment Variables:**
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `MODE` | Set to `http` to enable HTTP transport | `stdio` |
+| `PORT` | HTTP server port | `8080` |
+
+## Command Line Options
+
+```bash
+# Stdio mode
+terraform-mcp-server stdio [--log-file /path/to/log]
+
+# HTTP mode
+terraform-mcp-server http [--port 8080] [--host 0.0.0.0] [--log-file /path/to/log]
+```
 
 ## Installation
 
@@ -62,10 +95,10 @@ Optionally, you can add a similar example (i.e. without the mcp key) to a file c
 }
 ```
 
-
-### Usage with Claude Desktop
+### Usage with Claude Desktop / Amazon Q Developer / Amazon Q CLI
 
 More about using MCP server tools in Claude Desktop [user documentation](https://modelcontextprotocol.io/quickstart/user).
+Read more about using MCP server in Amazon Q from the [documentation](https://docs.aws.amazon.com/amazonq/latest/qdeveloper-ug/qdev-mcp.html).
 
 ```json
 {
@@ -83,6 +116,16 @@ More about using MCP server tools in Claude Desktop [user documentation](https:/
 }
 ```
 
+### Running StreamableHTTP in Docker
+
+```bash
+# Start the server
+docker run -p 8080:8080 --rm -e MODE=http hashicorp/terraform-mcp-server
+
+# Test the connection
+curl http://localhost:8080/health
+```
+
 ## Tool Configuration
 
 ### Available Toolsets
@@ -95,8 +138,8 @@ The following sets of tools are available:
 | `providers` | `getProviderDocs`      | Fetches the complete documentation content for a specific provider resource, data source, or function using a document ID obtained from the `resolveProviderDocID` tool. Returns the raw documentation in markdown format.                                     |
 | `modules`   | `searchModules`        | Searches the Terraform Registry for modules based on specified `moduleQuery` with pagination. Returns a list of module IDs with their names, descriptions, download counts, verification status, and publish dates                                             |
 | `modules`   | `moduleDetails`        | Retrieves detailed documentation for a module using a module ID obtained from the `searchModules` tool including inputs, outputs, configuration, submodules, and examples.                                                                                     |
-| `policies`   | `searchPolicies`        | Queries the Terraform Registry to find and list the appropriate Sentinel Policy based on the provided query `policyQuery`. Returns a list of matching policies with terraformPolicyIDs with their name, title and download counts.                                                                                    |
-| `policies`   | `policyDetails`        | Retrieves detailed documentation for a policy set using a terraformPolicyID obtained from the `searchPolicies` tool including policy readme and implementation details.                                                                                     |
+| `policies`  | `searchPolicies`       | Queries the Terraform Registry to find and list the appropriate Sentinel Policy based on the provided query `policyQuery`. Returns a list of matching policies with terraformPolicyIDs with their name, title and download counts.                             |
+| `policies`  | `policyDetails`        | Retrieves detailed documentation for a policy set using a terraformPolicyID obtained from the `searchPolicies` tool including policy readme and implementation details.                                                                                        |
 ### Install from source
 
 Use the latest release version:
@@ -139,18 +182,28 @@ cd terraform-mcp-server
 make docker-build
 ```
 
-This will create a local Docker image that you can use in the following configuration.
+3. This will create a local Docker image that you can use in the following configuration.
+
+```bash
+# Run in stdio mode
+docker run -i --rm terraform-mcp-server:dev
+
+# Run in http mode
+docker run -p 8080:8080 --rm -e MODE=http terraform-mcp-server:dev
+```
+
+4. You can use it on your AI assistant as follow:
 
 ```json
 {
-  "servers": {
+  "mcpServers": {
     "terraform": {
       "command": "docker",
       "args": [
         "run",
         "-i",
         "--rm",
-        "terraform-mcp-server"
+        "terraform-mcp-server:dev"
       ]
     }
   }
@@ -163,6 +216,13 @@ This will create a local Docker image that you can use in the following configur
 - Go (check [go.mod](./go.mod) file for specific version)
 - Docker (optional, for container builds)
 
+### Build
+To build the MCP server:
+
+```bash
+make build
+```
+
 ### Running Tests
 ```bash
 # Run all tests
@@ -173,14 +233,18 @@ make test-e2e
 ```
 
 ### Available Make Commands
-```bash
-make build        # Build the binary
-make test         # Run all tests
-make test-e2e     # Run end-to-end tests
-make clean        # Remove build artifacts
-make deps         # Download dependencies
-make docker-build # Build docker image
-```
+
+| Command | Description |
+|---------|-------------|
+| `make build` | Build the binary |
+| `make test` | Run all tests |
+| `make test-e2e` | Run end-to-end tests |
+| `make docker-build` | Build Docker image |
+| `make run-http` | Run HTTP server locally |
+| `make docker-run-http` | Run HTTP server in Docker |
+| `make test-http` | Test HTTP health endpoint |
+| `make clean` | Remove build artifacts |
+| `make help` | Show all available commands |
 
 ## Contributing
 
