@@ -400,3 +400,56 @@ func TestLogAndReturnError(t *testing.T) {
 		})
 	}
 }
+
+func TestExtractReadme(t *testing.T) {
+	tests := []struct {
+		name     string
+		readme   string
+		expected string
+	}{
+		{
+			name:     "NoHash",
+			readme:   "No hash at all",
+			expected: "No hash at all",
+		},
+		{
+			name:     "SingleSection",
+			readme:   "# Title\nSome content here.",
+			expected: "# Title\nSome content here.",
+		},
+		{
+			name:     "TwoSections",
+			readme:   "# Title\nSome content here.\n\n# Section2\nMore content.",
+			expected: "# Title\nSome content here.\n",
+		},
+		{
+			name:     "ThreeSections",
+			readme:   "# First\nContent1\n# Second\nContent2\n# Third\nContent3",
+			expected: "# First\nContent1",
+		},
+		{
+			name:     "HashAtEnd",
+			readme:   "Some intro\n# OnlySection",
+			expected: "Some intro\n# OnlySection",
+		},
+		{
+			name:     "HashWithoutNextLine",
+			readme:   "Some intro\n# OnlySection ## More Content",
+			expected: "Some intro\n# OnlySection ## More Content",
+		},
+		{
+			name:     "EmptyString",
+			readme:   "",
+			expected: "",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			result := extractReadme(tc.readme)
+			if result != tc.expected {
+				t.Errorf("extractReadme(%q) = %q; want %q", tc.readme, result, tc.expected)
+			}
+		})
+	}
+}

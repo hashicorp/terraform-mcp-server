@@ -96,13 +96,13 @@ func httpServerInit(ctx context.Context, hcServer *server.MCPServer, logger *log
 		server.WithEndpointPath("/mcp"), // Default MCP endpoint path
 		server.WithLogger(logger),
 	)
-	
+
 	mux := http.NewServeMux()
-	
+
 	// Handle the /mcp endpoint with the StreamableHTTP server
 	mux.Handle("/mcp", streamableServer)
 	mux.Handle("/mcp/", streamableServer)
-	
+
 	// Add health check endpoint
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -112,11 +112,12 @@ func httpServerInit(ctx context.Context, hcServer *server.MCPServer, logger *log
 
 	addr := fmt.Sprintf("%s:%s", host, port)
 	httpServer := &http.Server{
-		Addr:         addr,
-		Handler:      mux,
-		ReadTimeout:  30 * time.Second,
-		WriteTimeout: 30 * time.Second,
-		IdleTimeout:  60 * time.Second,
+		Addr:              addr,
+		Handler:           mux,
+		ReadTimeout:       30 * time.Second,
+		ReadHeaderTimeout: 30 * time.Second,
+		WriteTimeout:      30 * time.Second,
+		IdleTimeout:       60 * time.Second,
 	}
 
 	// Start server in goroutine
@@ -191,19 +192,19 @@ func main() {
 	if shouldUseHTTPMode() {
 		port := getHTTPPort()
 		host := "0.0.0.0"
-		
+
 		logFile, _ := rootCmd.PersistentFlags().GetString("log-file")
 		logger, err := initLogger(logFile)
 		if err != nil {
 			stdlog.Fatal("Failed to initialize logger:", err)
 		}
-		
+
 		if err := runHTTPServer(logger, host, port); err != nil {
 			stdlog.Fatal("failed to run HTTP server:", err)
 		}
 		return
 	}
-	
+
 	// Fall back to normal CLI behavior
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Println(err)

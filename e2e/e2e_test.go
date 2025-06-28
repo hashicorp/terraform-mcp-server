@@ -120,13 +120,14 @@ func runTestSuite(t *testing.T, client mcpClient.MCPClient, transportName string
 				require.True(t, ok, "expected content to be of type TextContent")
 				t.Logf("Content length: %d", len(textContent.Text))
 
-				if testCase.TestContentType == CONST_TYPE_DATA_SOURCE {
+				switch testCase.TestContentType {
+				case CONST_TYPE_DATA_SOURCE:
 					require.Contains(t, textContent.Text, "Category: data-sources", "expected content to contain data-sources")
-				} else if testCase.TestContentType == CONST_TYPE_RESOURCE {
+				case CONST_TYPE_RESOURCE:
 					require.Contains(t, textContent.Text, "Category: resources", "expected content to contain resources")
-				} else if testCase.TestContentType == CONST_TYPE_GUIDES {
+				case CONST_TYPE_GUIDES:
 					require.Contains(t, textContent.Text, "guide", "expected content to contain guide")
-				} else if testCase.TestContentType == CONST_TYPE_FUNCTIONS {
+				case CONST_TYPE_FUNCTIONS:
 					require.Contains(t, textContent.Text, "functions", "expected content to contain functions")
 				}
 			}
@@ -221,14 +222,86 @@ func runTestSuite(t *testing.T, client mcpClient.MCPClient, transportName string
 				require.True(t, ok, "expected content to be of type TextContent")
 				t.Logf("Content length: %d", len(textContent.Text))
 
-				if testCase.TestContentType == CONST_TYPE_DATA_SOURCE {
+				switch testCase.TestContentType {
+				case CONST_TYPE_DATA_SOURCE:
 					require.NotContains(t, textContent.Text, "**Category:** resources", "expected content not to contain resources")
-				} else if testCase.TestContentType == CONST_TYPE_RESOURCE {
+				case CONST_TYPE_RESOURCE:
 					require.NotContains(t, textContent.Text, "**Category:** data-sources", "expected content not to contain data-sources")
 				}
 			}
 		})
 	}
+
+	for _, testCase := range searchPoliciesTestCases {
+		t.Run("CallTool searchPolicies", func(t *testing.T) {
+			// t.Parallel()
+			t.Logf("TOOL searchPolicies %s", testCase.TestDescription)
+			t.Logf("Test payload: %v", testCase.TestPayload)
+
+			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			defer cancel()
+
+			request := mcp.CallToolRequest{}
+			request.Params.Name = "searchPolicies"
+			request.Params.Arguments = testCase.TestPayload
+
+			response, err := client.CallTool(ctx, request)
+			if testCase.TestShouldFail {
+				require.Error(t, err, "expected to call 'searchPolicies' tool with error")
+				t.Logf("Error: %v", err)
+			} else {
+				require.NoError(t, err, "expected to call 'searchPolicies' tool successfully")
+				require.False(t, response.IsError, "expected result not to be an error")
+				require.Len(t, response.Content, 1, "expected content to have one item")
+
+				textContent, ok := response.Content[0].(mcp.TextContent)
+				require.True(t, ok, "expected content to be of type TextContent")
+				t.Logf("Content length: %d", len(textContent.Text))
+
+				// For successful searches, check that the response contains the expected policy information format
+				if len(textContent.Text) > 0 {
+					require.Contains(t, textContent.Text, "terraformPolicyID", "expected content to contain terraformPolicyID")
+					require.Contains(t, textContent.Text, "Name:", "expected content to contain policy Name")
+					require.Contains(t, textContent.Text, "Title:", "expected content to contain policy Title")
+					require.Contains(t, textContent.Text, "Downloads:", "expected content to contain Downloads count")
+				}
+			}
+		})
+	}
+
+	for _, testCase := range policyDetailsTestCases {
+		t.Run("CallTool policyDetails", func(t *testing.T) {
+			// t.Parallel()
+			t.Logf("TOOL policyDetails %s", testCase.TestDescription)
+			t.Logf("Test payload: %v", testCase.TestPayload)
+
+			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			defer cancel()
+
+			request := mcp.CallToolRequest{}
+			request.Params.Name = "policyDetails"
+			request.Params.Arguments = testCase.TestPayload
+
+			response, err := client.CallTool(ctx, request)
+			if testCase.TestShouldFail {
+				require.Error(t, err, "expected to call 'policyDetails' tool with error")
+				t.Logf("Error: %v", err)
+			} else {
+				require.NoError(t, err, "expected to call 'policyDetails' tool successfully")
+				require.False(t, response.IsError, "expected result not to be an error")
+				require.Len(t, response.Content, 1, "expected content to have at least one item")
+
+				textContent, ok := response.Content[0].(mcp.TextContent)
+				require.True(t, ok, "expected content to be of type TextContent")
+				t.Logf("Content length: %d", len(textContent.Text))
+
+				// Add specific assertions for policy details if needed
+				require.Contains(t, textContent.Text, "POLICY_NAME", "expected content to contain policy name")
+				require.Contains(t, textContent.Text, "POLICY_CHECKSUM:", "expected content to contain policy checksum")
+			}
+		})
+	}
+
 }
 
 // createStdioClient creates a stdio-based MCP client

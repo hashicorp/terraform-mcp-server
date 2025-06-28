@@ -165,7 +165,6 @@ func GetProviderResourceDetailsV2(client *http.Client, providerDetail ProviderDe
 
 // containsSlug checks if the sourceName string contains the slug string anywhere within it.
 // It safely handles potential regex metacharacters in the slug.
-// TODO: include a unit test for this
 func containsSlug(sourceName string, slug string) (bool, error) {
 	// Use regexp.QuoteMeta to escape any special regex characters in the slug.
 	// This ensures the slug is treated as a literal string in the pattern.
@@ -521,4 +520,28 @@ func GetProviderDocsV2(client *http.Client, providerDetail ProviderDetail, logge
 func isV2ProviderDataType(dataType string) bool {
 	v2Categories := []string{"guides", "functions", "overview"}
 	return slices.Contains(v2Categories, dataType)
+}
+
+func extractReadme(readme string) string {
+	if readme == "" {
+		return ""
+	}
+
+	var builder strings.Builder
+	headerFound := false
+	strArr := strings.Split(readme, "\n")
+	headerRegex := regexp.MustCompile(`^#+\s?`)
+	for _, str := range strArr {
+		matched := headerRegex.MatchString(str)
+		if matched {
+			if headerFound {
+				break
+			}
+			headerFound = true
+		}
+		builder.WriteString(str)
+		builder.WriteString("\n")
+	}
+
+	return strings.TrimSuffix(builder.String(), "\n")
 }

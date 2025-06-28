@@ -342,3 +342,96 @@ var moduleDetailsTestCases = []RegistryTestCase{
 		},
 	},
 }
+
+var searchPoliciesTestCases = []RegistryTestCase{
+	{
+		TestShouldFail:  true,
+		TestDescription: "Testing searchPolicies with empty payload",
+		TestPayload:     map[string]interface{}{},
+	},
+	{
+		TestShouldFail:  true,
+		TestDescription: "Testing searchPolicies with empty policyQuery",
+		TestPayload: map[string]interface{}{
+			"policyQuery": "",
+		},
+	},
+	{
+		TestShouldFail:  false,
+		TestDescription: "Testing searchPolicies with a valid hashicorp policy name",
+		TestPayload: map[string]interface{}{
+			"policyQuery": "aws",
+		},
+	},
+	{
+		TestShouldFail:  false,
+		TestDescription: "Testing searchPolicies with a valid policy title substring",
+		TestPayload: map[string]interface{}{
+			"policyQuery": "security",
+		},
+	},
+	{
+		TestShouldFail:  true,
+		TestDescription: "Testing searchPolicies with an invalid/nonexistent policy name",
+		TestPayload: map[string]interface{}{
+			"policyQuery": "nonexistentpolicyxyz123",
+		},
+	},
+	{
+		TestShouldFail:  false,
+		TestDescription: "Testing searchPolicies with mixed case input",
+		TestPayload: map[string]interface{}{
+			"policyQuery": "TeRrAfOrM",
+		},
+	},
+	{
+		TestShouldFail:  false,
+		TestDescription: "Testing searchPolicies with policy name containing special characters",
+		TestPayload: map[string]interface{}{
+			"policyQuery": "cis-policy",
+		},
+	},
+	{
+		TestShouldFail:  false,
+		TestDescription: "Testing searchPolicies with policy name containing spaces",
+		TestPayload: map[string]interface{}{
+			"policyQuery": "FSBP Foundations benchmark",
+		},
+	},
+}
+
+var policyDetailsTestCases = []RegistryTestCase{
+	{
+		TestShouldFail:  false,
+		TestDescription: "Testing policyDetails with valid terraformPolicyID",
+		TestPayload: map[string]interface{}{
+			"terraformPolicyID": "policies/hashicorp/azure-storage-terraform/1.0.2",
+		},
+	},
+	{
+		TestShouldFail:  true,
+		TestDescription: "Testing policyDetails with missing terraformPolicyID",
+		TestPayload:     map[string]interface{}{},
+	},
+	{
+		TestShouldFail:  true,
+		TestDescription: "Testing policyDetails with empty terraformPolicyID",
+		TestPayload: map[string]interface{}{
+			"terraformPolicyID": "",
+		},
+	},
+	{
+		TestShouldFail:  true,
+		TestDescription: "Testing policyDetails with non-existent terraformPolicyID",
+		TestPayload: map[string]interface{}{
+			"terraformPolicyID": "nonexistent-policy-xyz",
+		},
+	},
+	{
+		TestShouldFail:  true,
+		TestDescription: "Testing policyDetails with malformed terraformPolicyID",
+		TestPayload: map[string]interface{}{
+			"terraformPolicyID": "malformed!@#",
+		},
+	},
+}
