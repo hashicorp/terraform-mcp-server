@@ -94,7 +94,11 @@ func ResolveProviderDocID(registryClient *http.Client, logger *log.Logger) (tool
 					cs_pn, err_pn := containsSlug(fmt.Sprintf("%s_%s", providerDetail.ProviderName, doc.Slug), serviceSlug)
 					if (cs || cs_pn) && err == nil && err_pn == nil {
 						contentAvailable = true
-						builder.WriteString(fmt.Sprintf("- providerDocID: %s\n- Title: %s\n- Category: %s\n---\n", doc.ID, doc.Title, doc.Category))
+						contentSnippet, err := getContentSnippet(registryClient, doc.ID, logger)
+						if err != nil {
+							return nil, logAndReturnError(logger, fmt.Sprintf("error fetching provider-docs/%s within ResolveProviderDocID", doc.ID), err)
+						}
+						builder.WriteString(fmt.Sprintf("- providerDocID: %s\n- Content: %s\n---\n", doc.ID, contentSnippet))
 					}
 				}
 			}
@@ -106,6 +110,20 @@ func ResolveProviderDocID(registryClient *http.Client, logger *log.Logger) (tool
 			}
 			return mcp.NewToolResultText(builder.String()), nil
 		}
+}
+
+func getContentSnippet(registryClient *http.Client, docID string, logger *log.Logger) (string, error) {
+
+	docContent, err := sendRegistryCall(registryClient, "GET", fmt.Sprintf("provider-docs/%s", docID), logger, "v2")
+	if err != nil {
+		return "", logAndReturnError(logger, fmt.Sprintf("error fetching provider-docs/%s within getContentSnippet", docID), err)
+	}
+	var docDescription ProviderResourceDetails
+	if err := json.Unmarshal(docContent, &docDescription); err != nil {
+		return "", logAndReturnError(logger, fmt.Sprintf("error unmarshalling provider-docs/%s within getContentSnippet", docID), err)
+	}
+	contentSnippet := strings.SplitN(docDescription.Data.Attributes.Content, "\n", 10)
+	return strings.Join(contentSnippet[:9], "\n"), nil
 }
 
 // GetProviderDocs creates a tool to get provider docs for a specific service from registry.
