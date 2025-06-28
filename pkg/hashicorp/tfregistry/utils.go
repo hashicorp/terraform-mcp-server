@@ -527,20 +527,21 @@ func extractReadme(readme string) string {
 		return ""
 	}
 
-	extractedReadme := ""
+	var builder strings.Builder
 	headerFound := false
 	strArr := strings.Split(readme, "\n")
+	headerRegex := regexp.MustCompile(`^#+\s`)
 	for _, str := range strArr {
-		matched, _ := regexp.MatchString(`^#+\s`, str)
+		matched := headerRegex.MatchString(str)
 		if matched {
 			if headerFound {
-				return extractedReadme
+				break
 			}
 			headerFound = true
 		}
-		extractedReadme += str + "\n"
+		builder.WriteString(str)
+		builder.WriteString("\n")
 	}
 
-	extractedReadme = strings.TrimSuffix(extractedReadme, "\n")
-	return extractedReadme
+	return strings.TrimSuffix(builder.String(), "\n")
 }

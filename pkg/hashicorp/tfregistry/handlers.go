@@ -228,51 +228,53 @@ func SearchPolicies(registryClient *http.Client, logger *log.Logger) (tool mcp.T
 			),
 		), func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			var terraformPolicies TerraformPolicyList
-			policyQuery := request.Params.Arguments["policyQuery"]
-			if pq, ok := policyQuery.(string); !ok || policyQuery == "" {
-				return nil, logAndReturnError(logger, "error finding the policy based on that name", nil)
-			} else {
-
-				// static list of 100 is fine for now
-				policyResp, err := sendRegistryCall(registryClient, "GET", "policies?page%5Bsize%5D=100&include=latest-version", logger, "v2")
-				if err != nil {
-					return nil, logAndReturnError(logger, "Failed to fetch policies: registry API did not return a successful response", err)
-				}
-
-				err = json.Unmarshal(policyResp, &terraformPolicies)
-				if err != nil {
-					return nil, logAndReturnError(logger, "Unmarshalling policy list", err)
-				}
-
-				var builder strings.Builder
-				builder.WriteString(fmt.Sprintf("Matching Terraform Policies for query: %s\n\n", pq))
-				builder.WriteString("Each result includes:\n- terraformPolicyID: Unique identifier to be used with policyDetails tool\n- Name: Policy name\n- Title: Policy description\n- Downloads: Policy downloads\n---\n\n")
-
-				contentAvailable := false
-				for _, policy := range terraformPolicies.Data {
-					cs, err := containsSlug(strings.ToLower(policy.Attributes.Title), strings.ToLower(pq))
-					cs_pn, err_pn := containsSlug(strings.ToLower(policy.Attributes.Name), strings.ToLower(pq))
-					if (cs || cs_pn) && err == nil && err_pn == nil {
-						contentAvailable = true
-						ID := strings.ReplaceAll(policy.Relationships.LatestVersion.Links.Related, "/v2/", "")
-						builder.WriteString(fmt.Sprintf(
-							"- terraformPolicyID: %s\n- Name: %s\n- Title: %s\n- Downloads: %d\n---\n",
-							ID,
-							policy.Attributes.Name,
-							policy.Attributes.Title,
-							policy.Attributes.Downloads,
-						))
-					}
-				}
-
-				policyData := builder.String()
-				if !contentAvailable {
-					errMessage := fmt.Sprintf("No policies found matching the query: %s. Try a different policyQuery.", pq)
-					return nil, logAndReturnError(logger, errMessage, nil)
-				}
-
-				return mcp.NewToolResultText(policyData), nil
+			pq, err := request.RequireString("policyQuery")
+			if err != nil {
+				return nil, logAndReturnError(logger, "policyQuery is required", err)
 			}
+			if pq == "" {
+				return nil, logAndReturnError(logger, "policyQuery cannot be empty", nil)
+			}
+
+			// static list of 100 is fine for now
+			policyResp, err := sendRegistryCall(registryClient, "GET", "policies?page%5Bsize%5D=100&include=latest-version", logger, "v2")
+			if err != nil {
+				return nil, logAndReturnError(logger, "Failed to fetch policies: registry API did not return a successful response", err)
+			}
+
+			err = json.Unmarshal(policyResp, &terraformPolicies)
+			if err != nil {
+				return nil, logAndReturnError(logger, "Unmarshalling policy list", err)
+			}
+
+			var builder strings.Builder
+			builder.WriteString(fmt.Sprintf("Matching Terraform Policies for query: %s\n\n", pq))
+			builder.WriteString("Each result includes:\n- terraformPolicyID: Unique identifier to be used with policyDetails tool\n- Name: Policy name\n- Title: Policy description\n- Downloads: Policy downloads\n---\n\n")
+
+			contentAvailable := false
+			for _, policy := range terraformPolicies.Data {
+				cs, err := containsSlug(strings.ToLower(policy.Attributes.Title), strings.ToLower(pq))
+				cs_pn, err_pn := containsSlug(strings.ToLower(policy.Attributes.Name), strings.ToLower(pq))
+				if (cs || cs_pn) && err == nil && err_pn == nil {
+					contentAvailable = true
+					ID := strings.ReplaceAll(policy.Relationships.LatestVersion.Links.Related, "/v2/", "")
+					builder.WriteString(fmt.Sprintf(
+						"- terraformPolicyID: %s\n- Name: %s\n- Title: %s\n- Downloads: %d\n---\n",
+						ID,
+						policy.Attributes.Name,
+						policy.Attributes.Title,
+						policy.Attributes.Downloads,
+					))
+				}
+			}
+
+			policyData := builder.String()
+			if !contentAvailable {
+				errMessage := fmt.Sprintf("No policies found matching the query: %s. Try a different policyQuery.", pq)
+				return nil, logAndReturnError(logger, errMessage, nil)
+			}
+
+			return mcp.NewToolResultText(policyData), nil
 		}
 }
 
@@ -286,9 +288,12 @@ func PolicyDetails(registryClient *http.Client, logger *log.Logger) (tool mcp.To
 				mcp.Description("Matching terraformPolicyID retrieved from the 'searchPolicies' tool (e.g., 'policies/hashicorp/CIS-Policy-Set-for-AWS-Terraform/1.0.1')"),
 			),
 		), func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-			terraformPolicyID, ok := request.Params.Arguments["terraformPolicyID"].(string)
-			if !ok || terraformPolicyID == "" {
-				return nil, logAndReturnError(logger, "terraformPolicyID is required and must be a string, it is fetched by running the searchPolicies tool", nil)
+			terraformPolicyID, err := request.RequireString("terraformPolicyID")
+			if err != nil {
+				return nil, logAndReturnError(logger, "terraformPolicyID is required and must be a string, it is fetched by running the searchPolicies tool", err)
+			}
+			if terraformPolicyID == "" {
+				return nil, logAndReturnError(logger, "terraformPolicyID cannot be empty, it is fetched by running the searchPolicies tool", nil)
 			}
 
 			policyResp, err := sendRegistryCall(registryClient, "GET", fmt.Sprintf("%s?include=policies,policy-modules,policy-library", terraformPolicyID), logger, "v2")
@@ -310,9 +315,9 @@ func PolicyDetails(registryClient *http.Client, logger *log.Logger) (tool mcp.To
 				if policy.Type == "policy-modules" {
 					moduleList += fmt.Sprintf(`
 module "%s" {
-	source = "https://registry.terraform.io/v2%s/policy-module/%s.sentinel?checksum=sha256:%s"
+  source = "https://registry.terraform.io/v2%s/policy-module/%s.sentinel?checksum=sha256:%s"
 }
-					`, policy.Attributes.Name, terraformPolicyID, policy.Attributes.Name, policy.Attributes.Shasum)
+`, policy.Attributes.Name, terraformPolicyID, policy.Attributes.Name, policy.Attributes.Shasum)
 				}
 
 				if policy.Type == "policies" {
@@ -324,13 +329,14 @@ module "%s" {
 			builder.WriteString("## Usage\n\n")
 			builder.WriteString("Generate the content for a HashiCorp Configuration Language (HCL) file named policies.hcl. This file should define a set of policies. For each policy provided, create a distinct policy block using the following template.\n")
 			builder.WriteString("\n```hcl\n")
-			builder.WriteString(moduleList)
-			builder.WriteString(fmt.Sprintf(`
+			hclTemplate := fmt.Sprintf(`
+%s
 policy "<<POLICY_NAME>>" {
-	source = "https://registry.terraform.io/v2%s/policy/<<POLICY_NAME>>.sentinel?checksum=<<POLICY_CHECKSUM>>"
-	enforcement_level = "advisory"
+  source = "https://registry.terraform.io/v2%s/policy/<<POLICY_NAME>>.sentinel?checksum=<<POLICY_CHECKSUM>>"
+  enforcement_level = "advisory"
 }
-			`, terraformPolicyID))
+`, moduleList, terraformPolicyID)
+			builder.WriteString(hclTemplate)
 			builder.WriteString("\n```\n")
 			builder.WriteString(fmt.Sprintf("Available policies with SHA for %s are: \n\n", terraformPolicyID))
 			builder.WriteString(policyList)
