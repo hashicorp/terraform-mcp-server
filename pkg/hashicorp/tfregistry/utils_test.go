@@ -408,24 +408,24 @@ func TestExtractReadme(t *testing.T) {
 		expected string
 	}{
 		{
+			name:     "NoHash",
+			readme:   "No hash at all",
+			expected: "No hash at all",
+		},
+		{
 			name:     "SingleSection",
 			readme:   "# Title\nSome content here.",
 			expected: "# Title\nSome content here.",
 		},
 		{
 			name:     "TwoSections",
-			readme:   "# Title\nSome content here.\n# Section2\nMore content.",
+			readme:   "# Title\nSome content here.\n\n# Section2\nMore content.",
 			expected: "# Title\nSome content here.\n",
 		},
 		{
-			name:     "NoHash",
-			readme:   "No hash at all",
-			expected: "No hash at all",
-		},
-		{
-			name:     "MultipleHashes",
+			name:     "ThreeSections",
 			readme:   "# First\nContent1\n# Second\nContent2\n# Third\nContent3",
-			expected: "# First\nContent1\n",
+			expected: "# First\nContent1",
 		},
 		{
 			name:     "HashAtEnd",
