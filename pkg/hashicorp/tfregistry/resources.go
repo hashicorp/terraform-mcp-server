@@ -84,11 +84,12 @@ func TerraformModuleDevGuideResource(httpClient *http.Client, logger *log.Logger
 				if err != nil {
 					return nil, logAndReturnError(logger, fmt.Sprintf("Error fetching %s markdown", u.Name), err)
 				}
-				defer resp.Body.Close()
 				if resp.StatusCode != http.StatusOK {
+					resp.Body.Close()
 					return nil, logAndReturnError(logger, fmt.Sprintf("Non-200 response fetching %s markdown", u.Name), fmt.Errorf("status: %s", resp.Status))
 				}
 				body, err := io.ReadAll(resp.Body)
+				resp.Body.Close()
 				if err != nil {
 					return nil, logAndReturnError(logger, fmt.Sprintf("Error reading %s markdown", u.Name), err)
 				}
