@@ -1,7 +1,6 @@
 package tfregistry
 
 import (
-	// ... other imports ...
 	"context"
 	"fmt"
 	"io"
