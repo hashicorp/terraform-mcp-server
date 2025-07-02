@@ -10,6 +10,7 @@ import (
 	stdlog "log"
 	"net/http"
 	"os"
+
 	"github.com/hashicorp/terraform-mcp-server/pkg/hashicorp/tfregistry"
 
 	"github.com/mark3labs/mcp-go/server"
@@ -31,11 +32,11 @@ func init() {
 	cobra.OnInitialize(initConfig)
 	rootCmd.SetVersionTemplate("{{.Short}}\n{{.Version}}\n")
 	rootCmd.PersistentFlags().String("log-file", "", "Path to log file")
-	
+
 	// Add HTTP command flags (avoid 'h' shorthand conflict with help)
-	httpCmd.Flags().StringP("port", "p", "8080", "Port to listen on")
-	httpCmd.Flags().String("host", "0.0.0.0", "Host to bind to")
-	
+	httpCmd.Flags().String("transport-host", "0.0.0.0", "Host to bind to")
+	httpCmd.Flags().StringP("transport-port", "p", "8080", "Port to listen on")
+
 	rootCmd.AddCommand(stdioCmd)
 	rootCmd.AddCommand(httpCmd)
 }
@@ -80,7 +81,7 @@ func serverInit(ctx context.Context, hcServer *server.MCPServer, logger *log.Log
 		errC <- stdioServer.Listen(ctx, in, out)
 	}()
 
-	_, _ = fmt.Fprintf(os.Stderr, "HCP Terraform MCP Server running on stdio\n")
+	_, _ = fmt.Fprintf(os.Stderr, "Terraform MCP Server running on stdio\n")
 
 	// Wait for shutdown signal
 	select {

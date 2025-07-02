@@ -63,23 +63,23 @@ var (
 				stdlog.Fatal("Failed to initialize logger:", err)
 			}
 
-			port, err := cmd.Flags().GetString("port")
+			port, err := cmd.Flags().GetString("transport-port")
 			if err != nil {
-				stdlog.Fatal("Failed to get port:", err)
+				stdlog.Fatal("Failed to get streamableHTTP port:", err)
 			}
-			host, err := cmd.Flags().GetString("host")
+			host, err := cmd.Flags().GetString("transport-host")
 			if err != nil {
-				stdlog.Fatal("Failed to get host:", err)
+				stdlog.Fatal("Failed to get streamableHTTP host:", err)
 			}
 
 			if err := runHTTPServer(logger, host, port); err != nil {
-				stdlog.Fatal("failed to run HTTP server:", err)
+				stdlog.Fatal("failed to run streamableHTTP server:", err)
 			}
 		},
 	}
 )
 
-func runHTTPServer(logger *log.Logger, host, port string) error {
+func runHTTPServer(logger *log.Logger, host string, port string) error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
@@ -89,7 +89,7 @@ func runHTTPServer(logger *log.Logger, host, port string) error {
 	return httpServerInit(ctx, hcServer, logger, host, port)
 }
 
-func httpServerInit(ctx context.Context, hcServer *server.MCPServer, logger *log.Logger, host, port string) error {
+func httpServerInit(ctx context.Context, hcServer *server.MCPServer, logger *log.Logger, host string, port string) error {
 	// Create StreamableHTTP server which implements the new streamable-http transport
 	// This is the modern MCP transport that supports both direct HTTP responses and SSE streams
 	streamableServer := server.NewStreamableHTTPServer(hcServer,
@@ -214,12 +214,12 @@ func main() {
 
 // shouldUseHTTPMode checks if environment variables indicate HTTP mode
 func shouldUseHTTPMode() bool {
-	return os.Getenv("MODE") == "http" || os.Getenv("PORT") != ""
+	return os.Getenv("TRANSPORT_MODE") == "http" || os.Getenv("TRANSPORT_PORT") != ""
 }
 
 // getHTTPPort returns the port from environment variables or default
 func getHTTPPort() string {
-	if port := os.Getenv("PORT"); port != "" {
+	if port := os.Getenv("TRANSPORT_PORT"); port != "" {
 		return port
 	}
 	return "8080"

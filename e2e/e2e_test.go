@@ -11,7 +11,6 @@ import (
 	"os"
 	"os/exec"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
@@ -20,26 +19,22 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-var initOnce sync.Once
-var globalClient mcpClient.MCPClient
-var globalCleanup func()
-
 func TestE2E(t *testing.T) {
 	buildDockerImage(t)
-	
+
 	// Ensure all test containers are cleaned up at the end
 	t.Cleanup(func() {
 		cleanupAllTestContainers(t)
 	})
-	
+
 	testCases := []struct {
-		name string
+		name          string
 		clientFactory func(t *testing.T) (mcpClient.MCPClient, func())
 	}{
 		{"Stdio", createStdioClient},
 		{"HTTP", createHTTPClient},
 	}
-	
+
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			client, cleanup := tc.clientFactory(t)
@@ -316,54 +311,54 @@ func createStdioClient(t *testing.T) (mcpClient.MCPClient, func()) {
 	t.Log("Starting Stdio MCP client...")
 	client, err := mcpClient.NewStdioMCPClient(args[0], []string{}, args[1:]...)
 	require.NoError(t, err, "expected to create stdio client successfully")
-	
+
 	cleanup := func() {
 		client.Close()
 	}
-	
+
 	return client, cleanup
 }
 
 // createHTTPClient creates an HTTP-based MCP client
 func createHTTPClient(t *testing.T) (mcpClient.MCPClient, func()) {
 	t.Log("Starting HTTP MCP server...")
-	
+
 	port := getTestPort()
 	baseURL := fmt.Sprintf("http://localhost:%s", port)
 	mcpURL := fmt.Sprintf("http://localhost:%s/mcp", port)
 
 	// Start container in HTTP mode
 	containerID := startHTTPContainer(t, port)
-	
+
 	// Ensure container cleanup even if test fails
 	t.Cleanup(func() {
 		stopContainer(t, containerID)
 	})
-	
+
 	// Wait for server to be ready
 	waitForServer(t, baseURL)
-	
+
 	// Create client with MCP endpoint
 	client, err := mcpClient.NewStreamableHttpClient(mcpURL)
 	require.NoError(t, err, "expected to create HTTP client successfully")
-	
+
 	cleanup := func() {
 		if client != nil {
 			client.Close()
 		}
 		// Container cleanup handled by t.Cleanup()
 	}
-	
+
 	return client, cleanup
 }
 
 // startHTTPContainer starts a Docker container in HTTP mode and returns container ID
 func startHTTPContainer(t *testing.T, port string) string {
 	portMapping := fmt.Sprintf("%s:8080", port)
-	cmd := exec.Command("docker", "run", "-d", "--rm", "-e", "MODE=http", "-p", portMapping, "terraform-mcp-server:test-e2e")
+	cmd := exec.Command("docker", "run", "-d", "--rm", "-e", "TRANSPORT_MODE=http", "-p", portMapping, "terraform-mcp-server:test-e2e")
 	output, err := cmd.Output()
 	require.NoError(t, err, "expected to start HTTP container successfully")
-	
+
 	containerID := string(output)[:12] // First 12 chars of container ID
 	t.Logf("Started HTTP container: %s on port %s", containerID, port)
 	return containerID
@@ -392,7 +387,7 @@ func stopContainer(t *testing.T, containerID string) {
 	if containerID == "" {
 		return
 	}
-	
+
 	t.Logf("Stopping container: %s", containerID)
 	cmd := exec.Command("docker", "stop", containerID)
 	if err := cmd.Run(); err != nil {
@@ -410,7 +405,7 @@ func stopContainer(t *testing.T, containerID string) {
 // cleanupAllTestContainers stops all containers created by this test
 func cleanupAllTestContainers(t *testing.T) {
 	t.Log("Cleaning up all test containers...")
-	
+
 	// Find all containers with our test image
 	cmd := exec.Command("docker", "ps", "-q", "--filter", "ancestor=terraform-mcp-server:test-e2e")
 	output, err := cmd.Output()
@@ -418,13 +413,13 @@ func cleanupAllTestContainers(t *testing.T) {
 		t.Logf("Warning: failed to list test containers: %v", err)
 		return
 	}
-	
+
 	containerIDs := string(output)
 	if containerIDs == "" {
 		t.Log("No test containers found to cleanup")
 		return
 	}
-	
+
 	// Stop all found containers
 	stopCmd := exec.Command("docker", "stop")
 	stopCmd.Stdin = strings.NewReader(containerIDs)
