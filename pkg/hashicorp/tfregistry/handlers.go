@@ -158,7 +158,7 @@ func SearchModules(registryClient *http.Client, logger *log.Logger) (tool mcp.To
 				mcp.DefaultString(""),
 			),
 			mcp.WithBoolean("verified",
-				mcp.Description("True when searching only for parnter modules. False, otherwise."),
+				mcp.Description("True when searching only for partner modules. False, otherwise."),
 				mcp.DefaultBool(false),
 			),
 		), func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
