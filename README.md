@@ -39,6 +39,7 @@ Modern HTTP-based transport supporting both direct HTTP requests and Server-Sent
 | Variable | Description | Default |
 |----------|-------------|---------|
 | `TRANSPORT_MODE` | Set to `http` to enable HTTP transport | `stdio` |
+| `TRANSPORT_HOST` | Host to bind the HTTP server | `0.0.0.0` |
 | `TRANSPORT_PORT` | HTTP server port | `8080` |
 
 ## Command Line Options
