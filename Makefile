@@ -11,7 +11,7 @@ TARGET_DIR ?= $(CURDIR)/dist
 # Build flags
 LDFLAGS=-ldflags="-s -w -X terraform-mcp-server/version.GitCommit=$(shell git rev-parse HEAD) -X terraform-mcp-server/version.BuildDate=$(shell git show --no-show-signature -s --format=%cd --date=format:"%Y-%m-%dT%H:%M:%SZ" HEAD)"
 
-.PHONY: all build crt-build test test-e2e clean deps docker-build run-http docker-run-http test-http cleanup-test-containers help
+.PHONY: all build crt-build test test-e2e test-security clean deps docker-build run-http run-http-secure docker-run-http test-http cleanup-test-containers help
 
 # Default target
 all: build
@@ -53,17 +53,25 @@ docker-build:
 
 # Run HTTP server locally
 run-http:
-	./$(BINARY_NAME) http --port 8080
+	./$(BINARY_NAME) http --transport-port 8080 --transport-host 0.0.0.0
+
+# Run HTTP server with security settings
+run-http-secure:
+	MCP_ALLOWED_ORIGINS="http://localhost:3000,https://example.com" MCP_CORS_MODE="development" ./$(BINARY_NAME) http --transport-port 8080 --transport-host 0.0.0.0
 
 # Run HTTP server in Docker
 docker-run-http:
-	$(DOCKER) run -p 8080:8080 --rm $(BINARY_NAME):$(VERSION) http
+	$(DOCKER) run -p 8080:8080 --rm $(BINARY_NAME):$(VERSION) http --transport-port 8080 --transport-host 0.0.0.0
 
 # Test HTTP endpoint
 test-http:
 	@echo "Testing StreamableHTTP server health endpoint..."
 	@curl -f http://localhost:8080/health || echo "Health check failed - make sure server is running with 'make run-http'"
 	@echo "StreamableHTTP MCP endpoint available at: http://localhost:8080/mcp"
+
+# Run security tests
+test-security:
+	$(GO) test ./cmd/terraform-mcp-server -v -run "TestIs|TestLoad|TestSecurity|TestOptions"
 
 # Run docker container
 # docker-run:
@@ -83,11 +91,14 @@ help:
 	@echo "  build          - Build the binary"
 	@echo "  test           - Run all tests"
 	@echo "  test-e2e       - Run end-to-end tests"
+	@echo "  test-security  - Run security-related tests"
 	@echo "  clean          - Remove build artifacts"
 	@echo "  deps           - Download dependencies"
 	@echo "  docker-build   - Build docker image"
 	@echo "  run-http       - Run StreamableHTTP server locally on port 8080"
+	@echo "  run-http-secure - Run StreamableHTTP server with security settings"
 	@echo "  docker-run-http - Run StreamableHTTP server in Docker on port 8080"
 	@echo "  test-http      - Test StreamableHTTP health endpoint"
 	@echo "  cleanup-test-containers - Stop and remove all test containers"
 	@echo "  help           - Show this help message"
+

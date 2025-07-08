@@ -11,8 +11,11 @@ automation and interaction capabilities for Infrastructure as Code (IaC) develop
 - **Module Search & Analysis**: Search and retrieve detailed information about Terraform modules
 - **Registry Integration**: Direct integration with Terraform Registry APIs
 - **Container Ready**: Docker support for easy deployment
+- **Security**: Origin validation to prevent cross-origin attacks
 
 > **Caution:** The outputs and recommendations provided by the MCP server are generated dynamically and may vary based on the query, model, and the connected MCP server. Users should **thoroughly review all outputs/recommendations** to ensure they align with their organization's **security best practices**, **cost-efficiency goals**, and **compliance requirements** before implementation.
+
+> **Security Note:** When using the StreamableHTTP transport in production, always configure the `MCP_ALLOWED_ORIGINS` environment variable to restrict access to trusted origins only. This helps prevent DNS rebinding attacks and other cross-origin vulnerabilities.
 
 ## Prerequisites
 
@@ -41,6 +44,18 @@ Modern HTTP-based transport supporting both direct HTTP requests and Server-Sent
 | `TRANSPORT_MODE` | Set to `http` to enable HTTP transport | `stdio` |
 | `TRANSPORT_HOST` | Host to bind the HTTP server | `0.0.0.0` |
 | `TRANSPORT_PORT` | HTTP server port | `8080` |
+| `MCP_ALLOWED_ORIGINS` | Comma-separated list of allowed origins for CORS | `""` (empty) |
+| `MCP_CORS_MODE` | CORS mode: `strict`, `development`, or `disabled` | `strict` |
+
+### Security Configuration
+
+The StreamableHTTP transport includes security features to prevent cross-origin attacks:
+
+- **Origin Validation**: Requests with an `Origin` header are validated against the allowed origins list
+- **CORS Modes**:
+  - `strict`: Only explicitly listed origins in `MCP_ALLOWED_ORIGINS` are allowed
+  - `development`: Allows localhost origins (`localhost`, `127.0.0.1`, `::1`) plus any listed in `MCP_ALLOWED_ORIGINS`
+  - `disabled`: Disables origin validation (not recommended for production)
 
 ## Command Line Options
 

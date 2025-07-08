@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -97,11 +98,29 @@ func httpServerInit(ctx context.Context, hcServer *server.MCPServer, logger *log
 		server.WithLogger(logger),
 	)
 
+	// Load CORS configuration
+	corsConfig := LoadCORSConfigFromEnv()
+	
+	// Log CORS configuration
+	logger.Infof("CORS Mode: %s", corsConfig.Mode)
+	if len(corsConfig.AllowedOrigins) > 0 {
+		logger.Infof("Allowed Origins: %s", strings.Join(corsConfig.AllowedOrigins, ", "))
+	} else if corsConfig.Mode == "strict" {
+		logger.Warnf("No allowed origins configured in strict mode. All cross-origin requests will be rejected.")
+	} else if corsConfig.Mode == "development" {
+		logger.Infof("Development mode: localhost origins are automatically allowed")
+	} else if corsConfig.Mode == "disabled" {
+		logger.Warnf("CORS validation is disabled. This is not recommended for production.")
+	}
+	
+	// Create a security wrapper around the streamable server
+	secureServer := NewSecurityHandler(streamableServer, corsConfig.AllowedOrigins, corsConfig.Mode, logger)
+
 	mux := http.NewServeMux()
 
-	// Handle the /mcp endpoint with the StreamableHTTP server
-	mux.Handle("/mcp", streamableServer)
-	mux.Handle("/mcp/", streamableServer)
+	// Handle the /mcp endpoint with the secure server wrapper
+	mux.Handle("/mcp", secureServer)
+	mux.Handle("/mcp/", secureServer)
 
 	// Add health check endpoint
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
