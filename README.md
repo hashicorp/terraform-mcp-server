@@ -57,6 +57,27 @@ The StreamableHTTP transport includes security features to prevent cross-origin 
   - `development`: Allows localhost origins (`localhost`, `127.0.0.1`, `::1`) plus any listed in `MCP_ALLOWED_ORIGINS`
   - `disabled`: Disables origin validation (not recommended for production)
 
+#### Important Security Considerations
+
+- **Requests without Origin headers** bypass CORS checks entirely. This is standard browser behavior, as same-origin requests often don't include Origin headers.
+- When using the StreamableHTTP transport in production, always configure the `MCP_ALLOWED_ORIGINS` environment variable to restrict access to trusted origins only.
+- For local development with tools like VS Code, the `development` mode allows localhost connections without additional configuration.
+
+#### Example Configuration
+
+```bash
+# Strict mode (recommended for production)
+export MCP_CORS_MODE=strict
+export MCP_ALLOWED_ORIGINS=https://example.com,https://trusted-domain.com
+
+# Development mode (convenient for local development)
+export MCP_CORS_MODE=development
+export MCP_ALLOWED_ORIGINS=https://example.com
+
+# Disabled mode (not recommended except for testing)
+export MCP_CORS_MODE=disabled
+```
+
 ## Command Line Options
 
 ```bash
