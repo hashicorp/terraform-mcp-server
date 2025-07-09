@@ -11,7 +11,6 @@ automation and interaction capabilities for Infrastructure as Code (IaC) develop
 - **Module Search & Analysis**: Search and retrieve detailed information about Terraform modules
 - **Registry Integration**: Direct integration with Terraform Registry APIs
 - **Container Ready**: Docker support for easy deployment
-- **Security**: Origin validation to prevent cross-origin attacks
 
 > **Caution:** The outputs and recommendations provided by the MCP server are generated dynamically and may vary based on the query, model, and the connected MCP server. Users should **thoroughly review all outputs/recommendations** to ensure they align with their organization's **security best practices**, **cost-efficiency goals**, and **compliance requirements** before implementation.
 
@@ -46,37 +45,6 @@ Modern HTTP-based transport supporting both direct HTTP requests and Server-Sent
 | `TRANSPORT_PORT` | HTTP server port | `8080` |
 | `MCP_ALLOWED_ORIGINS` | Comma-separated list of allowed origins for CORS | `""` (empty) |
 | `MCP_CORS_MODE` | CORS mode: `strict`, `development`, or `disabled` | `strict` |
-
-### Security Configuration
-
-The StreamableHTTP transport includes security features to prevent cross-origin attacks:
-
-- **Origin Validation**: Requests with an `Origin` header are validated against the allowed origins list
-- **CORS Modes**:
-  - `strict`: Only explicitly listed origins in `MCP_ALLOWED_ORIGINS` are allowed
-  - `development`: Allows localhost origins (`localhost`, `127.0.0.1`, `::1`) plus any listed in `MCP_ALLOWED_ORIGINS`
-  - `disabled`: Disables origin validation (not recommended for production)
-
-#### Important Security Considerations
-
-- **Requests without Origin headers** bypass CORS checks entirely. This is standard browser behavior, as same-origin requests often don't include Origin headers.
-- When using the StreamableHTTP transport in production, always configure the `MCP_ALLOWED_ORIGINS` environment variable to restrict access to trusted origins only.
-- For local development with tools like VS Code, the `development` mode allows localhost connections without additional configuration.
-
-#### Example Configuration
-
-```bash
-# Strict mode (recommended for production)
-export MCP_CORS_MODE=strict
-export MCP_ALLOWED_ORIGINS=https://example.com,https://trusted-domain.com
-
-# Development mode (convenient for local development)
-export MCP_CORS_MODE=development
-export MCP_ALLOWED_ORIGINS=https://example.com
-
-# Disabled mode (not recommended except for testing)
-export MCP_CORS_MODE=disabled
-```
 
 ## Command Line Options
 

@@ -93,7 +93,7 @@ func runHTTPServer(logger *log.Logger, host string, port string) error {
 func httpServerInit(ctx context.Context, hcServer *server.MCPServer, logger *log.Logger, host string, port string) error {
 	// Create StreamableHTTP server which implements the new streamable-http transport
 	// This is the modern MCP transport that supports both direct HTTP responses and SSE streams
-	streamableServer := server.NewStreamableHTTPServer(hcServer,
+	baseStreamableServer := server.NewStreamableHTTPServer(hcServer,
 		server.WithEndpointPath("/mcp"), // Default MCP endpoint path
 		server.WithLogger(logger),
 	)
@@ -114,13 +114,13 @@ func httpServerInit(ctx context.Context, hcServer *server.MCPServer, logger *log
 	}
 	
 	// Create a security wrapper around the streamable server
-	secureServer := NewSecurityHandler(streamableServer, corsConfig.AllowedOrigins, corsConfig.Mode, logger)
+	streamableServer := NewSecurityHandler(baseStreamableServer, corsConfig.AllowedOrigins, corsConfig.Mode, logger)
 
 	mux := http.NewServeMux()
 
-	// Handle the /mcp endpoint with the secure server wrapper
-	mux.Handle("/mcp", secureServer)
-	mux.Handle("/mcp/", secureServer)
+	// Handle the /mcp endpoint with the streamable server (with security wrapper)
+	mux.Handle("/mcp", streamableServer)
+	mux.Handle("/mcp/", streamableServer)
 
 	// Add health check endpoint
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
