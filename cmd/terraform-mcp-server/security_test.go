@@ -13,6 +13,9 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+// TestIsOriginAllowed tests the core function that determines if an origin is allowed
+// based on the CORS configuration. This function is called by the security handler
+// when processing requests with Origin headers.
 func TestIsOriginAllowed(t *testing.T) {
 	tests := []struct {
 		name           string
@@ -21,7 +24,7 @@ func TestIsOriginAllowed(t *testing.T) {
 		mode           string
 		expected       bool
 	}{
-		// Test case: In strict mode, an origin that matches one in the allowed list should be allowed
+		// Strict mode tests
 		{
 			name:           "strict mode - allowed origin",
 			origin:         "https://example.com",
@@ -29,7 +32,6 @@ func TestIsOriginAllowed(t *testing.T) {
 			mode:           "strict",
 			expected:       true,
 		},
-		// Test case: In strict mode, an origin that doesn't match any in the allowed list should be rejected
 		{
 			name:           "strict mode - disallowed origin",
 			origin:         "https://evil.com",
@@ -37,37 +39,68 @@ func TestIsOriginAllowed(t *testing.T) {
 			mode:           "strict",
 			expected:       false,
 		},
-		// Test case: In development mode, localhost origins should be allowed regardless of the allowed list
+		{
+			name:           "strict mode - localhost origin",
+			origin:         "http://localhost:3000",
+			allowedOrigins: []string{"https://example.com"},
+			mode:           "strict",
+			expected:       false, // Localhost is not automatically allowed in strict mode
+		},
+		// Note: The "no origin header" case cannot be directly tested here since
+		// isOriginAllowed requires an origin parameter. This behavior is tested
+		// in TestSecurityHandler instead.
+
+		// Development mode tests
 		{
 			name:           "development mode - localhost allowed",
 			origin:         "http://localhost:3000",
 			allowedOrigins: []string{"https://example.com"},
 			mode:           "development",
-			expected:       true,
+			expected:       true, // Localhost is automatically allowed in development mode
 		},
-		// Test case: In development mode, 127.0.0.1 (IPv4 localhost) should be allowed
 		{
 			name:           "development mode - 127.0.0.1 allowed",
 			origin:         "http://127.0.0.1:3000",
 			allowedOrigins: []string{"https://example.com"},
 			mode:           "development",
-			expected:       true,
+			expected:       true, // IPv4 localhost is automatically allowed in development mode
 		},
-		// Test case: In development mode, non-localhost origins not in the allowed list should be rejected
+		{
+			name:           "development mode - ::1 allowed",
+			origin:         "http://[::1]:3000",
+			allowedOrigins: []string{"https://example.com"},
+			mode:           "development",
+			expected:       true, // IPv6 localhost is automatically allowed in development mode
+		},
+		{
+			name:           "development mode - allowed origin",
+			origin:         "https://example.com",
+			allowedOrigins: []string{"https://example.com"},
+			mode:           "development",
+			expected:       true, // Explicitly allowed origins are still allowed in development mode
+		},
 		{
 			name:           "development mode - disallowed origin",
 			origin:         "https://evil.com",
 			allowedOrigins: []string{"https://example.com"},
 			mode:           "development",
-			expected:       false,
+			expected:       false, // Non-localhost, non-allowed origins are still rejected in development mode
 		},
-		// Test case: In disabled mode, all origins should be allowed regardless of the allowed list
+
+		// Disabled mode tests
 		{
-			name:           "disabled mode - all origins allowed",
+			name:           "disabled mode - any origin allowed",
 			origin:         "https://evil.com",
+			allowedOrigins: []string{"https://example.com"},
+			mode:           "disabled",
+			expected:       true, // All origins are allowed in disabled mode
+		},
+		{
+			name:           "disabled mode - localhost allowed",
+			origin:         "http://localhost:3000",
 			allowedOrigins: []string{},
 			mode:           "disabled",
-			expected:       true,
+			expected:       true, // Localhost is allowed in disabled mode (like any origin)
 		},
 	}
 
@@ -105,6 +138,9 @@ func TestLoadCORSConfigFromEnv(t *testing.T) {
 	assert.Equal(t, []string{"https://example.com", "https://test.com"}, config.AllowedOrigins)
 }
 
+// TestSecurityHandler tests the HTTP handler that applies CORS validation logic
+// to incoming requests. This test verifies the complete request handling flow,
+// including origin validation and response generation.
 func TestSecurityHandler(t *testing.T) {
 	logger := log.New()
 	logger.SetLevel(log.ErrorLevel) // Reduce noise in tests
@@ -123,66 +159,106 @@ func TestSecurityHandler(t *testing.T) {
 		expectedStatus int
 		expectedHeader bool
 	}{
-		// Test case: Request with an allowed origin in strict mode should be accepted
-		// and CORS headers should be set in the response
+		// Strict mode tests
 		{
-			name:           "allowed origin",
+			name:           "strict mode - allowed origin",
 			origin:         "https://example.com",
 			allowedOrigins: []string{"https://example.com"},
 			mode:           "strict",
 			expectedStatus: http.StatusOK,
-			expectedHeader: true,
+			expectedHeader: true, // CORS headers should be set for allowed origins
 		},
-		// Test case: Request with a disallowed origin in strict mode should be rejected
-		// with a 403 Forbidden status and no CORS headers
 		{
-			name:           "disallowed origin",
+			name:           "strict mode - disallowed origin",
 			origin:         "https://evil.com",
 			allowedOrigins: []string{"https://example.com"},
 			mode:           "strict",
 			expectedStatus: http.StatusForbidden,
-			expectedHeader: false,
+			expectedHeader: false, // No CORS headers for rejected requests
 		},
-		// Test case: Request with no Origin header in strict mode should be allowed
-		// This is important because it means requests without Origin headers bypass CORS checks
-		{
-			name:           "no origin header",
-			origin:         "",
-			allowedOrigins: []string{"https://example.com"},
-			mode:           "strict",
-			expectedStatus: http.StatusOK,
-			expectedHeader: false,
-		},
-		// Test case: Duplicate of above to explicitly test the behavior of missing Origin headers
-		// in strict mode. Requests without Origin headers are allowed regardless of CORS settings.
-		// This is why localhost requests might work even in strict mode if they don't include an Origin header.
-		{
-			name:           "strict mode - no origin header",
-			origin:         "", // No origin header
-			allowedOrigins: []string{"https://example.com"},
-			mode:           "strict",
-			expectedStatus: http.StatusOK, // Should be allowed
-			expectedHeader: false,
-		},
-		// Test case: Request with a localhost origin in strict mode should be rejected
-		// This confirms that localhost is not automatically allowed in strict mode
 		{
 			name:           "strict mode - localhost origin",
 			origin:         "http://localhost:3000",
 			allowedOrigins: []string{"https://example.com"},
 			mode:           "strict",
-			expectedStatus: http.StatusForbidden, // Should be rejected
+			expectedStatus: http.StatusForbidden, // Localhost is not automatically allowed in strict mode
 			expectedHeader: false,
 		},
-		// Test case: Request with a localhost origin in development mode should be allowed
-		// and CORS headers should be set in the response
+		{
+			name:           "strict mode - no origin header",
+			origin:         "", // No origin header
+			allowedOrigins: []string{"https://example.com"},
+			mode:           "strict",
+			expectedStatus: http.StatusOK, // Requests without Origin headers bypass CORS checks
+			expectedHeader: false, // No CORS headers when no Origin header is present
+		},
+
+		// Development mode tests
 		{
 			name:           "development mode - localhost allowed",
 			origin:         "http://localhost:3000",
 			allowedOrigins: []string{},
 			mode:           "development",
-			expectedStatus: http.StatusOK,
+			expectedStatus: http.StatusOK, // Localhost is automatically allowed in development mode
+			expectedHeader: true, // CORS headers should be set
+		},
+		{
+			name:           "development mode - 127.0.0.1 allowed",
+			origin:         "http://127.0.0.1:3000",
+			allowedOrigins: []string{},
+			mode:           "development",
+			expectedStatus: http.StatusOK, // IPv4 localhost is automatically allowed in development mode
 			expectedHeader: true,
+		},
+		{
+			name:           "development mode - allowed origin",
+			origin:         "https://example.com",
+			allowedOrigins: []string{"https://example.com"},
+			mode:           "development",
+			expectedStatus: http.StatusOK, // Explicitly allowed origins are still allowed in development mode
+			expectedHeader: true,
+		},
+		{
+			name:           "development mode - disallowed origin",
+			origin:         "https://evil.com",
+			allowedOrigins: []string{"https://example.com"},
+			mode:           "development",
+			expectedStatus: http.StatusForbidden, // Non-localhost, non-allowed origins are still rejected
+			expectedHeader: false,
+		},
+		{
+			name:           "development mode - no origin header",
+			origin:         "", // No origin header
+			allowedOrigins: []string{"https://example.com"},
+			mode:           "development",
+			expectedStatus: http.StatusOK, // Requests without Origin headers bypass CORS checks
+			expectedHeader: false,
+		},
+
+		// Disabled mode tests
+		{
+			name:           "disabled mode - any origin allowed",
+			origin:         "https://evil.com",
+			allowedOrigins: []string{"https://example.com"},
+			mode:           "disabled",
+			expectedStatus: http.StatusOK, // All origins are allowed in disabled mode
+			expectedHeader: true,
+		},
+		{
+			name:           "disabled mode - localhost allowed",
+			origin:         "http://localhost:3000",
+			allowedOrigins: []string{},
+			mode:           "disabled",
+			expectedStatus: http.StatusOK, // Localhost is allowed in disabled mode (like any origin)
+			expectedHeader: true,
+		},
+		{
+			name:           "disabled mode - no origin header",
+			origin:         "", // No origin header
+			allowedOrigins: []string{},
+			mode:           "disabled",
+			expectedStatus: http.StatusOK, // Requests without Origin headers are allowed
+			expectedHeader: false, // No CORS headers when no Origin header is present
 		},
 	}
 
@@ -210,6 +286,8 @@ func TestSecurityHandler(t *testing.T) {
 	}
 }
 
+// TestOptionsRequest tests the handling of CORS preflight requests (OPTIONS method)
+// which are handled specially by the security handler.
 func TestOptionsRequest(t *testing.T) {
 	logger := log.New()
 	logger.SetLevel(log.ErrorLevel)
