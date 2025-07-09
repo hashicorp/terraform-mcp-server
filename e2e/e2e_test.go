@@ -355,7 +355,13 @@ func createHTTPClient(t *testing.T) (mcpClient.MCPClient, func()) {
 // startHTTPContainer starts a Docker container in HTTP mode and returns container ID
 func startHTTPContainer(t *testing.T, port string) string {
 	portMapping := fmt.Sprintf("%s:8080", port)
-	cmd := exec.Command("docker", "run", "-d", "--rm", "-e", "TRANSPORT_MODE=http", "-p", portMapping, "terraform-mcp-server:test-e2e")
+	cmd := exec.Command(
+		"docker", "run", "-d", "--rm", 
+		"-e", "TRANSPORT_MODE=http", 
+		"-e", "TRANSPORT_HOST=0.0.0.0",
+		"-p", portMapping, 
+		"terraform-mcp-server:test-e2e",
+	)
 	output, err := cmd.Output()
 	require.NoError(t, err, "expected to start HTTP container successfully")
 

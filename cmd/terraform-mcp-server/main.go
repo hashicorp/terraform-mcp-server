@@ -210,7 +210,7 @@ func main() {
 	// Check environment variables first - they override command line args
 	if shouldUseHTTPMode() {
 		port := getHTTPPort()
-		host := "0.0.0.0"
+		host := getHTTPHost()
 
 		logFile, _ := rootCmd.PersistentFlags().GetString("log-file")
 		logger, err := initLogger(logFile)
@@ -233,7 +233,9 @@ func main() {
 
 // shouldUseHTTPMode checks if environment variables indicate HTTP mode
 func shouldUseHTTPMode() bool {
-	return os.Getenv("TRANSPORT_MODE") == "http" || os.Getenv("TRANSPORT_PORT") != ""
+	return os.Getenv("TRANSPORT_MODE") == "http" || 
+	       os.Getenv("TRANSPORT_PORT") != "" || 
+	       os.Getenv("TRANSPORT_HOST") != ""
 }
 
 // getHTTPPort returns the port from environment variables or default
@@ -242,4 +244,12 @@ func getHTTPPort() string {
 		return port
 	}
 	return "8080"
+}
+
+// getHTTPHost returns the host from environment variables or default
+func getHTTPHost() string {
+	if host := os.Getenv("TRANSPORT_HOST"); host != "" {
+		return host
+	}
+	return "127.0.0.1"
 }

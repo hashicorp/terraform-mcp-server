@@ -34,7 +34,7 @@ func init() {
 	rootCmd.PersistentFlags().String("log-file", "", "Path to log file")
 
 	// Add HTTP command flags (avoid 'h' shorthand conflict with help)
-	httpCmd.Flags().String("transport-host", "0.0.0.0", "Host to bind to")
+	httpCmd.Flags().String("transport-host", "127.0.0.1", "Host to bind to")
 	httpCmd.Flags().StringP("transport-port", "p", "8080", "Port to listen on")
 
 	rootCmd.AddCommand(stdioCmd)

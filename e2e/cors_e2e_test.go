@@ -92,6 +92,7 @@ func startHTTPContainerWithCORS(t *testing.T, port, mode, origins string) string
 	cmd := exec.Command(
 		"docker", "run", "-d", "--rm",
 		"-e", "TRANSPORT_MODE=http",
+		"-e", "TRANSPORT_HOST=0.0.0.0",
 		"-e", fmt.Sprintf("MCP_CORS_MODE=%s", mode),
 		"-e", fmt.Sprintf("MCP_ALLOWED_ORIGINS=%s", origins),
 		"-p", portMapping,
