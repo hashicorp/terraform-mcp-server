@@ -41,7 +41,7 @@ Modern HTTP-based transport supporting both direct HTTP requests and Server-Sent
 | Variable | Description | Default |
 |----------|-------------|---------|
 | `TRANSPORT_MODE` | Set to `http` to enable HTTP transport | `stdio` |
-| `TRANSPORT_HOST` | Host to bind the HTTP server | `0.0.0.0` |
+| `TRANSPORT_HOST` | Host to bind the HTTP server | `127.0.0.1` |
 | `TRANSPORT_PORT` | HTTP server port | `8080` |
 | `MCP_ALLOWED_ORIGINS` | Comma-separated list of allowed origins for CORS | `""` (empty) |
 | `MCP_CORS_MODE` | CORS mode: `strict`, `development`, or `disabled` | `strict` |
@@ -53,7 +53,7 @@ Modern HTTP-based transport supporting both direct HTTP requests and Server-Sent
 terraform-mcp-server stdio [--log-file /path/to/log]
 
 # HTTP mode
-terraform-mcp-server http [--transport-port 8080] [--transport-host 0.0.0.0] [--log-file /path/to/log]
+terraform-mcp-server http [--transport-port 8080] [--transport-host 127.0.0.1] [--log-file /path/to/log]
 ```
 
 ## Installation
@@ -184,8 +184,10 @@ make docker-build
 docker run -i --rm terraform-mcp-server:dev
 
 # Run in http mode
-docker run -p 8080:8080 --rm -e MODE=http terraform-mcp-server:dev
+docker run -p 8080:8080 --rm -e TRANSPORT_MODE=http -e TRANSPORT_HOST=0.0.0.0 terraform-mcp-server:dev
 ```
+
+> **Note:** When running in Docker, you should set `TRANSPORT_HOST=0.0.0.0` to allow connections from outside the container.
 
 4. (Optional) Test connection in http mode
   
