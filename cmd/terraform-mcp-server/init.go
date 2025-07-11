@@ -38,17 +38,13 @@ func InitRegistryClient(logger *log.Logger) *http.Client {
 	retryClient.Backoff = func(min, max time.Duration, attemptNum int, resp *http.Response) time.Duration {
 		if resp != nil && resp.StatusCode == http.StatusTooManyRequests {
 			resetAfter := resp.Header.Get("x-ratelimit-reset")
-
 			resetAfterInt, err := strconv.ParseInt(resetAfter, 10, 64)
 			if err != nil {
 				return 0
 			}
-
 			resetAfterTime := time.Unix(resetAfterInt, 0)
-
 			return time.Until(resetAfterTime)
 		}
-
 		return 0
 	}
 
@@ -57,7 +53,6 @@ func InitRegistryClient(logger *log.Logger) *http.Client {
 			resetAfter := resp.Header.Get("x-ratelimit-reset")
 			return resetAfter != "", nil
 		}
-
 		return false, nil
 	}
 
