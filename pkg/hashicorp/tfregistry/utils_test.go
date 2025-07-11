@@ -351,3 +351,105 @@ func TestIsV2ProviderDataType(t *testing.T) {
 		}
 	}
 }
+
+func TestLogAndReturnError(t *testing.T) {
+	tests := []struct {
+		name                string
+		logger              *log.Logger
+		context             string
+		inputErr            error
+		expectedErrContains []string
+	}{
+		{
+			name:                "NilError_WithLogger",
+			logger:              logger,
+			context:             "test context nil error",
+			inputErr:            nil,
+			expectedErrContains: []string{"test context nil error"},
+		},
+		{
+			name:                "NonNilError_WithLogger",
+			logger:              logger,
+			context:             "test context with error",
+			inputErr:            fmt.Errorf("original error"),
+			expectedErrContains: []string{"test context with error", "original error"},
+		},
+		{
+			name:                "NilError_NilLogger",
+			logger:              nil,
+			context:             "nil logger context",
+			inputErr:            nil,
+			expectedErrContains: []string{"nil logger context"},
+		},
+		{
+			name:                "NonNilError_NilLogger",
+			logger:              nil,
+			context:             "nil logger with error",
+			inputErr:            fmt.Errorf("original nil logger error"),
+			expectedErrContains: []string{"nil logger with error", "original nil logger error"},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			err := logAndReturnError(tc.logger, tc.context, tc.inputErr)
+			require.Error(t, err, "Expected an error to be returned")
+			for _, expected := range tc.expectedErrContains {
+				assert.Contains(t, err.Error(), expected, "Error message mismatch")
+			}
+		})
+	}
+}
+
+func TestExtractReadme(t *testing.T) {
+	tests := []struct {
+		name     string
+		readme   string
+		expected string
+	}{
+		{
+			name:     "NoHash",
+			readme:   "No hash at all",
+			expected: "No hash at all",
+		},
+		{
+			name:     "SingleSection",
+			readme:   "# Title\nSome content here.",
+			expected: "# Title\nSome content here.",
+		},
+		{
+			name:     "TwoSections",
+			readme:   "# Title\nSome content here.\n\n# Section2\nMore content.",
+			expected: "# Title\nSome content here.\n",
+		},
+		{
+			name:     "ThreeSections",
+			readme:   "# First\nContent1\n# Second\nContent2\n# Third\nContent3",
+			expected: "# First\nContent1",
+		},
+		{
+			name:     "HashAtEnd",
+			readme:   "Some intro\n# OnlySection",
+			expected: "Some intro\n# OnlySection",
+		},
+		{
+			name:     "HashWithoutNextLine",
+			readme:   "Some intro\n# OnlySection ## More Content",
+			expected: "Some intro\n# OnlySection ## More Content",
+		},
+		{
+			name:     "EmptyString",
+			readme:   "",
+			expected: "",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			result := extractReadme(tc.readme)
+			if result != tc.expected {
+				t.Errorf("extractReadme(%q) = %q; want %q", tc.readme, result, tc.expected)
+			}
+		})
+	}
+}

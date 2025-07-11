@@ -309,3 +309,128 @@ type ProviderDocData struct {
 		Self string `json:"self"`
 	} `json:"links"`
 }
+
+// TerraformPolicyList represents the response structure for a list of Terraform policies
+// retrieved from the HashiCorp Terraform Registry API.
+// https://registry.terraform.io/v2/policies?page%5Bsize%5D=100&include=latest-version
+type TerraformPolicyList struct {
+	Data []struct {
+		Type       string `json:"type"`
+		ID         string `json:"id"`
+		Attributes struct {
+			Downloads int    `json:"downloads"`
+			FullName  string `json:"full-name"`
+			Ingress   string `json:"ingress"`
+			Name      string `json:"name"`
+			Namespace string `json:"namespace"`
+			OwnerName string `json:"owner-name"`
+			Source    string `json:"source"`
+			Title     string `json:"title"`
+			Verified  bool   `json:"verified"`
+		} `json:"attributes"`
+		Relationships struct {
+			LatestVersion struct {
+				Data struct {
+					ID   string `json:"id"`
+					Type string `json:"type"`
+				} `json:"data"`
+				Links struct {
+					Related string `json:"related"`
+				} `json:"links"`
+			} `json:"latest-version"`
+		} `json:"relationships"`
+		Links struct {
+			Self string `json:"self"`
+		} `json:"links"`
+	} `json:"data"`
+	Included []struct {
+		Type       string `json:"type"`
+		ID         string `json:"id"`
+		Attributes struct {
+			Description string    `json:"description"`
+			Downloads   int       `json:"downloads"`
+			PublishedAt time.Time `json:"published-at"`
+			Readme      string    `json:"readme"`
+			Source      string    `json:"source"`
+			Tag         string    `json:"tag"`
+			Version     string    `json:"version"`
+		} `json:"attributes"`
+		Links struct {
+			Self string `json:"self"`
+		} `json:"links"`
+	} `json:"included"`
+	Links struct {
+		First string `json:"first"`
+		Last  string `json:"last"`
+		Next  any    `json:"next"`
+		Prev  any    `json:"prev"`
+	} `json:"links"`
+	Meta struct {
+		Pagination struct {
+			PageSize    int `json:"page-size"`
+			CurrentPage int `json:"current-page"`
+			NextPage    any `json:"next-page"`
+			PrevPage    any `json:"prev-page"`
+			TotalPages  int `json:"total-pages"`
+			TotalCount  int `json:"total-count"`
+		} `json:"pagination"`
+	} `json:"meta"`
+}
+
+// TerraformPolicyDetails represents the detailed response structure for a Terraform policy
+// as returned by the Terraform Registry API.
+// https://registry.terraform.io/v2/policies/hashicorp/CIS-Policy-Set-for-AWS-Terraform/1.0.1?include=policies,policy-modules,policy-library
+type TerraformPolicyDetails struct {
+	Data struct {
+		Type       string `json:"type"`
+		ID         string `json:"id"`
+		Attributes struct {
+			Description string    `json:"description"`
+			Downloads   int       `json:"downloads"`
+			PublishedAt time.Time `json:"published-at"`
+			Readme      string    `json:"readme"`
+			Source      string    `json:"source"`
+			Tag         string    `json:"tag"`
+			Version     string    `json:"version"`
+		} `json:"attributes"`
+		Relationships struct {
+			Policies struct {
+				Data []struct {
+					Type string `json:"type"`
+					ID   string `json:"id"`
+				} `json:"data"`
+			} `json:"policies"`
+			PolicyLibrary struct {
+				Data struct {
+					Type string `json:"type"`
+					ID   string `json:"id"`
+				} `json:"data"`
+			} `json:"policy-library"`
+			PolicyModules struct {
+				Data []struct {
+					Type string `json:"type"`
+					ID   string `json:"id"`
+				} `json:"data"`
+			} `json:"policy-modules"`
+		} `json:"relationships"`
+		Links struct {
+			Self string `json:"self"`
+		} `json:"links"`
+	} `json:"data"`
+	Included []struct {
+		Type       string `json:"type"`
+		ID         string `json:"id"`
+		Attributes struct {
+			Description string `json:"description"`
+			Downloads   int    `json:"downloads"`
+			FullName    string `json:"full-name"`
+			Name        string `json:"name"`
+			Shasum      string `json:"shasum"`
+			ShasumType  string `json:"shasum-type"`
+			Title       string `json:"title"`
+		} `json:"attributes"`
+		Links struct {
+			Self string `json:"self"`
+		} `json:"links"`
+	} `json:"included"`
+}
