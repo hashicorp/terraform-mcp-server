@@ -418,10 +418,13 @@ func sendRegistryCall(client *http.Client, method string, uri string, logger *lo
 		version = callOptions[0] // API version will be the first optional arg to this function
 	}
 
-	url := fmt.Sprintf("https://registry.terraform.io/%s/%s", version, uri)
+	url, err := url.Parse(fmt.Sprintf("https://registry.terraform.io/%s/%s", version, uri))
+	if err != nil {
+		return nil, fmt.Errorf("error parsing terraform registry URL: %w", err)
+	}
 	logger.Debugf("Requested URL: %s", url)
 
-	req, err := http.NewRequest(method, url, nil)
+	req, err := http.NewRequest(method, url.String(), nil)
 	if err != nil {
 		return nil, err
 	}
