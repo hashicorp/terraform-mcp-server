@@ -10,7 +10,11 @@ import (
 	stdlog "log"
 	"net/http"
 	"os"
+	"strconv"
+	"time"
 
+	"github.com/hashicorp/go-cleanhttp"
+	"github.com/hashicorp/go-retryablehttp"
 	"github.com/hashicorp/terraform-mcp-server/pkg/hashicorp/tfregistry"
 
 	"github.com/mark3labs/mcp-go/server"
@@ -19,13 +23,45 @@ import (
 	"github.com/spf13/viper"
 )
 
-func InitRegistryClient() *http.Client {
-	client := &http.Client{
-		Transport: &http.Transport{
-			Proxy: http.ProxyFromEnvironment,
-		},
+func InitRegistryClient(logger *log.Logger) *http.Client {
+	retryClient := retryablehttp.NewClient()
+	retryClient.Logger = logger
+
+	transport := cleanhttp.DefaultPooledTransport()
+	transport.Proxy = http.ProxyFromEnvironment
+
+	retryClient.HTTPClient = cleanhttp.DefaultClient()
+	retryClient.HTTPClient.Timeout = 10 * time.Second
+	retryClient.HTTPClient.Transport = transport
+	retryClient.RetryMax = 3
+
+	retryClient.Backoff = func(min, max time.Duration, attemptNum int, resp *http.Response) time.Duration {
+		if resp != nil && resp.StatusCode == http.StatusTooManyRequests {
+			resetAfter := resp.Header.Get("x-ratelimit-reset")
+
+			resetAfterInt, err := strconv.ParseInt(resetAfter, 10, 64)
+			if err != nil {
+				return 0
+			}
+
+			resetAfterTime := time.Unix(resetAfterInt, 0)
+
+			return time.Until(resetAfterTime)
+		}
+
+		return 0
 	}
-	return client
+
+	retryClient.CheckRetry = func(ctx context.Context, resp *http.Response, err error) (bool, error) {
+		if resp != nil && resp.StatusCode == http.StatusTooManyRequests {
+			resetAfter := resp.Header.Get("x-ratelimit-reset")
+			return resetAfter != "", nil
+		}
+
+		return false, nil
+	}
+
+	return retryClient.StandardClient()
 }
 
 func init() {
@@ -63,7 +99,7 @@ func initLogger(outPath string) (*log.Logger, error) {
 }
 
 func registryInit(hcServer *server.MCPServer, logger *log.Logger) {
-	registryClient := InitRegistryClient()
+	registryClient := InitRegistryClient(logger)
 	tfregistry.InitTools(hcServer, registryClient, logger)
 	tfregistry.RegisterResources(hcServer, registryClient, logger)
 	tfregistry.RegisterResourceTemplates(hcServer, registryClient, logger)

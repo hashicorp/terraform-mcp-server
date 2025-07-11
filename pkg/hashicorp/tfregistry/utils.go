@@ -4,7 +4,6 @@
 package tfregistry
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -13,12 +12,8 @@ import (
 	"regexp"
 	"slices"
 	"sort"
-	"strconv"
 	"strings"
-	"time"
 
-	"github.com/hashicorp/go-cleanhttp"
-	"github.com/hashicorp/go-retryablehttp"
 	"github.com/mark3labs/mcp-go/mcp"
 	log "github.com/sirupsen/logrus"
 )
@@ -417,50 +412,12 @@ func UnmarshalModuleSingular(response []byte) (string, error) {
 	return content, nil
 }
 
-func setUpCleanRetryableClient(log *log.Logger) *http.Client {
-	retryClient := retryablehttp.NewClient()
-	retryClient.Logger = log
-
-	retryClient.HTTPClient = cleanhttp.DefaultClient()
-	retryClient.HTTPClient.Timeout = 10 * time.Second
-	retryClient.RetryMax = 3
-
-	retryClient.Backoff = func(min, max time.Duration, attemptNum int, resp *http.Response) time.Duration {
-		if resp != nil && resp.StatusCode == http.StatusTooManyRequests {
-			resetAfter := resp.Header.Get("x-ratelimit-reset")
-
-			resetAfterInt, err := strconv.ParseInt(resetAfter, 10, 64)
-			if err != nil {
-				return 0
-			}
-
-			resetAfterTime := time.Unix(resetAfterInt, 0)
-
-			return time.Until(resetAfterTime)
-		}
-
-		return 0
-	}
-
-	retryClient.CheckRetry = func(ctx context.Context, resp *http.Response, err error) (bool, error) {
-		if resp != nil && resp.StatusCode == http.StatusTooManyRequests {
-			resetAfter := resp.Header.Get("x-ratelimit-reset")
-			return resetAfter != "", nil
-		}
-
-		return false, nil
-	}
-
-	return retryClient.StandardClient()
-}
-
 func sendRegistryCall(client *http.Client, method string, uri string, logger *log.Logger, callOptions ...string) ([]byte, error) {
 	version := "v1"
 	if len(callOptions) > 0 {
 		version = callOptions[0] // API version will be the first optional arg to this function
 	}
 
-	httpClient := setUpCleanRetryableClient(logger)
 	url, err := url.Parse(fmt.Sprintf("https://registry.terraform.io/%s/%s", version, uri))
 	if err != nil {
 		return nil, fmt.Errorf("error parsing terraform registry URL: %w", err)
@@ -472,7 +429,7 @@ func sendRegistryCall(client *http.Client, method string, uri string, logger *lo
 		return nil, err
 	}
 
-	resp, err := httpClient.Do(req)
+	resp, err := client.Do(req)
 	if err != nil {
 		return nil, err
 	}
