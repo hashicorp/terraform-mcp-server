@@ -22,7 +22,7 @@ automation and interaction capabilities for Infrastructure as Code (IaC) develop
 
 ### Usage with VS Code
 
-Add the following JSON block to your User Settings (JSON) file in VS Code. You can do this by pressing `Ctrl + Shift + P` and typing `Preferences: Open User Settings (JSON)`. 
+Add the following JSON block to your User Settings (JSON) file in VS Code. You can do this by pressing `Ctrl + Shift + P` and typing `Preferences: Open User Settings (JSON)`.
 
 More about using MCP server tools in VS Code's [agent mode documentation](https://code.visualstudio.com/docs/copilot/chat/mcp-servers).
 
@@ -44,6 +44,8 @@ More about using MCP server tools in VS Code's [agent mode documentation](https:
 }
 ```
 
+If you are running vscode server remotely (e.g. WSL2 on Windows) then use the Remote Settings (JSON) file instead. You can do this by pressing `Ctrl + Shift + P` and typing `Preferences: Open Remote Settings (JSON)`. Default location is `~/.vscode-server/data/Machine/settings.json`.
+
 Optionally, you can add a similar example (i.e. without the mcp key) to a file called `.vscode/mcp.json` in your workspace. This will allow you to share the configuration with others.
 
 ```json
@@ -57,26 +59,6 @@ Optionally, you can add a similar example (i.e. without the mcp key) to a file c
         "--rm",
         "hashicorp/terraform-mcp-server"
       ]
-    }
-  }
-}
-```
-
-If you are running vscode server remotely (e.g. WSL2 on Windows) then use the Remote Settings (JSON) file instead. You can do this by pressing `Ctrl + Shift + P` and typing `Preferences: Open Remote Settings (JSON)`. Default location is `~/.vscode-server/data/Machine/settings.json`.
-
-```json
-{
-  "mcp": {
-    "servers": {
-      "terraform": {
-        "command": "docker",
-        "args": [
-          "run",
-          "-i",
-          "--rm",
-          "hashicorp/terraform-mcp-server"
-        ]
-      }
     }
   }
 }
