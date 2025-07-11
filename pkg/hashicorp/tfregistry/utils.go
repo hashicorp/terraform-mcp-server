@@ -165,7 +165,6 @@ func GetProviderResourceDetailsV2(client *http.Client, providerDetail ProviderDe
 
 // containsSlug checks if the sourceName string contains the slug string anywhere within it.
 // It safely handles potential regex metacharacters in the slug.
-// TODO: include a unit test for this
 func containsSlug(sourceName string, slug string) (bool, error) {
 	// Use regexp.QuoteMeta to escape any special regex characters in the slug.
 	// This ensures the slug is treated as a literal string in the pattern.
@@ -202,24 +201,24 @@ func isValidProviderDataType(providerDataType string) bool {
 
 func resolveProviderDetails(request mcp.CallToolRequest, registryClient *http.Client, defaultErrorGuide string, logger *log.Logger) (ProviderDetail, error) {
 	providerDetail := ProviderDetail{}
-	providerName, ok := request.Params.Arguments["providerName"].(string)
-	if !ok || providerName == "" {
+	providerName := request.GetString("providerName", "")
+	if providerName == "" {
 		return providerDetail, fmt.Errorf("providerName is required and must be a string")
 	}
 
-	providerNamespace, ok := request.Params.Arguments["providerNamespace"].(string)
-	if !ok || providerNamespace == "" {
+	providerNamespace := request.GetString("providerNamespace", "")
+	if providerNamespace == "" {
 		logger.Debugf(`Error getting latest provider version in "%s" namespace, trying the hashicorp namespace`, providerNamespace)
 		providerNamespace = "hashicorp"
 	}
 
-	providerVersion := request.Params.Arguments["providerVersion"]
-	providerDataType := request.Params.Arguments["providerDataType"]
+	providerVersion := request.GetString("providerVersion", "latest")
+	providerDataType := request.GetString("providerDataType", "resources")
 
 	var err error
 	providerVersionValue := ""
-	if v, ok := providerVersion.(string); ok && isValidProviderVersionFormat(v) {
-		providerVersionValue = v
+	if isValidProviderVersionFormat(providerVersion) {
+		providerVersionValue = providerVersion
 	} else {
 		providerVersionValue, err = GetLatestProviderVersion(registryClient, providerNamespace, providerName, logger)
 		if err != nil {
@@ -244,8 +243,8 @@ func resolveProviderDetails(request mcp.CallToolRequest, registryClient *http.Cl
 	}
 
 	providerDataTypeValue := ""
-	if pdt, ok := providerDataType.(string); ok && isValidProviderDataType(pdt) {
-		providerDataTypeValue = pdt
+	if isValidProviderDataType(providerDataType) {
+		providerDataTypeValue = providerDataType
 	}
 
 	providerDetail.ProviderName = providerName
@@ -521,4 +520,28 @@ func GetProviderDocsV2(client *http.Client, providerDetail ProviderDetail, logge
 func isV2ProviderDataType(dataType string) bool {
 	v2Categories := []string{"guides", "functions", "overview"}
 	return slices.Contains(v2Categories, dataType)
+}
+
+func extractReadme(readme string) string {
+	if readme == "" {
+		return ""
+	}
+
+	var builder strings.Builder
+	headerFound := false
+	strArr := strings.Split(readme, "\n")
+	headerRegex := regexp.MustCompile(`^#+\s?`)
+	for _, str := range strArr {
+		matched := headerRegex.MatchString(str)
+		if matched {
+			if headerFound {
+				break
+			}
+			headerFound = true
+		}
+		builder.WriteString(str)
+		builder.WriteString("\n")
+	}
+
+	return strings.TrimSuffix(builder.String(), "\n")
 }

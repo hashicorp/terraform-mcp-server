@@ -43,15 +43,15 @@ func ResolveProviderDocID(registryClient *http.Client, logger *log.Logger) (tool
 				return nil, err
 			}
 
-			serviceSlug, ok := request.Params.Arguments["serviceSlug"].(string)
-			if !ok || serviceSlug == "" {
-				return nil, logAndReturnError(logger, "serviceSlug is required and must be a string", nil)
+			serviceSlug, err := request.RequireString("serviceSlug")
+			if err != nil {
+				return nil, logAndReturnError(logger, "serviceSlug is required", err)
+			}
+			if serviceSlug == "" {
+				return nil, logAndReturnError(logger, "serviceSlug cannot be empty", nil)
 			}
 
-			providerDataType, ok := request.Params.Arguments["providerDataType"].(string)
-			if !ok || providerDataType == "" {
-				providerDataType = "resources"
-			}
+			providerDataType := request.GetString("providerDataType", "resources")
 			providerDetail.ProviderDataType = providerDataType
 
 			// Check if we need to use v2 API for guides, functions, or overview
@@ -117,9 +117,12 @@ func GetProviderDocs(registryClient *http.Client, logger *log.Logger) (tool mcp.
 			mcp.WithString("providerDocID", mcp.Required(), mcp.Description("Exact tfprovider-compatible providerDocID, (e.g., '8894603', '8906901') retrieved from 'resolveProviderDocID'")),
 		),
 		func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-			providerDocID, ok := request.Params.Arguments["providerDocID"].(string)
-			if !ok || providerDocID == "" {
-				return nil, fmt.Errorf("providerDocID is required and must be a string")
+			providerDocID, err := request.RequireString("providerDocID")
+			if err != nil {
+				return nil, logAndReturnError(logger, "providerDocID is required", err)
+			}
+			if providerDocID == "" {
+				return nil, logAndReturnError(logger, "providerDocID cannot be empty", nil)
 			}
 
 			detailResp, err := sendRegistryCall(registryClient, "GET", fmt.Sprintf("provider-docs/%s", providerDocID), logger, "v2")
@@ -150,33 +153,28 @@ func SearchModules(registryClient *http.Client, logger *log.Logger) (tool mcp.To
 				mcp.DefaultNumber(0),
 			),
 		), func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-			moduleQuery := request.Params.Arguments["moduleQuery"]
-			currentOffset := request.Params.Arguments["currentOffset"]
-			currentOffsetValue := 0
-			if val, ok := currentOffset.(float64); ok {
-				currentOffsetValue = int(val)
+			moduleQuery, err := request.RequireString("moduleQuery")
+			if err != nil {
+				return nil, logAndReturnError(logger, "moduleQuery is required", err)
 			}
+			currentOffsetValue := request.GetInt("currentOffset", 0)
 
-			if mq, ok := moduleQuery.(string); !ok {
-				return nil, logAndReturnError(logger, "error finding the module name;", nil)
+			var modulesData, errMsg string
+			response, err := searchModules(registryClient, moduleQuery, currentOffsetValue, logger)
+			if err != nil {
+				return nil, logAndReturnError(logger, fmt.Sprintf("no module(s) found for moduleName: %s", moduleQuery), err)
 			} else {
-				var modulesData, errMsg string
-				response, err := searchModules(registryClient, mq, currentOffsetValue, logger)
+				modulesData, err = UnmarshalTFModulePlural(response, moduleQuery)
 				if err != nil {
-					return nil, logAndReturnError(logger, fmt.Sprintf("no module(s) found for moduleName: %s", mq), err)
-				} else {
-					modulesData, err = UnmarshalTFModulePlural(response, mq)
-					if err != nil {
-						return nil, logAndReturnError(logger, fmt.Sprintf("unmarshalling modules for moduleName: %s", mq), err)
-					}
+					return nil, logAndReturnError(logger, fmt.Sprintf("unmarshalling modules for moduleName: %s", moduleQuery), err)
 				}
-
-				if modulesData == "" {
-					errMsg = fmt.Sprintf("getting module(s), none found! query used: %s; error: %s", mq, errMsg)
-					return nil, logAndReturnError(logger, errMsg, nil)
-				}
-				return mcp.NewToolResultText(modulesData), nil
 			}
+
+			if modulesData == "" {
+				errMsg = fmt.Sprintf("getting module(s), none found! query used: %s; error: %s", moduleQuery, errMsg)
+				return nil, logAndReturnError(logger, errMsg, nil)
+			}
+			return mcp.NewToolResultText(modulesData), nil
 		}
 }
 
@@ -190,26 +188,160 @@ func ModuleDetails(registryClient *http.Client, logger *log.Logger) (tool mcp.To
 				mcp.Description("Exact valid and compatible moduleID retrieved from searchModules (e.g., 'squareops/terraform-kubernetes-mongodb/mongodb/2.1.1', 'GoogleCloudPlatform/vertex-ai/google/0.2.0')"),
 			),
 		), func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-			moduleID := request.Params.Arguments["moduleID"]
-
-			if mn, ok := moduleID.(string); !ok || mn == "" {
-				return nil, logAndReturnError(logger, "moduleID is required and must be a valid string. It represents the ID of the module to retrieve detailed information about", nil)
-			} else {
-				var errMsg string
-				response, err := GetModuleDetails(registryClient, mn, 0, logger)
-				if err != nil {
-					errMsg = fmt.Sprintf("no module(s) found for %v,", mn)
-					return nil, logAndReturnError(logger, errMsg, nil)
-				}
-				moduleData, err := UnmarshalModuleSingular(response)
-				if err != nil {
-					return nil, logAndReturnError(logger, "unmarshalling module details", err)
-				}
-				if moduleData == "" {
-					errMsg = fmt.Sprintf("getting module(s), none found! %s please provider a different moduleProvider", errMsg)
-					return nil, logAndReturnError(logger, errMsg, nil)
-				}
-				return mcp.NewToolResultText(moduleData), nil
+			moduleID, err := request.RequireString("moduleID")
+			if err != nil {
+				return nil, logAndReturnError(logger, "moduleID is required", err)
 			}
+			if moduleID == "" {
+				return nil, logAndReturnError(logger, "moduleID cannot be empty", nil)
+			}
+
+			var errMsg string
+			response, err := GetModuleDetails(registryClient, moduleID, 0, logger)
+			if err != nil {
+				errMsg = fmt.Sprintf("no module(s) found for %v,", moduleID)
+				return nil, logAndReturnError(logger, errMsg, nil)
+			}
+			moduleData, err := UnmarshalModuleSingular(response)
+			if err != nil {
+				return nil, logAndReturnError(logger, "unmarshalling module details", err)
+			}
+			if moduleData == "" {
+				errMsg = fmt.Sprintf("getting module(s), none found! %s please provider a different moduleProvider", errMsg)
+				return nil, logAndReturnError(logger, errMsg, nil)
+			}
+			return mcp.NewToolResultText(moduleData), nil
+		}
+}
+
+func SearchPolicies(registryClient *http.Client, logger *log.Logger) (tool mcp.Tool, handler server.ToolHandlerFunc) {
+	return mcp.NewTool("searchPolicies",
+			mcp.WithDescription(`Searches for Terraform policies based on a query string. This tool returns a list of matching policies, which can be used to retrieve detailed policy information using the 'policyDetails' tool. 
+			You MUST call this function before 'policyDetails' to obtain a valid terraformPolicyID.
+			When selecting the best match, consider: - Name similarity to the query - Title relevance - Verification status (verified) - Download counts (popularity) Return the selected policyID and explain your choice. 
+			If there are multiple good matches, mention this but proceed with the most relevant one. If no policies were found, reattempt the search with a new policyQuery.`),
+			mcp.WithTitleAnnotation("Search and match Terraform policies based on name and relevance"),
+			mcp.WithOpenWorldHintAnnotation(true),
+			mcp.WithString("policyQuery",
+				mcp.Required(),
+				mcp.Description("The query to search for Terraform modules."),
+			),
+		), func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			var terraformPolicies TerraformPolicyList
+			pq, err := request.RequireString("policyQuery")
+			if err != nil {
+				return nil, logAndReturnError(logger, "policyQuery is required", err)
+			}
+			if pq == "" {
+				return nil, logAndReturnError(logger, "policyQuery cannot be empty", nil)
+			}
+
+			// static list of 100 is fine for now
+			policyResp, err := sendRegistryCall(registryClient, "GET", "policies?page%5Bsize%5D=100&include=latest-version", logger, "v2")
+			if err != nil {
+				return nil, logAndReturnError(logger, "Failed to fetch policies: registry API did not return a successful response", err)
+			}
+
+			err = json.Unmarshal(policyResp, &terraformPolicies)
+			if err != nil {
+				return nil, logAndReturnError(logger, "Unmarshalling policy list", err)
+			}
+
+			var builder strings.Builder
+			builder.WriteString(fmt.Sprintf("Matching Terraform Policies for query: %s\n\n", pq))
+			builder.WriteString("Each result includes:\n- terraformPolicyID: Unique identifier to be used with policyDetails tool\n- Name: Policy name\n- Title: Policy description\n- Downloads: Policy downloads\n---\n\n")
+
+			contentAvailable := false
+			for _, policy := range terraformPolicies.Data {
+				cs, err := containsSlug(strings.ToLower(policy.Attributes.Title), strings.ToLower(pq))
+				cs_pn, err_pn := containsSlug(strings.ToLower(policy.Attributes.Name), strings.ToLower(pq))
+				if (cs || cs_pn) && err == nil && err_pn == nil {
+					contentAvailable = true
+					ID := strings.ReplaceAll(policy.Relationships.LatestVersion.Links.Related, "/v2/", "")
+					builder.WriteString(fmt.Sprintf(
+						"- terraformPolicyID: %s\n- Name: %s\n- Title: %s\n- Downloads: %d\n---\n",
+						ID,
+						policy.Attributes.Name,
+						policy.Attributes.Title,
+						policy.Attributes.Downloads,
+					))
+				}
+			}
+
+			policyData := builder.String()
+			if !contentAvailable {
+				errMessage := fmt.Sprintf("No policies found matching the query: %s. Try a different policyQuery.", pq)
+				return nil, logAndReturnError(logger, errMessage, nil)
+			}
+
+			return mcp.NewToolResultText(policyData), nil
+		}
+}
+
+func PolicyDetails(registryClient *http.Client, logger *log.Logger) (tool mcp.Tool, handler server.ToolHandlerFunc) {
+	return mcp.NewTool("policyDetails",
+			mcp.WithDescription(`Fetches up-to-date documentation for a specific policy from the Terraform registry. You must call 'searchPolicies' first to obtain the exact terraformPolicyID required to use this tool.`),
+			mcp.WithTitleAnnotation("Fetch detailed Terraform policy documentation using a terraformPolicyID"),
+			mcp.WithOpenWorldHintAnnotation(true),
+			mcp.WithString("terraformPolicyID",
+				mcp.Required(),
+				mcp.Description("Matching terraformPolicyID retrieved from the 'searchPolicies' tool (e.g., 'policies/hashicorp/CIS-Policy-Set-for-AWS-Terraform/1.0.1')"),
+			),
+		), func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			terraformPolicyID, err := request.RequireString("terraformPolicyID")
+			if err != nil {
+				return nil, logAndReturnError(logger, "terraformPolicyID is required and must be a string, it is fetched by running the searchPolicies tool", err)
+			}
+			if terraformPolicyID == "" {
+				return nil, logAndReturnError(logger, "terraformPolicyID cannot be empty, it is fetched by running the searchPolicies tool", nil)
+			}
+
+			policyResp, err := sendRegistryCall(registryClient, "GET", fmt.Sprintf("%s?include=policies,policy-modules,policy-library", terraformPolicyID), logger, "v2")
+			if err != nil {
+				return nil, logAndReturnError(logger, "Failed to fetch policy details: registry API did not return a successful response", err)
+			}
+
+			var policyDetails TerraformPolicyDetails
+			if err := json.Unmarshal(policyResp, &policyDetails); err != nil {
+				return nil, logAndReturnError(logger, fmt.Sprintf("error unmarshalling policy details for %s", terraformPolicyID), err)
+			}
+
+			readme := extractReadme(policyDetails.Data.Attributes.Readme)
+			var builder strings.Builder
+			builder.WriteString(fmt.Sprintf("## Policy details about %s \n\n%s", terraformPolicyID, readme))
+			policyList := ""
+			moduleList := ""
+			for _, policy := range policyDetails.Included {
+				if policy.Type == "policy-modules" {
+					moduleList += fmt.Sprintf(`
+module "%s" {
+  source = "https://registry.terraform.io/v2%s/policy-module/%s.sentinel?checksum=sha256:%s"
+}
+`, policy.Attributes.Name, terraformPolicyID, policy.Attributes.Name, policy.Attributes.Shasum)
+				}
+
+				if policy.Type == "policies" {
+					policyList += fmt.Sprintf("- POLICY_NAME: %s\n- POLICY_CHECKSUM: sha256:%s\n", policy.Attributes.Name, policy.Attributes.Shasum)
+					policyList += "\n---\n"
+				}
+			}
+			builder.WriteString("---\n")
+			builder.WriteString("## Usage\n\n")
+			builder.WriteString("Generate the content for a HashiCorp Configuration Language (HCL) file named policies.hcl. This file should define a set of policies. For each policy provided, create a distinct policy block using the following template.\n")
+			builder.WriteString("\n```hcl\n")
+			hclTemplate := fmt.Sprintf(`
+%s
+policy "<<POLICY_NAME>>" {
+  source = "https://registry.terraform.io/v2%s/policy/<<POLICY_NAME>>.sentinel?checksum=<<POLICY_CHECKSUM>>"
+  enforcement_level = "advisory"
+}
+`, moduleList, terraformPolicyID)
+			builder.WriteString(hclTemplate)
+			builder.WriteString("\n```\n")
+			builder.WriteString(fmt.Sprintf("Available policies with SHA for %s are: \n\n", terraformPolicyID))
+			builder.WriteString(policyList)
+
+			policyData := builder.String()
+			return mcp.NewToolResultText(policyData), nil
 		}
 }
