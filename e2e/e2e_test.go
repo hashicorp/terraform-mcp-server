@@ -359,6 +359,7 @@ func startHTTPContainer(t *testing.T, port string) string {
 		"docker", "run", "-d", "--rm", 
 		"-e", "TRANSPORT_MODE=streamable-http", 
 		"-e", "TRANSPORT_HOST=0.0.0.0",
+		"-e", "MCP_SESSION_MODE=stateful",
 		"-p", portMapping, 
 		"terraform-mcp-server:test-e2e",
 	)

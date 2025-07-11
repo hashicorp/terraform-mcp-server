@@ -43,6 +43,7 @@ Modern HTTP-based transport supporting both direct HTTP requests and Server-Sent
 | `TRANSPORT_MODE` | Set to `streamable-http` to enable HTTP transport (legacy `http` value still supported) | `stdio` |
 | `TRANSPORT_HOST` | Host to bind the HTTP server | `127.0.0.1` |
 | `TRANSPORT_PORT` | HTTP server port | `8080` |
+| `MCP_SESSION_MODE` | Session mode: `stateful` or `stateless` | `stateful` |
 | `MCP_ALLOWED_ORIGINS` | Comma-separated list of allowed origins for CORS | `""` (empty) |
 | `MCP_CORS_MODE` | CORS mode: `strict`, `development`, or `disabled` | `strict` |
 
@@ -57,6 +58,18 @@ terraform-mcp-server streamable-http [--transport-port 8080] [--transport-host 1
 
 # HTTP mode (deprecated, use streamable-http instead)
 terraform-mcp-server http [--transport-port 8080] [--transport-host 127.0.0.1] [--log-file /path/to/log]
+```
+
+## Session Modes
+
+The Terraform MCP Server supports two session modes when using the StreamableHTTP transport:
+
+- **Stateful Mode (Default)**: Maintains session state between requests, enabling context-aware operations.
+- **Stateless Mode**: Each request is processed independently without maintaining session state, which can be useful for high-availability deployments or when using load balancers.
+
+To enable stateless mode, set the environment variable:
+```bash
+export MCP_SESSION_MODE=stateless
 ```
 
 ## Installation
