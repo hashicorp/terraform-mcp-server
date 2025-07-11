@@ -50,8 +50,8 @@ var (
 		},
 	}
 
-	httpCmd = &cobra.Command{
-		Use:   "http",
+	streamableHTTPCmd = &cobra.Command{
+		Use:   "streamable-http",
 		Short: "Start StreamableHTTP server",
 		Long:  `Start a server that communicates via StreamableHTTP transport on port 8080 at /mcp endpoint.`,
 		Run: func(cmd *cobra.Command, _ []string) {
@@ -78,6 +78,18 @@ var (
 			}
 		},
 	}
+	
+	// Create an alias for backward compatibility
+	httpCmdAlias = &cobra.Command{
+		Use:        "http",
+		Short:      "Start StreamableHTTP server (deprecated, use 'streamable-http' instead)",
+		Long:       `This command is deprecated. Please use 'streamable-http' instead.`,
+		Deprecated: "Use 'streamable-http' instead",
+		Run: func(cmd *cobra.Command, args []string) {
+			// Forward to the new command
+			streamableHTTPCmd.Run(cmd, args)
+		},
+	}
 )
 
 func runHTTPServer(logger *log.Logger, host string, port string) error {
@@ -87,10 +99,10 @@ func runHTTPServer(logger *log.Logger, host string, port string) error {
 	hcServer := NewServer(version.Version)
 	registryInit(hcServer, logger)
 
-	return httpServerInit(ctx, hcServer, logger, host, port)
+	return streamableHTTPServerInit(ctx, hcServer, logger, host, port)
 }
 
-func httpServerInit(ctx context.Context, hcServer *server.MCPServer, logger *log.Logger, host string, port string) error {
+func streamableHTTPServerInit(ctx context.Context, hcServer *server.MCPServer, logger *log.Logger, host string, port string) error {
 	// Create StreamableHTTP server which implements the new streamable-http transport
 	// This is the modern MCP transport that supports both direct HTTP responses and SSE streams
 	baseStreamableServer := server.NewStreamableHTTPServer(hcServer,
@@ -208,7 +220,7 @@ func runDefaultCommand(cmd *cobra.Command, _ []string) {
 
 func main() {
 	// Check environment variables first - they override command line args
-	if shouldUseHTTPMode() {
+	if shouldUseStreamableHTTPMode() {
 		port := getHTTPPort()
 		host := getHTTPHost()
 
@@ -219,7 +231,7 @@ func main() {
 		}
 
 		if err := runHTTPServer(logger, host, port); err != nil {
-			stdlog.Fatal("failed to run HTTP server:", err)
+			stdlog.Fatal("failed to run StreamableHTTP server:", err)
 		}
 		return
 	}
@@ -231,9 +243,10 @@ func main() {
 	}
 }
 
-// shouldUseHTTPMode checks if environment variables indicate HTTP mode
-func shouldUseHTTPMode() bool {
-	return os.Getenv("TRANSPORT_MODE") == "http" || 
+// shouldUseStreamableHTTPMode checks if environment variables indicate HTTP mode
+func shouldUseStreamableHTTPMode() bool {
+	transportMode := os.Getenv("TRANSPORT_MODE")
+	return transportMode == "http" || transportMode == "streamable-http" || 
 	       os.Getenv("TRANSPORT_PORT") != "" || 
 	       os.Getenv("TRANSPORT_HOST") != ""
 }

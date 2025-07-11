@@ -33,12 +33,17 @@ func init() {
 	rootCmd.SetVersionTemplate("{{.Short}}\n{{.Version}}\n")
 	rootCmd.PersistentFlags().String("log-file", "", "Path to log file")
 
-	// Add HTTP command flags (avoid 'h' shorthand conflict with help)
-	httpCmd.Flags().String("transport-host", "127.0.0.1", "Host to bind to")
-	httpCmd.Flags().StringP("transport-port", "p", "8080", "Port to listen on")
+	// Add StreamableHTTP command flags (avoid 'h' shorthand conflict with help)
+	streamableHTTPCmd.Flags().String("transport-host", "127.0.0.1", "Host to bind to")
+	streamableHTTPCmd.Flags().StringP("transport-port", "p", "8080", "Port to listen on")
+	
+	// Add the same flags to the alias command for backward compatibility
+	httpCmdAlias.Flags().String("transport-host", "127.0.0.1", "Host to bind to")
+	httpCmdAlias.Flags().StringP("transport-port", "p", "8080", "Port to listen on")
 
 	rootCmd.AddCommand(stdioCmd)
-	rootCmd.AddCommand(httpCmd)
+	rootCmd.AddCommand(streamableHTTPCmd)
+	rootCmd.AddCommand(httpCmdAlias) // Add the alias for backward compatibility
 }
 
 func initConfig() {

@@ -357,7 +357,7 @@ func startHTTPContainer(t *testing.T, port string) string {
 	portMapping := fmt.Sprintf("%s:8080", port)
 	cmd := exec.Command(
 		"docker", "run", "-d", "--rm", 
-		"-e", "TRANSPORT_MODE=http", 
+		"-e", "TRANSPORT_MODE=streamable-http", 
 		"-e", "TRANSPORT_HOST=0.0.0.0",
 		"-p", portMapping, 
 		"terraform-mcp-server:test-e2e",

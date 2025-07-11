@@ -40,7 +40,7 @@ Modern HTTP-based transport supporting both direct HTTP requests and Server-Sent
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `TRANSPORT_MODE` | Set to `http` to enable HTTP transport | `stdio` |
+| `TRANSPORT_MODE` | Set to `streamable-http` to enable HTTP transport (legacy `http` value still supported) | `stdio` |
 | `TRANSPORT_HOST` | Host to bind the HTTP server | `127.0.0.1` |
 | `TRANSPORT_PORT` | HTTP server port | `8080` |
 | `MCP_ALLOWED_ORIGINS` | Comma-separated list of allowed origins for CORS | `""` (empty) |
@@ -52,7 +52,10 @@ Modern HTTP-based transport supporting both direct HTTP requests and Server-Sent
 # Stdio mode
 terraform-mcp-server stdio [--log-file /path/to/log]
 
-# HTTP mode
+# StreamableHTTP mode
+terraform-mcp-server streamable-http [--transport-port 8080] [--transport-host 127.0.0.1] [--log-file /path/to/log]
+
+# HTTP mode (deprecated, use streamable-http instead)
 terraform-mcp-server http [--transport-port 8080] [--transport-host 127.0.0.1] [--log-file /path/to/log]
 ```
 
@@ -183,7 +186,10 @@ make docker-build
 # Run in stdio mode
 docker run -i --rm terraform-mcp-server:dev
 
-# Run in http mode
+# Run in streamable-http mode
+docker run -p 8080:8080 --rm -e TRANSPORT_MODE=streamable-http -e TRANSPORT_HOST=0.0.0.0 terraform-mcp-server:dev
+
+# Run in http mode (deprecated)
 docker run -p 8080:8080 --rm -e TRANSPORT_MODE=http -e TRANSPORT_HOST=0.0.0.0 terraform-mcp-server:dev
 ```
 

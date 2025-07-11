@@ -51,7 +51,7 @@ func TestGetHTTPPort(t *testing.T) {
 	assert.Equal(t, "9090", port, "Port should be the value of TRANSPORT_PORT when it is set")
 }
 
-func TestShouldUseHTTPMode(t *testing.T) {
+func TestShouldUseStreamableHTTPMode(t *testing.T) {
 	// Save original env vars to restore later
 	origMode := os.Getenv("TRANSPORT_MODE")
 	origPort := os.Getenv("TRANSPORT_PORT")
@@ -66,19 +66,24 @@ func TestShouldUseHTTPMode(t *testing.T) {
 	os.Unsetenv("TRANSPORT_MODE")
 	os.Unsetenv("TRANSPORT_PORT")
 	os.Unsetenv("TRANSPORT_HOST")
-	assert.False(t, shouldUseHTTPMode(), "HTTP mode should not be used when no relevant env vars are set")
+	assert.False(t, shouldUseStreamableHTTPMode(), "HTTP mode should not be used when no relevant env vars are set")
 
-	// Test case: When TRANSPORT_MODE is set to "http", HTTP mode should be used
+	// Test case: When TRANSPORT_MODE is set to "http", HTTP mode should be used (backward compatibility)
 	os.Setenv("TRANSPORT_MODE", "http")
-	assert.True(t, shouldUseHTTPMode(), "HTTP mode should be used when TRANSPORT_MODE is set to 'http'")
+	assert.True(t, shouldUseStreamableHTTPMode(), "HTTP mode should be used when TRANSPORT_MODE is set to 'http'")
+	os.Unsetenv("TRANSPORT_MODE")
+	
+	// Test case: When TRANSPORT_MODE is set to "streamable-http", HTTP mode should be used
+	os.Setenv("TRANSPORT_MODE", "streamable-http")
+	assert.True(t, shouldUseStreamableHTTPMode(), "HTTP mode should be used when TRANSPORT_MODE is set to 'streamable-http'")
 	os.Unsetenv("TRANSPORT_MODE")
 
 	// Test case: When TRANSPORT_PORT is set, HTTP mode should be used
 	os.Setenv("TRANSPORT_PORT", "9090")
-	assert.True(t, shouldUseHTTPMode(), "HTTP mode should be used when TRANSPORT_PORT is set")
+	assert.True(t, shouldUseStreamableHTTPMode(), "HTTP mode should be used when TRANSPORT_PORT is set")
 	os.Unsetenv("TRANSPORT_PORT")
 
 	// Test case: When TRANSPORT_HOST is set, HTTP mode should be used
 	os.Setenv("TRANSPORT_HOST", "0.0.0.0")
-	assert.True(t, shouldUseHTTPMode(), "HTTP mode should be used when TRANSPORT_HOST is set")
+	assert.True(t, shouldUseStreamableHTTPMode(), "HTTP mode should be used when TRANSPORT_HOST is set")
 }
