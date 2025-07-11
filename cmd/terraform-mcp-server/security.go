@@ -96,7 +96,7 @@ func (h *securityHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		// If we have a valid origin, add CORS headers
 		w.Header().Set("Access-Control-Max-Age", "3600")
 		w.Header().Set("Access-Control-Allow-Origin", origin)
-		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
 		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Mcp-Session-Id")
 	}
 	
