@@ -55,9 +55,6 @@ terraform-mcp-server stdio [--log-file /path/to/log]
 
 # StreamableHTTP mode
 terraform-mcp-server streamable-http [--transport-port 8080] [--transport-host 127.0.0.1] [--log-file /path/to/log]
-
-# HTTP mode (deprecated, use streamable-http instead)
-terraform-mcp-server http [--transport-port 8080] [--transport-host 127.0.0.1] [--log-file /path/to/log]
 ```
 
 ## Session Modes
@@ -201,9 +198,6 @@ docker run -i --rm terraform-mcp-server:dev
 
 # Run in streamable-http mode
 docker run -p 8080:8080 --rm -e TRANSPORT_MODE=streamable-http -e TRANSPORT_HOST=0.0.0.0 terraform-mcp-server:dev
-
-# Run in http mode (deprecated)
-docker run -p 8080:8080 --rm -e TRANSPORT_MODE=http -e TRANSPORT_HOST=0.0.0.0 terraform-mcp-server:dev
 ```
 
 > **Note:** When running in Docker, you should set `TRANSPORT_HOST=0.0.0.0` to allow connections from outside the container.

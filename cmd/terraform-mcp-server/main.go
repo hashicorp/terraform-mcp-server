@@ -114,6 +114,7 @@ func streamableHTTPServerInit(ctx context.Context, hcServer *server.MCPServer, l
 	}
 
 	// Only add the WithStateLess option if stateless mode is enabled
+	// TODO: fix this in mcp-go ver 0.33.0 or higher
 	if isStateless {
 		opts = append(opts, server.WithStateLess(true))
 		logger.Infof("Running in stateless mode")
