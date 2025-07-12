@@ -1,4 +1,14 @@
-## 0.3.0
+## 0.2.1 (July 11, 2025)
+
+SECURITY
+
+* Added support for CORS (strict, development, disabled), default mode is strict. See [#108](https://github.com/hashicorp/terraform-mcp-server/pull/108)
+* Added support for CORS allowed origins, default is empty. See [#108](https://github.com/hashicorp/terraform-mcp-server/pull/108)
+* Added support for stateless streamable HTTP mode, see [#108](https://github.com/hashicorp/terraform-mcp-server/pull/108)
+
+IMPROVEMENTS
+
+* Improved the HTTP retry to the registry. See [#109](https://github.com/hashicorp/terraform-mcp-server/pull/109)
 
 ## 0.2.0 (July 3, 2025)
 
