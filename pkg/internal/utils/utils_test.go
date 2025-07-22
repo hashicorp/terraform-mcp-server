@@ -3,7 +3,7 @@
 
 //go:build !integration
 
-package tfregistry
+package utils
 
 import (
 	"fmt"
@@ -331,7 +331,7 @@ func TestIsValidProviderDataType(t *testing.T) {
 }
 
 func TestLogAndReturnError_NilLogger(t *testing.T) {
-	err := logAndReturnError(nil, "context", fmt.Errorf("fail"))
+	err := LogAndReturnError(nil, "context", fmt.Errorf("fail"))
 	if err == nil || !strings.Contains(err.Error(), "context") {
 		t.Errorf("expected error to contain context, got %v", err)
 	}
@@ -392,7 +392,7 @@ func TestLogAndReturnError(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			err := logAndReturnError(tc.logger, tc.context, tc.inputErr)
+			err := LogAndReturnError(tc.logger, tc.context, tc.inputErr)
 			require.Error(t, err, "Expected an error to be returned")
 			for _, expected := range tc.expectedErrContains {
 				assert.Contains(t, err.Error(), expected, "Error message mismatch")

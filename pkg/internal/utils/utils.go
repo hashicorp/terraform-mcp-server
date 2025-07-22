@@ -1,7 +1,7 @@
 // Copyright (c) HashiCorp, Inc.
 // SPDX-License-Identifier: MPL-2.0
 
-package tfregistry
+package utils
 
 import (
 	"encoding/json"
@@ -14,7 +14,8 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/mark3labs/mcp-go/mcp"
+	"github.com/hashicorp/terraform-mcp-server/pkg/internal/client"
+
 	log "github.com/sirupsen/logrus"
 )
 
@@ -22,14 +23,14 @@ const PROVIDER_BASE_PATH = "registry://providers"
 
 func GetProviderList(providerClient *http.Client, providerType string, logger *log.Logger) ([]map[string]string, error) {
 	uri := fmt.Sprintf("providers?filter[tier]=%s", providerType)
-	jsonData, err := sendRegistryCall(providerClient, "GET", uri, logger, "v2")
+	jsonData, err := SendRegistryCall(providerClient, "GET", uri, logger, "v2")
 	if err != nil {
-		return nil, logAndReturnError(logger, fmt.Sprintf("%s provider API request", providerType), err)
+		return nil, LogAndReturnError(logger, fmt.Sprintf("%s provider API request", providerType), err)
 	}
 
-	var providerListJson ProviderList
+	var providerListJson client.ProviderList
 	if err := json.Unmarshal(jsonData, &providerListJson); err != nil {
-		return nil, logAndReturnError(logger, fmt.Sprintf("%s providers request unmarshalling", providerType), err)
+		return nil, LogAndReturnError(logger, fmt.Sprintf("%s providers request unmarshalling", providerType), err)
 	}
 
 	providerDetails := make([]map[string]string, len(providerListJson.Data))
@@ -49,13 +50,13 @@ func GetProviderList(providerClient *http.Client, providerType string, logger *l
 // https://registry.terraform.io/v2/providers/hashicorp/aws?include=provider-versions
 func GetProviderVersionID(registryClient *http.Client, namespace string, name string, version string, logger *log.Logger) (string, error) {
 	uri := fmt.Sprintf("providers/%s/%s?include=provider-versions", namespace, name)
-	response, err := sendRegistryCall(registryClient, "GET", uri, logger, "v2")
+	response, err := SendRegistryCall(registryClient, "GET", uri, logger, "v2")
 	if err != nil {
-		return "", logAndReturnError(logger, "provider version ID request", err)
+		return "", LogAndReturnError(logger, "provider version ID request", err)
 	}
-	var providerVersionList ProviderVersionList
+	var providerVersionList client.ProviderVersionList
 	if err := json.Unmarshal(response, &providerVersionList); err != nil {
-		return "", logAndReturnError(logger, "provider version ID request unmarshalling", err)
+		return "", LogAndReturnError(logger, "provider version ID request unmarshalling", err)
 	}
 	for _, providerVersion := range providerVersionList.Included {
 		if providerVersion.Attributes.Version == version {
@@ -68,13 +69,13 @@ func GetProviderVersionID(registryClient *http.Client, namespace string, name st
 func GetProviderOverviewDocs(registryClient *http.Client, providerVersionID string, logger *log.Logger) (string, error) {
 	// https://registry.terraform.io/v2/provider-docs?filter[provider-version]=21818&filter[category]=overview&filter[slug]=index
 	uri := fmt.Sprintf("provider-docs?filter[provider-version]=%s&filter[category]=overview&filter[slug]=index", providerVersionID)
-	response, err := sendRegistryCall(registryClient, "GET", uri, logger, "v2")
+	response, err := SendRegistryCall(registryClient, "GET", uri, logger, "v2")
 	if err != nil {
-		return "", logAndReturnError(logger, "getting provider docs overview", err)
+		return "", LogAndReturnError(logger, "getting provider docs overview", err)
 	}
-	var providerOverview ProviderOverviewStruct
+	var providerOverview client.ProviderOverviewStruct
 	if err := json.Unmarshal(response, &providerOverview); err != nil {
-		return "", logAndReturnError(logger, "getting provider docs request unmarshalling", err)
+		return "", LogAndReturnError(logger, "getting provider docs request unmarshalling", err)
 	}
 
 	resourceContent := ""
@@ -82,7 +83,7 @@ func GetProviderOverviewDocs(registryClient *http.Client, providerVersionID stri
 		resourceContentNew, err := GetProviderResourceDocs(registryClient, providerOverviewPage.ID, logger)
 		resourceContent += resourceContentNew
 		if err != nil {
-			return "", logAndReturnError(logger, "getting provider resource docs looping", err)
+			return "", LogAndReturnError(logger, "getting provider resource docs looping", err)
 		}
 	}
 
@@ -92,13 +93,13 @@ func GetProviderOverviewDocs(registryClient *http.Client, providerVersionID stri
 func GetProviderResourceDocs(registryClient *http.Client, providerDocsID string, logger *log.Logger) (string, error) {
 	// https://registry.terraform.io/v2/provider-docs/8862001
 	uri := fmt.Sprintf("provider-docs/%s", providerDocsID)
-	response, err := sendRegistryCall(registryClient, "GET", uri, logger, "v2")
+	response, err := SendRegistryCall(registryClient, "GET", uri, logger, "v2")
 	if err != nil {
-		return "", logAndReturnError(logger, "Error getting provider resource docs ", err)
+		return "", LogAndReturnError(logger, "Error getting provider resource docs ", err)
 	}
-	var providerServiceDetails ProviderResourceDetails
+	var providerServiceDetails client.ProviderResourceDetails
 	if err := json.Unmarshal(response, &providerServiceDetails); err != nil {
-		return "", logAndReturnError(logger, "Error unmarshalling provider resource docs", err)
+		return "", LogAndReturnError(logger, "Error unmarshalling provider resource docs", err)
 	}
 	return providerServiceDetails.Data.Attributes.Content, nil
 }
@@ -115,14 +116,14 @@ func ConstructProviderVersionURI(providerNamespace interface{}, providerName str
 
 func GetLatestProviderVersion(providerClient *http.Client, providerNamespace, providerName interface{}, logger *log.Logger) (string, error) {
 	uri := fmt.Sprintf("providers/%s/%s", providerNamespace, providerName)
-	jsonData, err := sendRegistryCall(providerClient, "GET", uri, logger, "v1")
+	jsonData, err := SendRegistryCall(providerClient, "GET", uri, logger, "v1")
 	if err != nil {
-		return "", logAndReturnError(logger, "latest provider version API request", err)
+		return "", LogAndReturnError(logger, "latest provider version API request", err)
 	}
 
-	var providerVersionLatest ProviderVersionLatest
+	var providerVersionLatest client.ProviderVersionLatest
 	if err := json.Unmarshal(jsonData, &providerVersionLatest); err != nil {
-		return "", logAndReturnError(logger, "provider versions request unmarshalling", err)
+		return "", LogAndReturnError(logger, "provider versions request unmarshalling", err)
 	}
 
 	logger.Debugf("Fetched latest provider version: %s", providerVersionLatest.Version)
@@ -131,28 +132,28 @@ func GetLatestProviderVersion(providerClient *http.Client, providerNamespace, pr
 }
 
 // GetProviderResourceDetailsV2 fetches the provider resource details using v2 API with support for pagination using page numbers
-func GetProviderResourceDetailsV2(client *http.Client, providerDetail ProviderDetail, serviceSlug string, logger *log.Logger) (string, error) {
+func GetProviderResourceDetailsV2(client *http.Client, providerDetail client.ProviderDetail, serviceSlug string, logger *log.Logger) (string, error) {
 	providerVersionID, err := GetProviderVersionID(client, providerDetail.ProviderNamespace, providerDetail.ProviderName, providerDetail.ProviderVersion, logger)
 	if err != nil {
-		return "", logAndReturnError(logger, "getting provider version ID", err)
+		return "", LogAndReturnError(logger, "getting provider version ID", err)
 	}
 
 	uriPrefix := fmt.Sprintf("provider-docs?filter[provider-version]=%s&filter[category]=%s&filter[slug]=%s&filter[language]=hcl",
 		providerVersionID, providerDetail.ProviderDataType, serviceSlug)
-	docs, err := sendPaginatedRegistryCall[ProviderDocData](client, uriPrefix, logger)
+	docs, err := sendPaginatedRegistryCall[client.ProviderDocData](client, uriPrefix, logger)
 	if err != nil {
 		return "", err
 	}
 
 	var builder strings.Builder
 	for _, doc := range docs {
-		detailResp, err := sendRegistryCall(client, "GET", fmt.Sprintf("provider-docs/%s", doc.ID), logger, "v2")
+		detailResp, err := SendRegistryCall(client, "GET", fmt.Sprintf("provider-docs/%s", doc.ID), logger, "v2")
 		if err != nil {
 			logger.Errorf("Error fetching provider-docs/%s: %v", doc.ID, err)
 			continue
 		}
 
-		var details ProviderResourceDetails
+		var details client.ProviderResourceDetails
 		if err := json.Unmarshal(detailResp, &details); err != nil {
 			logger.Errorf("Error unmarshalling provider-docs/%s: %v", doc.ID, err)
 			continue
@@ -163,9 +164,9 @@ func GetProviderResourceDetailsV2(client *http.Client, providerDetail ProviderDe
 	return builder.String(), nil
 }
 
-// containsSlug checks if the sourceName string contains the slug string anywhere within it.
+// ContainsSlug checks if the sourceName string contains the slug string anywhere within it.
 // It safely handles potential regex metacharacters in the slug.
-func containsSlug(sourceName string, slug string) (bool, error) {
+func ContainsSlug(sourceName string, slug string) (bool, error) {
 	// Use regexp.QuoteMeta to escape any special regex characters in the slug.
 	// This ensures the slug is treated as a literal string in the pattern.
 	escapedSlug := regexp.QuoteMeta(slug)
@@ -186,93 +187,20 @@ func containsSlug(sourceName string, slug string) (bool, error) {
 	return matched, nil
 }
 
-// isValidProviderVersionFormat checks if the provider version format is valid.
-func isValidProviderVersionFormat(version string) bool {
+// IsValidProviderVersionFormat checks if the provider version format is valid.
+func IsValidProviderVersionFormat(version string) bool {
 	// Example regex for semantic versioning (e.g., "1.0.0", "1.0.0-beta").
 	semverRegex := `^v?(\d+\.\d+\.\d+(-[a-zA-Z0-9]+)?)$`
 	matched, _ := regexp.MatchString(semverRegex, version)
 	return matched
 }
 
-func isValidProviderDataType(providerDataType string) bool {
+func IsValidProviderDataType(providerDataType string) bool {
 	validTypes := []string{"resources", "data-sources", "functions", "guides", "overview"}
 	return slices.Contains(validTypes, providerDataType)
 }
 
-func resolveProviderDetails(request mcp.CallToolRequest, registryClient *http.Client, defaultErrorGuide string, logger *log.Logger) (ProviderDetail, error) {
-	providerDetail := ProviderDetail{}
-	providerName := request.GetString("providerName", "")
-	if providerName == "" {
-		return providerDetail, fmt.Errorf("providerName is required and must be a string")
-	}
-
-	providerNamespace := request.GetString("providerNamespace", "")
-	if providerNamespace == "" {
-		logger.Debugf(`Error getting latest provider version in "%s" namespace, trying the hashicorp namespace`, providerNamespace)
-		providerNamespace = "hashicorp"
-	}
-
-	providerVersion := request.GetString("providerVersion", "latest")
-	providerDataType := request.GetString("providerDataType", "resources")
-
-	var err error
-	providerVersionValue := ""
-	if isValidProviderVersionFormat(providerVersion) {
-		providerVersionValue = providerVersion
-	} else {
-		providerVersionValue, err = GetLatestProviderVersion(registryClient, providerNamespace, providerName, logger)
-		if err != nil {
-			providerVersionValue = ""
-			logger.Debugf("Error getting latest provider version in %s namespace: %v", providerNamespace, err)
-		}
-	}
-
-	// If the provider version doesn't exist, try the hashicorp namespace
-	if providerVersionValue == "" {
-		tryProviderNamespace := "hashicorp"
-		providerVersionValue, err = GetLatestProviderVersion(registryClient, tryProviderNamespace, providerName, logger)
-		if err != nil {
-			// Just so we don't print the same namespace twice if they are the same
-			if providerNamespace != tryProviderNamespace {
-				tryProviderNamespace = fmt.Sprintf(`"%s" or the "%s"`, providerNamespace, tryProviderNamespace)
-			}
-			return providerDetail, logAndReturnError(logger, fmt.Sprintf(`Error getting the "%s" provider, 
-			with version "%s" in the %s namespace, %s`, providerName, providerVersion, tryProviderNamespace, defaultErrorGuide), nil)
-		}
-		providerNamespace = tryProviderNamespace // Update the namespace to hashicorp, if successful
-	}
-
-	providerDataTypeValue := ""
-	if isValidProviderDataType(providerDataType) {
-		providerDataTypeValue = providerDataType
-	}
-
-	providerDetail.ProviderName = providerName
-	providerDetail.ProviderNamespace = providerNamespace
-	providerDetail.ProviderVersion = providerVersionValue
-	providerDetail.ProviderDataType = providerDataTypeValue
-	return providerDetail, nil
-}
-
 const MODULE_BASE_PATH = "registry://modules"
-
-func searchModules(providerClient *http.Client, moduleQuery string, currentOffset int, logger *log.Logger) ([]byte, error) {
-	uri := "modules"
-	if moduleQuery != "" {
-		uri = fmt.Sprintf("%s/search?q='%s'&offset=%v", uri, url.PathEscape(moduleQuery), currentOffset)
-	} else {
-		uri = fmt.Sprintf("%s?offset=%v", uri, currentOffset)
-	}
-
-	response, err := sendRegistryCall(providerClient, "GET", uri, logger)
-	if err != nil {
-		// We shouldn't log the error here because we might hit a namespace that doesn't exist, it's better to let the caller handle it.
-		return nil, fmt.Errorf("getting module(s) for: %v, call error: %v", moduleQuery, err)
-	}
-
-	// Return the filtered JSON as a string
-	return response, nil
-}
 
 func GetModuleDetails(providerClient *http.Client, moduleID string, currentOffset int, logger *log.Logger) ([]byte, error) {
 	uri := "modules"
@@ -281,7 +209,7 @@ func GetModuleDetails(providerClient *http.Client, moduleID string, currentOffse
 	}
 
 	uri = fmt.Sprintf("%s?offset=%v", uri, currentOffset)
-	response, err := sendRegistryCall(providerClient, "GET", uri, logger)
+	response, err := SendRegistryCall(providerClient, "GET", uri, logger)
 	if err != nil {
 		// We shouldn't log the error here because we might hit a namespace that doesn't exist, it's better to let the caller handle it.
 		return nil, fmt.Errorf("getting module(s) for: %v, please provide a different provider name like aws, azurerm or google etc", moduleID)
@@ -293,10 +221,10 @@ func GetModuleDetails(providerClient *http.Client, moduleID string, currentOffse
 
 func UnmarshalTFModulePlural(response []byte, moduleQuery string) (string, error) {
 	// Get the list of modules
-	var terraformModules TerraformModules
+	var terraformModules client.TerraformModules
 	err := json.Unmarshal(response, &terraformModules)
 	if err != nil {
-		return "", logAndReturnError(nil, "unmarshalling modules", err)
+		return "", LogAndReturnError(nil, "unmarshalling modules", err)
 	}
 
 	if len(terraformModules.Data) == 0 {
@@ -331,10 +259,10 @@ func UnmarshalTFModulePlural(response []byte, moduleQuery string) (string, error
 
 func UnmarshalModuleSingular(response []byte) (string, error) {
 	// Handles one module
-	var terraformModules TerraformModuleVersionDetails
+	var terraformModules client.TerraformModuleVersionDetails
 	err := json.Unmarshal(response, &terraformModules)
 	if err != nil {
-		return "", logAndReturnError(nil, "unmarshalling module details", err)
+		return "", LogAndReturnError(nil, "unmarshalling module details", err)
 	}
 
 	var builder strings.Builder
@@ -412,7 +340,7 @@ func UnmarshalModuleSingular(response []byte) (string, error) {
 	return content, nil
 }
 
-func sendRegistryCall(client *http.Client, method string, uri string, logger *log.Logger, callOptions ...string) ([]byte, error) {
+func SendRegistryCall(client *http.Client, method string, uri string, logger *log.Logger, callOptions ...string) ([]byte, error) {
 	version := "v1"
 	if len(callOptions) > 0 {
 		version = callOptions[0] // API version will be the first optional arg to this function
@@ -455,16 +383,16 @@ func sendPaginatedRegistryCall[T any](client *http.Client, uriPrefix string, log
 
 	for {
 		uri := fmt.Sprintf("%s&page[number]=%d", uriPrefix, page)
-		resp, err := sendRegistryCall(client, "GET", uri, logger, "v2")
+		resp, err := SendRegistryCall(client, "GET", uri, logger, "v2")
 		if err != nil {
-			return nil, logAndReturnError(logger, fmt.Sprintf("calling paginated registry API (page %d)", page), err)
+			return nil, LogAndReturnError(logger, fmt.Sprintf("calling paginated registry API (page %d)", page), err)
 		}
 
 		var wrapper struct {
 			Data []T `json:"data"`
 		}
 		if err := json.Unmarshal(resp, &wrapper); err != nil {
-			return nil, logAndReturnError(logger, fmt.Sprintf("unmarshalling page %d", page), err)
+			return nil, LogAndReturnError(logger, fmt.Sprintf("unmarshalling page %d", page), err)
 		}
 
 		if len(wrapper.Data) == 0 {
@@ -478,7 +406,8 @@ func sendPaginatedRegistryCall[T any](client *http.Client, uriPrefix string, log
 	return results, nil
 }
 
-func logAndReturnError(logger *log.Logger, context string, err error) error {
+// LogAndReturnError logs the error with context and returns a formatted error.
+func LogAndReturnError(logger *log.Logger, context string, err error) error {
 	err = fmt.Errorf("%s, %w", context, err)
 	if logger != nil {
 		logger.Errorf("Error in %s, %v", context, err)
@@ -487,10 +416,10 @@ func logAndReturnError(logger *log.Logger, context string, err error) error {
 }
 
 // GetProviderDocsV2 retrieves a list of documentation items for a specific provider category using v2 API with support for pagination using page numbers
-func GetProviderDocsV2(client *http.Client, providerDetail ProviderDetail, logger *log.Logger) (string, error) {
+func GetProviderDocsV2(client *http.Client, providerDetail client.ProviderDetail, logger *log.Logger) (string, error) {
 	providerVersionID, err := GetProviderVersionID(client, providerDetail.ProviderNamespace, providerDetail.ProviderName, providerDetail.ProviderVersion, logger)
 	if err != nil {
-		return "", logAndReturnError(logger, "getting provider version ID", err)
+		return "", LogAndReturnError(logger, "getting provider version ID", err)
 	}
 	category := providerDetail.ProviderDataType
 	if category == "overview" {
@@ -500,7 +429,7 @@ func GetProviderDocsV2(client *http.Client, providerDetail ProviderDetail, logge
 	uriPrefix := fmt.Sprintf("provider-docs?filter[provider-version]=%s&filter[category]=%s&filter[language]=hcl",
 		providerVersionID, category)
 
-	docs, err := sendPaginatedRegistryCall[ProviderDocData](client, uriPrefix, logger)
+	docs, err := sendPaginatedRegistryCall[client.ProviderDocData](client, uriPrefix, logger)
 	if err != nil {
 		return "", err
 	}
@@ -520,12 +449,12 @@ func GetProviderDocsV2(client *http.Client, providerDetail ProviderDetail, logge
 	return builder.String(), nil
 }
 
-func isV2ProviderDataType(dataType string) bool {
+func IsV2ProviderDataType(dataType string) bool {
 	v2Categories := []string{"guides", "functions", "overview"}
 	return slices.Contains(v2Categories, dataType)
 }
 
-func extractReadme(readme string) string {
+func ExtractReadme(readme string) string {
 	if readme == "" {
 		return ""
 	}

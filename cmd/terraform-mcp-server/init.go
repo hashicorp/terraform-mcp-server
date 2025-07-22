@@ -15,7 +15,6 @@ import (
 
 	"github.com/hashicorp/go-cleanhttp"
 	"github.com/hashicorp/go-retryablehttp"
-	"github.com/hashicorp/terraform-mcp-server/pkg/hashicorp/tfregistry"
 
 	"github.com/mark3labs/mcp-go/server"
 	log "github.com/sirupsen/logrus"
@@ -67,7 +66,7 @@ func init() {
 	// Add StreamableHTTP command flags (avoid 'h' shorthand conflict with help)
 	streamableHTTPCmd.Flags().String("transport-host", "127.0.0.1", "Host to bind to")
 	streamableHTTPCmd.Flags().StringP("transport-port", "p", "8080", "Port to listen on")
-	
+
 	// Add the same flags to the alias command for backward compatibility
 	httpCmdAlias.Flags().String("transport-host", "127.0.0.1", "Host to bind to")
 	httpCmdAlias.Flags().StringP("transport-port", "p", "8080", "Port to listen on")
@@ -100,9 +99,9 @@ func initLogger(outPath string) (*log.Logger, error) {
 
 func registryInit(hcServer *server.MCPServer, logger *log.Logger) {
 	registryClient := InitRegistryClient(logger)
-	tfregistry.InitTools(hcServer, registryClient, logger)
-	tfregistry.RegisterResources(hcServer, registryClient, logger)
-	tfregistry.RegisterResourceTemplates(hcServer, registryClient, logger)
+	tools.InitTools(hcServer, registryClient, logger)
+	resources.RegisterResources(hcServer, registryClient, logger)
+	resources.RegisterResourceTemplates(hcServer, registryClient, logger)
 }
 
 func serverInit(ctx context.Context, hcServer *server.MCPServer, logger *log.Logger) error {
