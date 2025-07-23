@@ -73,12 +73,17 @@ var (
 				stdlog.Fatal("Failed to get streamableHTTP host:", err)
 			}
 
-			if err := runHTTPServer(logger, host, port); err != nil {
+			endpointPath, err := cmd.Flags().GetString("endpoint-path")
+			if err != nil {
+				stdlog.Fatal("Failed to get endpoint path:", err)
+			}
+
+			if err := runHTTPServer(logger, host, port, endpointPath); err != nil {
 				stdlog.Fatal("failed to run streamableHTTP server:", err)
 			}
 		},
 	}
-	
+
 	// Create an alias for backward compatibility
 	httpCmdAlias = &cobra.Command{
 		Use:        "http",
@@ -92,26 +97,33 @@ var (
 	}
 )
 
-func runHTTPServer(logger *log.Logger, host string, port string) error {
+func runHTTPServer(logger *log.Logger, host string, port string, endpointPath string) error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
 	hcServer := NewServer(version.Version)
 	registryInit(hcServer, logger)
 
-	return streamableHTTPServerInit(ctx, hcServer, logger, host, port)
+	return streamableHTTPServerInit(ctx, hcServer, logger, host, port, endpointPath)
 }
 
-func streamableHTTPServerInit(ctx context.Context, hcServer *server.MCPServer, logger *log.Logger, host string, port string) error {
+func streamableHTTPServerInit(ctx context.Context, hcServer *server.MCPServer, logger *log.Logger, host string, port string, endpointPath string) error {
 	// Check if stateless mode is enabled
 	isStateless := shouldUseStatelessMode()
-	
+
+	// Ensure endpoint path starts with /
+	if !strings.HasPrefix(endpointPath, "/") {
+		endpointPath = "/" + endpointPath
+	}
 	// Create StreamableHTTP server which implements the new streamable-http transport
 	// This is the modern MCP transport that supports both direct HTTP responses and SSE streams
 	opts := []server.StreamableHTTPOption{
-		server.WithEndpointPath("/mcp"), // Default MCP endpoint path
+		server.WithEndpointPath(endpointPath), // Default MCP endpoint path
 		server.WithLogger(logger),
 	}
+
+	// Log the endpoint path being used
+	logger.Infof("Using endpoint path: %s", endpointPath)
 
 	// Only add the WithStateLess option if stateless mode is enabled
 	// TODO: fix this in mcp-go ver 0.33.0 or higher
@@ -126,7 +138,7 @@ func streamableHTTPServerInit(ctx context.Context, hcServer *server.MCPServer, l
 
 	// Load CORS configuration
 	corsConfig := LoadCORSConfigFromEnv()
-	
+
 	// Log CORS configuration
 	logger.Infof("CORS Mode: %s", corsConfig.Mode)
 	if len(corsConfig.AllowedOrigins) > 0 {
@@ -138,21 +150,22 @@ func streamableHTTPServerInit(ctx context.Context, hcServer *server.MCPServer, l
 	} else if corsConfig.Mode == "disabled" {
 		logger.Warnf("CORS validation is disabled. This is not recommended for production.")
 	}
-	
+
 	// Create a security wrapper around the streamable server
 	streamableServer := NewSecurityHandler(baseStreamableServer, corsConfig.AllowedOrigins, corsConfig.Mode, logger)
 
 	mux := http.NewServeMux()
 
 	// Handle the /mcp endpoint with the streamable server (with security wrapper)
-	mux.Handle("/mcp", streamableServer)
-	mux.Handle("/mcp/", streamableServer)
+	mux.Handle(endpointPath, streamableServer)
+	mux.Handle(endpointPath+"/", streamableServer)
 
 	// Add health check endpoint
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`{"status":"ok","service":"terraform-mcp-server","transport":"streamable-http"}`))
+		response := fmt.Sprintf(`{"status":"ok","service":"terraform-mcp-server","transport":"streamable-http","endpoint":"%s"}`, endpointPath)
+		w.Write([]byte(response))
 	})
 
 	addr := fmt.Sprintf("%s:%s", host, port)
@@ -168,7 +181,7 @@ func streamableHTTPServerInit(ctx context.Context, hcServer *server.MCPServer, l
 	// Start server in goroutine
 	errC := make(chan error, 1)
 	go func() {
-		logger.Infof("Starting StreamableHTTP server on %s/mcp", addr)
+		logger.Infof("Starting StreamableHTTP server on %s%s", addr, endpointPath)
 		errC <- httpServer.ListenAndServe()
 	}()
 
@@ -237,6 +250,7 @@ func main() {
 	if shouldUseStreamableHTTPMode() {
 		port := getHTTPPort()
 		host := getHTTPHost()
+		endpointPath := getEndpointPath(nil)
 
 		logFile, _ := rootCmd.PersistentFlags().GetString("log-file")
 		logger, err := initLogger(logFile)
@@ -244,7 +258,7 @@ func main() {
 			stdlog.Fatal("Failed to initialize logger:", err)
 		}
 
-		if err := runHTTPServer(logger, host, port); err != nil {
+		if err := runHTTPServer(logger, host, port, endpointPath); err != nil {
 			stdlog.Fatal("failed to run StreamableHTTP server:", err)
 		}
 		return
@@ -260,20 +274,20 @@ func main() {
 // shouldUseStreamableHTTPMode checks if environment variables indicate HTTP mode
 func shouldUseStreamableHTTPMode() bool {
 	transportMode := os.Getenv("TRANSPORT_MODE")
-	return transportMode == "http" || transportMode == "streamable-http" || 
-	       os.Getenv("TRANSPORT_PORT") != "" || 
-	       os.Getenv("TRANSPORT_HOST") != ""
+	return transportMode == "http" || transportMode == "streamable-http" ||
+		os.Getenv("TRANSPORT_PORT") != "" ||
+		os.Getenv("TRANSPORT_HOST") != ""
 }
 
 // shouldUseStatelessMode returns true if the MCP_SESSION_MODE environment variable is set to "stateless"
 func shouldUseStatelessMode() bool {
 	mode := strings.ToLower(os.Getenv("MCP_SESSION_MODE"))
-	
+
 	// Explicitly check for "stateless" value
 	if mode == "stateless" {
 		return true
 	}
-	
+
 	// All other values (including empty string, "stateful", or any other value) default to stateful mode
 	return false
 }
@@ -292,4 +306,21 @@ func getHTTPHost() string {
 		return host
 	}
 	return "127.0.0.1"
+}
+
+// Add function to get endpoint path from environment or flag
+func getEndpointPath(cmd *cobra.Command) string {
+	// First check environment variable
+	if envPath := os.Getenv("ENDPOINT_PATH"); envPath != "" {
+		return envPath
+	}
+
+	// Fall back to command line flag
+	if cmd != nil {
+		if path, err := cmd.Flags().GetString("endpoint-path"); err == nil && path != "" {
+			return path
+		}
+	}
+
+	return "/mcp"
 }
