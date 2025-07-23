@@ -33,6 +33,30 @@ func TestGetHTTPHost(t *testing.T) {
 	assert.Equal(t, "192.168.1.100", host, "Host should be the custom value set in TRANSPORT_HOST")
 }
 
+func TestGetEndpointPath(t *testing.T) {
+	// Save original env var to restore later
+    origPath := os.Getenv("ENDPOINT_PATH")
+    defer func() {
+        os.Setenv("ENDPOINT_PATH", origPath)
+    }()
+
+    // Test case: When ENDPOINT_PATH is not set, default value should be used
+    os.Unsetenv("ENDPOINT_PATH")
+    path := getEndpointPath(nil)
+    assert.Equal(t, "/mcp", path, "Default endpoint path should be /mcp when ENDPOINT_PATH is not set")
+
+    // Test case: When ENDPOINT_PATH is set, its value should be used
+    os.Setenv("ENDPOINT_PATH", "/terraform")
+    path = getEndpointPath(nil)
+    assert.Equal(t, "/terraform", path, "Endpoint path should be the value of ENDPOINT_PATH when it is set")
+
+    // Test case: Custom endpoint path value
+    os.Setenv("ENDPOINT_PATH", "/api/v1/terraform-mcp")
+    path = getEndpointPath(nil)
+    assert.Equal(t, "/api/v1/terraform-mcp", path, "Endpoint path should be the custom value set in ENDPOINT_PATH")
+
+}
+
 func TestGetHTTPPort(t *testing.T) {
 	// Save original env var to restore later
 	origPort := os.Getenv("TRANSPORT_PORT")
@@ -56,16 +80,19 @@ func TestShouldUseStreamableHTTPMode(t *testing.T) {
 	origMode := os.Getenv("TRANSPORT_MODE")
 	origPort := os.Getenv("TRANSPORT_PORT")
 	origHost := os.Getenv("TRANSPORT_HOST")
+	origEndpointPath := os.Getenv("ENDPOINT_PATH")
 	defer func() {
 		os.Setenv("TRANSPORT_MODE", origMode)
 		os.Setenv("TRANSPORT_PORT", origPort)
 		os.Setenv("TRANSPORT_HOST", origHost)
+		os.Setenv("ENDPOINT_PATH", origEndpointPath)
 	}()
 
 	// Test case: When no relevant env vars are set, HTTP mode should not be used
 	os.Unsetenv("TRANSPORT_MODE")
 	os.Unsetenv("TRANSPORT_PORT")
 	os.Unsetenv("TRANSPORT_HOST")
+	os.Unsetenv("ENDPOINT_PATH")
 	assert.False(t, shouldUseStreamableHTTPMode(), "HTTP mode should not be used when no relevant env vars are set")
 
 	// Test case: When TRANSPORT_MODE is set to "http", HTTP mode should be used (backward compatibility)
@@ -86,6 +113,12 @@ func TestShouldUseStreamableHTTPMode(t *testing.T) {
 	// Test case: When TRANSPORT_HOST is set, HTTP mode should be used
 	os.Setenv("TRANSPORT_HOST", "0.0.0.0")
 	assert.True(t, shouldUseStreamableHTTPMode(), "HTTP mode should be used when TRANSPORT_HOST is set")
+	os.Unsetenv("TRANSPORT_HOST")
+
+	// Test case: When ENDPOINT_PATH is set, HTTP mode should be used
+	os.Setenv("ENDPOINT_PATH", "/mcp")
+	assert.True(t, shouldUseStreamableHTTPMode(), "HTTP mode should be used when ENDPOINT_PATH is set")
+
 }
 func TestShouldUseStatelessMode(t *testing.T) {
 	// Save original env var to restore later
