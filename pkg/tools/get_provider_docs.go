@@ -9,8 +9,8 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/hashicorp/terraform-mcp-server/pkg/internal/client"
-	"github.com/hashicorp/terraform-mcp-server/pkg/internal/utils"
+	"github.com/hashicorp/terraform-mcp-server/pkg/client"
+	"github.com/hashicorp/terraform-mcp-server/pkg/utils"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 	log "github.com/sirupsen/logrus"
@@ -33,7 +33,7 @@ func GetProviderDocs(registryClient *http.Client, logger *log.Logger) (tool mcp.
 				return nil, utils.LogAndReturnError(logger, "providerDocID cannot be empty", nil)
 			}
 
-			detailResp, err := utils.SendRegistryCall(registryClient, "GET", fmt.Sprintf("provider-docs/%s", providerDocID), logger, "v2")
+			detailResp, err := client.SendRegistryCall(registryClient, "GET", fmt.Sprintf("provider-docs/%s", providerDocID), logger, "v2")
 			if err != nil {
 				return nil, utils.LogAndReturnError(logger, fmt.Sprintf("Error fetching provider-docs/%s, please make sure providerDocID is valid and the resolveProviderDocID tool has run prior", providerDocID), err)
 			}

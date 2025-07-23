@@ -10,8 +10,8 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/hashicorp/terraform-mcp-server/pkg/internal/client"
-	"github.com/hashicorp/terraform-mcp-server/pkg/internal/utils"
+	"github.com/hashicorp/terraform-mcp-server/pkg/client"
+	"github.com/hashicorp/terraform-mcp-server/pkg/utils"
 	log "github.com/sirupsen/logrus"
 
 	"github.com/mark3labs/mcp-go/mcp"
@@ -41,7 +41,7 @@ func SearchPolicies(registryClient *http.Client, logger *log.Logger) (tool mcp.T
 			}
 
 			// static list of 100 is fine for now
-			policyResp, err := utils.SendRegistryCall(registryClient, "GET", "policies?page%5Bsize%5D=100&include=latest-version", logger, "v2")
+			policyResp, err := client.SendRegistryCall(registryClient, "GET", "policies?page%5Bsize%5D=100&include=latest-version", logger, "v2")
 			if err != nil {
 				return nil, utils.LogAndReturnError(logger, "Failed to fetch policies: registry API did not return a successful response", err)
 			}

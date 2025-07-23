@@ -15,6 +15,8 @@ import (
 
 	"github.com/hashicorp/go-cleanhttp"
 	"github.com/hashicorp/go-retryablehttp"
+	"github.com/hashicorp/terraform-mcp-server/pkg/resources"
+	"github.com/hashicorp/terraform-mcp-server/pkg/tools"
 
 	"github.com/mark3labs/mcp-go/server"
 	log "github.com/sirupsen/logrus"

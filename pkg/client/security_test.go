@@ -1,7 +1,7 @@
 // Copyright (c) HashiCorp, Inc.
 // SPDX-License-Identifier: MPL-2.0
 
-package main
+package client
 
 import (
 	"net/http"
@@ -190,7 +190,7 @@ func TestSecurityHandler(t *testing.T) {
 			allowedOrigins: []string{"https://example.com"},
 			mode:           "strict",
 			expectedStatus: http.StatusOK, // Requests without Origin headers bypass CORS checks
-			expectedHeader: false, // No CORS headers when no Origin header is present
+			expectedHeader: false,         // No CORS headers when no Origin header is present
 		},
 
 		// Development mode tests
@@ -200,7 +200,7 @@ func TestSecurityHandler(t *testing.T) {
 			allowedOrigins: []string{},
 			mode:           "development",
 			expectedStatus: http.StatusOK, // Localhost is automatically allowed in development mode
-			expectedHeader: true, // CORS headers should be set
+			expectedHeader: true,          // CORS headers should be set
 		},
 		{
 			name:           "development mode - 127.0.0.1 allowed",
@@ -258,24 +258,24 @@ func TestSecurityHandler(t *testing.T) {
 			allowedOrigins: []string{},
 			mode:           "disabled",
 			expectedStatus: http.StatusOK, // Requests without Origin headers are allowed
-			expectedHeader: false, // No CORS headers when no Origin header is present
+			expectedHeader: false,         // No CORS headers when no Origin header is present
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			handler := NewSecurityHandler(mockHandler, tt.allowedOrigins, tt.mode, logger)
-			
+
 			req := httptest.NewRequest("GET", "/mcp", nil)
 			if tt.origin != "" {
 				req.Header.Set("Origin", tt.origin)
 			}
-			
+
 			rr := httptest.NewRecorder()
 			handler.ServeHTTP(rr, req)
-			
+
 			assert.Equal(t, tt.expectedStatus, rr.Code)
-			
+
 			if tt.expectedHeader {
 				assert.Equal(t, tt.origin, rr.Header().Get("Access-Control-Allow-Origin"))
 				assert.NotEmpty(t, rr.Header().Get("Access-Control-Allow-Methods"))
@@ -302,13 +302,13 @@ func TestOptionsRequest(t *testing.T) {
 	// Test case: OPTIONS request (CORS preflight) should be handled by the security handler
 	// and should return 200 OK with appropriate CORS headers
 	handler := NewSecurityHandler(mockHandler, []string{"https://example.com"}, "strict", logger)
-	
+
 	req := httptest.NewRequest("OPTIONS", "/mcp", nil)
 	req.Header.Set("Origin", "https://example.com")
-	
+
 	rr := httptest.NewRecorder()
 	handler.ServeHTTP(rr, req)
-	
+
 	assert.Equal(t, http.StatusOK, rr.Code)
 	assert.Equal(t, "https://example.com", rr.Header().Get("Access-Control-Allow-Origin"))
 	assert.NotEmpty(t, rr.Header().Get("Access-Control-Allow-Methods"))

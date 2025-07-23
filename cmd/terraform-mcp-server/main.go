@@ -14,6 +14,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/hashicorp/terraform-mcp-server/pkg/client"
 	"github.com/hashicorp/terraform-mcp-server/version"
 
 	"github.com/mark3labs/mcp-go/server"
@@ -78,7 +79,7 @@ var (
 			}
 		},
 	}
-	
+
 	// Create an alias for backward compatibility
 	httpCmdAlias = &cobra.Command{
 		Use:        "http",
@@ -105,7 +106,7 @@ func runHTTPServer(logger *log.Logger, host string, port string) error {
 func streamableHTTPServerInit(ctx context.Context, hcServer *server.MCPServer, logger *log.Logger, host string, port string) error {
 	// Check if stateless mode is enabled
 	isStateless := shouldUseStatelessMode()
-	
+
 	// Create StreamableHTTP server which implements the new streamable-http transport
 	// This is the modern MCP transport that supports both direct HTTP responses and SSE streams
 	opts := []server.StreamableHTTPOption{
@@ -125,8 +126,8 @@ func streamableHTTPServerInit(ctx context.Context, hcServer *server.MCPServer, l
 	baseStreamableServer := server.NewStreamableHTTPServer(hcServer, opts...)
 
 	// Load CORS configuration
-	corsConfig := LoadCORSConfigFromEnv()
-	
+	corsConfig := client.LoadCORSConfigFromEnv()
+
 	// Log CORS configuration
 	logger.Infof("CORS Mode: %s", corsConfig.Mode)
 	if len(corsConfig.AllowedOrigins) > 0 {
@@ -138,9 +139,9 @@ func streamableHTTPServerInit(ctx context.Context, hcServer *server.MCPServer, l
 	} else if corsConfig.Mode == "disabled" {
 		logger.Warnf("CORS validation is disabled. This is not recommended for production.")
 	}
-	
+
 	// Create a security wrapper around the streamable server
-	streamableServer := NewSecurityHandler(baseStreamableServer, corsConfig.AllowedOrigins, corsConfig.Mode, logger)
+	streamableServer := client.NewSecurityHandler(baseStreamableServer, corsConfig.AllowedOrigins, corsConfig.Mode, logger)
 
 	mux := http.NewServeMux()
 
@@ -260,20 +261,20 @@ func main() {
 // shouldUseStreamableHTTPMode checks if environment variables indicate HTTP mode
 func shouldUseStreamableHTTPMode() bool {
 	transportMode := os.Getenv("TRANSPORT_MODE")
-	return transportMode == "http" || transportMode == "streamable-http" || 
-	       os.Getenv("TRANSPORT_PORT") != "" || 
-	       os.Getenv("TRANSPORT_HOST") != ""
+	return transportMode == "http" || transportMode == "streamable-http" ||
+		os.Getenv("TRANSPORT_PORT") != "" ||
+		os.Getenv("TRANSPORT_HOST") != ""
 }
 
 // shouldUseStatelessMode returns true if the MCP_SESSION_MODE environment variable is set to "stateless"
 func shouldUseStatelessMode() bool {
 	mode := strings.ToLower(os.Getenv("MCP_SESSION_MODE"))
-	
+
 	// Explicitly check for "stateless" value
 	if mode == "stateless" {
 		return true
 	}
-	
+
 	// All other values (including empty string, "stateful", or any other value) default to stateful mode
 	return false
 }

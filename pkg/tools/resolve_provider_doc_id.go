@@ -10,8 +10,8 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/hashicorp/terraform-mcp-server/pkg/internal/client"
-	"github.com/hashicorp/terraform-mcp-server/pkg/internal/utils"
+	"github.com/hashicorp/terraform-mcp-server/pkg/client"
+	"github.com/hashicorp/terraform-mcp-server/pkg/utils"
 	log "github.com/sirupsen/logrus"
 
 	"github.com/mark3labs/mcp-go/mcp"
@@ -58,7 +58,7 @@ func ResolveProviderDocID(registryClient *http.Client, logger *log.Logger) (tool
 
 			// Check if we need to use v2 API for guides, functions, or overview
 			if utils.IsV2ProviderDataType(providerDetail.ProviderDataType) {
-				content, err := utils.GetProviderDocsV2(registryClient, providerDetail, logger)
+				content, err := getProviderDocsV2(registryClient, providerDetail, logger)
 				if err != nil {
 					errMessage := fmt.Sprintf(`No %s documentation found for provider '%s' in the '%s' namespace, %s`,
 						providerDetail.ProviderDataType, providerDetail.ProviderName, providerDetail.ProviderNamespace, defaultErrorGuide)
@@ -73,7 +73,7 @@ func ResolveProviderDocID(registryClient *http.Client, logger *log.Logger) (tool
 
 			// For resources/data-sources, use the v1 API for better performance (single response)
 			uri := fmt.Sprintf("providers/%s/%s/%s", providerDetail.ProviderNamespace, providerDetail.ProviderName, providerDetail.ProviderVersion)
-			response, err := utils.SendRegistryCall(registryClient, "GET", uri, logger)
+			response, err := client.SendRegistryCall(registryClient, "GET", uri, logger)
 			if err != nil {
 				return nil, utils.LogAndReturnError(logger, fmt.Sprintf(`Error getting the "%s" provider, 
 					with version "%s" in the %s namespace, %s`, providerDetail.ProviderName, providerDetail.ProviderVersion, providerDetail.ProviderNamespace, defaultErrorGuide), nil)
@@ -131,7 +131,7 @@ func resolveProviderDetails(request mcp.CallToolRequest, registryClient *http.Cl
 	if utils.IsValidProviderVersionFormat(providerVersion) {
 		providerVersionValue = providerVersion
 	} else {
-		providerVersionValue, err = utils.GetLatestProviderVersion(registryClient, providerNamespace, providerName, logger)
+		providerVersionValue, err = client.GetLatestProviderVersion(registryClient, providerNamespace, providerName, logger)
 		if err != nil {
 			providerVersionValue = ""
 			logger.Debugf("Error getting latest provider version in %s namespace: %v", providerNamespace, err)
@@ -141,7 +141,7 @@ func resolveProviderDetails(request mcp.CallToolRequest, registryClient *http.Cl
 	// If the provider version doesn't exist, try the hashicorp namespace
 	if providerVersionValue == "" {
 		tryProviderNamespace := "hashicorp"
-		providerVersionValue, err = utils.GetLatestProviderVersion(registryClient, tryProviderNamespace, providerName, logger)
+		providerVersionValue, err = client.GetLatestProviderVersion(registryClient, tryProviderNamespace, providerName, logger)
 		if err != nil {
 			// Just so we don't print the same namespace twice if they are the same
 			if providerNamespace != tryProviderNamespace {
@@ -163,4 +163,38 @@ func resolveProviderDetails(request mcp.CallToolRequest, registryClient *http.Cl
 	providerDetail.ProviderVersion = providerVersionValue
 	providerDetail.ProviderDataType = providerDataTypeValue
 	return providerDetail, nil
+}
+
+// getProviderDocsV2 retrieves a list of documentation items for a specific provider category using v2 API with support for pagination using page numbers
+func getProviderDocsV2(registryClient *http.Client, providerDetail client.ProviderDetail, logger *log.Logger) (string, error) {
+	providerVersionID, err := client.GetProviderVersionID(registryClient, providerDetail.ProviderNamespace, providerDetail.ProviderName, providerDetail.ProviderVersion, logger)
+	if err != nil {
+		return "", utils.LogAndReturnError(logger, "getting provider version ID", err)
+	}
+	category := providerDetail.ProviderDataType
+	if category == "overview" {
+		return client.GetProviderOverviewDocs(registryClient, providerVersionID, logger)
+	}
+
+	uriPrefix := fmt.Sprintf("provider-docs?filter[provider-version]=%s&filter[category]=%s&filter[language]=hcl",
+		providerVersionID, category)
+
+	docs, err := client.SendPaginatedRegistryCall(registryClient, uriPrefix, logger)
+	if err != nil {
+		return "", utils.LogAndReturnError(logger, "getting provider documentation", err)
+	}
+
+	if len(docs) == 0 {
+		return "", fmt.Errorf("no %s documentation found for provider version %s", category, providerVersionID)
+	}
+
+	var builder strings.Builder
+	builder.WriteString(fmt.Sprintf("Available Documentation (top matches) for %s in Terraform provider %s/%s version: %s\n\n", providerDetail.ProviderDataType, providerDetail.ProviderNamespace, providerDetail.ProviderName, providerDetail.ProviderVersion))
+	builder.WriteString("Each result includes:\n- providerDocID: tfprovider-compatible identifier\n- Title: Service or resource name\n- Category: Type of document\n")
+	builder.WriteString("For best results, select libraries based on the serviceSlug match and category of information requested.\n\n---\n\n")
+	for _, doc := range docs {
+		builder.WriteString(fmt.Sprintf("- providerDocID: %s\n- Title: %s\n- Category: %s\n---\n", doc.ID, doc.Attributes.Title, doc.Attributes.Category))
+	}
+
+	return builder.String(), nil
 }

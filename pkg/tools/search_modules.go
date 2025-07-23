@@ -5,11 +5,15 @@ package tools
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/url"
+	"sort"
+	"strings"
 
-	"github.com/hashicorp/terraform-mcp-server/pkg/internal/utils"
+	"github.com/hashicorp/terraform-mcp-server/pkg/client"
+	"github.com/hashicorp/terraform-mcp-server/pkg/utils"
 	log "github.com/sirupsen/logrus"
 
 	"github.com/mark3labs/mcp-go/mcp"
@@ -42,7 +46,7 @@ func SearchModules(registryClient *http.Client, logger *log.Logger) (tool mcp.To
 			if err != nil {
 				return nil, utils.LogAndReturnError(logger, fmt.Sprintf("no module(s) found for moduleName: %s", moduleQuery), err)
 			} else {
-				modulesData, err = utils.UnmarshalTFModulePlural(response, moduleQuery)
+				modulesData, err = unmarshalTerraformModules(response, moduleQuery)
 				if err != nil {
 					return nil, utils.LogAndReturnError(logger, fmt.Sprintf("unmarshalling modules for moduleName: %s", moduleQuery), err)
 				}
@@ -64,7 +68,7 @@ func sendSearchModulesCall(providerClient *http.Client, moduleQuery string, curr
 		uri = fmt.Sprintf("%s?offset=%v", uri, currentOffset)
 	}
 
-	response, err := utils.SendRegistryCall(providerClient, "GET", uri, logger)
+	response, err := client.SendRegistryCall(providerClient, "GET", uri, logger)
 	if err != nil {
 		// We shouldn't log the error here because we might hit a namespace that doesn't exist, it's better to let the caller handle it.
 		return nil, fmt.Errorf("getting module(s) for: %v, call error: %v", moduleQuery, err)
@@ -72,4 +76,42 @@ func sendSearchModulesCall(providerClient *http.Client, moduleQuery string, curr
 
 	// Return the filtered JSON as a string
 	return response, nil
+}
+
+func unmarshalTerraformModules(response []byte, moduleQuery string) (string, error) {
+	// Get the list of modules
+	var terraformModules client.TerraformModules
+	err := json.Unmarshal(response, &terraformModules)
+	if err != nil {
+		return "", utils.LogAndReturnError(nil, "unmarshalling modules", err)
+	}
+
+	if len(terraformModules.Data) == 0 {
+		return "", fmt.Errorf("no modules found for query: %s", moduleQuery)
+	}
+
+	// Sort by most downloaded
+	sort.Slice(terraformModules.Data, func(i, j int) bool {
+		return terraformModules.Data[i].Downloads > terraformModules.Data[j].Downloads
+	})
+
+	var builder strings.Builder
+	builder.WriteString(fmt.Sprintf("Available Terraform Modules (top matches) for %s\n\n Each result includes:\n", moduleQuery))
+	builder.WriteString("- moduleID: The module ID (format: namespace/name/provider-name/module-version)\n")
+	builder.WriteString("- Name: The name of the module\n")
+	builder.WriteString("- Description: A short description of the module\n")
+	builder.WriteString("- Downloads: The total number of times the module has been downloaded\n")
+	builder.WriteString("- Verified: Verification status of the module\n")
+	builder.WriteString("- Published: The date and time when the module was published\n")
+	builder.WriteString("\n\n---\n\n")
+	for _, module := range terraformModules.Data {
+		builder.WriteString(fmt.Sprintf("- moduleID: %s\n", module.ID))
+		builder.WriteString(fmt.Sprintf("- Name: %s\n", module.Name))
+		builder.WriteString(fmt.Sprintf("- Description: %s\n", module.Description))
+		builder.WriteString(fmt.Sprintf("- Downloads: %d\n", module.Downloads))
+		builder.WriteString(fmt.Sprintf("- Verified: %t\n", module.Verified))
+		builder.WriteString(fmt.Sprintf("- Published: %s\n", module.PublishedAt))
+		builder.WriteString("---\n\n")
+	}
+	return builder.String(), nil
 }

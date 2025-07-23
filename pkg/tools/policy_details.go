@@ -10,8 +10,8 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/hashicorp/terraform-mcp-server/pkg/internal/client"
-	"github.com/hashicorp/terraform-mcp-server/pkg/internal/utils"
+	"github.com/hashicorp/terraform-mcp-server/pkg/client"
+	"github.com/hashicorp/terraform-mcp-server/pkg/utils"
 	log "github.com/sirupsen/logrus"
 
 	"github.com/mark3labs/mcp-go/mcp"
@@ -36,7 +36,7 @@ func PolicyDetails(registryClient *http.Client, logger *log.Logger) (tool mcp.To
 				return nil, utils.LogAndReturnError(logger, "terraformPolicyID cannot be empty, it is fetched by running the searchPolicies tool", nil)
 			}
 
-			policyResp, err := utils.SendRegistryCall(registryClient, "GET", fmt.Sprintf("%s?include=policies,policy-modules,policy-library", terraformPolicyID), logger, "v2")
+			policyResp, err := client.SendRegistryCall(registryClient, "GET", fmt.Sprintf("%s?include=policies,policy-modules,policy-library", terraformPolicyID), logger, "v2")
 			if err != nil {
 				return nil, utils.LogAndReturnError(logger, "Failed to fetch policy details: registry API did not return a successful response", err)
 			}
@@ -46,7 +46,7 @@ func PolicyDetails(registryClient *http.Client, logger *log.Logger) (tool mcp.To
 				return nil, utils.LogAndReturnError(logger, fmt.Sprintf("error unmarshalling policy details for %s", terraformPolicyID), err)
 			}
 
-			readme := utils.extractReadme(policyDetails.Data.Attributes.Readme)
+			readme := utils.ExtractReadme(policyDetails.Data.Attributes.Readme)
 			var builder strings.Builder
 			builder.WriteString(fmt.Sprintf("## Policy details about %s \n\n%s", terraformPolicyID, readme))
 			policyList := ""

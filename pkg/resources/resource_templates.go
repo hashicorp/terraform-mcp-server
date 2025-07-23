@@ -8,7 +8,8 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/hashicorp/terraform-mcp-server/pkg/internal/utils"
+	"github.com/hashicorp/terraform-mcp-server/pkg/client"
+	"github.com/hashicorp/terraform-mcp-server/pkg/utils"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 	log "github.com/sirupsen/logrus"
@@ -51,7 +52,7 @@ func ProviderResourceTemplateHandler(registryClient *http.Client, resourceURI st
 
 	var err error
 	if version == "" || version == "latest" || !utils.IsValidProviderVersionFormat(version) {
-		version, err = utils.GetLatestProviderVersion(registryClient, namespace, name, logger)
+		version, err = client.GetLatestProviderVersion(registryClient, namespace, name, logger)
 		if err != nil {
 			return "", utils.LogAndReturnError(logger, fmt.Sprintf("Provider Resource: error getting %s/%s latest provider version", namespace, name), err)
 		}
@@ -63,14 +64,14 @@ func ProviderResourceTemplateHandler(registryClient *http.Client, resourceURI st
 	}
 
 	// Get the provider-version-id for the specified provider version
-	providerVersionID, err := utils.GetProviderVersionID(registryClient, namespace, name, version, logger)
+	providerVersionID, err := client.GetProviderVersionID(registryClient, namespace, name, version, logger)
 	logger.Debugf("Provider resource template - Provider version id providerVersionID: %s, providerVersionUri: %s", providerVersionID, providerVersionUri)
 	if err != nil {
 		return "", utils.LogAndReturnError(logger, "getting provider details", err)
 	}
 
 	// Get all the docs based on provider version id
-	providerDocs, err := utils.GetProviderOverviewDocs(registryClient, providerVersionID, logger)
+	providerDocs, err := client.GetProviderOverviewDocs(registryClient, providerVersionID, logger)
 	logger.Debugf("Provider resource template - Provider docs providerVersionID: %s", providerVersionID)
 	if err != nil {
 		return "", utils.LogAndReturnError(logger, "getting provider details", err)
