@@ -55,7 +55,7 @@ Modern HTTP-based transport supporting both direct HTTP requests and Server-Sent
 terraform-mcp-server stdio [--log-file /path/to/log]
 
 # StreamableHTTP mode
-terraform-mcp-server streamable-http [--transport-port 8080] [--transport-host 127.0.0.1] [--log-file /path/to/log]
+terraform-mcp-server streamable-http [--transport-port 8080] [--transport-host 127.0.0.1] [--endpoint-path /mcp] [--log-file /path/to/log]
 ```
 
 ## Session Modes
