@@ -43,7 +43,7 @@ Modern HTTP-based transport supporting both direct HTTP requests and Server-Sent
 | `TRANSPORT_MODE` | Set to `streamable-http` to enable HTTP transport (legacy `http` value still supported) | `stdio` |
 | `TRANSPORT_HOST` | Host to bind the HTTP server | `127.0.0.1` |
 | `TRANSPORT_PORT` | HTTP server port | `8080` |
-| `ENDPOINT_PATH` | HTTP server endpoint path | `/mcp` |
+| `MCP_ENDPOINT` | HTTP server endpoint path | `/mcp` |
 | `MCP_SESSION_MODE` | Session mode: `stateful` or `stateless` | `stateful` |
 | `MCP_ALLOWED_ORIGINS` | Comma-separated list of allowed origins for CORS | `""` (empty) |
 | `MCP_CORS_MODE` | CORS mode: `strict`, `development`, or `disabled` | `strict` |

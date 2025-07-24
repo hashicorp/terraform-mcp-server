@@ -276,7 +276,8 @@ func shouldUseStreamableHTTPMode() bool {
 	transportMode := os.Getenv("TRANSPORT_MODE")
 	return transportMode == "http" || transportMode == "streamable-http" ||
 		os.Getenv("TRANSPORT_PORT") != "" ||
-		os.Getenv("TRANSPORT_HOST") != ""
+		os.Getenv("TRANSPORT_HOST") != "" ||
+		os.Getenv("MCP_ENDPOINT") != ""
 }
 
 // shouldUseStatelessMode returns true if the MCP_SESSION_MODE environment variable is set to "stateless"
@@ -311,7 +312,7 @@ func getHTTPHost() string {
 // Add function to get endpoint path from environment or flag
 func getEndpointPath(cmd *cobra.Command) string {
 	// First check environment variable
-	if envPath := os.Getenv("ENDPOINT_PATH"); envPath != "" {
+	if envPath := os.Getenv("MCP_ENDPOINT"); envPath != "" {
 		return envPath
 	}
 
