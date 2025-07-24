@@ -73,7 +73,7 @@ var (
 				stdlog.Fatal("Failed to get streamableHTTP host:", err)
 			}
 
-			endpointPath, err := cmd.Flags().GetString("endpoint-path")
+			endpointPath, err := cmd.Flags().GetString("mcp-endpoint")
 			if err != nil {
 				stdlog.Fatal("Failed to get endpoint path:", err)
 			}
@@ -318,7 +318,7 @@ func getEndpointPath(cmd *cobra.Command) string {
 
 	// Fall back to command line flag
 	if cmd != nil {
-		if path, err := cmd.Flags().GetString("endpoint-path"); err == nil && path != "" {
+		if path, err := cmd.Flags().GetString("mcp-endpoint"); err == nil && path != "" {
 			return path
 		}
 	}
