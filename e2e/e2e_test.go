@@ -90,24 +90,24 @@ func runTestSuite(t *testing.T, client mcpClient.MCPClient, transportName string
 	})
 
 	for _, testCase := range providerTestCases {
-		t.Run(fmt.Sprintf("%s_resolveProviderDocID/%s", transportName, testCase.TestName), func(t *testing.T) {
+		t.Run(fmt.Sprintf("%s_resolve_provider_doc_id/%s", transportName, testCase.TestName), func(t *testing.T) {
 			ensureClientInitialized(t, client)
-			t.Logf("TOOL resolveProviderDocID %s", testCase.TestDescription)
+			t.Logf("TOOL resolve_provider_doc_id %s", testCase.TestDescription)
 			t.Logf("Test payload: %v", testCase.TestPayload)
 
 			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 			defer cancel()
 
 			request := mcp.CallToolRequest{}
-			request.Params.Name = "resolveProviderDocID"
+			request.Params.Name = "resolve_provider_doc_id"
 			request.Params.Arguments = testCase.TestPayload
 
 			response, err := client.CallTool(ctx, request)
 			if testCase.TestShouldFail {
-				require.Error(t, err, "expected to call 'resolveProviderDocID' tool with error")
+				require.Error(t, err, "expected to call 'resolve_provider_doc_id' tool with error")
 				t.Logf("Error: %v", err)
 			} else {
-				require.NoError(t, err, "expected to call 'resolveProviderDocID' tool successfully")
+				require.NoError(t, err, "expected to call 'resolve_provider_doc_id' tool successfully")
 				require.False(t, response.IsError, "expected result not to be an error")
 				require.Len(t, response.Content, 1, "expected content to have one item")
 
@@ -130,24 +130,24 @@ func runTestSuite(t *testing.T, client mcpClient.MCPClient, transportName string
 	}
 
 	for _, testCase := range providerDocsTestCases {
-		t.Run(fmt.Sprintf("%s_getProviderDocs/%s", transportName, testCase.TestName), func(t *testing.T) {
+		t.Run(fmt.Sprintf("%s_get_provider_docs/%s", transportName, testCase.TestName), func(t *testing.T) {
 			ensureClientInitialized(t, client)
-			t.Logf("TOOL getProviderDocs %s", testCase.TestDescription)
+			t.Logf("TOOL get_provider_docs %s", testCase.TestDescription)
 			t.Logf("Test payload: %v", testCase.TestPayload)
 
 			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 			defer cancel()
 
 			request := mcp.CallToolRequest{}
-			request.Params.Name = "getProviderDocs"
+			request.Params.Name = "get_provider_docs"
 			request.Params.Arguments = testCase.TestPayload
 
 			response, err := client.CallTool(ctx, request)
 			if testCase.TestShouldFail {
-				require.Error(t, err, "expected to call 'getProviderDocs' tool with error")
+				require.Error(t, err, "expected to call 'get_provider_docs' tool with error")
 				t.Logf("Error: %v", err)
 			} else {
-				require.NoError(t, err, "expected to call 'getProviderDocs' tool successfully")
+				require.NoError(t, err, "expected to call 'get_provider_docs' tool successfully")
 				require.False(t, response.IsError, "expected result not to be an error")
 				require.Len(t, response.Content, 1, "expected content to have one item")
 
@@ -161,24 +161,24 @@ func runTestSuite(t *testing.T, client mcpClient.MCPClient, transportName string
 	}
 
 	for _, testCase := range searchModulesTestCases {
-		t.Run(fmt.Sprintf("%s_searchModules/%s", transportName, testCase.TestName), func(t *testing.T) {
+		t.Run(fmt.Sprintf("%s_search_modules/%s", transportName, testCase.TestName), func(t *testing.T) {
 			ensureClientInitialized(t, client)
-			t.Logf("TOOL searchModules %s", testCase.TestDescription)
+			t.Logf("TOOL search_modules %s", testCase.TestDescription)
 			t.Logf("Test payload: %v", testCase.TestPayload)
 
 			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 			defer cancel()
 
 			request := mcp.CallToolRequest{}
-			request.Params.Name = "searchModules"
+			request.Params.Name = "search_modules"
 			request.Params.Arguments = testCase.TestPayload
 
 			response, err := client.CallTool(ctx, request)
 			if testCase.TestShouldFail {
-				require.Error(t, err, "expected to call 'searchModules' tool with error")
+				require.Error(t, err, "expected to call 'search_modules' tool with error")
 				t.Logf("Error: %v", err)
 			} else {
-				require.NoError(t, err, "expected to call 'searchModules' tool successfully")
+				require.NoError(t, err, "expected to call 'search_modules' tool successfully")
 				require.False(t, response.IsError, "expected result not to be an error")
 				if len(response.Content) > 0 {
 					textContent, ok := response.Content[0].(mcp.TextContent)
@@ -192,24 +192,24 @@ func runTestSuite(t *testing.T, client mcpClient.MCPClient, transportName string
 	}
 
 	for _, testCase := range moduleDetailsTestCases {
-		t.Run(fmt.Sprintf("%s_moduleDetails/%s", transportName, testCase.TestName), func(t *testing.T) {
+		t.Run(fmt.Sprintf("%s_module_details/%s", transportName, testCase.TestName), func(t *testing.T) {
 			ensureClientInitialized(t, client)
-			t.Logf("TOOL moduleDetails %s", testCase.TestDescription)
+			t.Logf("TOOL module_details %s", testCase.TestDescription)
 			t.Logf("Test payload: %v", testCase.TestPayload)
 
 			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 			defer cancel()
 
 			request := mcp.CallToolRequest{}
-			request.Params.Name = "moduleDetails"
+			request.Params.Name = "module_details"
 			request.Params.Arguments = testCase.TestPayload
 
 			response, err := client.CallTool(ctx, request)
 			if testCase.TestShouldFail {
-				require.Error(t, err, "expected to call 'moduleDetails' tool with error")
+				require.Error(t, err, "expected to call 'module_details' tool with error")
 				t.Logf("Error: %v", err)
 			} else {
-				require.NoError(t, err, "expected to call 'moduleDetails' tool successfully")
+				require.NoError(t, err, "expected to call 'module_details' tool successfully")
 				require.False(t, response.IsError, "expected result not to be an error")
 				require.Len(t, response.Content, 1, "expected content to have one item")
 
@@ -228,24 +228,24 @@ func runTestSuite(t *testing.T, client mcpClient.MCPClient, transportName string
 	}
 
 	for _, testCase := range searchPoliciesTestCases {
-		t.Run("CallTool searchPolicies", func(t *testing.T) {
+		t.Run("CallTool search_policies", func(t *testing.T) {
 			// t.Parallel()
-			t.Logf("TOOL searchPolicies %s", testCase.TestDescription)
+			t.Logf("TOOL search_policies %s", testCase.TestDescription)
 			t.Logf("Test payload: %v", testCase.TestPayload)
 
 			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 			defer cancel()
 
 			request := mcp.CallToolRequest{}
-			request.Params.Name = "searchPolicies"
+			request.Params.Name = "search_policies"
 			request.Params.Arguments = testCase.TestPayload
 
 			response, err := client.CallTool(ctx, request)
 			if testCase.TestShouldFail {
-				require.Error(t, err, "expected to call 'searchPolicies' tool with error")
+				require.Error(t, err, "expected to call 'search_policies' tool with error")
 				t.Logf("Error: %v", err)
 			} else {
-				require.NoError(t, err, "expected to call 'searchPolicies' tool successfully")
+				require.NoError(t, err, "expected to call 'search_policies' tool successfully")
 				require.False(t, response.IsError, "expected result not to be an error")
 				require.Len(t, response.Content, 1, "expected content to have one item")
 
@@ -255,7 +255,7 @@ func runTestSuite(t *testing.T, client mcpClient.MCPClient, transportName string
 
 				// For successful searches, check that the response contains the expected policy information format
 				if len(textContent.Text) > 0 {
-					require.Contains(t, textContent.Text, "terraformPolicyID", "expected content to contain terraformPolicyID")
+					require.Contains(t, textContent.Text, "terraform_policy_id", "expected content to contain terraform_policy_id")
 					require.Contains(t, textContent.Text, "Name:", "expected content to contain policy Name")
 					require.Contains(t, textContent.Text, "Title:", "expected content to contain policy Title")
 					require.Contains(t, textContent.Text, "Downloads:", "expected content to contain Downloads count")
@@ -265,24 +265,24 @@ func runTestSuite(t *testing.T, client mcpClient.MCPClient, transportName string
 	}
 
 	for _, testCase := range policyDetailsTestCases {
-		t.Run("CallTool policyDetails", func(t *testing.T) {
+		t.Run("CallTool policy_details", func(t *testing.T) {
 			// t.Parallel()
-			t.Logf("TOOL policyDetails %s", testCase.TestDescription)
+			t.Logf("TOOL policy_details %s", testCase.TestDescription)
 			t.Logf("Test payload: %v", testCase.TestPayload)
 
 			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 			defer cancel()
 
 			request := mcp.CallToolRequest{}
-			request.Params.Name = "policyDetails"
+			request.Params.Name = "policy_details"
 			request.Params.Arguments = testCase.TestPayload
 
 			response, err := client.CallTool(ctx, request)
 			if testCase.TestShouldFail {
-				require.Error(t, err, "expected to call 'policyDetails' tool with error")
+				require.Error(t, err, "expected to call 'policy_details' tool with error")
 				t.Logf("Error: %v", err)
 			} else {
-				require.NoError(t, err, "expected to call 'policyDetails' tool successfully")
+				require.NoError(t, err, "expected to call 'policy_details' tool successfully")
 				require.False(t, response.IsError, "expected result not to be an error")
 				require.Len(t, response.Content, 1, "expected content to have at least one item")
 
@@ -356,11 +356,11 @@ func createHTTPClient(t *testing.T) (mcpClient.MCPClient, func()) {
 func startHTTPContainer(t *testing.T, port string) string {
 	portMapping := fmt.Sprintf("%s:8080", port)
 	cmd := exec.Command(
-		"docker", "run", "-d", "--rm", 
-		"-e", "TRANSPORT_MODE=streamable-http", 
+		"docker", "run", "-d", "--rm",
+		"-e", "TRANSPORT_MODE=streamable-http",
 		"-e", "TRANSPORT_HOST=0.0.0.0",
 		"-e", "MCP_SESSION_MODE=stateful",
-		"-p", portMapping, 
+		"-p", portMapping,
 		"terraform-mcp-server:test-e2e",
 	)
 	output, err := cmd.Output()

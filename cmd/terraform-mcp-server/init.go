@@ -15,7 +15,8 @@ import (
 
 	"github.com/hashicorp/go-cleanhttp"
 	"github.com/hashicorp/go-retryablehttp"
-	"github.com/hashicorp/terraform-mcp-server/pkg/hashicorp/tfregistry"
+	"github.com/hashicorp/terraform-mcp-server/pkg/resources"
+	"github.com/hashicorp/terraform-mcp-server/pkg/tools"
 
 	"github.com/mark3labs/mcp-go/server"
 	log "github.com/sirupsen/logrus"
@@ -102,9 +103,9 @@ func initLogger(outPath string) (*log.Logger, error) {
 
 func registryInit(hcServer *server.MCPServer, logger *log.Logger) {
 	registryClient := InitRegistryClient(logger)
-	tfregistry.InitTools(hcServer, registryClient, logger)
-	tfregistry.RegisterResources(hcServer, registryClient, logger)
-	tfregistry.RegisterResourceTemplates(hcServer, registryClient, logger)
+	tools.InitTools(hcServer, registryClient, logger)
+	resources.RegisterResources(hcServer, registryClient, logger)
+	resources.RegisterResourceTemplates(hcServer, registryClient, logger)
 }
 
 func serverInit(ctx context.Context, hcServer *server.MCPServer, logger *log.Logger) error {

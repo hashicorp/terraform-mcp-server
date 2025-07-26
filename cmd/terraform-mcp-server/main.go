@@ -14,6 +14,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/hashicorp/terraform-mcp-server/pkg/client"
 	"github.com/hashicorp/terraform-mcp-server/version"
 
 	"github.com/mark3labs/mcp-go/server"
@@ -137,7 +138,7 @@ func streamableHTTPServerInit(ctx context.Context, hcServer *server.MCPServer, l
 	baseStreamableServer := server.NewStreamableHTTPServer(hcServer, opts...)
 
 	// Load CORS configuration
-	corsConfig := LoadCORSConfigFromEnv()
+	corsConfig := client.LoadCORSConfigFromEnv()
 
 	// Log CORS configuration
 	logger.Infof("CORS Mode: %s", corsConfig.Mode)
@@ -152,7 +153,7 @@ func streamableHTTPServerInit(ctx context.Context, hcServer *server.MCPServer, l
 	}
 
 	// Create a security wrapper around the streamable server
-	streamableServer := NewSecurityHandler(baseStreamableServer, corsConfig.AllowedOrigins, corsConfig.Mode, logger)
+	streamableServer := client.NewSecurityHandler(baseStreamableServer, corsConfig.AllowedOrigins, corsConfig.Mode, logger)
 
 	mux := http.NewServeMux()
 

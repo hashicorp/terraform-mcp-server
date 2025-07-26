@@ -1,7 +1,7 @@
 // Copyright (c) HashiCorp, Inc.
 // SPDX-License-Identifier: MPL-2.0
 
-package tfregistry
+package resources
 
 import (
 	"context"
@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 
+	"github.com/hashicorp/terraform-mcp-server/pkg/utils"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 	log "github.com/sirupsen/logrus"
@@ -37,15 +38,15 @@ func TerraformStyleGuideResource(httpClient *http.Client, logger *log.Logger) (m
 		func(ctx context.Context, request mcp.ReadResourceRequest) ([]mcp.ResourceContents, error) {
 			resp, err := httpClient.Get(fmt.Sprintf("%s/style.mdx", terraformGuideRawURL))
 			if err != nil {
-				return nil, logAndReturnError(logger, "Error fetching Terraform Style Guide markdown", err)
+				return nil, utils.LogAndReturnError(logger, "Error fetching Terraform Style Guide markdown", err)
 			}
 			defer resp.Body.Close()
 			if resp.StatusCode != http.StatusOK {
-				return nil, logAndReturnError(logger, "Non-200 response fetching Terraform Style Guide markdown", fmt.Errorf("status: %s", resp.Status))
+				return nil, utils.LogAndReturnError(logger, "Non-200 response fetching Terraform Style Guide markdown", fmt.Errorf("status: %s", resp.Status))
 			}
 			body, err := io.ReadAll(resp.Body)
 			if err != nil {
-				return nil, logAndReturnError(logger, "Error reading Terraform Style Guide markdown", err)
+				return nil, utils.LogAndReturnError(logger, "Error reading Terraform Style Guide markdown", err)
 			}
 			return []mcp.ResourceContents{
 				mcp.TextResourceContents{
@@ -85,16 +86,16 @@ func TerraformModuleDevGuideResource(httpClient *http.Client, logger *log.Logger
 			for _, u := range urls {
 				resp, err := httpClient.Get(u.URL)
 				if err != nil {
-					return nil, logAndReturnError(logger, fmt.Sprintf("Error fetching %s markdown", u.Name), err)
+					return nil, utils.LogAndReturnError(logger, fmt.Sprintf("Error fetching %s markdown", u.Name), err)
 				}
 				if resp.StatusCode != http.StatusOK {
 					resp.Body.Close()
-					return nil, logAndReturnError(logger, fmt.Sprintf("Non-200 response fetching %s markdown", u.Name), fmt.Errorf("status: %s", resp.Status))
+					return nil, utils.LogAndReturnError(logger, fmt.Sprintf("Non-200 response fetching %s markdown", u.Name), fmt.Errorf("status: %s", resp.Status))
 				}
 				body, err := io.ReadAll(resp.Body)
 				resp.Body.Close()
 				if err != nil {
-					return nil, logAndReturnError(logger, fmt.Sprintf("Error reading %s markdown", u.Name), err)
+					return nil, utils.LogAndReturnError(logger, fmt.Sprintf("Error reading %s markdown", u.Name), err)
 				}
 				contents = append(contents, mcp.TextResourceContents{
 					MIMEType: "text/markdown",

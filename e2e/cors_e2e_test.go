@@ -114,7 +114,7 @@ func startHTTPContainerWithCORS(t *testing.T, port, mode, origins string) string
 // waitForCORSServer waits for the HTTP server to be ready
 func waitForCORSServer(t *testing.T, baseURL string) {
 	client := &http.Client{Timeout: 2 * time.Second}
-	for i := 0; i < 30; i++ {
+	for range 30 {
 		resp, err := client.Get(baseURL + "/health")
 		if err == nil && resp.StatusCode == 200 {
 			resp.Body.Close()
@@ -241,14 +241,14 @@ func runCORSTests(t *testing.T, mcpURL, mode, configuredOrigins string) {
 			assert.Equal(t, tc.expectedStatus, resp.StatusCode, "Unexpected status code")
 
 			if tc.expectCORSHeaders {
-				assert.Equal(t, tc.origin, resp.Header.Get("Access-Control-Allow-Origin"), 
+				assert.Equal(t, tc.origin, resp.Header.Get("Access-Control-Allow-Origin"),
 					"Expected Access-Control-Allow-Origin header to match origin")
-				assert.NotEmpty(t, resp.Header.Get("Access-Control-Allow-Methods"), 
+				assert.NotEmpty(t, resp.Header.Get("Access-Control-Allow-Methods"),
 					"Expected Access-Control-Allow-Methods header to be set")
 			} else if resp.StatusCode == 200 || resp.StatusCode == 202 {
 				// If status is 200 but we don't expect CORS headers (e.g., no origin case)
 				if tc.origin == "" {
-					assert.Empty(t, resp.Header.Get("Access-Control-Allow-Origin"), 
+					assert.Empty(t, resp.Header.Get("Access-Control-Allow-Origin"),
 						"Expected no Access-Control-Allow-Origin header when no origin is sent")
 				}
 			}
@@ -260,25 +260,25 @@ func runCORSTests(t *testing.T, mcpURL, mode, configuredOrigins string) {
 func testCORSDirectly(t *testing.T, mcpURL, method, origin string, expectedStatus int, expectCORSHeaders bool) {
 	client := &http.Client{}
 	req, _ := http.NewRequest(method, mcpURL, nil)
-	
+
 	if origin != "" {
 		req.Header.Set("Origin", origin)
 	}
-	
+
 	resp, err := client.Do(req)
 	require.NoError(t, err)
 	defer resp.Body.Close()
-	
+
 	assert.Equal(t, expectedStatus, resp.StatusCode, "Unexpected status code")
-	
+
 	if expectCORSHeaders {
-		assert.Equal(t, origin, resp.Header.Get("Access-Control-Allow-Origin"), 
+		assert.Equal(t, origin, resp.Header.Get("Access-Control-Allow-Origin"),
 			"Expected Access-Control-Allow-Origin header to match origin")
-		assert.NotEmpty(t, resp.Header.Get("Access-Control-Allow-Methods"), 
+		assert.NotEmpty(t, resp.Header.Get("Access-Control-Allow-Methods"),
 			"Expected Access-Control-Allow-Methods header to be set")
 	} else if resp.StatusCode == 200 || resp.StatusCode == 202 {
 		if origin == "" {
-			assert.Empty(t, resp.Header.Get("Access-Control-Allow-Origin"), 
+			assert.Empty(t, resp.Header.Get("Access-Control-Allow-Origin"),
 				"Expected no Access-Control-Allow-Origin header when no origin is sent")
 		}
 	}
