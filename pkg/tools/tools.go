@@ -12,21 +12,24 @@ import (
 
 func InitTools(hcServer *server.MCPServer, registryClient *http.Client, logger *log.Logger) {
 
-	ResolveProviderDocID := ResolveProviderDocID(registryClient, logger)
-	hcServer.AddTool(ResolveProviderDocID.Tool, ResolveProviderDocID.Handler)
+	// Provider tools
+	getResolveProviderDocIDTool := ResolveProviderDocID(registryClient, logger)
+	hcServer.AddTool(getResolveProviderDocIDTool.Tool, getResolveProviderDocIDTool.Handler)
 
 	getProviderDocsTool := GetProviderDocs(registryClient, logger)
 	hcServer.AddTool(getProviderDocsTool.Tool, getProviderDocsTool.Handler)
 
+	// Module tools
 	getSearchModulesTool := SearchModules(registryClient, logger)
 	hcServer.AddTool(getSearchModulesTool.Tool, getSearchModulesTool.Handler)
 
-	moduleDetailsTool := ModuleDetails(registryClient, logger)
-	hcServer.AddTool(moduleDetailsTool.Tool, moduleDetailsTool.Handler)
+	getModuleDetailsTool := ModuleDetails(registryClient, logger)
+	hcServer.AddTool(getModuleDetailsTool.Tool, getModuleDetailsTool.Handler)
 
-	getSearchModules := SearchModules(registryClient, logger)
-	hcServer.AddTool(getSearchModules.Tool, getSearchModules.Handler)
+	// Policy tools
+	getSearchPoliciesTool := SearchPolicies(registryClient, logger)
+	hcServer.AddTool(getSearchPoliciesTool.Tool, getSearchPoliciesTool.Handler)
 
-	policyDetailsTool := PolicyDetails(registryClient, logger)
-	hcServer.AddTool(policyDetailsTool.Tool, policyDetailsTool.Handler)
+	getPolicyDetailsTool := PolicyDetails(registryClient, logger)
+	hcServer.AddTool(getPolicyDetailsTool.Tool, getPolicyDetailsTool.Handler)
 }

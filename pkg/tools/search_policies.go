@@ -21,10 +21,10 @@ import (
 func SearchPolicies(registryClient *http.Client, logger *log.Logger) server.ServerTool {
 	return server.ServerTool{
 		Tool: mcp.NewTool("search_policies",
-			mcp.WithDescription(`Searches for Terraform policies based on a query string. This tool returns a list of matching policies, which can be used to retrieve detailed policy information using the 'policy_details' tool. 
-			You MUST call this function before 'policy_details' to obtain a valid terraform_policy_id.
-			When selecting the best match, consider: - Name similarity to the query - Title relevance - Verification status (verified) - Download counts (popularity) Return the selected policyID and explain your choice. 
-			If there are multiple good matches, mention this but proceed with the most relevant one. If no policies were found, reattempt the search with a new policy_query.`),
+			mcp.WithDescription(`Searches for Terraform policies based on a query string. This tool returns a list of matching policies, which can be used to retrieve detailed policy information using the 'policy_details' tool.
+You MUST call this function before 'policy_details' to obtain a valid terraform_policy_id.
+When selecting the best match, consider: - Name similarity to the query - Title relevance - Verification status (verified) - Download counts (popularity) Return the selected policyID and explain your choice. 
+If there are multiple good matches, mention this but proceed with the most relevant one. If no policies were found, reattempt the search with a new policy_query.`),
 			mcp.WithTitleAnnotation("Search and match Terraform policies based on name and relevance"),
 			mcp.WithOpenWorldHintAnnotation(true),
 			mcp.WithString("policy_query",

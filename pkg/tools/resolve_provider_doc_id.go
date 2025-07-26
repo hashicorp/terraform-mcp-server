@@ -22,10 +22,14 @@ import (
 func ResolveProviderDocID(registryClient *http.Client, logger *log.Logger) server.ServerTool {
 	return server.ServerTool{
 		Tool: mcp.NewTool("resolve_provider_doc_id",
-			mcp.WithDescription(`This tool retrieves a list of potential documents based on the service_slug and provider_data_type provided. You MUST call this function before 'get_provider_docs' to obtain a valid tfprovider-compatible providerDocID. 
-			Use the most relevant single word as the search query for service_slug, if unsure about the service_slug, use the provider_name for its value.
-			When selecting the best match, consider: - Title similarity to the query - Category relevance Return the selected providerDocID and explain your choice.  
-			If there are multiple good matches, mention this but proceed with the most relevant one.`),
+			mcp.WithDescription(`This tool retrieves a list of potential documents based on the service_slug and provider_data_type provided.
+You MUST call this function before 'get_provider_docs' to obtain a valid tfprovider-compatible provider_doc_id. 
+Use the most relevant single word as the search query for service_slug, if unsure about the service_slug, use the provider_name for its value.
+When selecting the best match, consider the following:
+- Title similarity to the query
+- Category relevance
+Return the selected provider_doc_id and explain your choice.
+If there are multiple good matches, mention this but proceed with the most relevant one.`),
 			mcp.WithTitleAnnotation("Identify the most relevant provider document ID for a Terraform service"),
 			mcp.WithReadOnlyHintAnnotation(true),
 			mcp.WithString("provider_name", mcp.Required(), mcp.Description("The name of the Terraform provider to perform the read or deployment operation")),

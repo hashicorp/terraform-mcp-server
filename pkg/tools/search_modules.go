@@ -23,7 +23,16 @@ import (
 func SearchModules(registryClient *http.Client, logger *log.Logger) server.ServerTool {
 	return server.ServerTool{
 		Tool: mcp.NewTool("search_modules",
-			mcp.WithDescription(`Resolves a Terraform module name to obtain a compatible module_id for the module_details tool and returns a list of matching Terraform modules. You MUST call this function before 'module_details' to obtain a valid and compatible module_id. When selecting the best match, consider: - Name similarity to the query - Description relevance - Verification status (verified) - Download counts (popularity) Return the selected module_id and explain your choice. If there are multiple good matches, mention this but proceed with the most relevant one. If no modules were found, reattempt the search with a new moduleName query.`),
+			mcp.WithDescription(`Resolves a Terraform module name to obtain a compatible module_id for the module_details tool and returns a list of matching Terraform modules. 
+You MUST call this function before 'module_details' to obtain a valid and compatible module_id.
+When selecting the best match, consider the following:
+- Name similarity to the query
+- Description relevance
+- Verification status (verified)
+- Download counts (popularity)
+
+Return the selected module_id and explain your choice. If there are multiple good matches, mention this but proceed with the most relevant one.
+If no modules were found, reattempt the search with a new moduleName query.`),
 			mcp.WithTitleAnnotation("Search and match Terraform modules based on name and relevance"),
 			mcp.WithOpenWorldHintAnnotation(true),
 			mcp.WithString("module_query",
