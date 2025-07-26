@@ -11,10 +11,22 @@ import (
 )
 
 func InitTools(hcServer *server.MCPServer, registryClient *http.Client, logger *log.Logger) {
-	hcServer.AddTool(ResolveProviderDocID(registryClient, logger))
-	hcServer.AddTool(GetProviderDocs(registryClient, logger))
-	hcServer.AddTool(SearchModules(registryClient, logger))
-	hcServer.AddTool(ModuleDetails(registryClient, logger))
-	hcServer.AddTool(SearchPolicies(registryClient, logger))
-	hcServer.AddTool(PolicyDetails(registryClient, logger))
+
+	ResolveProviderDocID := ResolveProviderDocID(registryClient, logger)
+	hcServer.AddTool(ResolveProviderDocID.Tool, ResolveProviderDocID.Handler)
+
+	getProviderDocsTool := GetProviderDocs(registryClient, logger)
+	hcServer.AddTool(getProviderDocsTool.Tool, getProviderDocsTool.Handler)
+
+	getSearchModulesTool := SearchModules(registryClient, logger)
+	hcServer.AddTool(getSearchModulesTool.Tool, getSearchModulesTool.Handler)
+
+	moduleDetailsTool := ModuleDetails(registryClient, logger)
+	hcServer.AddTool(moduleDetailsTool.Tool, moduleDetailsTool.Handler)
+
+	getSearchModules := SearchModules(registryClient, logger)
+	hcServer.AddTool(getSearchModules.Tool, getSearchModules.Handler)
+
+	policyDetailsTool := PolicyDetails(registryClient, logger)
+	hcServer.AddTool(policyDetailsTool.Tool, policyDetailsTool.Handler)
 }
