@@ -23,23 +23,34 @@ func ResolveProviderDocID(registryClient *http.Client, logger *log.Logger) serve
 	return server.ServerTool{
 		Tool: mcp.NewTool("resolve_provider_doc_id",
 			mcp.WithDescription(`This tool retrieves a list of potential documents based on the service_slug and provider_data_type provided.
-You MUST call this function before 'get_provider_docs' to obtain a valid tfprovider-compatible provider_doc_id. 
+You MUST call this function before 'get_provider_docs' to obtain a valid tfprovider-compatible provider_doc_id.
 Use the most relevant single word as the search query for service_slug, if unsure about the service_slug, use the provider_name for its value.
 When selecting the best match, consider the following:
-- Title similarity to the query
-- Category relevance
+	- Title similarity to the query
+	- Category relevance
 Return the selected provider_doc_id and explain your choice.
 If there are multiple good matches, mention this but proceed with the most relevant one.`),
 			mcp.WithTitleAnnotation("Identify the most relevant provider document ID for a Terraform service"),
 			mcp.WithReadOnlyHintAnnotation(true),
-			mcp.WithString("provider_name", mcp.Required(), mcp.Description("The name of the Terraform provider to perform the read or deployment operation")),
-			mcp.WithString("provider_namespace", mcp.Required(), mcp.Description("The publisher of the Terraform provider, typically the name of the company, or their GitHub organization name that created the provider")),
-			mcp.WithString("service_slug", mcp.Required(), mcp.Description("The slug of the service you want to deploy or read using the Terraform provider, prefer using a single word, use underscores for multiple words and if unsure about the service_slug, use the provider_name for its value")),
-			mcp.WithString("provider_data_type", mcp.Description("The type of the document to retrieve, for general information use 'guides', for deploying resources use 'resources', for reading pre-deployed resources use 'data-sources', for functions use 'functions', and for overview of the provider use 'overview'"),
+			mcp.WithString("provider_name",
+				mcp.Required(),
+				mcp.Description("The name of the Terraform provider to perform the read or deployment operation"),
+			),
+			mcp.WithString("provider_namespace",
+				mcp.Required(),
+				mcp.Description("The publisher of the Terraform provider, typically the name of the company, or their GitHub organization name that created the provider"),
+			),
+			mcp.WithString("service_slug",
+				mcp.Required(),
+				mcp.Description("The slug of the service you want to deploy or read using the Terraform provider, prefer using a single word, use underscores for multiple words and if unsure about the service_slug, use the provider_name for its value"),
+			),
+			mcp.WithString("provider_data_type",
+				mcp.Description("The type of the document to retrieve, for general information use 'guides', for deploying resources use 'resources', for reading pre-deployed resources use 'data-sources', for functions use 'functions', and for overview of the provider use 'overview'"),
 				mcp.Enum("resources", "data-sources", "functions", "guides", "overview"),
 				mcp.DefaultString("resources"),
 			),
-			mcp.WithString("provider_version", mcp.Description("The version of the Terraform provider to retrieve in the format 'x.y.z', or 'latest' to get the latest version")),
+			mcp.WithString("provider_version",
+				mcp.Description("The version of the Terraform provider to retrieve in the format 'x.y.z', or 'latest' to get the latest version")),
 		),
 		Handler: func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			return resolveProviderDocIDHandler(registryClient, request, logger)

@@ -20,10 +20,13 @@ import (
 func GetProviderDocs(registryClient *http.Client, logger *log.Logger) server.ServerTool {
 	return server.ServerTool{
 		Tool: mcp.NewTool("get_provider_docs",
-			mcp.WithDescription(`Fetches up-to-date documentation for a specific service from a Terraform provider. You must call 'resolve_provider_doc_id' tool first to obtain the exact tfprovider-compatible provider_doc_id required to use this tool.`),
+			mcp.WithDescription(`Fetches up-to-date documentation for a specific service from a Terraform provider. 
+You must call 'resolve_provider_doc_id' tool first to obtain the exact tfprovider-compatible provider_doc_id required to use this tool.`),
 			mcp.WithTitleAnnotation("Fetch detailed Terraform provider documentation using a document ID"),
 			mcp.WithOpenWorldHintAnnotation(true),
-			mcp.WithString("provider_doc_id", mcp.Required(), mcp.Description("Exact tfprovider-compatible provider_doc_id, (e.g., '8894603', '8906901') retrieved from 'resolve_provider_doc_id'")),
+			mcp.WithString("provider_doc_id",
+				mcp.Required(),
+				mcp.Description("Exact tfprovider-compatible provider_doc_id, (e.g., '8894603', '8906901') retrieved from 'resolve_provider_doc_id'")),
 		),
 		Handler: func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			return getProviderDocsHandler(registryClient, req, logger)
