@@ -102,8 +102,10 @@ func runHTTPServer(logger *log.Logger, host string, port string, endpointPath st
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	hcServer := NewServer(version.Version)
-	registryInit(hcServer, logger)
+	hcServer := NewServer(version.Version, logger)
+	//TODO: fix this
+	registryClient := InitRegistryClient(logger)
+	registerToolsAndResources(hcServer, registryClient, logger)
 
 	return streamableHTTPServerInit(ctx, hcServer, logger, host, port, endpointPath)
 }
@@ -206,19 +208,34 @@ func runStdioServer(logger *log.Logger) error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	hcServer := NewServer(version.Version)
-	registryInit(hcServer, logger)
+	hcServer := NewServer(version.Version, logger)
+
+	//TODO: fix this
+	registryClient := InitRegistryClient(logger)
+	registerToolsAndResources(hcServer, registryClient, logger)
 
 	return serverInit(ctx, hcServer, logger)
 }
 
-func NewServer(version string, opts ...server.ServerOption) *server.MCPServer {
+func NewServer(version string, logger *log.Logger, opts ...server.ServerOption) *server.MCPServer {
 	// Add default options
 	defaultOpts := []server.ServerOption{
 		server.WithToolCapabilities(true),
 		server.WithResourceCapabilities(true, true),
 	}
 	opts = append(defaultOpts, opts...)
+
+	// Create hooks for session management
+	hooks := &server.Hooks{}
+	hooks.AddOnRegisterSession(func(ctx context.Context, session server.ClientSession) {
+		client.NewSessionHandler(ctx, session, logger)
+	})
+	hooks.AddOnUnregisterSession(func(ctx context.Context, session server.ClientSession) {
+		client.EndSessionHandler(ctx, session, logger)
+	})
+
+	// Add hooks to options
+	opts = append(opts, server.WithHooks(hooks))
 
 	// Create a new MCP server
 	s := server.NewMCPServer(

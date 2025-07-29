@@ -101,8 +101,7 @@ func initLogger(outPath string) (*log.Logger, error) {
 	return logger, nil
 }
 
-func registryInit(hcServer *server.MCPServer, logger *log.Logger) {
-	registryClient := InitRegistryClient(logger)
+func registerToolsAndResources(hcServer *server.MCPServer, registryClient *http.Client, logger *log.Logger) {
 	tools.InitTools(hcServer, registryClient, logger)
 	resources.RegisterResources(hcServer, registryClient, logger)
 	resources.RegisterResourceTemplates(hcServer, registryClient, logger)
