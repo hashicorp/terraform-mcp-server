@@ -7,7 +7,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"net/http"
 	"strings"
 
 	"github.com/hashicorp/terraform-mcp-server/pkg/client"
@@ -18,7 +17,7 @@ import (
 	"github.com/mark3labs/mcp-go/server"
 )
 
-func PolicyDetails(registryClient *http.Client, logger *log.Logger) server.ServerTool {
+func PolicyDetails(logger *log.Logger) server.ServerTool {
 	return server.ServerTool{
 		Tool: mcp.NewTool("policy_details",
 			mcp.WithDescription(`Fetches up-to-date documentation for a specific policy from the Terraform registry. You must call 'search_policies' first to obtain the exact terraform_policy_id required to use this tool.`),
@@ -30,12 +29,12 @@ func PolicyDetails(registryClient *http.Client, logger *log.Logger) server.Serve
 			),
 		),
 		Handler: func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-			return getPolicyDetailsHandler(registryClient, request, logger)
+			return getPolicyDetailsHandler(ctx, request, logger)
 		},
 	}
 }
 
-func getPolicyDetailsHandler(registryClient *http.Client, request mcp.CallToolRequest, logger *log.Logger) (*mcp.CallToolResult, error) {
+func getPolicyDetailsHandler(ctx context.Context, request mcp.CallToolRequest, logger *log.Logger) (*mcp.CallToolResult, error) {
 	terraformPolicyID, err := request.RequireString("terraform_policy_id")
 	if err != nil {
 		return nil, utils.LogAndReturnError(logger, "terraform_policy_id is required and must be a string, it is fetched by running the search_policies tool", err)
@@ -44,7 +43,15 @@ func getPolicyDetailsHandler(registryClient *http.Client, request mcp.CallToolRe
 		return nil, utils.LogAndReturnError(logger, "terraform_policy_id cannot be empty, it is fetched by running the search_policies tool", nil)
 	}
 
-	policyResp, err := client.SendRegistryCall(registryClient, "GET", fmt.Sprintf("%s?include=policies,policy-modules,policy-library", terraformPolicyID), logger, "v2")
+	// Get a simple http client to access the public Terraform registry from context
+	terraformClients, err := client.GetTerraformClientFromContext(ctx, logger)
+	if err != nil {
+		logger.WithError(err).Error("failed to get http client for public Terraform registry")
+		return mcp.NewToolResultError(fmt.Sprintf("failed to get http client for public Terraform registry: %v", err)), nil
+	}
+
+	httpClient := terraformClients.HttpClient
+	policyResp, err := client.SendRegistryCall(httpClient, "GET", fmt.Sprintf("%s?include=policies,policy-modules,policy-library", terraformPolicyID), logger, "v2")
 	if err != nil {
 		return nil, utils.LogAndReturnError(logger, "Failed to fetch policy details: registry API did not return a successful response", err)
 	}

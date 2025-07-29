@@ -8,13 +8,8 @@ import (
 	"fmt"
 	"io"
 	stdlog "log"
-	"net/http"
 	"os"
-	"strconv"
-	"time"
 
-	"github.com/hashicorp/go-cleanhttp"
-	"github.com/hashicorp/go-retryablehttp"
 	"github.com/hashicorp/terraform-mcp-server/pkg/resources"
 	"github.com/hashicorp/terraform-mcp-server/pkg/tools"
 
@@ -23,42 +18,6 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
-
-func InitRegistryClient(logger *log.Logger) *http.Client {
-	retryClient := retryablehttp.NewClient()
-	retryClient.Logger = logger
-
-	transport := cleanhttp.DefaultPooledTransport()
-	transport.Proxy = http.ProxyFromEnvironment
-
-	retryClient.HTTPClient = cleanhttp.DefaultClient()
-	retryClient.HTTPClient.Timeout = 10 * time.Second
-	retryClient.HTTPClient.Transport = transport
-	retryClient.RetryMax = 3
-
-	retryClient.Backoff = func(min, max time.Duration, attemptNum int, resp *http.Response) time.Duration {
-		if resp != nil && resp.StatusCode == http.StatusTooManyRequests {
-			resetAfter := resp.Header.Get("x-ratelimit-reset")
-			resetAfterInt, err := strconv.ParseInt(resetAfter, 10, 64)
-			if err != nil {
-				return 0
-			}
-			resetAfterTime := time.Unix(resetAfterInt, 0)
-			return time.Until(resetAfterTime)
-		}
-		return 0
-	}
-
-	retryClient.CheckRetry = func(ctx context.Context, resp *http.Response, err error) (bool, error) {
-		if resp != nil && resp.StatusCode == http.StatusTooManyRequests {
-			resetAfter := resp.Header.Get("x-ratelimit-reset")
-			return resetAfter != "", nil
-		}
-		return false, nil
-	}
-
-	return retryClient.StandardClient()
-}
 
 func init() {
 	cobra.OnInitialize(initConfig)
@@ -101,10 +60,10 @@ func initLogger(outPath string) (*log.Logger, error) {
 	return logger, nil
 }
 
-func registerToolsAndResources(hcServer *server.MCPServer, registryClient *http.Client, logger *log.Logger) {
-	tools.InitTools(hcServer, registryClient, logger)
-	resources.RegisterResources(hcServer, registryClient, logger)
-	resources.RegisterResourceTemplates(hcServer, registryClient, logger)
+func registerToolsAndResources(hcServer *server.MCPServer, logger *log.Logger) {
+	tools.InitTools(hcServer, logger)
+	resources.RegisterResources(hcServer, logger)
+	resources.RegisterResourceTemplates(hcServer, logger)
 }
 
 func serverInit(ctx context.Context, hcServer *server.MCPServer, logger *log.Logger) error {

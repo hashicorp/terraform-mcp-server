@@ -5,7 +5,6 @@ package client
 
 import (
 	"context"
-	"crypto/tls"
 	"fmt"
 	"net/http"
 	"os"
@@ -22,12 +21,17 @@ var (
 )
 
 const (
-	TerraformAddress       = "TERRAFORM_ADDR"
-	TerraformToken         = "TERRAFORM_TOKEN"
-	TerraformSkipTLSVerify = "TERRAFORM_SKIP_VERIFY"
+	TerraformAddress       = "TFE_ADDRESS"
+	TerraformToken         = "TFE_TOKEN"
+	TerraformSkipTLSVerify = "TFE_SKIP_VERIFY"
 )
 
 const DefaultTerraformAddress = "https://app.terraform.io"
+
+type terraformClients struct {
+	TfeClient  *tfe.Client
+	HttpClient *http.Client
+}
 
 // contextKey is a type alias to avoid lint warnings while maintaining compatibility
 type contextKey string
@@ -41,42 +45,46 @@ func getEnv(key, fallback string) string {
 }
 
 // NewTerraformClient creates a new Terraform client for the given session
-func NewTerraformClient(sessionId string, terraformAddress string, terraformSkipTLSVerify bool, terraformToken string) (*tfe.Client, error) {
+func NewTerraformClient(sessionId string, terraformAddress string, terraformSkipTLSVerify bool, terraformToken string, logger *log.Logger) *terraformClients {
 	// Initialize Terraform client
 	config := &tfe.Config{
 		Address:           terraformAddress,
 		Token:             terraformToken,
 		RetryServerErrors: true,
 	}
-	tr := &http.Transport{
-		TLSClientConfig: &tls.Config{InsecureSkipVerify: terraformSkipTLSVerify},
+
+	config.HTTPClient = createHTTPClient(terraformSkipTLSVerify, logger)
+	terraformClients := &terraformClients{
+		TfeClient:  nil,
+		HttpClient: config.HTTPClient,
 	}
 
-	config.HTTPClient = &http.Client{Transport: tr}
 	client, err := tfe.NewClient(config)
 	if err != nil {
-		return nil, fmt.Errorf("tfe.NewClient failed to create Terraform client: %v", err)
+		logger.Warnf("Failed to create a Terraform client: %s, %v", sessionId, err)
+		return terraformClients
 	}
 
-	activeClients.Store(sessionId, client)
-	return client, nil
+	terraformClients.TfeClient = client
+	activeClients.Store(sessionId, terraformClients)
+	return terraformClients
 }
 
 // GetTerraformClient retrieves the Terraform client for the given session
-func GetTerraformClient(sessionId string) *tfe.Client {
+func GetTerraformClient(sessionId string) *terraformClients {
 	if value, ok := activeClients.Load(sessionId); ok {
-		return value.(*tfe.Client)
+		return value.(*terraformClients)
 	}
 	return nil
 }
 
 // DeleteTerraformClient removes the Terraform client for the given session
-func DeleteVaultClient(sessionId string) {
+func DeleteTerraformClient(sessionId string) {
 	activeClients.Delete(sessionId)
 }
 
 // GetTerraformClientFromContext extracts Terraform client from the MCP context
-func GetTerraformClientFromContext(ctx context.Context, logger *log.Logger) (*tfe.Client, error) {
+func GetTerraformClientFromContext(ctx context.Context, logger *log.Logger) (*terraformClients, error) {
 	session := server.ClientSessionFromContext(ctx)
 	if session == nil {
 		return nil, fmt.Errorf("no active session")
@@ -92,11 +100,10 @@ func GetTerraformClientFromContext(ctx context.Context, logger *log.Logger) (*tf
 	}
 
 	logger.WithField("session_id", session.SessionID()).Warn("Terraform client not found, creating a new one")
-
 	return CreateTerraformClientForSession(ctx, session, logger)
 }
 
-func CreateTerraformClientForSession(ctx context.Context, session server.ClientSession, logger *log.Logger) (*tfe.Client, error) {
+func CreateTerraformClientForSession(ctx context.Context, session server.ClientSession, logger *log.Logger) (*terraformClients, error) {
 	// Initialize a new Terraform client for this session
 	terraformAddress, ok := ctx.Value(contextKey(TerraformAddress)).(string)
 	if !ok || terraformAddress == "" {
@@ -107,30 +114,29 @@ func CreateTerraformClientForSession(ctx context.Context, session server.ClientS
 	if !ok || terraformToken == "" {
 		terraformToken = getEnv(TerraformToken, "")
 		if terraformToken == "" {
-			//logger.Warn("Terraform token not provided for session")
-			return nil, fmt.Errorf("terraform token not provided for session")
+			logger.Warn("Terraform token not provided for session")
 		}
 	}
 
-	terraformSkipTLSVerify, err := strconv.ParseBool(ctx.Value(contextKey(TerraformSkipTLSVerify)).(string))
-	if err != nil {
-		terraformSkipTLSVerify = false
+	terraformSkipTLSVerifyStr, ok := ctx.Value(contextKey(TerraformSkipTLSVerify)).(string)
+	terraformSkipTLSVerify := false
+	if ok && terraformSkipTLSVerifyStr != "" {
+		var err error
+		terraformSkipTLSVerify, err = strconv.ParseBool(terraformSkipTLSVerifyStr)
+		if err != nil {
+			terraformSkipTLSVerify = false
+		}
 	}
 
-	newClient, err := NewTerraformClient(session.SessionID(), terraformAddress, terraformSkipTLSVerify, terraformToken)
-	if err != nil {
-		return nil, fmt.Errorf("NewTerraformClient failed to create Terraform client: %v", err)
-	}
-
+	newClient := NewTerraformClient(session.SessionID(), terraformAddress, terraformSkipTLSVerify, terraformToken, logger)
 	logger.WithFields(log.Fields{
-		"session_id":     session.SessionID(),
-		"terraform_addr": terraformAddress,
-	}).Info("Created Vault client for session")
+		"session_id": session.SessionID(),
+	}).Info("Created Terraform client for session")
 
 	return newClient, nil
 }
 
-// NewSessionHandler initializes a new Vault client for the session
+// NewSessionHandler initializes a new Terraform client for the session
 func NewSessionHandler(ctx context.Context, session server.ClientSession, logger *log.Logger) {
 	_, err := CreateTerraformClientForSession(ctx, session, logger)
 	if err != nil {
@@ -141,6 +147,6 @@ func NewSessionHandler(ctx context.Context, session server.ClientSession, logger
 
 // EndSessionHandler cleans up the Terraform client when the session ends
 func EndSessionHandler(_ context.Context, session server.ClientSession, logger *log.Logger) {
-	DeleteVaultClient(session.SessionID())
-	logger.WithField("session_id", session.SessionID()).Info("Cleaned up Vault client for session")
+	DeleteTerraformClient(session.SessionID())
+	logger.WithField("session_id", session.SessionID()).Info("Cleaned up Terraform client for session")
 }

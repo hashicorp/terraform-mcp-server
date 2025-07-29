@@ -103,9 +103,7 @@ func runHTTPServer(logger *log.Logger, host string, port string, endpointPath st
 	defer stop()
 
 	hcServer := NewServer(version.Version, logger)
-	//TODO: fix this
-	registryClient := InitRegistryClient(logger)
-	registerToolsAndResources(hcServer, registryClient, logger)
+	registerToolsAndResources(hcServer, logger)
 
 	return streamableHTTPServerInit(ctx, hcServer, logger, host, port, endpointPath)
 }
@@ -159,6 +157,9 @@ func streamableHTTPServerInit(ctx context.Context, hcServer *server.MCPServer, l
 
 	mux := http.NewServeMux()
 
+	// Apply middleware
+	streamableServer = client.TerraformContextMiddleware(logger)(streamableServer)
+
 	// Handle the /mcp endpoint with the streamable server (with security wrapper)
 	mux.Handle(endpointPath, streamableServer)
 	mux.Handle(endpointPath+"/", streamableServer)
@@ -209,10 +210,7 @@ func runStdioServer(logger *log.Logger) error {
 	defer stop()
 
 	hcServer := NewServer(version.Version, logger)
-
-	//TODO: fix this
-	registryClient := InitRegistryClient(logger)
-	registerToolsAndResources(hcServer, registryClient, logger)
+	registerToolsAndResources(hcServer, logger)
 
 	return serverInit(ctx, hcServer, logger)
 }
