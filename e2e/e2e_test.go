@@ -297,6 +297,74 @@ func runTestSuite(t *testing.T, client mcpClient.MCPClient, transportName string
 		})
 	}
 
+	for _, testCase := range getLatestModuleVersionTestCases {
+		t.Run(fmt.Sprintf("%s_get_latest_module_version/%s", transportName, testCase.TestName), func(t *testing.T) {
+			ensureClientInitialized(t, client)
+			t.Logf("TOOL get_latest_module_version %s", testCase.TestDescription)
+			t.Logf("Test payload: %v", testCase.TestPayload)
+
+			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			defer cancel()
+
+			request := mcp.CallToolRequest{}
+			request.Params.Name = "get_latest_module_version"
+			request.Params.Arguments = testCase.TestPayload
+
+			response, err := client.CallTool(ctx, request)
+			if testCase.TestShouldFail {
+				require.Error(t, err, "expected to call 'get_latest_module_version' tool with error")
+				t.Logf("Error: %v", err)
+			} else {
+				require.NoError(t, err, "expected to call 'get_latest_module_version' tool successfully")
+				require.False(t, response.IsError, "expected result not to be an error")
+				require.Len(t, response.Content, 1, "expected content to have one item")
+
+				textContent, ok := response.Content[0].(mcp.TextContent)
+				require.True(t, ok, "expected content to be of type TextContent")
+				t.Logf("Module version: %s", textContent.Text)
+
+				// Verify that the response contains a valid version string
+				require.NotEmpty(t, textContent.Text, "expected version string to not be empty")
+				// Basic version format validation (should contain at least one dot for semantic versioning)
+				require.Contains(t, textContent.Text, ".", "expected version to contain at least one dot")
+			}
+		})
+	}
+
+	for _, testCase := range getLatestProviderVersionTestCases {
+		t.Run(fmt.Sprintf("%s_get_latest_provider_version/%s", transportName, testCase.TestName), func(t *testing.T) {
+			ensureClientInitialized(t, client)
+			t.Logf("TOOL get_latest_provider_version %s", testCase.TestDescription)
+			t.Logf("Test payload: %v", testCase.TestPayload)
+
+			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			defer cancel()
+
+			request := mcp.CallToolRequest{}
+			request.Params.Name = "get_latest_provider_version"
+			request.Params.Arguments = testCase.TestPayload
+
+			response, err := client.CallTool(ctx, request)
+			if testCase.TestShouldFail {
+				require.Error(t, err, "expected to call 'get_latest_provider_version' tool with error")
+				t.Logf("Error: %v", err)
+			} else {
+				require.NoError(t, err, "expected to call 'get_latest_provider_version' tool successfully")
+				require.False(t, response.IsError, "expected result not to be an error")
+				require.Len(t, response.Content, 1, "expected content to have one item")
+
+				textContent, ok := response.Content[0].(mcp.TextContent)
+				require.True(t, ok, "expected content to be of type TextContent")
+				t.Logf("Provider version: %s", textContent.Text)
+
+				// Verify that the response contains a valid version string
+				require.NotEmpty(t, textContent.Text, "expected version string to not be empty")
+				// Basic version format validation (should contain at least one dot for semantic versioning)
+				require.Contains(t, textContent.Text, ".", "expected version to contain at least one dot")
+			}
+		})
+	}
+
 }
 
 // createStdioClient creates a stdio-based MCP client
