@@ -62,7 +62,7 @@ func (r *DynamicToolRegistry) UnregisterSessionWithTFE(sessionID string) {
 	defer r.mu.Unlock()
 
 	delete(r.sessionsWithTFE, sessionID)
-	r.logger.WithField("session_id", sessionID).Info("Session unregistered from TFE client")
+	r.logger.Info("Session unregistered from TFE client")
 
 	// If no sessions have TFE clients, we could unregister tools
 	// but since MCP doesn't support tool removal, we keep them registered
