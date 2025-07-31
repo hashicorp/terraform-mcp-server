@@ -52,7 +52,7 @@ func getPolicyDetailsHandler(ctx context.Context, request mcp.CallToolRequest, l
 	}
 
 	httpClient := terraformClients.HttpClient
-	policyResp, err := client.SendRegistryCall(httpClient, "GET", fmt.Sprintf("%s?include=policies,policy-modules,policy-library", terraformPolicyID), logger, "v2")
+	policyResp, err := client.SendRegistryCall(httpClient, "GET", (&url.URL{Path: terraformPolicyID, RawQuery: url.Values{"include": {"policies,policy-modules,policy-library"}}.Encode()}).String(), logger, "v2")
 	if err != nil {
 		return nil, utils.LogAndReturnError(logger, "Failed to fetch policy details: registry API did not return a successful response", err)
 	}
