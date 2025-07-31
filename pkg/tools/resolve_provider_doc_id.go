@@ -117,7 +117,11 @@ func resolveProviderDocIDHandler(registryClient *http.Client, request mcp.CallTo
 			cs_pn, err_pn := utils.ContainsSlug(fmt.Sprintf("%s_%s", providerDetail.ProviderName, doc.Slug), serviceSlug)
 			if (cs || cs_pn) && err == nil && err_pn == nil {
 				contentAvailable = true
-				builder.WriteString(fmt.Sprintf("- providerDocID: %s\n- Title: %s\n- Category: %s\n---\n", doc.ID, doc.Title, doc.Category))
+				descriptionSnippet, err := getContentSnippet(registryClient, doc.ID, logger)
+				if err != nil {
+					descriptionSnippet = fmt.Sprintf("No additional description for provider_doc_id %s: %v", doc.ID, err)
+				}
+				builder.WriteString(fmt.Sprintf("- providerDocID: %s\n- Title: %s\n- Category: %s\n- description: %s\n---\n", doc.ID, doc.Title, doc.Category, descriptionSnippet))
 			}
 		}
 	}
@@ -213,8 +217,39 @@ func get_provider_docsV2(registryClient *http.Client, providerDetail client.Prov
 	builder.WriteString("Each result includes:\n- providerDocID: tfprovider-compatible identifier\n- Title: Service or resource name\n- Category: Type of document\n")
 	builder.WriteString("For best results, select libraries based on the service_slug match and category of information requested.\n\n---\n\n")
 	for _, doc := range docs {
-		builder.WriteString(fmt.Sprintf("- providerDocID: %s\n- Title: %s\n- Category: %s\n---\n", doc.ID, doc.Attributes.Title, doc.Attributes.Category))
+		descriptionSnippet, err := getContentSnippet(registryClient, doc.ID, logger)
+		if err != nil {
+			descriptionSnippet = fmt.Sprintf("No additional description for provider_doc_id %s: %v", doc.ID, err)
+		}
+		builder.WriteString(fmt.Sprintf("- providerDocID: %s\n- Title: %s\n- Category: %s\n- description: %s\n---\n", doc.ID, doc.Attributes.Title, doc.Attributes.Category, descriptionSnippet))
 	}
 
 	return builder.String(), nil
+}
+
+func getContentSnippet(registryClient *http.Client, docID string, logger *log.Logger) (string, error) {
+	docContent, err := client.SendRegistryCall(registryClient, "GET", fmt.Sprintf("provider-docs/%s", docID), logger, "v2")
+	if err != nil {
+		return "", utils.LogAndReturnError(logger, fmt.Sprintf("error fetching provider-docs/%s within getContentSnippet", docID), err)
+	}
+	var docDescription client.ProviderResourceDetails
+	if err := json.Unmarshal(docContent, &docDescription); err != nil {
+		return "", utils.LogAndReturnError(logger, fmt.Sprintf("error unmarshalling provider-docs/%s within getContentSnippet", docID), err)
+	}
+
+	content := docDescription.Data.Attributes.Content
+	// Only consider first 500 chars of content
+	if len(content) > 500 {
+		content = strings.TrimSpace(content[:500]) + "..."
+	}
+	// Try to extract description from markdown frontmatter
+	desc := ""
+	if start := strings.Index(content, "description: |-"); start != -1 {
+		if end := strings.Index(content[start:], "\n---"); end != -1 {
+			desc = strings.ReplaceAll(strings.TrimSpace(content[start+len("description: |-"):start+end]), "\n", " ")
+		} else {
+			desc = strings.ReplaceAll(strings.TrimSpace(content[start+len("description: |-"):]), "\n", " ")
+		}
+	}
+	return desc, nil
 }
