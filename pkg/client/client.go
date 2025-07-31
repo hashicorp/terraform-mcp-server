@@ -144,7 +144,7 @@ func NewSessionHandler(ctx context.Context, session server.ClientSession, logger
 		}
 		logger.Info("Session has valid TFE client - registered with tool registry")
 	} else {
-		logger.WithField("session_id", session.SessionID()).Info("Session has no valid TFE client - TFE tools will not be available")
+		logger.Info("Session has no valid TFE client - TFE tools will not be available")
 	}
 }
 
