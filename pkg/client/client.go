@@ -61,7 +61,7 @@ func NewTerraformClient(sessionId string, terraformAddress string, terraformSkip
 
 	client, err := tfe.NewClient(config)
 	if err != nil {
-		logger.Warnf("Failed to create a Terraform Cloud/Enterprise client: %s, %v", sessionId, err)
+		logger.Warnf("Failed to create a Terraform Cloud/Enterprise client: %v", err)
 		return terraformClients
 	}
 
