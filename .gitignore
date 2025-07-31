@@ -4,3 +4,4 @@ cmd/mcpcurl/mcpcurl
 *.log
 .vscode/
 dist/
+bin/*
