@@ -48,6 +48,9 @@ func listTerraformProjectsHandler(ctx context.Context, request mcp.CallToolReque
 		return nil, utils.LogAndReturnError(logger, "failed to get Terraform client", err)
 	}
 	tfeClient := terraformClients.TfeClient
+	if tfeClient == nil {
+		return nil, utils.LogAndReturnError(logger, "TFE client is not available - please ensure TFE_TOKEN and TFE_ADDRESS are properly configured", nil)
+	}
 
 	// Fetch the list of projects
 	projects, err := tfeClient.Projects.List(ctx, terraformOrgName, &tfe.ProjectListOptions{

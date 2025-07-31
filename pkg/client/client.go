@@ -61,7 +61,7 @@ func NewTerraformClient(sessionId string, terraformAddress string, terraformSkip
 
 	client, err := tfe.NewClient(config)
 	if err != nil {
-		logger.Warnf("Failed to create a Terraform client: %s, %v", sessionId, err)
+		logger.Warnf("Failed to create a Terraform Cloud/Enterprise client: %s, %v", sessionId, err)
 		return terraformClients
 	}
 
@@ -113,9 +113,6 @@ func CreateTerraformClientForSession(ctx context.Context, session server.ClientS
 	terraformToken, ok := ctx.Value(contextKey(TerraformToken)).(string)
 	if !ok || terraformToken == "" {
 		terraformToken = getEnv(TerraformToken, "")
-		if terraformToken == "" {
-			logger.Warn("Terraform token not provided for session")
-		}
 	}
 
 	terraformSkipTLSVerifyStr, ok := ctx.Value(contextKey(TerraformSkipTLSVerify)).(string)
@@ -129,24 +126,55 @@ func CreateTerraformClientForSession(ctx context.Context, session server.ClientS
 	}
 
 	newClient := NewTerraformClient(session.SessionID(), terraformAddress, terraformSkipTLSVerify, terraformToken, logger)
-	logger.WithFields(log.Fields{
-		"session_id": session.SessionID(),
-	}).Info("Created Terraform client for session")
-
 	return newClient, nil
 }
 
 // NewSessionHandler initializes a new Terraform client for the session
 func NewSessionHandler(ctx context.Context, session server.ClientSession, logger *log.Logger) {
-	_, err := CreateTerraformClientForSession(ctx, session, logger)
+	terraformClient, err := CreateTerraformClientForSession(ctx, session, logger)
 	if err != nil {
 		logger.WithError(err).Error("NewSessionHandler failed to create Terraform client")
 		return
+	}
+
+	// Check if the session has a valid TFE client and register with dynamic tool registry
+	if terraformClient.TfeClient != nil {
+		// Import the tools package to access the registry
+		// We need to avoid circular imports, so we'll use a callback approach
+		if registryCallback := getToolRegistryCallback(); registryCallback != nil {
+			registryCallback.RegisterSessionWithTFE(session.SessionID())
+		}
+		logger.WithField("session_id", session.SessionID()).Info("Session has valid TFE client - registered with tool registry")
+	} else {
+		logger.WithField("session_id", session.SessionID()).Info("Session has no valid TFE client - TFE tools will not be available")
 	}
 }
 
 // EndSessionHandler cleans up the Terraform client when the session ends
 func EndSessionHandler(_ context.Context, session server.ClientSession, logger *log.Logger) {
+	// Unregister from tool registry if it was registered
+	if registryCallback := getToolRegistryCallback(); registryCallback != nil {
+		registryCallback.UnregisterSessionWithTFE(session.SessionID())
+	}
+
 	DeleteTerraformClient(session.SessionID())
 	logger.WithField("session_id", session.SessionID()).Info("Cleaned up Terraform client for session")
+}
+
+// ToolRegistryCallback defines the interface for interacting with the tool registry
+type ToolRegistryCallback interface {
+	RegisterSessionWithTFE(sessionID string)
+	UnregisterSessionWithTFE(sessionID string)
+}
+
+var toolRegistryCallback ToolRegistryCallback
+
+// SetToolRegistryCallback sets the callback for tool registry operations
+func SetToolRegistryCallback(callback ToolRegistryCallback) {
+	toolRegistryCallback = callback
+}
+
+// getToolRegistryCallback returns the current tool registry callback
+func getToolRegistryCallback() ToolRegistryCallback {
+	return toolRegistryCallback
 }

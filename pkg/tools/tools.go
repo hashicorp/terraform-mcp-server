@@ -8,33 +8,28 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-func InitTools(hcServer *server.MCPServer, logger *log.Logger) {
+func RegisterTools(hcServer *server.MCPServer, logger *log.Logger) {
+	// Register the dynamic tool
+	registerDynamicTools(hcServer, logger)
 
-	// Provider tools
+	// Provider tools (always available)
 	getResolveProviderDocIDTool := ResolveProviderDocID(logger)
 	hcServer.AddTool(getResolveProviderDocIDTool.Tool, getResolveProviderDocIDTool.Handler)
 
 	getProviderDocsTool := GetProviderDocs(logger)
 	hcServer.AddTool(getProviderDocsTool.Tool, getProviderDocsTool.Handler)
 
-	// Module tools
+	// Module tools (always available)
 	getSearchModulesTool := SearchModules(logger)
 	hcServer.AddTool(getSearchModulesTool.Tool, getSearchModulesTool.Handler)
 
 	getModuleDetailsTool := ModuleDetails(logger)
 	hcServer.AddTool(getModuleDetailsTool.Tool, getModuleDetailsTool.Handler)
 
-	// Policy tools
+	// Policy tools (always available)
 	getSearchPoliciesTool := SearchPolicies(logger)
 	hcServer.AddTool(getSearchPoliciesTool.Tool, getSearchPoliciesTool.Handler)
 
 	getPolicyDetailsTool := PolicyDetails(logger)
 	hcServer.AddTool(getPolicyDetailsTool.Tool, getPolicyDetailsTool.Handler)
-
-	// Terraform tools
-	getListTerraformOrgsTool := ListTerraformOrgs(logger)
-	hcServer.AddTool(getListTerraformOrgsTool.Tool, getListTerraformOrgsTool.Handler)
-
-	getListTerraformProjectsTool := ListTerraformProjects(logger)
-	hcServer.AddTool(getListTerraformProjectsTool.Tool, getListTerraformProjectsTool.Handler)
 }

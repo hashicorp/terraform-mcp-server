@@ -37,6 +37,9 @@ func listTerraformOrgsHandler(ctx context.Context, logger *log.Logger) (*mcp.Cal
 	}
 
 	tfeClient := terraformClients.TfeClient
+	if tfeClient == nil {
+		return nil, utils.LogAndReturnError(logger, "TFE client is not available - please ensure TFE_TOKEN and TFE_ADDRESS are properly configured", nil)
+	}
 
 	orgs, err := tfeClient.Organizations.List(ctx, &tfe.OrganizationListOptions{
 		ListOptions: tfe.ListOptions{
