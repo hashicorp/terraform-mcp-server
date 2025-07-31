@@ -147,7 +147,7 @@ func TerraformContextMiddleware(logger *log.Logger) func(http.Handler) http.Hand
 
 					// Explicitly disallow TerraformToken in query parameters for security reasons
 					if header == TerraformToken && headerValue != "" {
-						logger.Info(fmt.Sprintf("Terraform token was provided in query parameters by client %v, termiating request", r.RemoteAddr))
+						logger.Info(fmt.Sprintf("Terraform token was provided in query parameters by client %v, terminating request", r.RemoteAddr))
 						http.Error(w, "Terraform token should not be provided in query parameters for security reasons, use the terraform_token header", http.StatusBadRequest)
 						return
 					}
