@@ -90,8 +90,6 @@ func GetTerraformClientFromContext(ctx context.Context, logger *log.Logger) (*te
 		return nil, fmt.Errorf("no active session")
 	}
 
-	// Log the session ID for debugging
-	logger.WithField("session_id", session.SessionID()).Debug("Retrieving Terraform client for session")
 
 	// Try to get existing client
 	client := GetTerraformClient(session.SessionID())
