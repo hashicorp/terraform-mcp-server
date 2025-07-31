@@ -242,9 +242,13 @@ func getContentSnippet(registryClient *http.Client, docID string, logger *log.Lo
 	desc := ""
 	if start := strings.Index(content, "description: |-"); start != -1 {
 		if end := strings.Index(content[start:], "\n---"); end != -1 {
-			desc = strings.ReplaceAll(strings.TrimSpace(content[start+len("description: |-"):start+end]), "\n", " ")
+			substring := content[start+len("description: |-"):start+end]
+			trimmed := strings.TrimSpace(substring)
+			desc = strings.ReplaceAll(trimmed, "\n", " ")
 		} else {
-			desc = strings.ReplaceAll(strings.TrimSpace(content[start+len("description: |-"):]), "\n", " ")
+			substring := content[start+len("description: |-"):]
+			trimmed := strings.TrimSpace(substring)
+			desc = strings.ReplaceAll(trimmed, "\n", " ")
 		}
 	}
 	return desc, nil
