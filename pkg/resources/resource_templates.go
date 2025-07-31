@@ -16,7 +16,7 @@ import (
 )
 
 func RegisterResourceTemplates(hcServer *server.MCPServer, logger *log.Logger) {
-	hcServer.AddResourceTemplate(ProviderResourceTemplate(fmt.Sprintf("%s/{namespace}/name/{name}/version/{version}", utils.PROVIDER_BASE_PATH), "Provider details", logger))
+	hcServer.AddResourceTemplate(ProviderResourceTemplate(path.Join(utils.PROVIDER_BASE_PATH, "{namespace}", "name", "{name}", "version", "{version}"), utils.PROVIDER_BASE_PATH), "Provider details", logger))
 }
 
 func ProviderResourceTemplate(resourceURI string, description string, logger *log.Logger) (mcp.ResourceTemplate, server.ResourceTemplateHandlerFunc) {
