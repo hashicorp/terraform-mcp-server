@@ -48,7 +48,7 @@ func (r *DynamicToolRegistry) RegisterSessionWithTFE(sessionID string) {
 	defer r.mu.Unlock()
 
 	r.sessionsWithTFE[sessionID] = true
-	r.logger.WithField("session_id", sessionID).Info("Session registered with TFE client")
+	r.logger.Info("Session registered with TFE client")
 
 	// If this is the first session with TFE, register the tools
 	if !r.tfeToolsRegistered {
