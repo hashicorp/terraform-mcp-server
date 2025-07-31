@@ -26,6 +26,7 @@ func ModuleDetails(logger *log.Logger) server.ServerTool {
 			mcp.WithDescription(`Fetches up-to-date documentation on how to use a Terraform module. You must call 'search_modules' first to obtain the exact valid and compatible module_id required to use this tool.`),
 			mcp.WithTitleAnnotation("Retrieve documentation for a specific Terraform module"),
 			mcp.WithOpenWorldHintAnnotation(true),
+			mcp.WithReadOnlyHintAnnotation(true),
 			mcp.WithString("module_id",
 				mcp.Required(),
 				mcp.Description("Exact valid and compatible module_id retrieved from search_modules (e.g., 'squareops/terraform-kubernetes-mongodb/mongodb/2.1.1', 'GoogleCloudPlatform/vertex-ai/google/0.2.0')"),

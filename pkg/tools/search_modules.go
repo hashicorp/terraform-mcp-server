@@ -34,6 +34,7 @@ Return the selected module_id and explain your choice. If there are multiple goo
 If no modules were found, reattempt the search with a new moduleName query.`),
 			mcp.WithTitleAnnotation("Search and match Terraform modules based on name and relevance"),
 			mcp.WithOpenWorldHintAnnotation(true),
+			mcp.WithReadOnlyHintAnnotation(true),
 			mcp.WithString("module_query",
 				mcp.Required(),
 				mcp.Description("The query to search for Terraform modules."),

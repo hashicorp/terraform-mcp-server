@@ -31,6 +31,7 @@ When selecting the best match, consider the following:
 Return the selected provider_doc_id and explain your choice.
 If there are multiple good matches, mention this but proceed with the most relevant one.`),
 			mcp.WithTitleAnnotation("Identify the most relevant provider document ID for a Terraform service"),
+			mcp.WithOpenWorldHintAnnotation(true),
 			mcp.WithReadOnlyHintAnnotation(true),
 			mcp.WithString("provider_name",
 				mcp.Required(),
@@ -105,8 +106,7 @@ func resolveProviderDocIDHandler(ctx context.Context, request mcp.CallToolReques
 	uri := fmt.Sprintf("providers/%s/%s/%s", providerDetail.ProviderNamespace, providerDetail.ProviderName, providerDetail.ProviderVersion)
 	response, err := client.SendRegistryCall(httpClient, "GET", uri, logger)
 	if err != nil {
-		return nil, utils.LogAndReturnError(logger, fmt.Sprintf(`Error getting the "%s" provider, 
-			with version "%s" in the %s namespace, %s`, providerDetail.ProviderName, providerDetail.ProviderVersion, providerDetail.ProviderNamespace, defaultErrorGuide), nil)
+		return nil, utils.LogAndReturnError(logger, fmt.Sprintf(`Error getting the "%s" provider, with version "%s" in the %s namespace, %s`, providerDetail.ProviderName, providerDetail.ProviderVersion, providerDetail.ProviderNamespace, defaultErrorGuide), nil)
 	}
 
 	var providerDocs client.ProviderDocs
@@ -176,8 +176,7 @@ func resolveProviderDetails(request mcp.CallToolRequest, registryClient *http.Cl
 			if providerNamespace != tryProviderNamespace {
 				tryProviderNamespace = fmt.Sprintf(`"%s" or the "%s"`, providerNamespace, tryProviderNamespace)
 			}
-			return providerDetail, utils.LogAndReturnError(logger, fmt.Sprintf(`Error getting the "%s" provider, 
-			with version "%s" in the %s namespace, %s`, providerName, providerVersion, tryProviderNamespace, defaultErrorGuide), nil)
+			return providerDetail, utils.LogAndReturnError(logger, fmt.Sprintf(`Error getting the "%s" provider, with version "%s" in the %s namespace, %s`, providerName, providerVersion, tryProviderNamespace, defaultErrorGuide), nil)
 		}
 		providerNamespace = tryProviderNamespace // Update the namespace to hashicorp, if successful
 	}

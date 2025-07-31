@@ -23,6 +23,7 @@ func GetProviderDocs(logger *log.Logger) server.ServerTool {
 You must call 'resolve_provider_doc_id' tool first to obtain the exact tfprovider-compatible provider_doc_id required to use this tool.`),
 			mcp.WithTitleAnnotation("Fetch detailed Terraform provider documentation using a document ID"),
 			mcp.WithOpenWorldHintAnnotation(true),
+			mcp.WithReadOnlyHintAnnotation(true),
 			mcp.WithString("provider_doc_id",
 				mcp.Required(),
 				mcp.Description("Exact tfprovider-compatible provider_doc_id, (e.g., '8894603', '8906901') retrieved from 'resolve_provider_doc_id'")),

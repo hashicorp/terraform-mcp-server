@@ -30,4 +30,11 @@ func InitTools(hcServer *server.MCPServer, logger *log.Logger) {
 
 	getPolicyDetailsTool := PolicyDetails(logger)
 	hcServer.AddTool(getPolicyDetailsTool.Tool, getPolicyDetailsTool.Handler)
+
+	// Terraform tools
+	getListTerraformOrgsTool := ListTerraformOrgs(logger)
+	hcServer.AddTool(getListTerraformOrgsTool.Tool, getListTerraformOrgsTool.Handler)
+
+	getListTerraformProjectsTool := ListTerraformProjects(logger)
+	hcServer.AddTool(getListTerraformProjectsTool.Tool, getListTerraformProjectsTool.Handler)
 }

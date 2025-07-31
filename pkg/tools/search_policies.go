@@ -32,6 +32,7 @@ Return the selected policyID and explain your choice. If there are multiple good
 If no policies were found, reattempt the search with a new policy_query.`),
 			mcp.WithTitleAnnotation("Search and match Terraform policies based on name and relevance"),
 			mcp.WithOpenWorldHintAnnotation(true),
+			mcp.WithReadOnlyHintAnnotation(true),
 			mcp.WithString("policy_query",
 				mcp.Required(),
 				mcp.Description("The query to search for Terraform modules."),

@@ -23,6 +23,7 @@ func PolicyDetails(logger *log.Logger) server.ServerTool {
 			mcp.WithDescription(`Fetches up-to-date documentation for a specific policy from the Terraform registry. You must call 'search_policies' first to obtain the exact terraform_policy_id required to use this tool.`),
 			mcp.WithTitleAnnotation("Fetch detailed Terraform policy documentation using a terraform_policy_id"),
 			mcp.WithOpenWorldHintAnnotation(true),
+			mcp.WithReadOnlyHintAnnotation(true),
 			mcp.WithString("terraform_policy_id",
 				mcp.Required(),
 				mcp.Description("Matching terraform_policy_id retrieved from the 'search_policies' tool (e.g., 'policies/hashicorp/CIS-Policy-Set-for-AWS-Terraform/1.0.1')"),
@@ -70,7 +71,7 @@ func getPolicyDetailsHandler(ctx context.Context, request mcp.CallToolRequest, l
 		if policy.Type == "policy-modules" {
 			moduleList += fmt.Sprintf(`
 module "%s" {
-source = "https://registry.terraform.io/v2%s/policy-module/%s.sentinel?checksum=sha256:%s"
+	source = "https://registry.terraform.io/v2%s/policy-module/%s.sentinel?checksum=sha256:%s"
 }
 `, policy.Attributes.Name, terraformPolicyID, policy.Attributes.Name, policy.Attributes.Shasum)
 		}
@@ -87,8 +88,8 @@ source = "https://registry.terraform.io/v2%s/policy-module/%s.sentinel?checksum=
 	hclTemplate := fmt.Sprintf(`
 %s
 policy "<<POLICY_NAME>>" {
-source = "https://registry.terraform.io/v2%s/policy/<<POLICY_NAME>>.sentinel?checksum=<<POLICY_CHECKSUM>>"
-enforcement_level = "advisory"
+	source = "https://registry.terraform.io/v2%s/policy/<<POLICY_NAME>>.sentinel?checksum=<<POLICY_CHECKSUM>>"
+	enforcement_level = "advisory"
 }
 `, moduleList, terraformPolicyID)
 	builder.WriteString(hclTemplate)
