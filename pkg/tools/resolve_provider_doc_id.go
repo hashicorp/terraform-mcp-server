@@ -107,7 +107,7 @@ func resolveProviderDocIDHandler(registryClient *http.Client, request mcp.CallTo
 
 	var builder strings.Builder
 	builder.WriteString(fmt.Sprintf("Available Documentation (top matches) for %s in Terraform provider %s/%s version: %s\n\n", providerDetail.ProviderDataType, providerDetail.ProviderNamespace, providerDetail.ProviderName, providerDetail.ProviderVersion))
-	builder.WriteString("Each result includes:\n- providerDocID: tfprovider-compatible identifier\n- Title: Service or resource name\n- Category: Type of document\n")
+	builder.WriteString("Each result includes:\n- providerDocID: tfprovider-compatible identifier\n- Title: Service or resource name\n- Category: Type of document\n- Description: Brief summary of the document\n")
 	builder.WriteString("For best results, select libraries based on the service_slug match and category of information requested.\n\n---\n\n")
 
 	contentAvailable := false
@@ -119,9 +119,9 @@ func resolveProviderDocIDHandler(registryClient *http.Client, request mcp.CallTo
 				contentAvailable = true
 				descriptionSnippet, err := getContentSnippet(registryClient, doc.ID, logger)
 				if err != nil {
-					descriptionSnippet = fmt.Sprintf("No additional description for provider_doc_id %s: %v", doc.ID, err)
+					descriptionSnippet = ""
 				}
-				builder.WriteString(fmt.Sprintf("- providerDocID: %s\n- Title: %s\n- Category: %s\n- description: %s\n---\n", doc.ID, doc.Title, doc.Category, descriptionSnippet))
+				builder.WriteString(fmt.Sprintf("- providerDocID: %s\n- Title: %s\n- Category: %s\n- Description: %s\n---\n", doc.ID, doc.Title, doc.Category, descriptionSnippet))
 			}
 		}
 	}
@@ -214,14 +214,14 @@ func get_provider_docsV2(registryClient *http.Client, providerDetail client.Prov
 
 	var builder strings.Builder
 	builder.WriteString(fmt.Sprintf("Available Documentation (top matches) for %s in Terraform provider %s/%s version: %s\n\n", providerDetail.ProviderDataType, providerDetail.ProviderNamespace, providerDetail.ProviderName, providerDetail.ProviderVersion))
-	builder.WriteString("Each result includes:\n- providerDocID: tfprovider-compatible identifier\n- Title: Service or resource name\n- Category: Type of document\n")
+	builder.WriteString("Each result includes:\n- providerDocID: tfprovider-compatible identifier\n- Title: Service or resource name\n- Category: Type of document\n- Description: Brief summary of the document\n")
 	builder.WriteString("For best results, select libraries based on the service_slug match and category of information requested.\n\n---\n\n")
 	for _, doc := range docs {
 		descriptionSnippet, err := getContentSnippet(registryClient, doc.ID, logger)
 		if err != nil {
-			descriptionSnippet = fmt.Sprintf("No additional description for provider_doc_id %s: %v", doc.ID, err)
+			descriptionSnippet = ""
 		}
-		builder.WriteString(fmt.Sprintf("- providerDocID: %s\n- Title: %s\n- Category: %s\n- description: %s\n---\n", doc.ID, doc.Attributes.Title, doc.Attributes.Category, descriptionSnippet))
+		builder.WriteString(fmt.Sprintf("- providerDocID: %s\n- Title: %s\n- Category: %s\n- Description: %s\n---\n", doc.ID, doc.Attributes.Title, doc.Attributes.Category, descriptionSnippet))
 	}
 
 	return builder.String(), nil
@@ -238,11 +238,7 @@ func getContentSnippet(registryClient *http.Client, docID string, logger *log.Lo
 	}
 
 	content := docDescription.Data.Attributes.Content
-	// Only consider first 500 chars of content
-	if len(content) > 500 {
-		content = strings.TrimSpace(content[:500]) + "..."
-	}
-	// Try to extract description from markdown frontmatter
+	// Try to extract description from markdown content
 	desc := ""
 	if start := strings.Index(content, "description: |-"); start != -1 {
 		if end := strings.Index(content[start:], "\n---"); end != -1 {
