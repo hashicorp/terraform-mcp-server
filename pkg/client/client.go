@@ -97,7 +97,7 @@ func GetTerraformClientFromContext(ctx context.Context, logger *log.Logger) (*te
 		return client, nil
 	}
 
-	logger.WithField("session_id", session.SessionID()).Warn("Terraform client not found, creating a new one")
+	logger.Warnf("Terraform client not found, creating a new one")
 	return CreateTerraformClientForSession(ctx, session, logger)
 }
 
