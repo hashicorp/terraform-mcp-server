@@ -103,7 +103,7 @@ func resolveProviderDocIDHandler(ctx context.Context, request mcp.CallToolReques
 	}
 
 	// For resources/data-sources, use the v1 API for better performance (single response)
-	uri := fmt.Sprintf("providers/%s/%s/%s", providerDetail.ProviderNamespace, providerDetail.ProviderName, providerDetail.ProviderVersion)
+	uri := path.Join("providers", providerDetail.ProviderNamespace, providerDetail.ProviderName, providerDetail.ProviderVersion)
 	response, err := client.SendRegistryCall(httpClient, "GET", uri, logger)
 	if err != nil {
 		return nil, utils.LogAndReturnError(logger, fmt.Sprintf(`Error getting the "%s" provider, with version "%s" in the %s namespace, %s`, providerDetail.ProviderName, providerDetail.ProviderVersion, providerDetail.ProviderNamespace, defaultErrorGuide), nil)
