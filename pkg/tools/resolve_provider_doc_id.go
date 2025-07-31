@@ -119,7 +119,7 @@ func resolveProviderDocIDHandler(registryClient *http.Client, request mcp.CallTo
 				contentAvailable = true
 				descriptionSnippet, err := getContentSnippet(registryClient, doc.ID, logger)
 				if err != nil {
-					descriptionSnippet = ""
+					logger.Warnf("Error fetching content snippet for provider doc ID: %s: %v", doc.ID, err)
 				}
 				builder.WriteString(fmt.Sprintf("- providerDocID: %s\n- Title: %s\n- Category: %s\n- Description: %s\n---\n", doc.ID, doc.Title, doc.Category, descriptionSnippet))
 			}
@@ -219,7 +219,7 @@ func get_provider_docsV2(registryClient *http.Client, providerDetail client.Prov
 	for _, doc := range docs {
 		descriptionSnippet, err := getContentSnippet(registryClient, doc.ID, logger)
 		if err != nil {
-			descriptionSnippet = ""
+			logger.Warnf("Error fetching content snippet for provider doc ID: %s: %v", doc.ID, err)
 		}
 		builder.WriteString(fmt.Sprintf("- providerDocID: %s\n- Title: %s\n- Category: %s\n- Description: %s\n---\n", doc.ID, doc.Attributes.Title, doc.Attributes.Category, descriptionSnippet))
 	}
@@ -242,7 +242,7 @@ func getContentSnippet(registryClient *http.Client, docID string, logger *log.Lo
 	desc := ""
 	if start := strings.Index(content, "description: |-"); start != -1 {
 		if end := strings.Index(content[start:], "\n---"); end != -1 {
-			substring := content[start+len("description: |-"):start+end]
+			substring := content[start+len("description: |-") : start+end]
 			trimmed := strings.TrimSpace(substring)
 			desc = strings.ReplaceAll(trimmed, "\n", " ")
 		} else {
@@ -250,6 +250,10 @@ func getContentSnippet(registryClient *http.Client, docID string, logger *log.Lo
 			trimmed := strings.TrimSpace(substring)
 			desc = strings.ReplaceAll(trimmed, "\n", " ")
 		}
+	}
+
+	if len(desc) > 300 {
+		return desc[:300] + "...", nil
 	}
 	return desc, nil
 }
