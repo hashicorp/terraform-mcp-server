@@ -19,7 +19,7 @@ import (
 )
 
 // ResolveProviderDocID creates a tool to get provider details from registry.
-func ResolveProviderDocID(registryClient *http.Client, logger *log.Logger) server.ServerTool {
+func ResolveProviderDocID(logger *log.Logger) server.ServerTool {
 	return server.ServerTool{
 		Tool: mcp.NewTool("resolve_provider_doc_id",
 			mcp.WithDescription(`This tool retrieves a list of potential documents based on the service_slug and provider_data_type provided.
@@ -31,6 +31,7 @@ When selecting the best match, consider the following:
 Return the selected provider_doc_id and explain your choice.
 If there are multiple good matches, mention this but proceed with the most relevant one.`),
 			mcp.WithTitleAnnotation("Identify the most relevant provider document ID for a Terraform service"),
+			mcp.WithOpenWorldHintAnnotation(true),
 			mcp.WithReadOnlyHintAnnotation(true),
 			mcp.WithString("provider_name",
 				mcp.Required(),
@@ -53,15 +54,24 @@ If there are multiple good matches, mention this but proceed with the most relev
 				mcp.Description("The version of the Terraform provider to retrieve in the format 'x.y.z', or 'latest' to get the latest version")),
 		),
 		Handler: func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-			return resolveProviderDocIDHandler(registryClient, request, logger)
+			return resolveProviderDocIDHandler(ctx, request, logger)
 		},
 	}
 }
 
-func resolveProviderDocIDHandler(registryClient *http.Client, request mcp.CallToolRequest, logger *log.Logger) (*mcp.CallToolResult, error) {
+func resolveProviderDocIDHandler(ctx context.Context, request mcp.CallToolRequest, logger *log.Logger) (*mcp.CallToolResult, error) {
 	// For typical provider and namespace hallucinations
 	defaultErrorGuide := "please check the provider name, provider namespace or the provider version you're looking for, perhaps the provider is published under a different namespace or company name"
-	providerDetail, err := resolveProviderDetails(request, registryClient, defaultErrorGuide, logger)
+
+	// Get a simple http client to access the public Terraform registry from context
+	terraformClients, err := client.GetTerraformClientFromContext(ctx, logger)
+	if err != nil {
+		logger.WithError(err).Error("failed to get http client for public Terraform registry")
+		return mcp.NewToolResultError(fmt.Sprintf("failed to get http client for public Terraform registry: %v", err)), nil
+	}
+
+	httpClient := terraformClients.HttpClient
+	providerDetail, err := resolveProviderDetails(request, httpClient, defaultErrorGuide, logger)
 	if err != nil {
 		return nil, err
 	}
@@ -79,7 +89,7 @@ func resolveProviderDocIDHandler(registryClient *http.Client, request mcp.CallTo
 
 	// Check if we need to use v2 API for guides, functions, or overview
 	if utils.IsV2ProviderDataType(providerDetail.ProviderDataType) {
-		content, err := get_provider_docsV2(registryClient, providerDetail, logger)
+		content, err := get_provider_docsV2(httpClient, providerDetail, logger)
 		if err != nil {
 			errMessage := fmt.Sprintf(`No %s documentation found for provider '%s' in the '%s' namespace, %s`,
 				providerDetail.ProviderDataType, providerDetail.ProviderName, providerDetail.ProviderNamespace, defaultErrorGuide)
@@ -94,10 +104,9 @@ func resolveProviderDocIDHandler(registryClient *http.Client, request mcp.CallTo
 
 	// For resources/data-sources, use the v1 API for better performance (single response)
 	uri := fmt.Sprintf("providers/%s/%s/%s", providerDetail.ProviderNamespace, providerDetail.ProviderName, providerDetail.ProviderVersion)
-	response, err := client.SendRegistryCall(registryClient, "GET", uri, logger)
+	response, err := client.SendRegistryCall(httpClient, "GET", uri, logger)
 	if err != nil {
-		return nil, utils.LogAndReturnError(logger, fmt.Sprintf(`Error getting the "%s" provider, 
-			with version "%s" in the %s namespace, %s`, providerDetail.ProviderName, providerDetail.ProviderVersion, providerDetail.ProviderNamespace, defaultErrorGuide), nil)
+		return nil, utils.LogAndReturnError(logger, fmt.Sprintf(`Error getting the "%s" provider, with version "%s" in the %s namespace, %s`, providerDetail.ProviderName, providerDetail.ProviderVersion, providerDetail.ProviderNamespace, defaultErrorGuide), nil)
 	}
 
 	var providerDocs client.ProviderDocs
@@ -167,8 +176,7 @@ func resolveProviderDetails(request mcp.CallToolRequest, registryClient *http.Cl
 			if providerNamespace != tryProviderNamespace {
 				tryProviderNamespace = fmt.Sprintf(`"%s" or the "%s"`, providerNamespace, tryProviderNamespace)
 			}
-			return providerDetail, utils.LogAndReturnError(logger, fmt.Sprintf(`Error getting the "%s" provider, 
-			with version "%s" in the %s namespace, %s`, providerName, providerVersion, tryProviderNamespace, defaultErrorGuide), nil)
+			return providerDetail, utils.LogAndReturnError(logger, fmt.Sprintf(`Error getting the "%s" provider, with version "%s" in the %s namespace, %s`, providerName, providerVersion, tryProviderNamespace, defaultErrorGuide), nil)
 		}
 		providerNamespace = tryProviderNamespace // Update the namespace to hashicorp, if successful
 	}
