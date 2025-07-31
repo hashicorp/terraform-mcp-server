@@ -52,7 +52,7 @@ func getProviderDocsHandler(ctx context.Context, request mcp.CallToolRequest, lo
 
 	httpClient := terraformClients.HttpClient
 
-	detailResp, err := client.SendRegistryCall(httpClient, "GET", fmt.Sprintf("provider-docs/%s", providerDocID), logger, "v2")
+	detailResp, err := client.SendRegistryCall(httpClient, "GET", path.Join("provider-docs", providerDocID), logger, "v2")
 	if err != nil {
 		return nil, utils.LogAndReturnError(logger, fmt.Sprintf("Error fetching provider-docs/%s, please make sure provider_doc_id is valid and the resolve_provider_doc_id tool has run prior", providerDocID), err)
 	}
