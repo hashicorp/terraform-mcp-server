@@ -23,7 +23,7 @@ all: build
 ARCH     = $(shell A=$$(uname -m); [ $$A = x86_64 ] && A=amd64; echo $$A)
 OS       = $(shell uname | tr [[:upper:]] [[:lower:]])
 build:
-	CGO_ENABLED=0 GOARCH=$(ARCH) GOOS=$(OS) $(GO) build $(LDFLAGS) -o $(BINARY_NAME) ./cmd/terraform-mcp-server
+	CGO_ENABLED=0 GOARCH=$(ARCH) GOOS=$(OS) $(GO) build $(LDFLAGS) -o bin/$(BINARY_NAME) ./cmd/terraform-mcp-server
 
 crt-build:
 	@mkdir -p $(TARGET_DIR)
