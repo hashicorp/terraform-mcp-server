@@ -142,7 +142,7 @@ func NewSessionHandler(ctx context.Context, session server.ClientSession, logger
 		if registryCallback := getToolRegistryCallback(); registryCallback != nil {
 			registryCallback.RegisterSessionWithTFE(session.SessionID())
 		}
-		logger.WithField("session_id", session.SessionID()).Info("Session has valid TFE client - registered with tool registry")
+		logger.Info("Session has valid TFE client - registered with tool registry")
 	} else {
 		logger.WithField("session_id", session.SessionID()).Info("Session has no valid TFE client - TFE tools will not be available")
 	}
