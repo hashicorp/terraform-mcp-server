@@ -132,12 +132,6 @@ func TerraformContextMiddleware(logger *log.Logger) func(http.Handler) http.Hand
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			requiredHeaders := []string{TerraformAddress, TerraformToken, TerraformSkipTLSVerify}
 			ctx := r.Context()
-			/*
-				if !r.URL.Query().Has("Authorization") || r.Header.Get("Authorization") == "" {
-					http.Error(w, "Unauthorized: Please provide valid credentials", http.StatusUnauthorized)
-					return
-				}
-			*/
 			for _, header := range requiredHeaders {
 				// Priority order: HTTP header -> Query parameter -> Environment variable
 				headerValue := r.Header.Get(textproto.CanonicalMIMEHeaderKey(header))
