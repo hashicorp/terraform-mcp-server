@@ -4,7 +4,10 @@
 package client
 
 import (
+	"context"
+	"fmt"
 	"net/http"
+	"net/textproto"
 	"os"
 	"strings"
 
@@ -118,5 +121,49 @@ func NewSecurityHandler(handler http.Handler, allowedOrigins []string, corsMode 
 		allowedOrigins: allowedOrigins,
 		corsMode:       corsMode,
 		logger:         logger,
+	}
+}
+
+// TerraformContextMiddleware adds Terraform-related header values to the request context
+// This middleware extracts Terraform configuration from HTTP headers, query parameters,
+// or environment variables and adds them to the request context for use by MCP tools
+func TerraformContextMiddleware(logger *log.Logger) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			requiredHeaders := []string{TerraformAddress, TerraformToken, TerraformSkipTLSVerify}
+			ctx := r.Context()
+			for _, header := range requiredHeaders {
+				// Priority order: HTTP header -> Query parameter -> Environment variable
+				headerValue := r.Header.Get(textproto.CanonicalMIMEHeaderKey(header))
+
+				if headerValue == "" {
+					headerValue = r.URL.Query().Get(header)
+
+					// Explicitly disallow TerraformToken in query parameters for security reasons
+					if header == TerraformToken && headerValue != "" {
+						logger.Info(fmt.Sprintf("Terraform token was provided in query parameters by client %v, terminating request", r.RemoteAddr))
+						http.Error(w, "Terraform token should not be provided in query parameters for security reasons, use the terraform_token header", http.StatusBadRequest)
+						return
+					}
+				}
+
+				if headerValue == "" {
+					headerValue = getEnv(header, "")
+				}
+
+				// Add to context using the header name as key
+				ctx = context.WithValue(ctx, contextKey(header), headerValue)
+
+				// Log the source of the configuration (without exposing sensitive values)
+				if header == TerraformToken && headerValue != "" {
+					logger.Debug("Terraform token provided via request context")
+				} else if header == TerraformAddress && headerValue != "" {
+					logger.Debug("Terraform address configured via request context")
+				}
+			}
+
+			// Call the next handler with the enriched context
+			next.ServeHTTP(w, r.WithContext(ctx))
+		})
 	}
 }
