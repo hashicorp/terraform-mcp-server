@@ -150,8 +150,8 @@ func runCORSTests(t *testing.T, mcpURL, mode, configuredOrigins string) {
 
 	// Define base test cases that apply to all modes
 	baseTestCases := []testCase{
-		{"GET with allowed origin", "GET", "https://example.com", 202, true},
-		{"GET with no origin", "GET", "", 202, false},
+		{"GET with allowed origin", "GET", "https://example.com", 200, true},
+		{"GET with no origin", "GET", "", 200, false},
 		{"OPTIONS preflight with allowed origin", "OPTIONS", "https://example.com", 200, true},
 	}
 
@@ -163,15 +163,15 @@ func runCORSTests(t *testing.T, mcpURL, mode, configuredOrigins string) {
 	}
 
 	developmentModeTests := []testCase{
-		{"GET with localhost origin", "GET", "http://localhost:3000", 202, true},
-		{"GET with IPv4 localhost", "GET", "http://127.0.0.1:3000", 202, true},
-		{"GET with IPv6 localhost", "GET", "http://[::1]:3000", 202, true},
+		{"GET with localhost origin", "GET", "http://localhost:3000", 200, true},
+		{"GET with IPv4 localhost", "GET", "http://127.0.0.1:3000", 200, true},
+		{"GET with IPv6 localhost", "GET", "http://[::1]:3000", 200, true},
 		{"GET with disallowed origin", "GET", "https://evil.com", 403, false},
 		{"OPTIONS with localhost origin", "OPTIONS", "http://localhost:3000", 200, true},
 	}
 
 	disabledModeTests := []testCase{
-		{"GET with any origin", "GET", "https://any-site.com", 202, true},
+		{"GET with any origin", "GET", "https://any-site.com", 200, true},
 		{"OPTIONS with any origin", "OPTIONS", "https://any-site.com", 200, true},
 	}
 
@@ -195,7 +195,7 @@ func runCORSTests(t *testing.T, mcpURL, mode, configuredOrigins string) {
 			var sessionID string
 			if tc.method != "OPTIONS" {
 				// Only try to initialize if we expect it to succeed
-				if tc.expectedStatus == 202 {
+				if tc.expectedStatus == 200 {
 					sessionID = initializeMCPSession(t, mcpURL, tc.origin)
 					require.NotEmpty(t, sessionID, "Expected to get a session ID for allowed origin")
 				} else {

@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"path"
 
 	"github.com/hashicorp/terraform-mcp-server/pkg/client"
 	"github.com/hashicorp/terraform-mcp-server/pkg/utils"
@@ -16,10 +17,16 @@ import (
 )
 
 func RegisterResourceTemplates(hcServer *server.MCPServer, logger *log.Logger) {
-	hcServer.AddResourceTemplate(ProviderResourceTemplate(path.Join(utils.PROVIDER_BASE_PATH, "{namespace}", "name", "{name}", "version", "{version}"), utils.PROVIDER_BASE_PATH), "Provider details", logger))
+	hcServer.AddResourceTemplate(
+		providerResourceTemplate(
+			path.Join(utils.PROVIDER_BASE_PATH, "{namespace}", "name", "{name}", "version", "{version}"),
+			"Provider details",
+			logger,
+		),
+	)
 }
 
-func ProviderResourceTemplate(resourceURI string, description string, logger *log.Logger) (mcp.ResourceTemplate, server.ResourceTemplateHandlerFunc) {
+func providerResourceTemplate(resourceURI string, description string, logger *log.Logger) (mcp.ResourceTemplate, server.ResourceTemplateHandlerFunc) {
 	return mcp.NewResourceTemplate(
 			resourceURI,
 			description,

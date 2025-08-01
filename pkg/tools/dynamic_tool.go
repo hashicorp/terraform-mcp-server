@@ -123,12 +123,11 @@ func (r *DynamicToolRegistry) createDynamicTFETool(toolName string, toolFactory 
 			terraformClient := client.GetTerraformClient(sessionID)
 			if terraformClient == nil || terraformClient.TfeClient == nil {
 				r.logger.WithFields(log.Fields{
-					"tool":       toolName,
+					"tool": toolName,
 				}).Warn("TFE tool called but session has no valid TFE client")
 
 				return mcp.NewToolResultError("This tool is not available. This tool requires a valid Terraform Cloud/Enterprise token and configuration. Please ensure TFE_TOKEN and TFE_ADDRESS environment variables are properly set."), nil
 			}
-
 			// If we found a valid client that wasn't registered, register it now
 			r.RegisterSessionWithTFE(sessionID)
 		}

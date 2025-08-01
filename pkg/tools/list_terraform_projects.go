@@ -26,6 +26,7 @@ func ListTerraformProjects(logger *log.Logger) server.ServerTool {
 				mcp.Required(),
 				mcp.Description("The name of the Terraform organization to list projects for."),
 			),
+			utils.WithPagination(),
 		),
 		Handler: func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			return listTerraformProjectsHandler(ctx, req, logger)
@@ -42,6 +43,11 @@ func listTerraformProjectsHandler(ctx context.Context, request mcp.CallToolReque
 		return nil, utils.LogAndReturnError(logger, "terraform_org_name cannot be empty", nil)
 	}
 
+	pagination, err := utils.OptionalPaginationParams(request)
+	if err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+
 	// Get a Terraform client from context
 	terraformClients, err := client.GetTerraformClientFromContext(ctx, logger)
 	if err != nil {
@@ -55,7 +61,8 @@ func listTerraformProjectsHandler(ctx context.Context, request mcp.CallToolReque
 	// Fetch the list of projects
 	projects, err := tfeClient.Projects.List(ctx, terraformOrgName, &tfe.ProjectListOptions{
 		ListOptions: tfe.ListOptions{
-			PageSize: 100,
+			PageNumber: pagination.Page,
+			PageSize:   pagination.PageSize,
 		},
 	})
 

@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"strings"
 
 	"github.com/hashicorp/terraform-mcp-server/pkg/client"
@@ -62,8 +63,14 @@ func getSearchPoliciesHandler(ctx context.Context, request mcp.CallToolRequest, 
 	}
 
 	httpClient := terraformClients.HttpClient
-	// static list of 100 is fine for now
-	policyResp, err := client.SendRegistryCall(httpClient, "GET", (&url.URL{Path: "policies", RawQuery: url.Values{"page[size]": {"100"}, "include": {"latest-version"}}.Encode()}).String(), logger, "v2")
+	uri := (&url.URL{
+		Path: "policies",
+		RawQuery: url.Values{
+			"page[size]": {"100"}, // static list of 100 is fine for now
+			"include":    {"latest-version"},
+		}.Encode(),
+	}).String()
+	policyResp, err := client.SendRegistryCall(httpClient, "GET", uri, logger, "v2")
 	if err != nil {
 		return nil, utils.LogAndReturnError(logger, "Failed to fetch policies: registry API did not return a successful response", err)
 	}

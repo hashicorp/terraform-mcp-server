@@ -22,14 +22,15 @@ func ListTerraformOrgs(logger *log.Logger) server.ServerTool {
 			mcp.WithDescription(`Fetches a list of all Terraform organizations.`),
 			mcp.WithTitleAnnotation("List all Terraform organizations"),
 			mcp.WithReadOnlyHintAnnotation(true),
+			utils.WithPagination(),
 		),
 		Handler: func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-			return listTerraformOrgsHandler(ctx, logger)
+			return listTerraformOrgsHandler(ctx, req, logger)
 		},
 	}
 }
 
-func listTerraformOrgsHandler(ctx context.Context, logger *log.Logger) (*mcp.CallToolResult, error) {
+func listTerraformOrgsHandler(ctx context.Context, request mcp.CallToolRequest, logger *log.Logger) (*mcp.CallToolResult, error) {
 	// Get a Terraform client from context
 	terraformClients, err := client.GetTerraformClientFromContext(ctx, logger)
 	if err != nil {
@@ -41,9 +42,15 @@ func listTerraformOrgsHandler(ctx context.Context, logger *log.Logger) (*mcp.Cal
 		return nil, utils.LogAndReturnError(logger, "TFE client is not available - please ensure TFE_TOKEN and TFE_ADDRESS are properly configured", nil)
 	}
 
+	pagination, err := utils.OptionalPaginationParams(request)
+	if err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+
 	orgs, err := tfeClient.Organizations.List(ctx, &tfe.OrganizationListOptions{
 		ListOptions: tfe.ListOptions{
-			PageSize: 100,
+			PageNumber: pagination.Page,
+			PageSize:   pagination.PageSize,
 		},
 	})
 
