@@ -448,6 +448,16 @@ var getLatestModuleVersionTestCases = []RegistryTestCase{
 		},
 	},
 	{
+		TestName:        "valid_aws_module_case_insensitivity",
+		TestShouldFail:  false,
+		TestDescription: "Testing get_latest_module_version with valid but case insensitive AWS module",
+		TestPayload: map[string]interface{}{
+			"module_publisher": "TerraFORM-AwS-ModuLES",
+			"module_name":      "VpC",
+			"module_provider":  "AWs",
+		},
+	},
+	{
 		TestName:        "valid_hashicorp_module",
 		TestShouldFail:  false,
 		TestDescription: "Testing get_latest_module_version with valid HashiCorp module",
@@ -530,6 +540,15 @@ var getLatestProviderVersionTestCases = []RegistryTestCase{
 		TestPayload: map[string]interface{}{
 			"namespace": "hashicorp",
 			"name":      "aws",
+		},
+	},
+	{
+		TestName:        "valid_aws_provider_case_insensitive",
+		TestShouldFail:  false,
+		TestDescription: "Testing get_latest_provider_version with valid AWS provider with case insensitivity",
+		TestPayload: map[string]interface{}{
+			"namespace": "HashiCORp",
+			"name":      "AwS",
 		},
 	},
 	{

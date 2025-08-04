@@ -73,6 +73,7 @@ func resolveProviderDocIDHandler(registryClient *http.Client, request mcp.CallTo
 	if serviceSlug == "" {
 		return nil, utils.LogAndReturnError(logger, "service_slug cannot be empty", nil)
 	}
+	serviceSlug = strings.ToLower(serviceSlug)
 
 	providerDataType := request.GetString("provider_data_type", "resources")
 	providerDetail.ProviderDataType = providerDataType
@@ -140,15 +141,20 @@ func resolveProviderDetails(request mcp.CallToolRequest, registryClient *http.Cl
 	if providerName == "" {
 		return providerDetail, fmt.Errorf("provider_name is required and must be a string")
 	}
+	providerName = strings.ToLower(providerName)
 
 	providerNamespace := request.GetString("provider_namespace", "")
 	if providerNamespace == "" {
 		logger.Debugf(`Error getting latest provider version in "%s" namespace, trying the hashicorp namespace`, providerNamespace)
 		providerNamespace = "hashicorp"
 	}
+	providerNamespace = strings.ToLower(providerNamespace)
 
 	providerVersion := request.GetString("provider_version", "latest")
+	providerVersion = strings.ToLower(providerVersion)
+
 	providerDataType := request.GetString("provider_data_type", "resources")
+	providerDataType = strings.ToLower(providerDataType)
 
 	var err error
 	providerVersionValue := ""

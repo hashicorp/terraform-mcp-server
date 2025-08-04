@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 
 	"github.com/hashicorp/terraform-mcp-server/pkg/client"
 	"github.com/hashicorp/terraform-mcp-server/pkg/utils"
@@ -43,16 +44,21 @@ func GetLatestModuleVersion(registryClient *http.Client, logger *log.Logger) ser
 func getLatestModuleVersionHandler(registryClient *http.Client, request mcp.CallToolRequest, logger *log.Logger) (*mcp.CallToolResult, error) {
 	modulePublisher, err := request.RequireString("module_publisher")
 	if err != nil {
-		return nil, utils.LogAndReturnError(logger, "module_publisher is required", err)
+		return nil, utils.LogAndReturnError(logger, "Input required: 'module_publisher' (the publisher of the module)", err)
 	}
+	modulePublisher = strings.ToLower(modulePublisher)
+
 	moduleName, err := request.RequireString("module_name")
 	if err != nil {
-		return nil, utils.LogAndReturnError(logger, "module_name is required", err)
+		return nil, utils.LogAndReturnError(logger, "Input required: 'module_name' (the name of the module)", err)
 	}
+	moduleName = strings.ToLower(moduleName)
+
 	moduleProvider, err := request.RequireString("module_provider")
 	if err != nil {
-		return nil, utils.LogAndReturnError(logger, "module_provider is required", err)
+		return nil, utils.LogAndReturnError(logger, "Input required: 'module_provider' (the provider of the module)", err)
 	}
+	moduleProvider = strings.ToLower(moduleProvider)
 
 	uri := fmt.Sprintf("modules/%s/%s/%s", modulePublisher, moduleName, moduleProvider)
 	response, err := client.SendRegistryCall(registryClient, http.MethodGet, uri, logger)

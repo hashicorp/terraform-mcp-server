@@ -6,6 +6,7 @@ package tools
 import (
 	"context"
 	"net/http"
+	"strings"
 
 	"github.com/hashicorp/terraform-mcp-server/pkg/client"
 	"github.com/hashicorp/terraform-mcp-server/pkg/utils"
@@ -18,16 +19,16 @@ import (
 func GetLatestProviderVersion(registryClient *http.Client, logger *log.Logger) server.ServerTool {
 	return server.ServerTool{
 		Tool: mcp.NewTool("get_latest_provider_version",
-			mcp.WithDescription("Fetches the latest version of a Terraform provider from the publi registry"),
+			mcp.WithDescription("Fetches the latest version of a Terraform provider from the public registry"),
 			mcp.WithTitleAnnotation("Get Latest Provider Version"),
 			mcp.WithOpenWorldHintAnnotation(true),
 			mcp.WithReadOnlyHintAnnotation(true),
 			mcp.WithString("namespace",
 				mcp.Required(),
-				mcp.Description("The namespace of the provider, e.g., 'hashicorp'")),
+				mcp.Description("The namespace of the Terraform provider, typically the name of the company, or their GitHub organization name that created the provider e.g., 'hashicorp'")),
 			mcp.WithString("name",
 				mcp.Required(),
-				mcp.Description("The name of the provider, e.g., 'aws'")),
+				mcp.Description("The name of the Terraform provider, e.g., 'aws', 'azurerm', 'google', etc.")),
 		),
 		Handler: func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			return getLatestProviderVersionHandler(registryClient, req, logger)
@@ -38,12 +39,15 @@ func GetLatestProviderVersion(registryClient *http.Client, logger *log.Logger) s
 func getLatestProviderVersionHandler(registryClient *http.Client, request mcp.CallToolRequest, logger *log.Logger) (*mcp.CallToolResult, error) {
 	namespace, err := request.RequireString("namespace")
 	if err != nil {
-		return nil, utils.LogAndReturnError(logger, "namespace is required", err)
+		return nil, utils.LogAndReturnError(logger, "namespace of the Terraform provider is required", err)
 	}
+	namespace = strings.ToLower(namespace)
+
 	name, err := request.RequireString("name")
 	if err != nil {
-		return nil, utils.LogAndReturnError(logger, "name is required", err)
+		return nil, utils.LogAndReturnError(logger, "name of the Terraform provider is required", err)
 	}
+	name = strings.ToLower(name)
 
 	version, err := client.GetLatestProviderVersion(registryClient, namespace, name, logger)
 	if err != nil {

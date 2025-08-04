@@ -55,6 +55,7 @@ func getSearchModulesHandler(registryClient *http.Client, request mcp.CallToolRe
 	if err != nil {
 		return nil, utils.LogAndReturnError(logger, "module_query is required", err)
 	}
+	moduleQuery = strings.ToLower(moduleQuery)
 	currentOffsetValue := request.GetInt("current_offset", 0)
 
 	var modulesData, errMsg string

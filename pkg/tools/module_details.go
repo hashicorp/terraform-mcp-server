@@ -45,6 +45,7 @@ func getModuleDetailsHandler(registryClient *http.Client, request mcp.CallToolRe
 	if moduleID == "" {
 		return nil, utils.LogAndReturnError(logger, "module_id cannot be empty", nil)
 	}
+	moduleID = strings.ToLower(moduleID)
 
 	var errMsg string
 	response, err := getModuleDetails(registryClient, moduleID, 0, logger)
