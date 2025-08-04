@@ -19,14 +19,14 @@ import (
 // GetProviderDocs creates a tool to get provider docs for a specific service from registry.
 func GetProviderDocs(registryClient *http.Client, logger *log.Logger) server.ServerTool {
 	return server.ServerTool{
-		Tool: mcp.NewTool("get_provider_docs",
+		Tool: mcp.NewTool("provider_details",
 			mcp.WithDescription(`Fetches up-to-date documentation for a specific service from a Terraform provider. 
-You must call 'resolve_provider_doc_id' tool first to obtain the exact tfprovider-compatible provider_doc_id required to use this tool.`),
+You must call 'search_providers' tool first to obtain the exact tfprovider-compatible provider_doc_id required to use this tool.`),
 			mcp.WithTitleAnnotation("Fetch detailed Terraform provider documentation using a document ID"),
 			mcp.WithOpenWorldHintAnnotation(true),
 			mcp.WithString("provider_doc_id",
 				mcp.Required(),
-				mcp.Description("Exact tfprovider-compatible provider_doc_id, (e.g., '8894603', '8906901') retrieved from 'resolve_provider_doc_id'")),
+				mcp.Description("Exact tfprovider-compatible provider_doc_id, (e.g., '8894603', '8906901') retrieved from 'search_providers'")),
 		),
 		Handler: func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			return getProviderDocsHandler(registryClient, req, logger)
@@ -45,7 +45,7 @@ func getProviderDocsHandler(registryClient *http.Client, request mcp.CallToolReq
 
 	detailResp, err := client.SendRegistryCall(registryClient, "GET", fmt.Sprintf("provider-docs/%s", providerDocID), logger, "v2")
 	if err != nil {
-		return nil, utils.LogAndReturnError(logger, fmt.Sprintf("Error fetching provider-docs/%s, please make sure provider_doc_id is valid and the resolve_provider_doc_id tool has run prior", providerDocID), err)
+		return nil, utils.LogAndReturnError(logger, fmt.Sprintf("Error fetching provider-docs/%s, please make sure provider_doc_id is valid and the search_providers tool has run prior", providerDocID), err)
 	}
 
 	var details client.ProviderResourceDetails
