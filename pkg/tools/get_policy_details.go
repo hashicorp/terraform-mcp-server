@@ -20,7 +20,7 @@ import (
 
 func PolicyDetails(registryClient *http.Client, logger *log.Logger) server.ServerTool {
 	return server.ServerTool{
-		Tool: mcp.NewTool("policy_details",
+		Tool: mcp.NewTool("get_policy_details",
 			mcp.WithDescription(`Fetches up-to-date documentation for a specific policy from the Terraform registry. You must call 'search_policies' first to obtain the exact terraform_policy_id required to use this tool.`),
 			mcp.WithTitleAnnotation("Fetch detailed Terraform policy documentation using a terraform_policy_id"),
 			mcp.WithOpenWorldHintAnnotation(true),

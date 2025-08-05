@@ -23,7 +23,7 @@ func ResolveProviderDocID(registryClient *http.Client, logger *log.Logger) serve
 	return server.ServerTool{
 		Tool: mcp.NewTool("search_providers",
 			mcp.WithDescription(`This tool retrieves a list of potential documents based on the service_slug and provider_data_type provided.
-You MUST call this function before 'provider_details' to obtain a valid tfprovider-compatible provider_doc_id.
+You MUST call this function before 'get_provider_details' to obtain a valid tfprovider-compatible provider_doc_id.
 Use the most relevant single word as the search query for service_slug, if unsure about the service_slug, use the provider_name for its value.
 When selecting the best match, consider the following:
 	- Title similarity to the query

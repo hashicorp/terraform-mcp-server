@@ -22,7 +22,7 @@ const MODULE_BASE_PATH = "registry://modules"
 
 func ModuleDetails(registryClient *http.Client, logger *log.Logger) server.ServerTool {
 	return server.ServerTool{
-		Tool: mcp.NewTool("module_details",
+		Tool: mcp.NewTool("get_module_details",
 			mcp.WithDescription(`Fetches up-to-date documentation on how to use a Terraform module. You must call 'search_modules' first to obtain the exact valid and compatible module_id required to use this tool.`),
 			mcp.WithTitleAnnotation("Retrieve documentation for a specific Terraform module"),
 			mcp.WithOpenWorldHintAnnotation(true),

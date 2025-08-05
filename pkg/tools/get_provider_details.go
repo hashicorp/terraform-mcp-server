@@ -19,7 +19,7 @@ import (
 // GetProviderDocs creates a tool to get provider docs for a specific service from registry.
 func GetProviderDocs(registryClient *http.Client, logger *log.Logger) server.ServerTool {
 	return server.ServerTool{
-		Tool: mcp.NewTool("provider_details",
+		Tool: mcp.NewTool("get_provider_details",
 			mcp.WithDescription(`Fetches up-to-date documentation for a specific service from a Terraform provider. 
 You must call 'search_providers' tool first to obtain the exact tfprovider-compatible provider_doc_id required to use this tool.`),
 			mcp.WithTitleAnnotation("Fetch detailed Terraform provider documentation using a document ID"),
