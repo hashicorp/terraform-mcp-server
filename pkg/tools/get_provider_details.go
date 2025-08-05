@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strconv"
 
 	"github.com/hashicorp/terraform-mcp-server/pkg/client"
 	"github.com/hashicorp/terraform-mcp-server/pkg/utils"
@@ -41,6 +42,9 @@ func getProviderDocsHandler(registryClient *http.Client, request mcp.CallToolReq
 	}
 	if providerDocID == "" {
 		return nil, utils.LogAndReturnError(logger, "provider_doc_id cannot be empty", nil)
+	}
+	if _, err := strconv.Atoi(providerDocID); err != nil {
+		return nil, utils.LogAndReturnError(logger, "provider_doc_id must be a valid number", err)
 	}
 
 	detailResp, err := client.SendRegistryCall(registryClient, "GET", fmt.Sprintf("provider-docs/%s", providerDocID), logger, "v2")

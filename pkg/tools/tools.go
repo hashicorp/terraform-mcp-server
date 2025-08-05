@@ -19,12 +19,18 @@ func InitTools(hcServer *server.MCPServer, registryClient *http.Client, logger *
 	getProviderDocsTool := GetProviderDocs(registryClient, logger)
 	hcServer.AddTool(getProviderDocsTool.Tool, getProviderDocsTool.Handler)
 
+	getLatestProviderVersionTool := GetLatestProviderVersion(registryClient, logger)
+	hcServer.AddTool(getLatestProviderVersionTool.Tool, getLatestProviderVersionTool.Handler)
+
 	// Module tools
 	getSearchModulesTool := SearchModules(registryClient, logger)
 	hcServer.AddTool(getSearchModulesTool.Tool, getSearchModulesTool.Handler)
 
 	getModuleDetailsTool := ModuleDetails(registryClient, logger)
 	hcServer.AddTool(getModuleDetailsTool.Tool, getModuleDetailsTool.Handler)
+
+	getLatestModuleVersionTool := GetLatestModuleVersion(registryClient, logger)
+	hcServer.AddTool(getLatestModuleVersionTool.Tool, getLatestModuleVersionTool.Handler)
 
 	// Policy tools
 	getSearchPoliciesTool := SearchPolicies(registryClient, logger)

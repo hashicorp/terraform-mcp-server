@@ -53,6 +53,7 @@ func getSearchPoliciesHandler(registryClient *http.Client, request mcp.CallToolR
 	if pq == "" {
 		return nil, utils.LogAndReturnError(logger, "policy_query cannot be empty", nil)
 	}
+	pq = strings.ToLower(pq)
 
 	// static list of 100 is fine for now
 	policyResp, err := client.SendRegistryCall(registryClient, "GET", "policies?page%5Bsize%5D=100&include=latest-version", logger, "v2")
@@ -71,8 +72,8 @@ func getSearchPoliciesHandler(registryClient *http.Client, request mcp.CallToolR
 
 	contentAvailable := false
 	for _, policy := range terraformPolicies.Data {
-		cs, err := utils.ContainsSlug(strings.ToLower(policy.Attributes.Title), strings.ToLower(pq))
-		cs_pn, err_pn := utils.ContainsSlug(strings.ToLower(policy.Attributes.Name), strings.ToLower(pq))
+		cs, err := utils.ContainsSlug(strings.ToLower(policy.Attributes.Title), pq)
+		cs_pn, err_pn := utils.ContainsSlug(strings.ToLower(policy.Attributes.Name), pq)
 		if (cs || cs_pn) && err == nil && err_pn == nil {
 			contentAvailable = true
 			ID := strings.ReplaceAll(policy.Relationships.LatestVersion.Links.Related, "/v2/", "")

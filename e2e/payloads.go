@@ -435,3 +435,196 @@ var policyDetailsTestCases = []RegistryTestCase{
 		},
 	},
 }
+
+var getLatestModuleVersionTestCases = []RegistryTestCase{
+	{
+		TestName:        "valid_aws_module",
+		TestShouldFail:  false,
+		TestDescription: "Testing get_latest_module_version with valid AWS module",
+		TestPayload: map[string]interface{}{
+			"module_publisher": "terraform-aws-modules",
+			"module_name":      "vpc",
+			"module_provider":  "aws",
+		},
+	},
+	{
+		TestName:        "valid_aws_module_case_insensitivity",
+		TestShouldFail:  false,
+		TestDescription: "Testing get_latest_module_version with valid but case insensitive AWS module",
+		TestPayload: map[string]interface{}{
+			"module_publisher": "TerraFORM-AwS-ModuLES",
+			"module_name":      "VpC",
+			"module_provider":  "AWs",
+		},
+	},
+	{
+		TestName:        "valid_hashicorp_module",
+		TestShouldFail:  false,
+		TestDescription: "Testing get_latest_module_version with valid HashiCorp module",
+		TestPayload: map[string]interface{}{
+			"module_publisher": "hashicorp",
+			"module_name":      "consul",
+			"module_provider":  "aws",
+		},
+	},
+	{
+		TestName:        "missing_module_publisher",
+		TestShouldFail:  true,
+		TestDescription: "Testing get_latest_module_version with missing module_publisher",
+		TestPayload: map[string]interface{}{
+			"module_name":     "vpc",
+			"module_provider": "aws",
+		},
+	},
+	{
+		TestName:        "missing_module_name",
+		TestShouldFail:  true,
+		TestDescription: "Testing get_latest_module_version with missing module_name",
+		TestPayload: map[string]interface{}{
+			"module_publisher": "terraform-aws-modules",
+			"module_provider":  "aws",
+		},
+	},
+	{
+		TestName:        "missing_module_provider",
+		TestShouldFail:  true,
+		TestDescription: "Testing get_latest_module_version with missing module_provider",
+		TestPayload: map[string]interface{}{
+			"module_publisher": "terraform-aws-modules",
+			"module_name":      "vpc",
+		},
+	},
+	{
+		TestName:        "empty_parameters",
+		TestShouldFail:  true,
+		TestDescription: "Testing get_latest_module_version with empty parameters",
+		TestPayload:     map[string]interface{}{},
+	},
+	{
+		TestName:        "nonexistent_module",
+		TestShouldFail:  true,
+		TestDescription: "Testing get_latest_module_version with nonexistent module",
+		TestPayload: map[string]interface{}{
+			"module_publisher": "nonexistent-publisher",
+			"module_name":      "nonexistent-module",
+			"module_provider":  "nonexistent-provider",
+		},
+	},
+	{
+		TestName:        "valid_google_module",
+		TestShouldFail:  false,
+		TestDescription: "Testing get_latest_module_version with valid Google module",
+		TestPayload: map[string]interface{}{
+			"module_publisher": "terraform-google-modules",
+			"module_name":      "network",
+			"module_provider":  "google",
+		},
+	},
+	{
+		TestName:        "valid_azure_module",
+		TestShouldFail:  false,
+		TestDescription: "Testing get_latest_module_version with valid Azure module",
+		TestPayload: map[string]interface{}{
+			"module_publisher": "Azure",
+			"module_name":      "network",
+			"module_provider":  "azurerm",
+		},
+	},
+}
+
+var getLatestProviderVersionTestCases = []RegistryTestCase{
+	{
+		TestName:        "valid_aws_provider",
+		TestShouldFail:  false,
+		TestDescription: "Testing get_latest_provider_version with valid AWS provider",
+		TestPayload: map[string]interface{}{
+			"namespace": "hashicorp",
+			"name":      "aws",
+		},
+	},
+	{
+		TestName:        "valid_aws_provider_case_insensitive",
+		TestShouldFail:  false,
+		TestDescription: "Testing get_latest_provider_version with valid AWS provider with case insensitivity",
+		TestPayload: map[string]interface{}{
+			"namespace": "HashiCORp",
+			"name":      "AwS",
+		},
+	},
+	{
+		TestName:        "valid_google_provider",
+		TestShouldFail:  false,
+		TestDescription: "Testing get_latest_provider_version with valid Google provider",
+		TestPayload: map[string]interface{}{
+			"namespace": "hashicorp",
+			"name":      "google",
+		},
+	},
+	{
+		TestName:        "valid_azurerm_provider",
+		TestShouldFail:  false,
+		TestDescription: "Testing get_latest_provider_version with valid Azure provider",
+		TestPayload: map[string]interface{}{
+			"namespace": "hashicorp",
+			"name":      "azurerm",
+		},
+	},
+	{
+		TestName:        "missing_namespace",
+		TestShouldFail:  true,
+		TestDescription: "Testing get_latest_provider_version with missing namespace",
+		TestPayload: map[string]interface{}{
+			"name": "aws",
+		},
+	},
+	{
+		TestName:        "missing_name",
+		TestShouldFail:  true,
+		TestDescription: "Testing get_latest_provider_version with missing name",
+		TestPayload: map[string]interface{}{
+			"namespace": "hashicorp",
+		},
+	},
+	{
+		TestName:        "empty_parameters",
+		TestShouldFail:  true,
+		TestDescription: "Testing get_latest_provider_version with empty parameters",
+		TestPayload:     map[string]interface{}{},
+	},
+	{
+		TestName:        "nonexistent_provider",
+		TestShouldFail:  true,
+		TestDescription: "Testing get_latest_provider_version with nonexistent provider",
+		TestPayload: map[string]interface{}{
+			"namespace": "nonexistent-namespace",
+			"name":      "nonexistent-provider",
+		},
+	},
+	{
+		TestName:        "valid_third_party_provider",
+		TestShouldFail:  false,
+		TestDescription: "Testing get_latest_provider_version with valid third-party provider",
+		TestPayload: map[string]interface{}{
+			"namespace": "datadog",
+			"name":      "datadog",
+		},
+	},
+	{
+		TestName:        "empty_namespace",
+		TestShouldFail:  true,
+		TestDescription: "Testing get_latest_provider_version with empty namespace",
+		TestPayload: map[string]interface{}{
+			"namespace": "",
+			"name":      "aws",
+		},
+	},
+	{
+		TestName:        "empty_name",
+		TestShouldFail:  true,
+		TestDescription: "Testing get_latest_provider_version with empty name",
+		TestPayload: map[string]interface{}{
+			"namespace": "hashicorp",
+			"name":      "",
+		},
+	},
+}
