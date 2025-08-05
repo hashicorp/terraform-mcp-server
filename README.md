@@ -268,4 +268,4 @@ For security issues, please contact security@hashicorp.com or follow our [securi
 
 For bug reports and feature requests, please open an issue on GitHub.
 
-For general questions and discussions, open a GitHub Discussion.
+For general questions and discussions, open a GitHub Discussion. 
