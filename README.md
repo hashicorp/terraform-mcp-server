@@ -149,6 +149,23 @@ The following sets of tools are available:
 | `modules`   | `get_module_details`        | Retrieves detailed documentation for a module using a module ID obtained from the `search_modules` tool including inputs, outputs, configuration, submodules, and examples.                                                                                     |
 | `policies`  | `search_policies`       | Queries the Terraform Registry to find and list the appropriate Sentinel Policy based on the provided query `policy_query`. Returns a list of matching policies with terraform_policy_id(s) with their name, title and download counts.                             |
 | `policies`  | `get_policy_details`        | Retrieves detailed documentation for a policy set using a terraform_policy_id obtained from the `search_policies` tool including policy readme and implementation details.                                                                                        |
+
+## Resource Configuration
+
+### Available resources
+
+| Resource URI | Description |
+|--------------|-------------|
+| `/terraform/style-guide` | Terraform Style Guide - Provides access to the official Terraform style guide documentation in markdown format |
+| `/terraform/module-development` | Terraform Module Development Guide - Comprehensive guide covering module composition, structure, providers, publishing, and refactoring best practices |
+
+### Available Resource Templates
+
+| Resouce Template URI | Description |
+|--------------|-------------|
+| `/terraform/providers/{namespace}/name/{name}/version/{version}` | Provider Resource Template - Dynamically retrieves detailed documentation and overview for any Terraform provider by namespace, name, and version |
+
+
 ### Install from source
 
 Use the latest release version:
