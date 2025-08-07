@@ -22,8 +22,8 @@ func SearchPolicies(logger *log.Logger) server.ServerTool {
 	return server.ServerTool{
 		Tool: mcp.NewTool("search_policies",
 			mcp.WithDescription(`Searches for Terraform policies based on a query string.
-This tool returns a list of matching policies, which can be used to retrieve detailed policy information using the 'policy_details' tool.
-You MUST call this function before 'policy_details' to obtain a valid terraform_policy_id.
+This tool returns a list of matching policies, which can be used to retrieve detailed policy information using the 'get_policy_details' tool.
+You MUST call this function before 'get_policy_details' to obtain a valid terraform_policy_id.
 When selecting the best match, consider the following:
 	- Name similarity to the query
 	- Title relevance
@@ -54,6 +54,7 @@ func getSearchPoliciesHandler(ctx context.Context, request mcp.CallToolRequest, 
 	if pq == "" {
 		return nil, utils.LogAndReturnError(logger, "policy_query cannot be empty", nil)
 	}
+	pq = strings.ToLower(pq)
 
 	// Get a simple http client to access the public Terraform registry from context
 	terraformClients, err := client.GetTerraformClientFromContext(ctx, logger)
@@ -82,12 +83,12 @@ func getSearchPoliciesHandler(ctx context.Context, request mcp.CallToolRequest, 
 
 	var builder strings.Builder
 	builder.WriteString(fmt.Sprintf("Matching Terraform Policies for query: %s\n\n", pq))
-	builder.WriteString("Each result includes:\n- terraform_policy_id: Unique identifier to be used with policy_details tool\n- Name: Policy name\n- Title: Policy description\n- Downloads: Policy downloads\n---\n\n")
+	builder.WriteString("Each result includes:\n- terraform_policy_id: Unique identifier to be used with get_policy_details tool\n- Name: Policy name\n- Title: Policy description\n- Downloads: Policy downloads\n---\n\n")
 
 	contentAvailable := false
 	for _, policy := range terraformPolicies.Data {
-		cs, err := utils.ContainsSlug(strings.ToLower(policy.Attributes.Title), strings.ToLower(pq))
-		cs_pn, err_pn := utils.ContainsSlug(strings.ToLower(policy.Attributes.Name), strings.ToLower(pq))
+		cs, err := utils.ContainsSlug(strings.ToLower(policy.Attributes.Title), pq)
+		cs_pn, err_pn := utils.ContainsSlug(strings.ToLower(policy.Attributes.Name), pq)
 		if (cs || cs_pn) && err == nil && err_pn == nil {
 			contentAvailable = true
 			ID := strings.ReplaceAll(policy.Relationships.LatestVersion.Links.Related, "/v2/", "")

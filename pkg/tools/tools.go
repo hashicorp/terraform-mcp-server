@@ -19,14 +19,20 @@ func RegisterTools(hcServer *server.MCPServer, logger *log.Logger) {
 	getProviderDocsTool := GetProviderDocs(logger)
 	hcServer.AddTool(getProviderDocsTool.Tool, getProviderDocsTool.Handler)
 
-	// Module tools (always available)
+	getLatestProviderVersionTool := GetLatestProviderVersion(logger)
+	hcServer.AddTool(getLatestProviderVersionTool.Tool, getLatestProviderVersionTool.Handler)
+
+	// Module tools
 	getSearchModulesTool := SearchModules(logger)
 	hcServer.AddTool(getSearchModulesTool.Tool, getSearchModulesTool.Handler)
 
 	getModuleDetailsTool := ModuleDetails(logger)
 	hcServer.AddTool(getModuleDetailsTool.Tool, getModuleDetailsTool.Handler)
 
-	// Policy tools (always available)
+	getLatestModuleVersionTool := GetLatestModuleVersion(logger)
+	hcServer.AddTool(getLatestModuleVersionTool.Tool, getLatestModuleVersionTool.Handler)
+
+	// Policy tools
 	getSearchPoliciesTool := SearchPolicies(logger)
 	hcServer.AddTool(getSearchPoliciesTool.Tool, getSearchPoliciesTool.Handler)
 

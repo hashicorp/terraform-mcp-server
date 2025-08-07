@@ -23,8 +23,8 @@ import (
 func SearchModules(logger *log.Logger) server.ServerTool {
 	return server.ServerTool{
 		Tool: mcp.NewTool("search_modules",
-			mcp.WithDescription(`Resolves a Terraform module name to obtain a compatible module_id for the module_details tool and returns a list of matching Terraform modules.
-You MUST call this function before 'module_details' to obtain a valid and compatible module_id.
+			mcp.WithDescription(`Resolves a Terraform module name to obtain a compatible module_id for the get_module_details tool and returns a list of matching Terraform modules.
+You MUST call this function before 'get_module_details' to obtain a valid and compatible module_id.
 When selecting the best match, consider the following:
 	- Name similarity to the query
 	- Description relevance
@@ -56,6 +56,7 @@ func getSearchModulesHandler(ctx context.Context, request mcp.CallToolRequest, l
 	if err != nil {
 		return nil, utils.LogAndReturnError(logger, "module_query is required", err)
 	}
+	moduleQuery = strings.ToLower(moduleQuery)
 	currentOffsetValue := request.GetInt("current_offset", 0)
 
 	// Get a simple http client to access the public Terraform registry from context

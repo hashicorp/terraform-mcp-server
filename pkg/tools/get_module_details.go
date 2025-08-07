@@ -22,7 +22,7 @@ const MODULE_BASE_PATH = "registry://modules"
 
 func ModuleDetails(logger *log.Logger) server.ServerTool {
 	return server.ServerTool{
-		Tool: mcp.NewTool("module_details",
+		Tool: mcp.NewTool("get_module_details",
 			mcp.WithDescription(`Fetches up-to-date documentation on how to use a Terraform module. You must call 'search_modules' first to obtain the exact valid and compatible module_id required to use this tool.`),
 			mcp.WithTitleAnnotation("Retrieve documentation for a specific Terraform module"),
 			mcp.WithOpenWorldHintAnnotation(true),
@@ -46,6 +46,7 @@ func getModuleDetailsHandler(ctx context.Context, request mcp.CallToolRequest, l
 	if moduleID == "" {
 		return nil, utils.LogAndReturnError(logger, "module_id cannot be empty", nil)
 	}
+	moduleID = strings.ToLower(moduleID)
 
 	// Get a simple http client to access the public Terraform registry from context
 	terraformClients, err := client.GetTerraformClientFromContext(ctx, logger)
