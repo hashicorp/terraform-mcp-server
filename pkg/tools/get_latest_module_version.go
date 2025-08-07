@@ -18,7 +18,7 @@ import (
 )
 
 // GetLatestModuleVersion creates a tool to get the latest module version from the public registry.
-func GetLatestModuleVersion(registryClient *http.Client, logger *log.Logger) server.ServerTool {
+func GetLatestModuleVersion(logger *log.Logger) server.ServerTool {
 	return server.ServerTool{
 		Tool: mcp.NewTool("get_latest_module_version",
 			mcp.WithDescription("Fetches the latest version of a Terraform module from the public registry"),
@@ -36,12 +36,12 @@ func GetLatestModuleVersion(registryClient *http.Client, logger *log.Logger) ser
 				mcp.Description("The name of the Terraform provider for the module, e.g., 'aws', 'google', 'azurerm' etc.")),
 		),
 		Handler: func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-			return getLatestModuleVersionHandler(registryClient, req, logger)
+			return getLatestModuleVersionHandler(ctx, req, logger)
 		},
 	}
 }
 
-func getLatestModuleVersionHandler(registryClient *http.Client, request mcp.CallToolRequest, logger *log.Logger) (*mcp.CallToolResult, error) {
+func getLatestModuleVersionHandler(ctx context.Context, request mcp.CallToolRequest, logger *log.Logger) (*mcp.CallToolResult, error) {
 	modulePublisher, err := request.RequireString("module_publisher")
 	if err != nil {
 		return nil, utils.LogAndReturnError(logger, "Input required: 'module_publisher' (the publisher of the module)", err)
@@ -60,8 +60,16 @@ func getLatestModuleVersionHandler(registryClient *http.Client, request mcp.Call
 	}
 	moduleProvider = strings.ToLower(moduleProvider)
 
+	// Get a simple http client to access the public Terraform registry from context
+	terraformClients, err := client.GetTerraformClientFromContext(ctx, logger)
+	if err != nil {
+		logger.WithError(err).Error("failed to get http client for public Terraform registry")
+		return mcp.NewToolResultError(fmt.Sprintf("failed to get http client for public Terraform registry: %v", err)), nil
+	}
+
+	httpClient := terraformClients.HttpClient
 	uri := fmt.Sprintf("modules/%s/%s/%s", modulePublisher, moduleName, moduleProvider)
-	response, err := client.SendRegistryCall(registryClient, http.MethodGet, uri, logger)
+	response, err := client.SendRegistryCall(httpClient, http.MethodGet, uri, logger)
 	if err != nil {
 		return nil, utils.LogAndReturnError(logger, fmt.Sprintf("error fetching module information for %s/%s from the %s provider", modulePublisher, moduleName, moduleProvider), err)
 	}

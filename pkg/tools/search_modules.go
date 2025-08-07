@@ -20,7 +20,7 @@ import (
 	"github.com/mark3labs/mcp-go/server"
 )
 
-func SearchModules(registryClient *http.Client, logger *log.Logger) server.ServerTool {
+func SearchModules(logger *log.Logger) server.ServerTool {
 	return server.ServerTool{
 		Tool: mcp.NewTool("search_modules",
 			mcp.WithDescription(`Resolves a Terraform module name to obtain a compatible module_id for the get_module_details tool and returns a list of matching Terraform modules.
@@ -34,6 +34,7 @@ Return the selected module_id and explain your choice. If there are multiple goo
 If no modules were found, reattempt the search with a new moduleName query.`),
 			mcp.WithTitleAnnotation("Search and match Terraform modules based on name and relevance"),
 			mcp.WithOpenWorldHintAnnotation(true),
+			mcp.WithReadOnlyHintAnnotation(true),
 			mcp.WithString("module_query",
 				mcp.Required(),
 				mcp.Description("The query to search for Terraform modules."),
@@ -45,12 +46,12 @@ If no modules were found, reattempt the search with a new moduleName query.`),
 			),
 		),
 		Handler: func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-			return getSearchModulesHandler(registryClient, request, logger)
+			return getSearchModulesHandler(ctx, request, logger)
 		},
 	}
 }
 
-func getSearchModulesHandler(registryClient *http.Client, request mcp.CallToolRequest, logger *log.Logger) (*mcp.CallToolResult, error) {
+func getSearchModulesHandler(ctx context.Context, request mcp.CallToolRequest, logger *log.Logger) (*mcp.CallToolResult, error) {
 	moduleQuery, err := request.RequireString("module_query")
 	if err != nil {
 		return nil, utils.LogAndReturnError(logger, "module_query is required", err)
@@ -58,8 +59,17 @@ func getSearchModulesHandler(registryClient *http.Client, request mcp.CallToolRe
 	moduleQuery = strings.ToLower(moduleQuery)
 	currentOffsetValue := request.GetInt("current_offset", 0)
 
+	// Get a simple http client to access the public Terraform registry from context
+	terraformClients, err := client.GetTerraformClientFromContext(ctx, logger)
+	if err != nil {
+		logger.WithError(err).Error("failed to get http client for public Terraform registry")
+		return mcp.NewToolResultError(fmt.Sprintf("failed to get http client for public Terraform registry: %v", err)), nil
+	}
+
+	httpClient := terraformClients.HttpClient
+
 	var modulesData, errMsg string
-	response, err := sendSearchModulesCall(registryClient, moduleQuery, currentOffsetValue, logger)
+	response, err := sendSearchModulesCall(httpClient, moduleQuery, currentOffsetValue, logger)
 	if err != nil {
 		return nil, utils.LogAndReturnError(logger, fmt.Sprintf("no module(s) found for moduleName: %s", moduleQuery), err)
 	} else {

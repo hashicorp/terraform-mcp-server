@@ -7,7 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"net/http"
+	"net/url"
 	"strings"
 
 	"github.com/hashicorp/terraform-mcp-server/pkg/client"
@@ -18,7 +18,7 @@ import (
 	"github.com/mark3labs/mcp-go/server"
 )
 
-func SearchPolicies(registryClient *http.Client, logger *log.Logger) server.ServerTool {
+func SearchPolicies(logger *log.Logger) server.ServerTool {
 	return server.ServerTool{
 		Tool: mcp.NewTool("search_policies",
 			mcp.WithDescription(`Searches for Terraform policies based on a query string.
@@ -33,18 +33,19 @@ Return the selected policyID and explain your choice. If there are multiple good
 If no policies were found, reattempt the search with a new policy_query.`),
 			mcp.WithTitleAnnotation("Search and match Terraform policies based on name and relevance"),
 			mcp.WithOpenWorldHintAnnotation(true),
+			mcp.WithReadOnlyHintAnnotation(true),
 			mcp.WithString("policy_query",
 				mcp.Required(),
 				mcp.Description("The query to search for Terraform modules."),
 			),
 		),
 		Handler: func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-			return getSearchPoliciesHandler(registryClient, request, logger)
+			return getSearchPoliciesHandler(ctx, request, logger)
 		},
 	}
 }
 
-func getSearchPoliciesHandler(registryClient *http.Client, request mcp.CallToolRequest, logger *log.Logger) (*mcp.CallToolResult, error) {
+func getSearchPoliciesHandler(ctx context.Context, request mcp.CallToolRequest, logger *log.Logger) (*mcp.CallToolResult, error) {
 	var terraformPolicies client.TerraformPolicyList
 	pq, err := request.RequireString("policy_query")
 	if err != nil {
@@ -55,8 +56,22 @@ func getSearchPoliciesHandler(registryClient *http.Client, request mcp.CallToolR
 	}
 	pq = strings.ToLower(pq)
 
-	// static list of 100 is fine for now
-	policyResp, err := client.SendRegistryCall(registryClient, "GET", "policies?page%5Bsize%5D=100&include=latest-version", logger, "v2")
+	// Get a simple http client to access the public Terraform registry from context
+	terraformClients, err := client.GetTerraformClientFromContext(ctx, logger)
+	if err != nil {
+		logger.WithError(err).Error("failed to get http client for public Terraform registry")
+		return mcp.NewToolResultError(fmt.Sprintf("failed to get http client for public Terraform registry: %v", err)), nil
+	}
+
+	httpClient := terraformClients.HttpClient
+	uri := (&url.URL{
+		Path: "policies",
+		RawQuery: url.Values{
+			"page[size]": {"100"}, // static list of 100 is fine for now
+			"include":    {"latest-version"},
+		}.Encode(),
+	}).String()
+	policyResp, err := client.SendRegistryCall(httpClient, "GET", uri, logger, "v2")
 	if err != nil {
 		return nil, utils.LogAndReturnError(logger, "Failed to fetch policies: registry API did not return a successful response", err)
 	}

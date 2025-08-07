@@ -4,38 +4,38 @@
 package tools
 
 import (
-	"net/http"
-
 	"github.com/mark3labs/mcp-go/server"
 	log "github.com/sirupsen/logrus"
 )
 
-func InitTools(hcServer *server.MCPServer, registryClient *http.Client, logger *log.Logger) {
+func RegisterTools(hcServer *server.MCPServer, logger *log.Logger) {
+	// Register the dynamic tool
+	registerDynamicTools(hcServer, logger)
 
-	// Provider tools
-	getResolveProviderDocIDTool := ResolveProviderDocID(registryClient, logger)
+	// Provider tools (always available)
+	getResolveProviderDocIDTool := ResolveProviderDocID(logger)
 	hcServer.AddTool(getResolveProviderDocIDTool.Tool, getResolveProviderDocIDTool.Handler)
 
-	getProviderDocsTool := GetProviderDocs(registryClient, logger)
+	getProviderDocsTool := GetProviderDocs(logger)
 	hcServer.AddTool(getProviderDocsTool.Tool, getProviderDocsTool.Handler)
 
-	getLatestProviderVersionTool := GetLatestProviderVersion(registryClient, logger)
+	getLatestProviderVersionTool := GetLatestProviderVersion(logger)
 	hcServer.AddTool(getLatestProviderVersionTool.Tool, getLatestProviderVersionTool.Handler)
 
 	// Module tools
-	getSearchModulesTool := SearchModules(registryClient, logger)
+	getSearchModulesTool := SearchModules(logger)
 	hcServer.AddTool(getSearchModulesTool.Tool, getSearchModulesTool.Handler)
 
-	getModuleDetailsTool := ModuleDetails(registryClient, logger)
+	getModuleDetailsTool := ModuleDetails(logger)
 	hcServer.AddTool(getModuleDetailsTool.Tool, getModuleDetailsTool.Handler)
 
-	getLatestModuleVersionTool := GetLatestModuleVersion(registryClient, logger)
+	getLatestModuleVersionTool := GetLatestModuleVersion(logger)
 	hcServer.AddTool(getLatestModuleVersionTool.Tool, getLatestModuleVersionTool.Handler)
 
 	// Policy tools
-	getSearchPoliciesTool := SearchPolicies(registryClient, logger)
+	getSearchPoliciesTool := SearchPolicies(logger)
 	hcServer.AddTool(getSearchPoliciesTool.Tool, getSearchPoliciesTool.Handler)
 
-	getPolicyDetailsTool := PolicyDetails(registryClient, logger)
+	getPolicyDetailsTool := PolicyDetails(logger)
 	hcServer.AddTool(getPolicyDetailsTool.Tool, getPolicyDetailsTool.Handler)
 }

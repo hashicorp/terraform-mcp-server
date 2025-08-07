@@ -5,7 +5,7 @@ package tools
 
 import (
 	"context"
-	"net/http"
+	"fmt"
 	"strings"
 
 	"github.com/hashicorp/terraform-mcp-server/pkg/client"
@@ -16,7 +16,7 @@ import (
 )
 
 // GetLatestProviderVersion creates a tool to get the latest provider version from the public registry.
-func GetLatestProviderVersion(registryClient *http.Client, logger *log.Logger) server.ServerTool {
+func GetLatestProviderVersion(logger *log.Logger) server.ServerTool {
 	return server.ServerTool{
 		Tool: mcp.NewTool("get_latest_provider_version",
 			mcp.WithDescription("Fetches the latest version of a Terraform provider from the public registry"),
@@ -31,12 +31,12 @@ func GetLatestProviderVersion(registryClient *http.Client, logger *log.Logger) s
 				mcp.Description("The name of the Terraform provider, e.g., 'aws', 'azurerm', 'google', etc.")),
 		),
 		Handler: func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-			return getLatestProviderVersionHandler(registryClient, req, logger)
+			return getLatestProviderVersionHandler(ctx, req, logger)
 		},
 	}
 }
 
-func getLatestProviderVersionHandler(registryClient *http.Client, request mcp.CallToolRequest, logger *log.Logger) (*mcp.CallToolResult, error) {
+func getLatestProviderVersionHandler(ctx context.Context, request mcp.CallToolRequest, logger *log.Logger) (*mcp.CallToolResult, error) {
 	namespace, err := request.RequireString("namespace")
 	if err != nil {
 		return nil, utils.LogAndReturnError(logger, "namespace of the Terraform provider is required", err)
@@ -49,7 +49,16 @@ func getLatestProviderVersionHandler(registryClient *http.Client, request mcp.Ca
 	}
 	name = strings.ToLower(name)
 
-	version, err := client.GetLatestProviderVersion(registryClient, namespace, name, logger)
+	// Get a simple http client to access the public Terraform registry from context
+	terraformClients, err := client.GetTerraformClientFromContext(ctx, logger)
+	if err != nil {
+		logger.WithError(err).Error("failed to get http client for public Terraform registry")
+		return mcp.NewToolResultError(fmt.Sprintf("failed to get http client for public Terraform registry: %v", err)), nil
+	}
+
+	httpClient := terraformClients.HttpClient
+
+	version, err := client.GetLatestProviderVersion(httpClient, namespace, name, logger)
 	if err != nil {
 		return nil, utils.LogAndReturnError(logger, "error fetching latest provider version", err)
 	}

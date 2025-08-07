@@ -20,24 +20,25 @@ import (
 
 const MODULE_BASE_PATH = "registry://modules"
 
-func ModuleDetails(registryClient *http.Client, logger *log.Logger) server.ServerTool {
+func ModuleDetails(logger *log.Logger) server.ServerTool {
 	return server.ServerTool{
 		Tool: mcp.NewTool("get_module_details",
 			mcp.WithDescription(`Fetches up-to-date documentation on how to use a Terraform module. You must call 'search_modules' first to obtain the exact valid and compatible module_id required to use this tool.`),
 			mcp.WithTitleAnnotation("Retrieve documentation for a specific Terraform module"),
 			mcp.WithOpenWorldHintAnnotation(true),
+			mcp.WithReadOnlyHintAnnotation(true),
 			mcp.WithString("module_id",
 				mcp.Required(),
 				mcp.Description("Exact valid and compatible module_id retrieved from search_modules (e.g., 'squareops/terraform-kubernetes-mongodb/mongodb/2.1.1', 'GoogleCloudPlatform/vertex-ai/google/0.2.0')"),
 			),
 		),
 		Handler: func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-			return getModuleDetailsHandler(registryClient, request, logger)
+			return getModuleDetailsHandler(ctx, request, logger)
 		},
 	}
 }
 
-func getModuleDetailsHandler(registryClient *http.Client, request mcp.CallToolRequest, logger *log.Logger) (*mcp.CallToolResult, error) {
+func getModuleDetailsHandler(ctx context.Context, request mcp.CallToolRequest, logger *log.Logger) (*mcp.CallToolResult, error) {
 	moduleID, err := request.RequireString("module_id")
 	if err != nil {
 		return nil, utils.LogAndReturnError(logger, "module_id is required", err)
@@ -47,8 +48,17 @@ func getModuleDetailsHandler(registryClient *http.Client, request mcp.CallToolRe
 	}
 	moduleID = strings.ToLower(moduleID)
 
+	// Get a simple http client to access the public Terraform registry from context
+	terraformClients, err := client.GetTerraformClientFromContext(ctx, logger)
+	if err != nil {
+		logger.WithError(err).Error("failed to get http client for public Terraform registry")
+		return mcp.NewToolResultError(fmt.Sprintf("failed to get http client for public Terraform registry: %v", err)), nil
+	}
+
+	httpClient := terraformClients.HttpClient
+
 	var errMsg string
-	response, err := getModuleDetails(registryClient, moduleID, 0, logger)
+	response, err := getModuleDetails(httpClient, moduleID, 0, logger)
 	if err != nil {
 		errMsg = fmt.Sprintf("no module(s) found for %v,", moduleID)
 		return nil, utils.LogAndReturnError(logger, errMsg, nil)
@@ -64,14 +74,14 @@ func getModuleDetailsHandler(registryClient *http.Client, request mcp.CallToolRe
 	return mcp.NewToolResultText(moduleData), nil
 }
 
-func getModuleDetails(providerClient *http.Client, moduleID string, currentOffset int, logger *log.Logger) ([]byte, error) {
+func getModuleDetails(httpClient *http.Client, moduleID string, currentOffset int, logger *log.Logger) ([]byte, error) {
 	uri := "modules"
 	if moduleID != "" {
 		uri = fmt.Sprintf("modules/%s", moduleID)
 	}
 
 	uri = fmt.Sprintf("%s?offset=%v", uri, currentOffset)
-	response, err := client.SendRegistryCall(providerClient, "GET", uri, logger)
+	response, err := client.SendRegistryCall(httpClient, "GET", uri, logger)
 	if err != nil {
 		// We shouldn't log the error here because we might hit a namespace that doesn't exist, it's better to let the caller handle it.
 		return nil, fmt.Errorf("getting module(s) for: %v, please provide a different provider name like aws, azurerm or google etc", moduleID)
