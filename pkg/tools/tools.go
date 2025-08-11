@@ -6,6 +6,8 @@ package tools
 import (
 	"net/http"
 
+	"github.com/hashicorp/terraform-mcp-server/pkg/client/hcp_terraform"
+	hcp_tools "github.com/hashicorp/terraform-mcp-server/pkg/tools/hcp_terraform"
 	"github.com/mark3labs/mcp-go/server"
 	log "github.com/sirupsen/logrus"
 )
@@ -38,4 +40,13 @@ func InitTools(hcServer *server.MCPServer, registryClient *http.Client, logger *
 
 	getPolicyDetailsTool := PolicyDetails(registryClient, logger)
 	hcServer.AddTool(getPolicyDetailsTool.Tool, getPolicyDetailsTool.Handler)
+
+	// HCP Terraform tools
+	hcpClient := hcp_terraform.NewClient(logger)
+
+	// Organizations tool
+	getHCPOrganizationsTool := hcp_tools.GetOrganizations(hcpClient, logger)
+	hcServer.AddTool(getHCPOrganizationsTool.Tool, getHCPOrganizationsTool.Handler)
+
+	logger.Infof("Initialized %d tools (including HCP Terraform tools)", 9) // Update count as we add more tools
 }

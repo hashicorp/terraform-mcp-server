@@ -52,12 +52,12 @@ docker-build:
 	$(DOCKER) build --build-arg VERSION=$(VERSION) -t $(BINARY_NAME):$(VERSION) .
 
 # Run HTTP server locally
-run-http:
-	./$(BINARY_NAME) http --transport-port 8080 --transport-host 0.0.0.0
+run-http: build
+	bin/$(BINARY_NAME) http --transport-port 8080 --transport-host 0.0.0.0
 
 # Run HTTP server with security settings
-run-http-secure:
-	MCP_ALLOWED_ORIGINS="http://localhost:3000,https://example.com" MCP_CORS_MODE="development" ./$(BINARY_NAME) http --transport-port 8080 --transport-host 0.0.0.0
+run-http-secure: build
+	MCP_ALLOWED_ORIGINS="http://localhost:3000,https://example.com" MCP_CORS_MODE="development" bin/$(BINARY_NAME) http --transport-port 8080 --transport-host 0.0.0.0
 
 # Run HTTP server in Docker
 docker-run-http:
