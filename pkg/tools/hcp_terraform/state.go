@@ -5,8 +5,8 @@ import (
 	"crypto/md5"
 	"encoding/base64"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
-	"strings"
 
 	"github.com/hashicorp/terraform-mcp-server/pkg/client/hcp_terraform"
 	"github.com/hashicorp/terraform-mcp-server/pkg/utils"
@@ -251,11 +251,15 @@ func getCurrentStateVersionHandler(hcpClient *hcp_terraform.Client, request mcp.
 		return nil, utils.LogAndReturnError(logger, "current state version retrieval", err)
 	}
 
-	// Format the response
-	formattedResult := formatCurrentStateVersionResponse(result)
-	logger.Infof("Successfully retrieved current state version for workspace %s", workspaceID)
+	// Return JSON response
+	jsonResponse, err := json.Marshal(result)
+	if err != nil {
+		logger.Errorf("Failed to marshal response: %v", err)
+		return nil, utils.LogAndReturnError(logger, "response marshaling", err)
+	}
 
-	return mcp.NewToolResultText(formattedResult), nil
+	logger.Infof("Successfully retrieved current state version for workspace %s", workspaceID)
+	return mcp.NewToolResultText(string(jsonResponse)), nil
 }
 
 func downloadStateVersionHandler(hcpClient *hcp_terraform.Client, request mcp.CallToolRequest, logger *log.Logger) (*mcp.CallToolResult, error) {
@@ -281,11 +285,15 @@ func downloadStateVersionHandler(hcpClient *hcp_terraform.Client, request mcp.Ca
 		return nil, utils.LogAndReturnError(logger, "state version download", err)
 	}
 
-	// Format the response
-	formattedResult := formatDownloadStateVersionResponse(result)
-	logger.Infof("Successfully downloaded state version %s", stateVersionID)
+	// Return JSON response
+	jsonResponse, err := json.Marshal(result)
+	if err != nil {
+		logger.Errorf("Failed to marshal response: %v", err)
+		return nil, utils.LogAndReturnError(logger, "response marshaling", err)
+	}
 
-	return mcp.NewToolResultText(formattedResult), nil
+	logger.Infof("Successfully downloaded state version %s", stateVersionID)
+	return mcp.NewToolResultText(string(jsonResponse)), nil
 }
 
 func createStateVersionHandler(hcpClient *hcp_terraform.Client, request mcp.CallToolRequest, logger *log.Logger) (*mcp.CallToolResult, error) {
@@ -327,108 +335,13 @@ func createStateVersionHandler(hcpClient *hcp_terraform.Client, request mcp.Call
 		return nil, utils.LogAndReturnError(logger, "state version creation", err)
 	}
 
-	// Format the response
-	formattedResult := formatCreateStateVersionResponse(result)
+	// Return JSON response
+	jsonResponse, err := json.Marshal(result)
+	if err != nil {
+		logger.Errorf("Failed to marshal response: %v", err)
+		return nil, utils.LogAndReturnError(logger, "response marshaling", err)
+	}
+
 	logger.Infof("Successfully created state version for workspace %s", workspaceID)
-
-	return mcp.NewToolResultText(formattedResult), nil
-}
-
-// Formatting functions
-
-func formatCurrentStateVersionResponse(result map[string]interface{}) string {
-	var response strings.Builder
-
-	if message, ok := result["message"].(string); ok {
-		response.WriteString(fmt.Sprintf("✅ %s\n\n", message))
-	}
-
-	if sv, ok := result["state_version"].(hcp_terraform.StateVersion); ok {
-		response.WriteString("### Current State Version Details\n")
-		response.WriteString(fmt.Sprintf("- **ID**: %s\n", sv.ID))
-		response.WriteString(fmt.Sprintf("- **Serial**: %d\n", sv.Attributes.Serial))
-		response.WriteString(fmt.Sprintf("- **Status**: %s\n", sv.Attributes.Status))
-		response.WriteString(fmt.Sprintf("- **Size**: %d bytes\n", sv.Attributes.Size))
-		response.WriteString(fmt.Sprintf("- **Terraform Version**: %s\n", sv.Attributes.TerraformVersion))
-		response.WriteString(fmt.Sprintf("- **Has State Data**: %t\n", sv.Attributes.HasStateData))
-		response.WriteString(fmt.Sprintf("- **Created At**: %s\n", sv.Attributes.CreatedAt))
-
-		if sv.Attributes.Lineage != nil {
-			response.WriteString(fmt.Sprintf("- **Lineage**: %s\n", *sv.Attributes.Lineage))
-		}
-
-		if sv.Attributes.VCSCommitSHA != nil {
-			response.WriteString(fmt.Sprintf("- **VCS Commit SHA**: %s\n", *sv.Attributes.VCSCommitSHA))
-		}
-
-		if sv.Attributes.DownloadURL != nil {
-			response.WriteString("- **Download URL**: Available\n")
-		}
-
-		if sv.Attributes.JSONStateSizeBytes != nil {
-			response.WriteString(fmt.Sprintf("- **JSON State Size**: %d bytes\n", *sv.Attributes.JSONStateSizeBytes))
-		}
-	}
-
-	return response.String()
-}
-
-func formatDownloadStateVersionResponse(result map[string]interface{}) string {
-	var response strings.Builder
-
-	if message, ok := result["message"].(string); ok {
-		response.WriteString(fmt.Sprintf("✅ %s\n\n", message))
-	}
-
-	response.WriteString("### Download Details\n")
-	if versionID, ok := result["state_version_id"].(string); ok {
-		response.WriteString(fmt.Sprintf("- **State Version ID**: %s\n", versionID))
-	}
-	if fileSize, ok := result["file_size"].(int); ok {
-		response.WriteString(fmt.Sprintf("- **File Size**: %d bytes\n", fileSize))
-	}
-	if encoding, ok := result["content_encoding"].(string); ok {
-		response.WriteString(fmt.Sprintf("- **Content Encoding**: %s\n", encoding))
-	}
-	if instructions, ok := result["usage_instructions"].(string); ok {
-		response.WriteString(fmt.Sprintf("- **Usage Instructions**: %s\n", instructions))
-	}
-
-	if content, ok := result["content"].(string); ok {
-		response.WriteString("\n### State Content (Base64)\n")
-		// Show first 100 characters of base64 content for preview
-		if len(content) > 100 {
-			response.WriteString(fmt.Sprintf("```\n%s...\n```\n", content[:100]))
-			response.WriteString(fmt.Sprintf("(Content truncated for display - full content has %d characters)\n", len(content)))
-		} else {
-			response.WriteString(fmt.Sprintf("```\n%s\n```\n", content))
-		}
-	}
-
-	return response.String()
-}
-
-func formatCreateStateVersionResponse(result map[string]interface{}) string {
-	var response strings.Builder
-
-	if message, ok := result["message"].(string); ok {
-		response.WriteString(fmt.Sprintf("✅ %s\n\n", message))
-	}
-
-	if sv, ok := result["state_version"].(hcp_terraform.StateVersion); ok {
-		response.WriteString("### Created State Version Details\n")
-		response.WriteString(fmt.Sprintf("- **ID**: %s\n", sv.ID))
-		response.WriteString(fmt.Sprintf("- **Serial**: %d\n", sv.Attributes.Serial))
-		response.WriteString(fmt.Sprintf("- **Status**: %s\n", sv.Attributes.Status))
-		response.WriteString(fmt.Sprintf("- **Size**: %d bytes\n", sv.Attributes.Size))
-		response.WriteString(fmt.Sprintf("- **Terraform Version**: %s\n", sv.Attributes.TerraformVersion))
-		response.WriteString(fmt.Sprintf("- **Has State Data**: %t\n", sv.Attributes.HasStateData))
-		response.WriteString(fmt.Sprintf("- **Created At**: %s\n", sv.Attributes.CreatedAt))
-
-		if sv.Attributes.Lineage != nil {
-			response.WriteString(fmt.Sprintf("- **Lineage**: %s\n", *sv.Attributes.Lineage))
-		}
-	}
-
-	return response.String()
+	return mcp.NewToolResultText(string(jsonResponse)), nil
 }

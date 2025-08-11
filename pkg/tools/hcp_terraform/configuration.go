@@ -3,6 +3,7 @@ package hcp_terraform
 import (
 	"context"
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"strconv"
 	"strings"
@@ -348,11 +349,15 @@ func getConfigurationVersionsHandler(hcpClient *hcp_terraform.Client, request mc
 		return nil, utils.LogAndReturnError(logger, "configuration versions retrieval", err)
 	}
 
-	// Format the response
-	formattedResult := formatConfigurationVersionsResponse(result)
-	logger.Infof("Successfully retrieved configuration versions for workspace %s", workspaceID)
+	// Return JSON response
+	jsonResponse, err := json.Marshal(result)
+	if err != nil {
+		logger.Errorf("Failed to marshal response: %v", err)
+		return nil, utils.LogAndReturnError(logger, "response marshaling", err)
+	}
 
-	return mcp.NewToolResultText(formattedResult), nil
+	logger.Infof("Successfully retrieved configuration versions for workspace %s", workspaceID)
+	return mcp.NewToolResultText(string(jsonResponse)), nil
 }
 
 func createConfigurationVersionHandler(hcpClient *hcp_terraform.Client, request mcp.CallToolRequest, logger *log.Logger) (*mcp.CallToolResult, error) {
@@ -382,11 +387,15 @@ func createConfigurationVersionHandler(hcpClient *hcp_terraform.Client, request 
 		return nil, utils.LogAndReturnError(logger, "configuration version creation", err)
 	}
 
-	// Format the response
-	formattedResult := formatCreateConfigurationVersionResponse(result)
-	logger.Infof("Successfully created configuration version for workspace %s", workspaceID)
+	// Return JSON response
+	jsonResponse, err := json.Marshal(result)
+	if err != nil {
+		logger.Errorf("Failed to marshal response: %v", err)
+		return nil, utils.LogAndReturnError(logger, "response marshaling", err)
+	}
 
-	return mcp.NewToolResultText(formattedResult), nil
+	logger.Infof("Successfully created configuration version for workspace %s", workspaceID)
+	return mcp.NewToolResultText(string(jsonResponse)), nil
 }
 
 func downloadConfigurationFilesHandler(hcpClient *hcp_terraform.Client, request mcp.CallToolRequest, logger *log.Logger) (*mcp.CallToolResult, error) {
@@ -412,11 +421,15 @@ func downloadConfigurationFilesHandler(hcpClient *hcp_terraform.Client, request 
 		return nil, utils.LogAndReturnError(logger, "configuration files download", err)
 	}
 
-	// Format the response
-	formattedResult := formatDownloadConfigurationFilesResponse(result)
-	logger.Infof("Successfully downloaded configuration files for version %s", configurationVersionID)
+	// Return JSON response
+	jsonResponse, err := json.Marshal(result)
+	if err != nil {
+		logger.Errorf("Failed to marshal response: %v", err)
+		return nil, utils.LogAndReturnError(logger, "response marshaling", err)
+	}
 
-	return mcp.NewToolResultText(formattedResult), nil
+	logger.Infof("Successfully downloaded configuration files for version %s", configurationVersionID)
+	return mcp.NewToolResultText(string(jsonResponse)), nil
 }
 
 func uploadConfigurationFilesHandler(hcpClient *hcp_terraform.Client, request mcp.CallToolRequest, logger *log.Logger) (*mcp.CallToolResult, error) {
@@ -442,149 +455,13 @@ func uploadConfigurationFilesHandler(hcpClient *hcp_terraform.Client, request mc
 		return nil, utils.LogAndReturnError(logger, "configuration files upload", err)
 	}
 
-	// Format the response
-	formattedResult := formatUploadConfigurationFilesResponse(result)
+	// Return JSON response
+	jsonResponse, err := json.Marshal(result)
+	if err != nil {
+		logger.Errorf("Failed to marshal response: %v", err)
+		return nil, utils.LogAndReturnError(logger, "response marshaling", err)
+	}
+
 	logger.Infof("Successfully uploaded configuration files")
-
-	return mcp.NewToolResultText(formattedResult), nil
-}
-
-// Formatting functions
-
-func formatConfigurationVersionsResponse(result map[string]interface{}) string {
-	var response strings.Builder
-
-	if configVersions, ok := result["configuration_versions"].([]hcp_terraform.ConfigurationVersion); ok {
-		if len(configVersions) == 0 {
-			return "No configuration versions found."
-		}
-
-		response.WriteString(fmt.Sprintf("Found %d configuration version(s):\n\n", len(configVersions)))
-
-		for i, cv := range configVersions {
-			response.WriteString(fmt.Sprintf("## %d. Configuration Version %s\n", i+1, cv.ID))
-			response.WriteString(fmt.Sprintf("- **ID**: %s\n", cv.ID))
-			response.WriteString(fmt.Sprintf("- **Status**: %s\n", cv.Attributes.Status))
-			response.WriteString(fmt.Sprintf("- **Source**: %s\n", cv.Attributes.Source))
-			response.WriteString(fmt.Sprintf("- **Auto Queue Runs**: %t\n", cv.Attributes.AutoQueueRuns))
-			response.WriteString(fmt.Sprintf("- **Speculative**: %t\n", cv.Attributes.Speculative))
-			response.WriteString(fmt.Sprintf("- **Created At**: %s\n", cv.Attributes.CreatedAt))
-
-			if cv.Attributes.Error != nil && *cv.Attributes.Error != "" {
-				response.WriteString(fmt.Sprintf("- **Error**: %s\n", *cv.Attributes.Error))
-			}
-
-			if cv.Attributes.UploadURL != nil {
-				response.WriteString("- **Upload URL**: Available\n")
-			}
-
-			if len(cv.Attributes.ChangedFiles) > 0 {
-				response.WriteString(fmt.Sprintf("- **Changed Files**: %d files\n", len(cv.Attributes.ChangedFiles)))
-			}
-
-			response.WriteString("\n")
-		}
-
-		// Add pagination info if available
-		if pagination, ok := result["pagination"]; ok {
-			if paginationMap, ok := pagination.(map[string]interface{}); ok {
-				response.WriteString("### Pagination\n")
-				if currentPage, ok := paginationMap["current_page"].(int); ok {
-					response.WriteString(fmt.Sprintf("- **Current Page**: %d\n", currentPage))
-				}
-				if totalPages, ok := paginationMap["total_pages"].(int); ok {
-					response.WriteString(fmt.Sprintf("- **Total Pages**: %d\n", totalPages))
-				}
-				if totalCount, ok := paginationMap["total_count"].(int); ok {
-					response.WriteString(fmt.Sprintf("- **Total Count**: %d\n", totalCount))
-				}
-			}
-		}
-	}
-
-	return response.String()
-}
-
-func formatCreateConfigurationVersionResponse(result map[string]interface{}) string {
-	var response strings.Builder
-
-	if message, ok := result["message"].(string); ok {
-		response.WriteString(fmt.Sprintf("✅ %s\n\n", message))
-	}
-
-	if cv, ok := result["configuration_version"].(hcp_terraform.ConfigurationVersion); ok {
-		response.WriteString("### Configuration Version Details\n")
-		response.WriteString(fmt.Sprintf("- **ID**: %s\n", cv.ID))
-		response.WriteString(fmt.Sprintf("- **Status**: %s\n", cv.Attributes.Status))
-		response.WriteString(fmt.Sprintf("- **Source**: %s\n", cv.Attributes.Source))
-		response.WriteString(fmt.Sprintf("- **Auto Queue Runs**: %t\n", cv.Attributes.AutoQueueRuns))
-		response.WriteString(fmt.Sprintf("- **Speculative**: %t\n", cv.Attributes.Speculative))
-		response.WriteString(fmt.Sprintf("- **Created At**: %s\n", cv.Attributes.CreatedAt))
-	}
-
-	if uploadURL, ok := result["upload_url"].(string); ok {
-		response.WriteString("\n### Upload Information\n")
-		response.WriteString(fmt.Sprintf("- **Upload URL**: %s\n", uploadURL))
-		if instructions, ok := result["upload_instructions"].(string); ok {
-			response.WriteString(fmt.Sprintf("- **Instructions**: %s\n", instructions))
-		}
-	}
-
-	return response.String()
-}
-
-func formatDownloadConfigurationFilesResponse(result map[string]interface{}) string {
-	var response strings.Builder
-
-	if message, ok := result["message"].(string); ok {
-		response.WriteString(fmt.Sprintf("✅ %s\n\n", message))
-	}
-
-	response.WriteString("### Download Details\n")
-	if versionID, ok := result["configuration_version_id"].(string); ok {
-		response.WriteString(fmt.Sprintf("- **Configuration Version ID**: %s\n", versionID))
-	}
-	if fileSize, ok := result["file_size"].(int); ok {
-		response.WriteString(fmt.Sprintf("- **File Size**: %d bytes\n", fileSize))
-	}
-	if encoding, ok := result["content_encoding"].(string); ok {
-		response.WriteString(fmt.Sprintf("- **Content Encoding**: %s\n", encoding))
-	}
-	if instructions, ok := result["usage_instructions"].(string); ok {
-		response.WriteString(fmt.Sprintf("- **Usage Instructions**: %s\n", instructions))
-	}
-
-	if content, ok := result["content"].(string); ok {
-		response.WriteString("\n### Configuration Files Content (Base64)\n")
-		// Show first 100 characters of base64 content for preview
-		if len(content) > 100 {
-			response.WriteString(fmt.Sprintf("```\n%s...\n```\n", content[:100]))
-			response.WriteString(fmt.Sprintf("(Content truncated for display - full content has %d characters)\n", len(content)))
-		} else {
-			response.WriteString(fmt.Sprintf("```\n%s\n```\n", content))
-		}
-	}
-
-	return response.String()
-}
-
-func formatUploadConfigurationFilesResponse(result map[string]interface{}) string {
-	var response strings.Builder
-
-	if message, ok := result["message"].(string); ok {
-		response.WriteString(fmt.Sprintf("✅ %s\n\n", message))
-	}
-
-	response.WriteString("### Upload Details\n")
-	if uploadURL, ok := result["upload_url"].(string); ok {
-		response.WriteString(fmt.Sprintf("- **Upload URL**: %s\n", uploadURL))
-	}
-	if fileSize, ok := result["file_size"].(int); ok {
-		response.WriteString(fmt.Sprintf("- **File Size**: %d bytes\n", fileSize))
-	}
-	if status, ok := result["status"].(string); ok {
-		response.WriteString(fmt.Sprintf("- **Status**: %s\n", status))
-	}
-
-	return response.String()
+	return mcp.NewToolResultText(string(jsonResponse)), nil
 }

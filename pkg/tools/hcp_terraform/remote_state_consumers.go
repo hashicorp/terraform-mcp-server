@@ -2,8 +2,8 @@ package hcp_terraform
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
-	"strings"
 
 	"github.com/hashicorp/terraform-mcp-server/pkg/client/hcp_terraform"
 	"github.com/hashicorp/terraform-mcp-server/pkg/utils"
@@ -13,7 +13,7 @@ import (
 )
 
 // GetHCPTerraformRemoteStateConsumersTool retrieves workspaces that can access this workspace's state
-func GetHCPTerraformRemoteStateConsumersTool(client *hcp_terraform.Client, authToken, workspaceID string) (map[string]interface{}, error) {
+func GetHCPTerraformRemoteStateConsumersTool(client *hcp_terraform.Client, authToken, workspaceID string) (*hcp_terraform.RemoteStateConsumersResponse, error) {
 	// Validate required parameters
 	if authToken == "" {
 		return nil, fmt.Errorf("authentication token is required")
@@ -22,21 +22,13 @@ func GetHCPTerraformRemoteStateConsumersTool(client *hcp_terraform.Client, authT
 		return nil, fmt.Errorf("workspace_id is required")
 	}
 
-	// Call client method
+	// Call client method and return raw API response
 	response, err := client.GetWorkspaceRemoteStateConsumers(authToken, workspaceID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get remote state consumers: %v", err)
 	}
 
-	// Format response for user
-	result := map[string]interface{}{
-		"workspace_id":           workspaceID,
-		"remote_state_consumers": response.Data,
-		"total_count":            len(response.Data),
-		"message":                fmt.Sprintf("Retrieved %d remote state consumers for workspace %s", len(response.Data), workspaceID),
-	}
-
-	return result, nil
+	return response, nil
 }
 
 // AddHCPTerraformRemoteStateConsumersTool adds workspaces as remote state consumers
@@ -60,11 +52,9 @@ func AddHCPTerraformRemoteStateConsumersTool(client *hcp_terraform.Client, authT
 
 	// Format response for user
 	result := map[string]interface{}{
-		"workspace_id":       workspaceID,
-		"added_consumer_ids": consumerWorkspaceIDs,
-		"added_count":        len(consumerWorkspaceIDs),
-		"message":            fmt.Sprintf("Added %d remote state consumers to workspace %s", len(consumerWorkspaceIDs), workspaceID),
-		"status":             "success",
+		"success":                true,
+		"workspace_id":           workspaceID,
+		"consumer_workspace_ids": consumerWorkspaceIDs,
 	}
 
 	return result, nil
@@ -91,11 +81,9 @@ func RemoveHCPTerraformRemoteStateConsumersTool(client *hcp_terraform.Client, au
 
 	// Format response for user
 	result := map[string]interface{}{
-		"workspace_id":         workspaceID,
-		"removed_consumer_ids": consumerWorkspaceIDs,
-		"removed_count":        len(consumerWorkspaceIDs),
-		"message":              fmt.Sprintf("Removed %d remote state consumers from workspace %s", len(consumerWorkspaceIDs), workspaceID),
-		"status":               "success",
+		"success":                true,
+		"workspace_id":           workspaceID,
+		"consumer_workspace_ids": consumerWorkspaceIDs,
 	}
 
 	return result, nil
@@ -215,17 +203,21 @@ func getRemoteStateConsumersHandler(hcpClient *hcp_terraform.Client, request mcp
 	}
 
 	// Call the tool function
-	result, err := GetHCPTerraformRemoteStateConsumersTool(hcpClient, token, workspaceID)
+	response, err := GetHCPTerraformRemoteStateConsumersTool(hcpClient, token, workspaceID)
 	if err != nil {
 		logger.Errorf("Remote state consumers retrieval failed: %v", err)
 		return nil, utils.LogAndReturnError(logger, "remote state consumers retrieval", err)
 	}
 
-	// Format the response
-	formattedResult := formatRemoteStateConsumersResponse(result)
-	logger.Infof("Successfully retrieved remote state consumers for workspace %s", workspaceID)
+	// Return raw API response as JSON
+	jsonResult, jsonErr := json.Marshal(response)
+	if jsonErr != nil {
+		logger.Errorf("Failed to marshal result to JSON: %v", jsonErr)
+		return nil, utils.LogAndReturnError(logger, "JSON marshaling", jsonErr)
+	}
 
-	return mcp.NewToolResultText(formattedResult), nil
+	logger.Infof("Successfully retrieved remote state consumers for workspace %s", workspaceID)
+	return mcp.NewToolResultText(string(jsonResult)), nil
 }
 
 func addRemoteStateConsumersHandler(hcpClient *hcp_terraform.Client, request mcp.CallToolRequest, logger *log.Logger) (*mcp.CallToolResult, error) {
@@ -258,11 +250,15 @@ func addRemoteStateConsumersHandler(hcpClient *hcp_terraform.Client, request mcp
 		return nil, utils.LogAndReturnError(logger, "remote state consumers addition", err)
 	}
 
-	// Format the response
-	formattedResult := formatAddRemoteStateConsumersResponse(result)
-	logger.Infof("Successfully added remote state consumers to workspace %s", workspaceID)
+	// Return JSON response
+	jsonResult, jsonErr := json.Marshal(result)
+	if jsonErr != nil {
+		logger.Errorf("Failed to marshal result to JSON: %v", jsonErr)
+		return nil, utils.LogAndReturnError(logger, "JSON marshaling", jsonErr)
+	}
 
-	return mcp.NewToolResultText(formattedResult), nil
+	logger.Infof("Successfully added remote state consumers to workspace %s", workspaceID)
+	return mcp.NewToolResultText(string(jsonResult)), nil
 }
 
 func removeRemoteStateConsumersHandler(hcpClient *hcp_terraform.Client, request mcp.CallToolRequest, logger *log.Logger) (*mcp.CallToolResult, error) {
@@ -295,121 +291,13 @@ func removeRemoteStateConsumersHandler(hcpClient *hcp_terraform.Client, request 
 		return nil, utils.LogAndReturnError(logger, "remote state consumers removal", err)
 	}
 
-	// Format the response
-	formattedResult := formatRemoveRemoteStateConsumersResponse(result)
+	// Return JSON response
+	jsonResult, jsonErr := json.Marshal(result)
+	if jsonErr != nil {
+		logger.Errorf("Failed to marshal result to JSON: %v", jsonErr)
+		return nil, utils.LogAndReturnError(logger, "JSON marshaling", jsonErr)
+	}
+
 	logger.Infof("Successfully removed remote state consumers from workspace %s", workspaceID)
-
-	return mcp.NewToolResultText(formattedResult), nil
-}
-
-// Formatting functions
-
-func formatRemoteStateConsumersResponse(result map[string]interface{}) string {
-	var response strings.Builder
-
-	if message, ok := result["message"].(string); ok {
-		response.WriteString(fmt.Sprintf("✅ %s\n\n", message))
-	}
-
-	if consumers, ok := result["remote_state_consumers"].([]hcp_terraform.RemoteStateConsumer); ok {
-		if len(consumers) == 0 {
-			response.WriteString("No remote state consumers found for this workspace.\n")
-		} else {
-			response.WriteString("### Remote State Consumers\n")
-			for i, consumer := range consumers {
-				response.WriteString(fmt.Sprintf("%d. **%s** (ID: %s)\n", i+1, consumer.Attributes.Name, consumer.ID))
-				if consumer.Attributes.Description != nil && *consumer.Attributes.Description != "" {
-					response.WriteString(fmt.Sprintf("   - Description: %s\n", *consumer.Attributes.Description))
-				}
-				if consumer.Attributes.Environment != nil && *consumer.Attributes.Environment != "" {
-					response.WriteString(fmt.Sprintf("   - Environment: %s\n", *consumer.Attributes.Environment))
-				}
-				lockStatus := "🔓 Unlocked"
-				if consumer.Attributes.Locked {
-					lockStatus = "🔒 Locked"
-				}
-				response.WriteString(fmt.Sprintf("   - Status: %s\n", lockStatus))
-			}
-		}
-	}
-
-	if totalCount, ok := result["total_count"].(int); ok {
-		response.WriteString(fmt.Sprintf("\n**Total Count**: %d\n", totalCount))
-	}
-
-	if workspaceID, ok := result["workspace_id"].(string); ok {
-		response.WriteString(fmt.Sprintf("**Source Workspace**: %s\n", workspaceID))
-	}
-
-	return response.String()
-}
-
-func formatAddRemoteStateConsumersResponse(result map[string]interface{}) string {
-	var response strings.Builder
-
-	if message, ok := result["message"].(string); ok {
-		response.WriteString(fmt.Sprintf("✅ %s\n\n", message))
-	}
-
-	response.WriteString("### Addition Details\n")
-
-	if workspaceID, ok := result["workspace_id"].(string); ok {
-		response.WriteString(fmt.Sprintf("- **Source Workspace**: %s\n", workspaceID))
-	}
-
-	if addedCount, ok := result["added_count"].(int); ok {
-		response.WriteString(fmt.Sprintf("- **Added Count**: %d\n", addedCount))
-	}
-
-	if addedIDs, ok := result["added_consumer_ids"].([]string); ok {
-		response.WriteString("- **Added Consumer IDs**:\n")
-		for i, id := range addedIDs {
-			response.WriteString(fmt.Sprintf("  %d. %s\n", i+1, id))
-		}
-	}
-
-	if status, ok := result["status"].(string); ok {
-		response.WriteString(fmt.Sprintf("- **Status**: %s\n", status))
-	}
-
-	response.WriteString("\n### Notes\n")
-	response.WriteString("- The specified workspaces can now access this workspace's remote state\n")
-	response.WriteString("- Use `terraform_remote_state` data source to access the state in consumer workspaces\n")
-
-	return response.String()
-}
-
-func formatRemoveRemoteStateConsumersResponse(result map[string]interface{}) string {
-	var response strings.Builder
-
-	if message, ok := result["message"].(string); ok {
-		response.WriteString(fmt.Sprintf("✅ %s\n\n", message))
-	}
-
-	response.WriteString("### Removal Details\n")
-
-	if workspaceID, ok := result["workspace_id"].(string); ok {
-		response.WriteString(fmt.Sprintf("- **Source Workspace**: %s\n", workspaceID))
-	}
-
-	if removedCount, ok := result["removed_count"].(int); ok {
-		response.WriteString(fmt.Sprintf("- **Removed Count**: %d\n", removedCount))
-	}
-
-	if removedIDs, ok := result["removed_consumer_ids"].([]string); ok {
-		response.WriteString("- **Removed Consumer IDs**:\n")
-		for i, id := range removedIDs {
-			response.WriteString(fmt.Sprintf("  %d. %s\n", i+1, id))
-		}
-	}
-
-	if status, ok := result["status"].(string); ok {
-		response.WriteString(fmt.Sprintf("- **Status**: %s\n", status))
-	}
-
-	response.WriteString("\n### Notes\n")
-	response.WriteString("- The specified workspaces no longer have access to this workspace's remote state\n")
-	response.WriteString("- Any `terraform_remote_state` data sources in consumer workspaces will fail until access is restored\n")
-
-	return response.String()
+	return mcp.NewToolResultText(string(jsonResult)), nil
 }

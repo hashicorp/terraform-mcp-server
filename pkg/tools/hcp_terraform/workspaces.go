@@ -5,8 +5,8 @@ package hcp_terraform
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
-	"strings"
 
 	"github.com/hashicorp/terraform-mcp-server/pkg/client/hcp_terraform"
 	"github.com/hashicorp/terraform-mcp-server/pkg/utils"
@@ -445,9 +445,14 @@ func getWorkspacesHandler(hcpClient *hcp_terraform.Client, request mcp.CallToolR
 
 	logger.Infof("Successfully fetched %d workspaces from organization '%s'", len(response.Data), organizationName)
 
-	// Format response
-	result := formatWorkspacesResponse(response)
-	return mcp.NewToolResultText(result), nil
+	// Return raw API response as JSON
+	jsonResult, jsonErr := json.Marshal(response)
+	if jsonErr != nil {
+		logger.Errorf("Failed to marshal result to JSON: %v", jsonErr)
+		return nil, utils.LogAndReturnError(logger, "JSON marshaling", jsonErr)
+	}
+
+	return mcp.NewToolResultText(string(jsonResult)), nil
 }
 
 func getWorkspaceDetailsHandler(hcpClient *hcp_terraform.Client, request mcp.CallToolRequest, logger *log.Logger) (*mcp.CallToolResult, error) {
@@ -490,9 +495,14 @@ func getWorkspaceDetailsHandler(hcpClient *hcp_terraform.Client, request mcp.Cal
 
 	logger.Infof("Successfully fetched workspace: %s", response.Data.Attributes.Name)
 
-	// Format response
-	result := formatWorkspaceDetailsResponse(response)
-	return mcp.NewToolResultText(result), nil
+	// Return raw API response as JSON
+	jsonResult, jsonErr := json.Marshal(response)
+	if jsonErr != nil {
+		logger.Errorf("Failed to marshal result to JSON: %v", jsonErr)
+		return nil, utils.LogAndReturnError(logger, "JSON marshaling", jsonErr)
+	}
+
+	return mcp.NewToolResultText(string(jsonResult)), nil
 }
 
 func createWorkspaceHandler(hcpClient *hcp_terraform.Client, request mcp.CallToolRequest, logger *log.Logger) (*mcp.CallToolResult, error) {
@@ -667,9 +677,13 @@ func createWorkspaceHandler(hcpClient *hcp_terraform.Client, request mcp.CallToo
 
 	logger.Infof("Successfully created workspace: %s", response.Data.Attributes.Name)
 
-	// Format response
-	result := formatWorkspaceDetailsResponse(response)
-	return mcp.NewToolResultText(result), nil
+	// Return JSON response
+	jsonResult, err := json.Marshal(response)
+	if err != nil {
+		logger.Errorf("Failed to marshal response: %v", err)
+		return mcp.NewToolResultText("Error marshaling response"), nil
+	}
+	return mcp.NewToolResultText(string(jsonResult)), nil
 }
 
 func updateWorkspaceHandler(hcpClient *hcp_terraform.Client, request mcp.CallToolRequest, logger *log.Logger) (*mcp.CallToolResult, error) {
@@ -848,145 +862,11 @@ func updateWorkspaceHandler(hcpClient *hcp_terraform.Client, request mcp.CallToo
 
 	logger.Infof("Successfully updated workspace: %s", response.Data.Attributes.Name)
 
-	// Format response
-	result := formatWorkspaceDetailsResponse(response)
-	return mcp.NewToolResultText(result), nil
-}
-
-// ====================
-// Helper Functions
-// ====================
-
-// formatWorkspacesResponse formats the workspaces response into a user-friendly format
-func formatWorkspacesResponse(response *hcp_terraform.WorkspaceResponse) string {
-	if len(response.Data) == 0 {
-		return "No workspaces found."
+	// Return JSON response
+	jsonResult, err := json.Marshal(response)
+	if err != nil {
+		logger.Errorf("Failed to marshal response: %v", err)
+		return mcp.NewToolResultText("Error marshaling response"), nil
 	}
-
-	var result strings.Builder
-	result.WriteString(fmt.Sprintf("Found %d workspace(s):\n\n", len(response.Data)))
-
-	for i, workspace := range response.Data {
-		result.WriteString(fmt.Sprintf("## %d. %s\n", i+1, workspace.Attributes.Name))
-		result.WriteString(fmt.Sprintf("- **ID**: %s\n", workspace.ID))
-		result.WriteString(fmt.Sprintf("- **Execution Mode**: %s\n", workspace.Attributes.ExecutionMode))
-		result.WriteString(fmt.Sprintf("- **Terraform Version**: %s\n", workspace.Attributes.TerraformVersion))
-		result.WriteString(fmt.Sprintf("- **Auto Apply**: %t\n", workspace.Attributes.AutoApply))
-		result.WriteString(fmt.Sprintf("- **Locked**: %t\n", workspace.Attributes.Locked))
-
-		if workspace.Attributes.Description != nil && *workspace.Attributes.Description != "" {
-			result.WriteString(fmt.Sprintf("- **Description**: %s\n", *workspace.Attributes.Description))
-		}
-
-		if workspace.Attributes.VCSRepo != nil {
-			result.WriteString(fmt.Sprintf("- **VCS Repository**: %s\n", workspace.Attributes.VCSRepo.Identifier))
-		}
-
-		if len(workspace.Attributes.TagNames) > 0 {
-			result.WriteString(fmt.Sprintf("- **Tags**: %s\n", strings.Join(workspace.Attributes.TagNames, ", ")))
-		}
-
-		result.WriteString(fmt.Sprintf("- **Created**: %s\n", workspace.Attributes.CreatedAt.Format("2006-01-02 15:04:05")))
-		result.WriteString(fmt.Sprintf("- **Updated**: %s\n", workspace.Attributes.UpdatedAt.Format("2006-01-02 15:04:05")))
-
-		if i < len(response.Data)-1 {
-			result.WriteString("\n")
-		}
-	}
-
-	// Add pagination information
-	if response.Meta.Pagination.TotalPages > 1 {
-		result.WriteString(fmt.Sprintf("\n**Pagination**: Page %d of %d (Total: %d workspaces)",
-			response.Meta.Pagination.CurrentPage,
-			response.Meta.Pagination.TotalPages,
-			response.Meta.Pagination.TotalCount))
-	}
-
-	return result.String()
-}
-
-// formatWorkspaceDetailsResponse formats a single workspace response into a user-friendly format
-func formatWorkspaceDetailsResponse(response *hcp_terraform.SingleWorkspaceResponse) string {
-	workspace := response.Data
-	var result strings.Builder
-
-	result.WriteString(fmt.Sprintf("# Workspace: %s\n\n", workspace.Attributes.Name))
-
-	// Basic Information
-	result.WriteString("## Basic Information\n")
-	result.WriteString(fmt.Sprintf("- **ID**: %s\n", workspace.ID))
-	result.WriteString(fmt.Sprintf("- **Name**: %s\n", workspace.Attributes.Name))
-	result.WriteString(fmt.Sprintf("- **Environment**: %s\n", workspace.Attributes.Environment))
-
-	if workspace.Attributes.Description != nil && *workspace.Attributes.Description != "" {
-		result.WriteString(fmt.Sprintf("- **Description**: %s\n", *workspace.Attributes.Description))
-	}
-
-	// Configuration
-	result.WriteString("\n## Configuration\n")
-	result.WriteString(fmt.Sprintf("- **Execution Mode**: %s\n", workspace.Attributes.ExecutionMode))
-	result.WriteString(fmt.Sprintf("- **Terraform Version**: %s\n", workspace.Attributes.TerraformVersion))
-	result.WriteString(fmt.Sprintf("- **Auto Apply**: %t\n", workspace.Attributes.AutoApply))
-	result.WriteString(fmt.Sprintf("- **Global Remote State**: %t\n", workspace.Attributes.GlobalRemoteState))
-	result.WriteString(fmt.Sprintf("- **Queue All Runs**: %t\n", workspace.Attributes.QueueAllRuns))
-	result.WriteString(fmt.Sprintf("- **Speculative Enabled**: %t\n", workspace.Attributes.SpeculativeEnabled))
-	result.WriteString(fmt.Sprintf("- **Allow Destroy Plan**: %t\n", workspace.Attributes.AllowDestroyPlan))
-
-	if workspace.Attributes.WorkingDirectory != nil && *workspace.Attributes.WorkingDirectory != "" {
-		result.WriteString(fmt.Sprintf("- **Working Directory**: %s\n", *workspace.Attributes.WorkingDirectory))
-	}
-
-	// Status
-	result.WriteString("\n## Status\n")
-	result.WriteString(fmt.Sprintf("- **Locked**: %t\n", workspace.Attributes.Locked))
-	if workspace.Attributes.LockedReason != nil && *workspace.Attributes.LockedReason != "" {
-		result.WriteString(fmt.Sprintf("- **Lock Reason**: %s\n", *workspace.Attributes.LockedReason))
-	}
-	result.WriteString(fmt.Sprintf("- **Resource Count**: %d\n", workspace.Attributes.ResourceCount))
-
-	// VCS Repository
-	if workspace.Attributes.VCSRepo != nil {
-		result.WriteString("\n## VCS Repository\n")
-		result.WriteString(fmt.Sprintf("- **Repository**: %s\n", workspace.Attributes.VCSRepo.Identifier))
-		result.WriteString(fmt.Sprintf("- **Branch**: %s\n", workspace.Attributes.VCSRepo.Branch))
-		result.WriteString(fmt.Sprintf("- **Service Provider**: %s\n", workspace.Attributes.VCSRepo.ServiceProvider))
-	}
-
-	// Tags
-	if len(workspace.Attributes.TagNames) > 0 {
-		result.WriteString("\n## Tags\n")
-		for _, tag := range workspace.Attributes.TagNames {
-			result.WriteString(fmt.Sprintf("- %s\n", tag))
-		}
-	}
-
-	// Performance Metrics
-	if workspace.Attributes.ApplyDurationAverage != nil || workspace.Attributes.PlanDurationAverage != nil {
-		result.WriteString("\n## Performance Metrics\n")
-		if workspace.Attributes.ApplyDurationAverage != nil {
-			result.WriteString(fmt.Sprintf("- **Average Apply Duration**: %d ms\n", *workspace.Attributes.ApplyDurationAverage))
-		}
-		if workspace.Attributes.PlanDurationAverage != nil {
-			result.WriteString(fmt.Sprintf("- **Average Plan Duration**: %d ms\n", *workspace.Attributes.PlanDurationAverage))
-		}
-		if workspace.Attributes.RunFailures != nil {
-			result.WriteString(fmt.Sprintf("- **Run Failures**: %d\n", *workspace.Attributes.RunFailures))
-		}
-	}
-
-	// Timestamps
-	result.WriteString("\n## Timestamps\n")
-	result.WriteString(fmt.Sprintf("- **Created**: %s\n", workspace.Attributes.CreatedAt.Format("2006-01-02 15:04:05")))
-	result.WriteString(fmt.Sprintf("- **Updated**: %s\n", workspace.Attributes.UpdatedAt.Format("2006-01-02 15:04:05")))
-	result.WriteString(fmt.Sprintf("- **Latest Change**: %s\n", workspace.Attributes.LatestChangeAt.Format("2006-01-02 15:04:05")))
-
-	// Permissions
-	result.WriteString("\n## Permissions\n")
-	result.WriteString(fmt.Sprintf("- **Can Update**: %t\n", workspace.Attributes.Permissions.CanUpdate))
-	result.WriteString(fmt.Sprintf("- **Can Destroy**: %t\n", workspace.Attributes.Permissions.CanDestroy))
-	result.WriteString(fmt.Sprintf("- **Can Queue Run**: %t\n", workspace.Attributes.Permissions.CanQueueRun))
-	result.WriteString(fmt.Sprintf("- **Can Lock**: %t\n", workspace.Attributes.Permissions.CanLock))
-	result.WriteString(fmt.Sprintf("- **Can Manage Tags**: %t\n", workspace.Attributes.Permissions.CanManageTags))
-
-	return result.String()
+	return mcp.NewToolResultText(string(jsonResult)), nil
 }
