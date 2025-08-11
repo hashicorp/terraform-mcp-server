@@ -68,12 +68,6 @@ func getOrganizationsHandler(hcpClient *hcp_terraform.Client, request mcp.CallTo
 		return nil, utils.LogAndReturnError(logger, "token resolution", err)
 	}
 
-	// Validate token format
-	if err := validateTokenFormat(token); err != nil {
-		logger.Errorf("Token validation failed: %v", err)
-		return nil, utils.LogAndReturnError(logger, "token validation", err)
-	}
-
 	// Parse request parameters
 	opts := &hcp_terraform.OrganizationListOptions{
 		PageSize:   request.GetInt("page_size", 20),
