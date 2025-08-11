@@ -19,16 +19,17 @@ import (
 	"github.com/mark3labs/mcp-go/server"
 )
 
-// ResolveProviderDocID creates a tool to get provider details from registry.
-func ResolveProviderDocID(logger *log.Logger) server.ServerTool {
+// SearchProviderDocs creates a tool to get provider details from registry.
+func SearchProviderDocs(logger *log.Logger) server.ServerTool {
 	return server.ServerTool{
-		Tool: mcp.NewTool("search_providers",
+		Tool: mcp.NewTool("search_provider_docs",
 			mcp.WithDescription(`This tool retrieves a list of potential documents based on the service_slug and provider_data_type provided.
-You MUST call this function before 'get_provider_details' to obtain a valid tfprovider-compatible provider_doc_id.
+You MUST call this function before 'get_provider_docs_details' to obtain a valid tfprovider-compatible provider_doc_id.
 Use the most relevant single word as the search query for service_slug, if unsure about the service_slug, use the provider_name for its value.
 When selecting the best match, consider the following:
 	- Title similarity to the query
 	- Category relevance
+	- Description relevance
 Return the selected provider_doc_id and explain your choice.
 If there are multiple good matches, mention this but proceed with the most relevant one.`),
 			mcp.WithTitleAnnotation("Identify the most relevant provider document ID for a Terraform service"),
@@ -55,12 +56,12 @@ If there are multiple good matches, mention this but proceed with the most relev
 				mcp.Description("The version of the Terraform provider to retrieve in the format 'x.y.z', or 'latest' to get the latest version")),
 		),
 		Handler: func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-			return resolveProviderDocIDHandler(ctx, request, logger)
+			return searchProvidersHandler(ctx, request, logger)
 		},
 	}
 }
 
-func resolveProviderDocIDHandler(ctx context.Context, request mcp.CallToolRequest, logger *log.Logger) (*mcp.CallToolResult, error) {
+func searchProvidersHandler(ctx context.Context, request mcp.CallToolRequest, logger *log.Logger) (*mcp.CallToolResult, error) {
 	// For typical provider and namespace hallucinations
 	defaultErrorGuide := "please check the provider name, provider namespace or the provider version you're looking for, perhaps the provider is published under a different namespace or company name"
 
@@ -118,7 +119,7 @@ func resolveProviderDocIDHandler(ctx context.Context, request mcp.CallToolReques
 
 	var builder strings.Builder
 	builder.WriteString(fmt.Sprintf("Available Documentation (top matches) for %s in Terraform provider %s/%s version: %s\n\n", providerDetail.ProviderDataType, providerDetail.ProviderNamespace, providerDetail.ProviderName, providerDetail.ProviderVersion))
-	builder.WriteString("Each result includes:\n- providerDocID: tfprovider-compatible identifier\n- Title: Service or resource name\n- Category: Type of document\n- Description: Brief summary of the document\n")
+	builder.WriteString("Each result includes:\n- provider_doc_id: tfprovider-compatible identifier\n- Title: Service or resource name\n- Category: Type of document\n- Description: Brief summary of the document\n")
 	builder.WriteString("For best results, select libraries based on the service_slug match and category of information requested.\n\n---\n\n")
 
 	contentAvailable := false
@@ -132,7 +133,7 @@ func resolveProviderDocIDHandler(ctx context.Context, request mcp.CallToolReques
 				if err != nil {
 					logger.Warnf("Error fetching content snippet for provider doc ID: %s: %v", doc.ID, err)
 				}
-				builder.WriteString(fmt.Sprintf("- providerDocID: %s\n- Title: %s\n- Category: %s\n- Description: %s\n---\n", doc.ID, doc.Title, doc.Category, descriptionSnippet))
+				builder.WriteString(fmt.Sprintf("- provider_doc_id: %s\n- Title: %s\n- Category: %s\n- Description: %s\n---\n", doc.ID, doc.Title, doc.Category, descriptionSnippet))
 			}
 		}
 	}
@@ -229,14 +230,14 @@ func providerDetailsV2(httpClient *http.Client, providerDetail client.ProviderDe
 
 	var builder strings.Builder
 	builder.WriteString(fmt.Sprintf("Available Documentation (top matches) for %s in Terraform provider %s/%s version: %s\n\n", providerDetail.ProviderDataType, providerDetail.ProviderNamespace, providerDetail.ProviderName, providerDetail.ProviderVersion))
-	builder.WriteString("Each result includes:\n- providerDocID: tfprovider-compatible identifier\n- Title: Service or resource name\n- Category: Type of document\n- Description: Brief summary of the document\n")
+	builder.WriteString("Each result includes:\n- provider_doc_id: tfprovider-compatible identifier\n- Title: Service or resource name\n- Category: Type of document\n- Description: Brief summary of the document\n")
 	builder.WriteString("For best results, select libraries based on the service_slug match and category of information requested.\n\n---\n\n")
 	for _, doc := range docs {
 		descriptionSnippet, err := getContentSnippet(httpClient, doc.ID, logger)
 		if err != nil {
 			logger.Warnf("Error fetching content snippet for provider doc ID: %s: %v", doc.ID, err)
 		}
-		builder.WriteString(fmt.Sprintf("- providerDocID: %s\n- Title: %s\n- Category: %s\n- Description: %s\n---\n", doc.ID, doc.Attributes.Title, doc.Attributes.Category, descriptionSnippet))
+		builder.WriteString(fmt.Sprintf("- provider_doc_id: %s\n- Title: %s\n- Category: %s\n- Description: %s\n---\n", doc.ID, doc.Attributes.Title, doc.Attributes.Category, descriptionSnippet))
 	}
 
 	return builder.String(), nil

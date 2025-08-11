@@ -13,11 +13,11 @@ func RegisterTools(hcServer *server.MCPServer, logger *log.Logger) {
 	registerDynamicTools(hcServer, logger)
 
 	// Provider tools (always available)
-	getResolveProviderDocIDTool := ResolveProviderDocID(logger)
-	hcServer.AddTool(getResolveProviderDocIDTool.Tool, getResolveProviderDocIDTool.Handler)
+	getSearchProviderDocsTool := SearchProviderDocs(logger)
+	hcServer.AddTool(getSearchProviderDocsTool.Tool, getSearchProviderDocsTool.Handler)
 
-	getProviderDocsTool := GetProviderDocs(logger)
-	hcServer.AddTool(getProviderDocsTool.Tool, getProviderDocsTool.Handler)
+	getProviderDocsDetailsTool := GetProviderDocsDetails(logger)
+	hcServer.AddTool(getProviderDocsDetailsTool.Tool, getProviderDocsDetailsTool.Handler)
 
 	getLatestProviderVersionTool := GetLatestProviderVersion(logger)
 	hcServer.AddTool(getLatestProviderVersionTool.Tool, getLatestProviderVersionTool.Handler)

@@ -21,23 +21,23 @@ type RegistryTestCase struct {
 	TestPayload     map[string]interface{} `json:"testPayload,omitempty"`
 }
 
-var searchProviderTestCases = []RegistryTestCase{
+var searchProviderDocsTestCases = []RegistryTestCase{
 	{
 		TestName:        "empty_payload",
 		TestShouldFail:  true,
-		TestDescription: "Testing search_providers with empty payload",
+		TestDescription: "Testing search_provider_docs with empty payload",
 		TestPayload:     map[string]interface{}{},
 	},
 	{
 		TestName:        "missing_namespace_and_version",
 		TestShouldFail:  true,
-		TestDescription: "Testing search_providers without provider_namespace and provider_version",
+		TestDescription: "Testing search_provider_docs without provider_namespace and provider_version",
 		TestPayload:     map[string]interface{}{"provider_name": "google"},
 	},
 	{
 		TestName:        "without_version",
 		TestShouldFail:  false,
-		TestDescription: "Testing search_providers without provider_version",
+		TestDescription: "Testing search_provider_docs without provider_version",
 		TestPayload: map[string]interface{}{
 			"provider_name":      "azurerm",
 			"provider_namespace": "hashicorp",
@@ -47,7 +47,7 @@ var searchProviderTestCases = []RegistryTestCase{
 	{
 		TestName:        "hashicorp_without_namespace",
 		TestShouldFail:  false,
-		TestDescription: "Testing search_providers without provider_namespace, but owned by hashicorp",
+		TestDescription: "Testing search_provider_docs without provider_namespace, but owned by hashicorp",
 		TestPayload: map[string]interface{}{
 			"provider_name":    "aws",
 			"provider_version": "latest",
@@ -57,7 +57,7 @@ var searchProviderTestCases = []RegistryTestCase{
 	{
 		TestName:        "third_party_without_namespace",
 		TestShouldFail:  true,
-		TestDescription: "Testing search_providers without provider_namespace, but not-owned by hashicorp",
+		TestDescription: "Testing search_provider_docs without provider_namespace, but not-owned by hashicorp",
 		TestPayload: map[string]interface{}{
 			"provider_name":    "snowflake",
 			"provider_version": "latest",
@@ -66,7 +66,7 @@ var searchProviderTestCases = []RegistryTestCase{
 	{
 		TestName:        "required_values_resource",
 		TestShouldFail:  false,
-		TestDescription: "Testing search_providers only with required values",
+		TestDescription: "Testing search_provider_docs only with required values",
 		TestContentType: CONST_TYPE_RESOURCE,
 		TestPayload: map[string]interface{}{
 			"provider_name":      "dns",
@@ -77,7 +77,7 @@ var searchProviderTestCases = []RegistryTestCase{
 	{
 		TestName:        "data_source_with_prefix",
 		TestShouldFail:  false,
-		TestDescription: "Testing search_providers only with required values with the provider_name prefix",
+		TestDescription: "Testing search_provider_docs only with required values with the provider_name prefix",
 		TestContentType: CONST_TYPE_DATA_SOURCE,
 		TestPayload: map[string]interface{}{
 			"provider_name":      "dns",
@@ -89,7 +89,7 @@ var searchProviderTestCases = []RegistryTestCase{
 	{
 		TestName:        "third_party_resource",
 		TestShouldFail:  false,
-		TestDescription: "Testing search_providers resources with all values for non-hashicorp provider_namespace",
+		TestDescription: "Testing search_provider_docs resources with all values for non-hashicorp provider_namespace",
 		TestContentType: CONST_TYPE_RESOURCE,
 		TestPayload: map[string]interface{}{
 			"provider_name":      "pinecone",
@@ -102,7 +102,7 @@ var searchProviderTestCases = []RegistryTestCase{
 	{
 		TestName:        "third_party_data_source",
 		TestShouldFail:  false,
-		TestDescription: "Testing search_providers data-sources for non-hashicorp provider_namespace",
+		TestDescription: "Testing search_provider_docs data-sources for non-hashicorp provider_namespace",
 		TestContentType: CONST_TYPE_DATA_SOURCE,
 		TestPayload: map[string]interface{}{
 			"provider_name":      "terracurl",
@@ -114,7 +114,7 @@ var searchProviderTestCases = []RegistryTestCase{
 	{
 		TestName:        "malformed_namespace",
 		TestShouldFail:  false,
-		TestDescription: "Testing search_providers payload with malformed provider_namespace",
+		TestDescription: "Testing search_provider_docs payload with malformed provider_namespace",
 		TestPayload: map[string]interface{}{
 			"provider_name":      "vault",
 			"provider_namespace": "hashicorp-malformed",
@@ -125,7 +125,7 @@ var searchProviderTestCases = []RegistryTestCase{
 	{
 		TestName:        "malformed_provider_name",
 		TestShouldFail:  true,
-		TestDescription: "Testing search_providers payload with malformed provider_name",
+		TestDescription: "Testing search_provider_docs payload with malformed provider_name",
 		TestPayload: map[string]interface{}{
 			"provider_name":      "vaults",
 			"provider_namespace": "hashicorp",
@@ -135,7 +135,7 @@ var searchProviderTestCases = []RegistryTestCase{
 	{
 		TestName:        "guides_documentation",
 		TestShouldFail:  false,
-		TestDescription: "Testing search_providers guides documentation with v2 API",
+		TestDescription: "Testing search_provider_docs guides documentation with v2 API",
 		TestContentType: CONST_TYPE_GUIDES,
 		TestPayload: map[string]interface{}{
 			"provider_name":      "aws",
@@ -148,7 +148,7 @@ var searchProviderTestCases = []RegistryTestCase{
 	{
 		TestName:        "functions_documentation",
 		TestShouldFail:  false,
-		TestDescription: "Testing search_providers functions documentation with v2 API",
+		TestDescription: "Testing search_provider_docs functions documentation with v2 API",
 		TestContentType: CONST_TYPE_FUNCTIONS,
 		TestPayload: map[string]interface{}{
 			"provider_name":      "google",
@@ -161,7 +161,7 @@ var searchProviderTestCases = []RegistryTestCase{
 	{
 		TestName:        "overview_documentation",
 		TestShouldFail:  false,
-		TestDescription: "Testing search_providers overview documentation with v2 API",
+		TestDescription: "Testing search_provider_docs overview documentation with v2 API",
 		TestContentType: CONST_TYPE_OVERVIEW,
 		TestPayload: map[string]interface{}{
 			"provider_name":      "google",
@@ -177,13 +177,13 @@ var providerDetailsTestCases = []RegistryTestCase{
 	{
 		TestName:        "empty_payload",
 		TestShouldFail:  true,
-		TestDescription: "Testing get_provider_details with empty payload",
+		TestDescription: "Testing get_provider_docs_details with empty payload",
 		TestPayload:     map[string]interface{}{},
 	},
 	{
 		TestName:        "empty_doc_id",
 		TestShouldFail:  true,
-		TestDescription: "Testing get_provider_details with empty provider_doc_id",
+		TestDescription: "Testing get_provider_docs_details with empty provider_doc_id",
 		TestPayload: map[string]interface{}{
 			"provider_doc_id": "",
 		},
@@ -191,7 +191,7 @@ var providerDetailsTestCases = []RegistryTestCase{
 	{
 		TestName:        "invalid_doc_id",
 		TestShouldFail:  true,
-		TestDescription: "Testing get_provider_details with invalid provider_doc_id",
+		TestDescription: "Testing get_provider_docs_details with invalid provider_doc_id",
 		TestPayload: map[string]interface{}{
 			"provider_doc_id": "invalid-doc-id",
 		},
@@ -199,14 +199,14 @@ var providerDetailsTestCases = []RegistryTestCase{
 	{
 		TestName:        "valid_doc_id",
 		TestShouldFail:  false,
-		TestDescription: "Testing get_provider_details with all correct provider_doc_id value",
+		TestDescription: "Testing get_provider_docs_details with all correct provider_doc_id value",
 		TestPayload: map[string]interface{}{
 			"provider_doc_id": "8894603",
 		},
 	}, {
 		TestName:        "incorrect_numeric_doc_id",
 		TestShouldFail:  true,
-		TestDescription: "Testing get_provider_details with incorrect numeric provider_doc_id value",
+		TestDescription: "Testing get_provider_docs_details with incorrect numeric provider_doc_id value",
 		TestPayload: map[string]interface{}{
 			"provider_doc_id": "3356809",
 		},

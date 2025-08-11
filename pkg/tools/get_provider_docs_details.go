@@ -17,26 +17,26 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-// GetProviderDocs creates a tool to get provider docs for a specific service from registry.
-func GetProviderDocs(logger *log.Logger) server.ServerTool {
+// GetProviderDocsDetails creates a tool to get provider docs for a specific service from registry.
+func GetProviderDocsDetails(logger *log.Logger) server.ServerTool {
 	return server.ServerTool{
-		Tool: mcp.NewTool("get_provider_details",
+		Tool: mcp.NewTool("get_provider_docs_details",
 			mcp.WithDescription(`Fetches up-to-date documentation for a specific service from a Terraform provider. 
-You must call 'search_providers' tool first to obtain the exact tfprovider-compatible provider_doc_id required to use this tool.`),
+You must call 'search_provider_docs' tool first to obtain the exact tfprovider-compatible provider_doc_id required to use this tool.`),
 			mcp.WithTitleAnnotation("Fetch detailed Terraform provider documentation using a document ID"),
 			mcp.WithOpenWorldHintAnnotation(true),
 			mcp.WithReadOnlyHintAnnotation(true),
 			mcp.WithString("provider_doc_id",
 				mcp.Required(),
-				mcp.Description("Exact tfprovider-compatible provider_doc_id, (e.g., '8894603', '8906901') retrieved from 'search_providers'")),
+				mcp.Description("Exact tfprovider-compatible provider_doc_id, (e.g., '8894603', '8906901') retrieved from 'search_provider_docs'")),
 		),
 		Handler: func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-			return getProviderDocsHandler(ctx, req, logger)
+			return getProviderDetailsHandler(ctx, req, logger)
 		},
 	}
 }
 
-func getProviderDocsHandler(ctx context.Context, request mcp.CallToolRequest, logger *log.Logger) (*mcp.CallToolResult, error) {
+func getProviderDetailsHandler(ctx context.Context, request mcp.CallToolRequest, logger *log.Logger) (*mcp.CallToolResult, error) {
 	providerDocID, err := request.RequireString("provider_doc_id")
 	if err != nil {
 		return nil, utils.LogAndReturnError(logger, "provider_doc_id is required", err)
@@ -59,7 +59,7 @@ func getProviderDocsHandler(ctx context.Context, request mcp.CallToolRequest, lo
 
 	detailResp, err := client.SendRegistryCall(httpClient, "GET", path.Join("provider-docs", providerDocID), logger, "v2")
 	if err != nil {
-		return nil, utils.LogAndReturnError(logger, fmt.Sprintf("Error fetching provider-docs/%s, please make sure provider_doc_id is valid and the search_providers tool has run prior", providerDocID), err)
+		return nil, utils.LogAndReturnError(logger, fmt.Sprintf("Error fetching provider-docs/%s, please make sure provider_doc_id is valid and the search_provider_docs tool has run prior", providerDocID), err)
 	}
 
 	var details client.ProviderResourceDetails

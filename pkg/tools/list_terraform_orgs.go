@@ -19,7 +19,7 @@ import (
 func ListTerraformOrgs(logger *log.Logger) server.ServerTool {
 	return server.ServerTool{
 		Tool: mcp.NewTool("list_terraform_orgs",
-			mcp.WithDescription(`Fetches a list of all Terraform organizations.`),
+			mcp.WithDescription(`Fetches a list of all Terraform organizations. This tool requires a valid Terraform token to be configured.`),
 			mcp.WithTitleAnnotation("List all Terraform organizations"),
 			mcp.WithReadOnlyHintAnnotation(true),
 			utils.WithPagination(),

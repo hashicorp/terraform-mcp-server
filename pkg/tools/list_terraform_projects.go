@@ -19,7 +19,7 @@ import (
 func ListTerraformProjects(logger *log.Logger) server.ServerTool {
 	return server.ServerTool{
 		Tool: mcp.NewTool("list_terraform_projects",
-			mcp.WithDescription(`Fetches a list of all Terraform projects.`),
+			mcp.WithDescription(`Fetches a list of all Terraform projects. This tool requires a valid Terraform token to be configured.`),
 			mcp.WithTitleAnnotation("List all Terraform projects"),
 			mcp.WithReadOnlyHintAnnotation(true),
 			mcp.WithString("terraform_org_name",
