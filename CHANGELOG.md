@@ -1,4 +1,15 @@
-## 0.3.0
+## Unreleased
+
+## 0.2.3 (Aug 12, 2025)
+
+FEATURES
+
+* User agent to identify calls made to the Terraform registry. See [133](https://github.com/hashicorp/terraform-mcp-server/pull/133)
+* Adding Issue templates, GitHub workflows and golang version. See [134](https://github.com/hashicorp/terraform-mcp-server/pull/134)
+
+FIXES
+
+* run-http command in makefile is fixed. See [132](https://github.com/hashicorp/terraform-mcp-server/pull/132)
 
 ## 0.2.2 (Aug 5, 2025)
 
