@@ -1,5 +1,12 @@
 ## 0.3.0
 
+* Authentication for HCP Terraform & TFE and restructure the repo. See [#121](https://github.com/hashicorp/terraform-mcp-server/pull/121)
+* Implement dynamic tool registration. See [#121](https://github.com/hashicorp/terraform-mcp-server/pull/121)
+* Adding 2 new HCP TF/TFE tools. List Terraform organizations & projects. See [#121](https://github.com/hashicorp/terraform-mcp-server/pull/121)
+* Changes to tool names to be more consistent. See [#121](https://github.com/hashicorp/terraform-mcp-server/pull/121)
+* Implement pagination utility. See [#121](https://github.com/hashicorp/terraform-mcp-server/pull/121)
+* Updating `mark3labs/mcp-go` and `hashicorp/tfe-go` versions. See [#121](https://github.com/hashicorp/terraform-mcp-server/pull/121)
+
 ## 0.2.2 (Aug 5, 2025)
 
 FEATURES

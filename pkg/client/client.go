@@ -90,7 +90,6 @@ func GetTerraformClientFromContext(ctx context.Context, logger *log.Logger) (*te
 		return nil, fmt.Errorf("no active session")
 	}
 
-
 	// Try to get existing client
 	client := GetTerraformClient(session.SessionID())
 	if client != nil {
@@ -144,7 +143,7 @@ func NewSessionHandler(ctx context.Context, session server.ClientSession, logger
 		}
 		logger.Info("Session has valid TFE client - registered with tool registry")
 	} else {
-		logger.Info("Session has no valid TFE client - TFE tools will not be available")
+		logger.Warn("Session has no valid TFE client - TFE tools will not be available")
 	}
 }
 
