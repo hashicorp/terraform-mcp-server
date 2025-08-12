@@ -1,0 +1,11 @@
+# Copyright (c) HashiCorp, Inc.
+# SPDX-License-Identifier: MPL-2.0
+
+blank_issues_enabled: false
+contact_links:
+  - name: HCP Terraform and Terraform Enterprise Troubleshooting and Feature Requests
+    url: https://support.hashicorp.com/hc/en-us/requests/new
+    about: For issues and feature requests concerning the HCP Terraform and Terraform Enterprise platform itself, please submit a HashiCorp support request
+  - name: Terraform Language or Workflow Questions
+    url: https://discuss.hashicorp.com
+    about: Please ask Terraform language or workflow related questions through the HashiCorp Discuss forum
