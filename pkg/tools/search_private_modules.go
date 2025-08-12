@@ -85,11 +85,10 @@ func searchPrivateModulesHandler(ctx context.Context, request mcp.CallToolReques
 		},
 	}
 
-	// TODO: fix it in the tfe-go sdk.
 	// Set search query if provided
-	// if searchQuery != "" {
-	// 	listOptions.Search = searchQuery
-	// }
+	if searchQuery != "" {
+		listOptions.Search = searchQuery
+	}
 
 	// Include No Code modules in the response
 	includeOpts := []tfe.RegistryModuleListIncludeOpt{tfe.IncludeNoCodeModules}
