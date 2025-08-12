@@ -17,6 +17,7 @@ import (
 	"github.com/hashicorp/go-cleanhttp"
 	"github.com/hashicorp/go-retryablehttp"
 	"github.com/hashicorp/terraform-mcp-server/pkg/utils"
+	"github.com/hashicorp/terraform-mcp-server/version"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -60,12 +61,12 @@ func createHTTPClient(insecureSkipVerify bool, logger *log.Logger) *http.Client 
 }
 
 func SendRegistryCall(client *http.Client, method string, uri string, logger *log.Logger, callOptions ...string) ([]byte, error) {
-	version := "v1"
+	ver := "v1"
 	if len(callOptions) > 0 {
-		version = callOptions[0] // API version will be the first optional arg to this function
+		ver = callOptions[0] // API version will be the first optional arg to this function
 	}
 
-	url, err := url.Parse(fmt.Sprintf("https://registry.terraform.io/%s/%s", version, uri))
+	url, err := url.Parse(fmt.Sprintf("https://registry.terraform.io/%s/%s", ver, uri))
 	if err != nil {
 		return nil, fmt.Errorf("error parsing terraform registry URL: %w", err)
 	}
@@ -75,6 +76,7 @@ func SendRegistryCall(client *http.Client, method string, uri string, logger *lo
 	if err != nil {
 		return nil, err
 	}
+	req.Header.Set("User-Agent", fmt.Sprintf("terraform-mcp-server/%s", version.GetHumanVersion()))
 
 	resp, err := client.Do(req)
 	if err != nil {
