@@ -1,6 +1,4 @@
-## Unreleased
-
-## 0.2.3 (Aug 12, 2025)
+## 0.2.3 (Aug 13, 2025)
 
 FEATURES
 
