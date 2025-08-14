@@ -130,5 +130,13 @@ func InitTools(hcServer *server.MCPServer, registryClient *http.Client, logger *
 	removeHCPRemoteStateConsumersTool := hcp_tools.RemoveRemoteStateConsumers(hcpClient, logger)
 	hcServer.AddTool(removeHCPRemoteStateConsumersTool.Tool, removeHCPRemoteStateConsumersTool.Handler)
 
-	logger.Infof("Initialized %d tools (including HCP Terraform tools)", 34) // Updated count: 8 registry tools + 26 HCP tools
+	// Workspace orchestrator tool
+	workspaceOrchestratorTool := hcp_tools.WorkspaceOrchestrator(hcpClient, logger)
+	hcServer.AddTool(workspaceOrchestratorTool.Tool, workspaceOrchestratorTool.Handler)
+
+	// Configuration preparation tool
+	configPreparatorTool := hcp_tools.ConfigurationPreparator(logger)
+	hcServer.AddTool(configPreparatorTool.Tool, configPreparatorTool.Handler)
+
+	logger.Infof("Initialized %d tools (including HCP Terraform tools)", 36)
 }

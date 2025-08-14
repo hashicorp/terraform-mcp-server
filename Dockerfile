@@ -54,7 +54,7 @@ FROM scratch AS release-default
 ARG BIN_NAME
 # Export BIN_NAME for the CMD below, it can't see ARGs directly.
 ENV BIN_NAME=$BIN_NAME
-ARG PRODUCT_VERSION
+ENV HCP_TERRAFORM_TOKEN=$HCP_TERRAFORM_TOKEN
 ARG PRODUCT_REVISION
 ARG PRODUCT_NAME=$BIN_NAME
 # TARGETARCH and TARGETOS are set automatically when --platform is provided.

@@ -22,6 +22,9 @@ const terraformGuideRawURL = "https://raw.githubusercontent.com/hashicorp/web-un
 func RegisterResources(hcServer *server.MCPServer, registryClient *http.Client, logger *log.Logger) {
 	hcServer.AddResource(TerraformStyleGuideResource(registryClient, logger))
 	hcServer.AddResource(TerraformModuleDevGuideResource(registryClient, logger))
+	
+	// Register workspace prompts
+	RegisterWorkspacePrompts(hcServer, logger)
 }
 
 // TerraformStyleGuideResource returns the resource and handler for the style guide
