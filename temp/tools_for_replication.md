@@ -407,6 +407,7 @@ If any step fails during the replication process:
 
 This detailed sequence provides a robust, production-ready foundation for workspace replication while maintaining the ability to customize the replicated workspace during the process.
 
+### Replication workflow sequence 
 You can now build complete workspace replication workflows using these atomic tools following the exact sequence outlined in the original document:
 
 Source Analysis → Get workspace details, variables, configurations, state
