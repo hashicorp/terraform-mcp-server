@@ -92,6 +92,13 @@ jobs:
             
             const changelogChangesPresent = ${{steps.changelog.outputs.changelog}};
 
+            const prAuthor = context.payload.pull_request.user.login;
+            if (prAuthor === 'dependabot[bot]') {
+                console.log('Skipping changelog check for Dependabot PR');
+                await createOrUpdateChangelogComment("", true);
+                return;
+            }
+
             const prLabels = await github.rest.issues.listLabelsOnIssue({
                 issue_number: context.issue.number,
                 owner: context.repo.owner,
