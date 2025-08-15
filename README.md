@@ -139,16 +139,25 @@ Read more about using MCP server in Amazon Q from the [documentation](https://do
 
 ### Available Toolsets
 
-The following sets of tools are available:
+The following sets of tools are available for the [public Terraform registry](https://registry.terraform.io):
 
-| Toolset     | Tool                   | Description                                                                                                                                                                                                                                                    |
-|-------------|------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `providers` | `search_providers` | Queries the Terraform Registry to find and list available documentation for a specific provider using the specified `service_slug`. Returns a list of provider document IDs with their titles and categories for resources, data sources, functions, or guides. |
-| `providers` | `get_provider_details`      | Fetches the complete documentation content for a specific provider resource, data source, or function using a document ID obtained from the `search_providers` tool. Returns the raw documentation in markdown format.                                     |
-| `modules`   | `search_modules`        | Searches the Terraform Registry for modules based on specified `module_query` with pagination. Returns a list of module IDs with their names, descriptions, download counts, verification status, and publish dates                                             |
-| `modules`   | `get_module_details`        | Retrieves detailed documentation for a module using a module ID obtained from the `search_modules` tool including inputs, outputs, configuration, submodules, and examples.                                                                                     |
-| `policies`  | `search_policies`       | Queries the Terraform Registry to find and list the appropriate Sentinel Policy based on the provided query `policy_query`. Returns a list of matching policies with terraform_policy_id(s) with their name, title and download counts.                             |
-| `policies`  | `get_policy_details`        | Retrieves detailed documentation for a policy set using a terraform_policy_id obtained from the `search_policies` tool including policy readme and implementation details.                                                                                        |
+| Toolset     | Tool                         | Description                                                                                                                                                                                                                                                     |
+|-------------|------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `providers` | `search_providers`           | Queries the Terraform Registry to find and list available documentation for a specific provider using the specified `service_slug`. Returns a list of provider document IDs with their titles and categories for resources, data sources, functions, or guides. |
+| `providers` | `get_provider_details`       | Fetches the complete documentation content for a specific provider resource, data source, or function using a document ID obtained from the `search_providers` tool. Returns the raw documentation in markdown format.                                          |
+| `providers` | `get_latest_provider_version`| Fetches the complete documentation content for a specific provider resource, data source, or function using a document ID obtained from the `search_providers` tool. Returns the raw documentation in markdown format.                                          |
+| `modules`   | `search_modules`             | Searches the Terraform Registry for modules based on specified `module_query` with pagination. Returns a list of module IDs with their names, descriptions, download counts, verification status, and publish dates                                             |
+| `modules`   | `get_module_details`         | Retrieves detailed documentation for a module using a module ID obtained from the `search_modules` tool including inputs, outputs, configuration, submodules, and examples.                                                                                     |
+| `modules`   | `get_latest_module_version`  | Retrieves detailed documentation for a module using a module ID obtained from the `search_modules` tool including inputs, outputs, configuration, submodules, and examples.                                                                                     |
+| `policies`  | `search_policies`            | Queries the Terraform Registry to find and list the appropriate Sentinel Policy based on the provided query `policy_query`. Returns a list of matching policies with terraform_policy_id(s) with their name, title and download counts.                         |
+| `policies`  | `get_policy_details`         | Retrieves detailed documentation for a policy set using a terraform_policy_id obtained from the `search_policies` tool including policy readme and implementation details.                                                                                      |
+
+The following sets of tools are available for HCP Terraform or Terraform Enterprise:
+
+| Toolset     | Tool                        | Description                                                             |
+|-------------|-----------------------------|-------------------------------------------------------------------------|
+| `orgs`      | `list_organizations`        | Lists all Terraform organizations accessible to the authenticated user. |
+| `projects`  | `list_projects`             | Lists all projects within a specified Terraform organization.           |
 
 ## Resource Configuration
 
