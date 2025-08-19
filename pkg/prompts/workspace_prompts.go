@@ -1,26 +1,26 @@
 // Copyright (c) HashiCorp, Inc.
 // SPDX-License-Identifier: MPL-2.0
 
-package resources
+package prompts
 
 import (
 	"context"
-	_ "embed"
 
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 	log "github.com/sirupsen/logrus"
 )
 
-//go:embed prompts/workspace_analysis.md
-var workspaceAnalysisPrompt string
-
-// RegisterWorkspacePrompts adds workspace-related prompt resources to the MCP server
+// RegisterWorkspacePrompts adds workspace-related prompt resources to the MCP server.
+// This function registers all workspace prompt resources including workspace analysis
+// prompts that can be accessed by MCP clients.
 func RegisterWorkspacePrompts(hcServer *server.MCPServer, logger *log.Logger) {
 	hcServer.AddResource(WorkspaceAnalysisPromptResource(logger))
 }
 
-// WorkspaceAnalysisPromptResource returns the resource and handler for workspace analysis prompts
+// WorkspaceAnalysisPromptResource returns the resource and handler for workspace analysis prompts.
+// It creates an MCP resource that provides access to the workspace analysis prompt template
+// with the specified URI and description. The handler returns the prompt content in markdown format.
 func WorkspaceAnalysisPromptResource(logger *log.Logger) (mcp.Resource, server.ResourceHandlerFunc) {
 	resourceURI := "/terraform/prompts/workspace-analysis"
 	description := "Workspace analysis prompt for comprehensive workspace details retrieval"
@@ -36,7 +36,7 @@ func WorkspaceAnalysisPromptResource(logger *log.Logger) (mcp.Resource, server.R
 				mcp.TextResourceContents{
 					MIMEType: "text/markdown",
 					URI:      resourceURI,
-					Text:     workspaceAnalysisPrompt,
+					Text:     GetWorkspaceAnalysisPrompt(),
 				},
 			}, nil
 		}

@@ -149,6 +149,8 @@ The following sets of tools are available:
 | `modules`   | `get_module_details`        | Retrieves detailed documentation for a module using a module ID obtained from the `search_modules` tool including inputs, outputs, configuration, submodules, and examples.                                                                                     |
 | `policies`  | `search_policies`       | Queries the Terraform Registry to find and list the appropriate Sentinel Policy based on the provided query `policy_query`. Returns a list of matching policies with terraform_policy_id(s) with their name, title and download counts.                             |
 | `policies`  | `get_policy_details`        | Retrieves detailed documentation for a policy set using a terraform_policy_id obtained from the `search_policies` tool including policy readme and implementation details.                                                                                        |
+| `workspace` | `get_workspace_comprehensive_analysis` | Performs comprehensive analysis of HCP Terraform workspaces including details, variables, configurations, state versions, tags, and remote state consumers. Provides complete workspace overview. |
+| `workspace` | `prepare_workspace_configuration` | Downloads and prepares workspace configuration files for replication or modification. Handles configuration parsing, tag updates, and variable reference modifications. |
 
 ## Resource Configuration
 
@@ -158,6 +160,7 @@ The following sets of tools are available:
 |--------------|-------------|
 | `/terraform/style-guide` | Terraform Style Guide - Provides access to the official Terraform style guide documentation in markdown format |
 | `/terraform/module-development` | Terraform Module Development Guide - Comprehensive guide covering module composition, structure, providers, publishing, and refactoring best practices |
+| `/terraform/prompts/workspace-analysis` | Workspace Analysis Prompt - Template for comprehensive workspace analysis and details retrieval |
 
 ### Available Resource Templates
 
@@ -244,6 +247,32 @@ curl http://localhost:8080/health
   }
 }
 ```
+
+## Architecture
+
+### Package Structure
+
+The Terraform MCP Server is organized into the following packages:
+
+- **`pkg/client/`** - Core API clients and types
+  - `hcp_terraform/` - HCP Terraform API client with workflow types
+  - `common.go` - Shared client utilities
+- **`pkg/tools/`** - MCP tool implementations
+  - `hcp_terraform/` - HCP Terraform-specific tools and handlers
+  - Registry tools for modules, providers, and policies
+- **`pkg/resources/`** - MCP resource implementations
+  - Resource handlers for guides and templates
+- **`pkg/prompts/`** - MCP prompt resources
+  - Workspace analysis and other prompt templates
+- **`pkg/utils/`** - Shared utilities and helpers
+- **`cmd/terraform-mcp-server/`** - Main application entry point
+
+### Key Features
+
+- **Comprehensive Workspace Analysis** - Deep analysis of HCP Terraform workspaces including variables, configurations, and state
+- **Configuration Management** - Tools for preparing and modifying Terraform configurations
+- **Terraform Registry Integration** - Search and retrieve modules, providers, and policies
+- **Resource Templates** - Dynamic provider documentation retrieval
 
 ## Development
 

@@ -1,14 +1,15 @@
 // Copyright (c) HashiCorp, Inc.
 // SPDX-License-Identifier: MPL-2.0
 
-package orchestrator
+package hcp_terraform
 
 import (
 	"fmt"
 	"time"
 )
 
-// WorkspaceAnalysisRequest represents the input for workspace analysis
+// WorkspaceAnalysisRequest represents the input parameters for comprehensive workspace analysis.
+// Either WorkspaceID OR (OrganizationName + WorkspaceName) must be provided.
 type WorkspaceAnalysisRequest struct {
 	WorkspaceID      string `json:"workspace_id,omitempty"`
 	OrganizationName string `json:"organization_name,omitempty"`
@@ -16,7 +17,8 @@ type WorkspaceAnalysisRequest struct {
 	Authorization    string `json:"authorization,omitempty"`
 }
 
-// Validate checks if the request has required parameters
+// Validate checks if the request has required parameters.
+// Returns an error if neither workspace_id nor (organization_name + workspace_name) are provided.
 func (r *WorkspaceAnalysisRequest) Validate() error {
 	if r.WorkspaceID == "" && (r.OrganizationName == "" || r.WorkspaceName == "") {
 		return fmt.Errorf("either workspace_id OR (organization_name + workspace_name) is required")
@@ -24,17 +26,17 @@ func (r *WorkspaceAnalysisRequest) Validate() error {
 	return nil
 }
 
-// WorkspaceAnalysisResponse represents the comprehensive workspace analysis result
+// WorkspaceAnalysisResponse represents the comprehensive workspace analysis result.
+// It includes all relevant workspace information including details, variables, configurations,
+// state versions, tags, and remote state consumers, along with analysis metadata.
 type WorkspaceAnalysisResponse struct {
-	WorkspaceDetails    *WorkspaceDetails     `json:"workspace_details"`
-	Variables           *VariablesSummary     `json:"variables"`
-	Configurations      *ConfigurationSummary `json:"configurations"`
-	StateInfo           *StateVersionSummary  `json:"state_info"`
-	Tags                *TagsSummary          `json:"tags"`
-	RemoteConsumers     *RemoteConsumerInfo   `json:"remote_consumers,omitempty"`
-	Summary             string                `json:"summary"`
-	Errors              []string              `json:"errors,omitempty"`
-	ExecutionTime       time.Duration         `json:"execution_time"`
+	WorkspaceDetails      *Workspace                         `json:"workspace_details"`
+	Variables             *VariableResponse                  `json:"variables"`
+	ConfigurationVersions *ConfigurationVersionsResponse     `json:"configuration_versions"`
+	StateVersion          *StateVersionResponse              `json:"state_version"`
+	TagBindings           *TagBindingsResponse               `json:"tag_bindings"`
+	RemoteStateConsumers  *RemoteStateConsumersResponse      `json:"remote_state_consumers"`
+	AnalysisTimestamp     time.Time                          `json:"analysis_timestamp"`
 }
 
 // WorkspaceDetails contains essential workspace information
@@ -127,28 +129,31 @@ type WorkspaceReference struct {
 
 // ===== Phase 1: Configuration Preparation Types =====
 
-// ConfigPreparationRequest represents the input for configuration preparation
+// ConfigPreparationRequest represents the input parameters for configuration preparation.
+// It requires a base64-encoded configuration archive and target workspace ID.
 type ConfigPreparationRequest struct {
-	WorkspaceID       string            `json:"workspace_id"`
-	NewWorkspaceName  string            `json:"new_workspace_name"`
-	TagUpdates        map[string]string `json:"tag_updates"`
-	VariableUpdates   map[string]string `json:"variable_updates,omitempty"`
-	ProviderUpdates   map[string]interface{} `json:"provider_updates,omitempty"`
-	Authorization     string            `json:"authorization,omitempty"`
+	ConfigurationArchive    string                 `json:"configuration_archive"`
+	WorkspaceID             string                 `json:"workspace_id"`
+	Authorization           string                 `json:"authorization,omitempty"`
+	Tags                    map[string]string      `json:"tags,omitempty"`
+	ProviderUpdates         map[string]interface{} `json:"provider_updates,omitempty"`
+	OriginalConfigVersionID string                 `json:"original_config_version_id,omitempty"`
 }
 
-// Validate checks if the configuration preparation request has required parameters
+// Validate checks if the configuration preparation request has required parameters.
+// Returns an error if configuration_archive or workspace_id are missing.
 func (r *ConfigPreparationRequest) Validate() error {
+	if r.ConfigurationArchive == "" {
+		return fmt.Errorf("configuration_archive is required")
+	}
 	if r.WorkspaceID == "" {
 		return fmt.Errorf("workspace_id is required")
-	}
-	if r.NewWorkspaceName == "" {
-		return fmt.Errorf("new_workspace_name is required")
 	}
 	return nil
 }
 
-// ConfigPreparationResponse represents the result of configuration preparation
+// ConfigPreparationResponse represents the result of configuration preparation.
+// It includes the modified configuration content and metadata about the processing.
 type ConfigPreparationResponse struct {
 	ModifiedConfigContent   string   `json:"modified_config_content"` // base64 encoded tar.gz
 	OriginalConfigVersionID string   `json:"original_config_version_id"`
@@ -158,15 +163,18 @@ type ConfigPreparationResponse struct {
 	ProcessingTimeSeconds   int      `json:"processing_time_seconds"`
 }
 
-// TerraformConfig represents parsed Terraform configuration structure
+// TerraformConfig represents a parsed Terraform configuration structure.
+// It contains all the major components of a Terraform configuration including
+// providers, resources, variables, outputs, locals, modules, and data sources.
 type TerraformConfig struct {
 	ProviderBlocks map[string]*ProviderBlock `json:"provider_blocks"`
 	ResourceBlocks map[string]*ResourceBlock `json:"resource_blocks"`
-	Variables      map[string]*Variable      `json:"variables"`
+	Variables      map[string]*TerraformVariable      `json:"variables"`
 	Outputs        map[string]*Output        `json:"outputs"`
 	LocalValues    map[string]*Local         `json:"local_values"`
 	ModuleCalls    map[string]*ModuleCall    `json:"module_calls"`
 	DataSources    map[string]*DataSource    `json:"data_sources"`
+	Files          map[string][]byte         `json:"files,omitempty"` // Raw file contents
 }
 
 // ProviderBlock represents a Terraform provider configuration
@@ -191,8 +199,8 @@ type ResourceBlock struct {
 	LineNumber   int                    `json:"line_number"`
 }
 
-// Variable represents a Terraform variable
-type Variable struct {
+// TerraformVariable represents a Terraform variable in configuration analysis
+type TerraformVariable struct {
 	Name         string      `json:"name"`
 	Type         string      `json:"type,omitempty"`
 	Description  string      `json:"description,omitempty"`

@@ -135,7 +135,7 @@ func InitTools(hcServer *server.MCPServer, registryClient *http.Client, logger *
 	hcServer.AddTool(workspaceOrchestratorTool.Tool, workspaceOrchestratorTool.Handler)
 
 	// Configuration preparation tool
-	configPreparatorTool := hcp_tools.ConfigurationPreparator(logger)
+	configPreparatorTool := hcp_tools.ConfigurationPreparator(hcpClient, logger)
 	hcServer.AddTool(configPreparatorTool.Tool, configPreparatorTool.Handler)
 
 	logger.Infof("Initialized %d tools (including HCP Terraform tools)", 36)

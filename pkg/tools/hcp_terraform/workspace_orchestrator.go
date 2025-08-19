@@ -8,7 +8,6 @@ import (
 	"encoding/json"
 
 	"github.com/hashicorp/terraform-mcp-server/pkg/client/hcp_terraform"
-	"github.com/hashicorp/terraform-mcp-server/pkg/orchestrator"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 	log "github.com/sirupsen/logrus"
@@ -51,15 +50,15 @@ func WorkspaceOrchestrator(hcpClient *hcp_terraform.Client, logger *log.Logger) 
 // workspaceOrchestratorHandler handles comprehensive workspace analysis requests
 func workspaceOrchestratorHandler(hcpClient *hcp_terraform.Client, request mcp.CallToolRequest, logger *log.Logger) (*mcp.CallToolResult, error) {
 	// Parse request parameters
-	req := &WorkspaceAnalysisRequest{
+	req := &hcp_terraform.WorkspaceAnalysisRequest{
 		WorkspaceID:      request.GetString("workspace_id", ""),
 		OrganizationName: request.GetString("organization_name", ""),
 		WorkspaceName:    request.GetString("workspace_name", ""),
 		Authorization:    request.GetString("authorization", ""),
 	}
 
-	// Perform workspace analysis
-	workspaceInfo, err := analyzeWorkspace(hcpClient, req, logger)
+	// Perform workspace analysis using enhanced client
+	workspaceInfo, err := hcpClient.AnalyzeWorkspaceComprehensive(req)
 	if err != nil {
 		return nil, err
 	}
@@ -81,7 +80,7 @@ func workspaceOrchestratorHandler(hcpClient *hcp_terraform.Client, request mcp.C
 }
 
 // ConfigurationPreparator creates the MCP tool for configuration preparation
-func ConfigurationPreparator(logger *log.Logger) server.ServerTool {
+func ConfigurationPreparator(hcpClient *hcp_terraform.Client, logger *log.Logger) server.ServerTool {
 	return server.ServerTool{
 		Tool: mcp.Tool{
 			Name:        "prepare_workspace_configuration",
@@ -106,30 +105,30 @@ func ConfigurationPreparator(logger *log.Logger) server.ServerTool {
 			},
 		},
 		Handler: func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-			return configurationPreparatorHandler(request, logger)
+			return configurationPreparatorHandler(hcpClient, request, logger)
 		},
 	}
 }
 
 // configurationPreparatorHandler handles configuration preparation requests
-func configurationPreparatorHandler(request mcp.CallToolRequest, logger *log.Logger) (*mcp.CallToolResult, error) {
+func configurationPreparatorHandler(hcpClient *hcp_terraform.Client, request mcp.CallToolRequest, logger *log.Logger) (*mcp.CallToolResult, error) {
 	// Parse request parameters
+	configArchive := request.GetString("configuration_archive", "")
 	workspaceID := request.GetString("workspace_id", "")
 	authorization := request.GetString("authorization", "")
 
 	// Create configuration preparation request
-	prepRequest := &orchestrator.ConfigPreparationRequest{
-		WorkspaceID:       workspaceID,
-		NewWorkspaceName:  "replicated-workspace", // TODO: Get from request
-		Authorization:     authorization,
-		TagUpdates:        make(map[string]string),
-		VariableUpdates:   make(map[string]string),
-		ProviderUpdates:   make(map[string]interface{}),
+	prepRequest := &hcp_terraform.ConfigPreparationRequest{
+		ConfigurationArchive:    configArchive,
+		WorkspaceID:             workspaceID,
+		Authorization:           authorization,
+		Tags:                    make(map[string]string),
+		ProviderUpdates:         make(map[string]interface{}),
+		OriginalConfigVersionID: "", // Will be set if needed
 	}
 
-	// Create orchestrator and prepare configuration
-	orch := orchestrator.NewOrchestrator(logger)
-	response, err := orch.PrepareConfiguration(prepRequest)
+	// Use enhanced client for preparation
+	response, err := hcpClient.PrepareConfiguration(prepRequest)
 	if err != nil {
 		return nil, err
 	}
