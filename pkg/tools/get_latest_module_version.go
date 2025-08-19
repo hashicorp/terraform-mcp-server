@@ -25,6 +25,7 @@ func GetLatestModuleVersion(logger *log.Logger) server.ServerTool {
 			mcp.WithTitleAnnotation("Get Latest Module Version"),
 			mcp.WithOpenWorldHintAnnotation(true),
 			mcp.WithReadOnlyHintAnnotation(true),
+			mcp.WithDestructiveHintAnnotation(false),
 			mcp.WithString("module_publisher",
 				mcp.Required(),
 				mcp.Description("The publisher of the module, e.g., 'hashicorp', 'aws-ia', 'terraform-google-modules', 'Azure' etc.")),

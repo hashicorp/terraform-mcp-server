@@ -23,6 +23,7 @@ func GetLatestProviderVersion(logger *log.Logger) server.ServerTool {
 			mcp.WithTitleAnnotation("Get Latest Provider Version"),
 			mcp.WithOpenWorldHintAnnotation(true),
 			mcp.WithReadOnlyHintAnnotation(true),
+			mcp.WithDestructiveHintAnnotation(false),
 			mcp.WithString("namespace",
 				mcp.Required(),
 				mcp.Description("The namespace of the Terraform provider, typically the name of the company, or their GitHub organization name that created the provider e.g., 'hashicorp'")),

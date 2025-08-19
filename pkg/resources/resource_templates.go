@@ -73,7 +73,7 @@ func providerResourceTemplateHelper(httpClient *http.Client, resourceURI string,
 			return "", utils.LogAndReturnError(logger, fmt.Sprintf("Provider Resource: error getting %s/%s latest provider version", namespace, name), err)
 		}
 	}
-	providerVersionUri := fmt.Sprintf("%s/%s/name/%s/version/%s", utils.PROVIDER_BASE_PATH, namespace, name, version)
+	providerVersionUri := path.Join(utils.PROVIDER_BASE_PATH, namespace, "name", name, "version", version)
 	logger.Debugf("Provider resource template - providerVersionUri: %s", providerVersionUri)
 	if err != nil {
 		return "", utils.LogAndReturnError(logger, "Provider Resource: error getting provider details", err)

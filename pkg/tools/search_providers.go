@@ -34,6 +34,7 @@ If there are multiple good matches, mention this but proceed with the most relev
 			mcp.WithTitleAnnotation("Identify the most relevant provider document ID for a Terraform service"),
 			mcp.WithOpenWorldHintAnnotation(true),
 			mcp.WithReadOnlyHintAnnotation(true),
+			mcp.WithDestructiveHintAnnotation(false),
 			mcp.WithString("provider_name",
 				mcp.Required(),
 				mcp.Description("The name of the Terraform provider to perform the read or deployment operation"),

@@ -26,6 +26,7 @@ You must call 'search_providers' tool first to obtain the exact tfprovider-compa
 			mcp.WithTitleAnnotation("Fetch detailed Terraform provider documentation using a document ID"),
 			mcp.WithOpenWorldHintAnnotation(true),
 			mcp.WithReadOnlyHintAnnotation(true),
+			mcp.WithDestructiveHintAnnotation(false),
 			mcp.WithString("provider_doc_id",
 				mcp.Required(),
 				mcp.Description("Exact tfprovider-compatible provider_doc_id, (e.g., '8894603', '8906901') retrieved from 'search_providers'")),

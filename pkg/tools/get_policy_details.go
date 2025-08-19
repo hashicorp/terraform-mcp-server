@@ -26,6 +26,7 @@ func PolicyDetails(logger *log.Logger) server.ServerTool {
 			mcp.WithTitleAnnotation("Fetch detailed Terraform policy documentation using a terraform_policy_id"),
 			mcp.WithOpenWorldHintAnnotation(true),
 			mcp.WithReadOnlyHintAnnotation(true),
+			mcp.WithDestructiveHintAnnotation(false),
 			mcp.WithString("terraform_policy_id",
 				mcp.Required(),
 				mcp.Description("Matching terraform_policy_id retrieved from the 'search_policies' tool (e.g., 'policies/hashicorp/CIS-Policy-Set-for-AWS-Terraform/1.0.1')"),

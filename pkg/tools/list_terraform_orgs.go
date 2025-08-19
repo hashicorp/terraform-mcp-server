@@ -22,6 +22,7 @@ func ListTerraformOrgs(logger *log.Logger) server.ServerTool {
 			mcp.WithDescription(`Fetches a list of all Terraform organizations.`),
 			mcp.WithTitleAnnotation("List all Terraform organizations"),
 			mcp.WithReadOnlyHintAnnotation(true),
+			mcp.WithDestructiveHintAnnotation(false),
 			utils.WithPagination(),
 		),
 		Handler: func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {

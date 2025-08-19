@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"path"
 
 	"github.com/hashicorp/terraform-mcp-server/pkg/client"
 	"github.com/hashicorp/terraform-mcp-server/pkg/utils"
@@ -45,7 +46,7 @@ func TerraformStyleGuideResource(logger *log.Logger) (mcp.Resource, server.Resou
 			}
 
 			httpClient := terraformClients.HttpClient
-			resp, err := httpClient.Get(fmt.Sprintf("%s/style.mdx", terraformGuideRawURL))
+			resp, err := httpClient.Get(path.Join(terraformGuideRawURL, "style.mdx"))
 			if err != nil {
 				return nil, utils.LogAndReturnError(logger, "Error fetching Terraform Style Guide markdown", err)
 			}
@@ -76,12 +77,12 @@ func TerraformModuleDevGuideResource(logger *log.Logger) (mcp.Resource, server.R
 		Name string
 		URL  string
 	}{
-		{"index", fmt.Sprintf("%s/modules/develop/index.mdx", terraformGuideRawURL)},
-		{"composition", fmt.Sprintf("%s/modules/develop/composition.mdx", terraformGuideRawURL)},
-		{"structure", fmt.Sprintf("%s/modules/develop/structure.mdx", terraformGuideRawURL)},
-		{"providers", fmt.Sprintf("%s/modules/develop/providers.mdx", terraformGuideRawURL)},
-		{"publish", fmt.Sprintf("%s/modules/develop/publish.mdx", terraformGuideRawURL)},
-		{"refactoring", fmt.Sprintf("%s/modules/develop/refactoring.mdx", terraformGuideRawURL)},
+		{"index", path.Join(terraformGuideRawURL, "modules/develop/index.mdx")},
+		{"composition", path.Join(terraformGuideRawURL, "modules/develop/composition.mdx")},
+		{"structure", path.Join(terraformGuideRawURL, "modules/develop/structure.mdx")},
+		{"providers", path.Join(terraformGuideRawURL, "modules/develop/providers.mdx")},
+		{"publish", path.Join(terraformGuideRawURL, "modules/develop/publish.mdx")},
+		{"refactoring", path.Join(terraformGuideRawURL, "modules/develop/refactoring.mdx")},
 	}
 
 	return mcp.NewResource(
@@ -115,7 +116,7 @@ func TerraformModuleDevGuideResource(logger *log.Logger) (mcp.Resource, server.R
 				}
 				contents = append(contents, mcp.TextResourceContents{
 					MIMEType: "text/markdown",
-					URI:      fmt.Sprintf("%s/%s", resourceURI, u.Name),
+					URI:      path.Join(resourceURI, u.Name),
 					Text:     string(body),
 				})
 			}
