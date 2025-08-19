@@ -57,7 +57,7 @@ It provides details on how to use the provider, permissions, available versions,
 }
 
 func getPrivateProviderDetailsHandler(ctx context.Context, request mcp.CallToolRequest, logger *log.Logger) (*mcp.CallToolResult, error) {
-	// Get Terraform organizaiton name
+	// Get Terraform organization name
 	terraformOrgName, err := request.RequireString("terraform_org_name")
 	if err != nil {
 		return nil, utils.LogAndReturnError(logger, "The 'terraform_org_name' parameter is required for the Terraform Cloud/Enterprise organization.", err)

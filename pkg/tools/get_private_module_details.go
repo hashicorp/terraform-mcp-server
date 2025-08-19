@@ -146,7 +146,7 @@ Please ensure TFE_TOKEN and TFE_ADDRESS environment variables are properly set.`
 func buildPrivateModuleDetailsResponse(registryModule *tfe.RegistryModule,
 	specificModuleVersion *tfe.RegistryModuleVersion,
 	terraformRegistryModule *tfe.TerraformRegistryModule,
-	tfeHostAdress string,
+	tfeHostAddress string,
 	logger *log.Logger) *mcp.CallToolResult {
 
 	// Build response
@@ -154,7 +154,7 @@ func buildPrivateModuleDetailsResponse(registryModule *tfe.RegistryModule,
 	builder.WriteString(fmt.Sprintf("Private Module Details: %s\n", registryModule.ID))
 
 	// Usage information
-	registryPath := path.Join(tfeHostAdress, registryModule.Namespace, registryModule.Name, registryModule.Provider)
+	registryPath := path.Join(tfeHostAddress, registryModule.Namespace, registryModule.Name, registryModule.Provider)
 	builder.WriteString("Usage:\n")
 	builder.WriteString("To use this private module in your Terraform configuration:\n\n")
 	builder.WriteString("```hcl\n")
