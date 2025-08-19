@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"path"
 
 	"github.com/hashicorp/terraform-mcp-server/pkg/client"
@@ -46,7 +47,11 @@ func TerraformStyleGuideResource(logger *log.Logger) (mcp.Resource, server.Resou
 			}
 
 			httpClient := terraformClients.HttpClient
-			resp, err := httpClient.Get(path.Join(terraformGuideRawURL, "style.mdx"))
+			styleGuideURL, err := url.JoinPath(terraformGuideRawURL, "style.mdx")
+			if err != nil {
+				return nil, utils.LogAndReturnError(logger, "Error getting URL for Terraform Style Guide markdown", err)
+			}
+			resp, err := httpClient.Get(styleGuideURL)
 			if err != nil {
 				return nil, utils.LogAndReturnError(logger, "Error fetching Terraform Style Guide markdown", err)
 			}
@@ -77,12 +82,12 @@ func TerraformModuleDevGuideResource(logger *log.Logger) (mcp.Resource, server.R
 		Name string
 		URL  string
 	}{
-		{"index", path.Join(terraformGuideRawURL, "modules/develop/index.mdx")},
-		{"composition", path.Join(terraformGuideRawURL, "modules/develop/composition.mdx")},
-		{"structure", path.Join(terraformGuideRawURL, "modules/develop/structure.mdx")},
-		{"providers", path.Join(terraformGuideRawURL, "modules/develop/providers.mdx")},
-		{"publish", path.Join(terraformGuideRawURL, "modules/develop/publish.mdx")},
-		{"refactoring", path.Join(terraformGuideRawURL, "modules/develop/refactoring.mdx")},
+		{"index", fmt.Sprintf("%s/%s", terraformGuideRawURL, "modules/develop/index.mdx")},
+		{"composition", fmt.Sprintf("%s/%s", terraformGuideRawURL, "modules/develop/composition.mdx")},
+		{"structure", fmt.Sprintf("%s/%s", terraformGuideRawURL, "modules/develop/structure.mdx")},
+		{"providers", fmt.Sprintf("%s/%s", terraformGuideRawURL, "modules/develop/providers.mdx")},
+		{"publish", fmt.Sprintf("%s/%s", terraformGuideRawURL, "modules/develop/publish.mdx")},
+		{"refactoring", fmt.Sprintf("%s/%s", terraformGuideRawURL, "modules/develop/refactoring.mdx")},
 	}
 
 	return mcp.NewResource(

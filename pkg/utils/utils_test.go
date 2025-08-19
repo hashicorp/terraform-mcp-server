@@ -20,7 +20,10 @@ var logger = log.New()
 
 func TestExtractProviderNameAndVersion(t *testing.T) {
 	uri := "registry://providers/hashicorp/namespace/aws/version/3.0.0"
-	ns, name, version := ExtractProviderNameAndVersion(uri)
+	ns, name, version, err := ExtractProviderNameAndVersion(uri)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 	if ns != "hashicorp" || name != "aws" || version != "3.0.0" {
 		t.Errorf("expected (hashicorp, aws, 3.0.0), got (%s, %s, %s)", ns, name, version)
 	}

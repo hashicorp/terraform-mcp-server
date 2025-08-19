@@ -12,7 +12,7 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-func GetLatestProviderVersion(httpClient *http.Client, providerNamespace, providerName interface{}, logger *log.Logger) (string, error) {
+func GetLatestProviderVersion(httpClient *http.Client, providerNamespace string, providerName string, logger *log.Logger) (string, error) {
 	uri := fmt.Sprintf("providers/%s/%s", providerNamespace, providerName)
 	jsonData, err := SendRegistryCall(httpClient, "GET", uri, logger, "v1")
 	if err != nil {

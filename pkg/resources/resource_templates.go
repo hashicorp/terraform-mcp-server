@@ -38,7 +38,7 @@ func providerResourceTemplate(resourceURI string, description string, logger *lo
 			// mcp.WithInteger("page_size", mcp.Description("Page size"), mcp.Optional()),
 		),
 		func(ctx context.Context, request mcp.ReadResourceRequest) ([]mcp.ResourceContents, error) {
-			logger.Debugf("Provider resource template - resourceURI: %s", request.Params.URI)
+			logger.Infof("Provider resource template - resourceURI: %s", request.Params.URI)
 
 			// Get a simple http client to access the public Terraform registry from context
 			terraformClients, err := client.GetTerraformClientFromContext(ctx, logger)
@@ -63,16 +63,19 @@ func providerResourceTemplate(resourceURI string, description string, logger *lo
 
 // providerResourceTemplateHelper fetches the provider details based on the resource URI
 func providerResourceTemplateHelper(httpClient *http.Client, resourceURI string, logger *log.Logger) (string, error) {
-	namespace, name, version := utils.ExtractProviderNameAndVersion(resourceURI)
+	namespace, name, version, err := utils.ExtractProviderNameAndVersion(resourceURI)
+	if err != nil {
+		return "", utils.LogAndReturnError(logger, "Extracting provider name and version", err)
+	}
 	logger.Debugf("Extracted namespace: %s, name: %s, version: %s", namespace, name, version)
 
-	var err error
 	if version == "" || version == "latest" || !utils.IsValidProviderVersionFormat(version) {
 		version, err = client.GetLatestProviderVersion(httpClient, namespace, name, logger)
 		if err != nil {
 			return "", utils.LogAndReturnError(logger, fmt.Sprintf("Provider Resource: error getting %s/%s latest provider version", namespace, name), err)
 		}
 	}
+
 	providerVersionUri := path.Join(utils.PROVIDER_BASE_PATH, namespace, "name", name, "version", version)
 	logger.Debugf("Provider resource template - providerVersionUri: %s", providerVersionUri)
 	if err != nil {
