@@ -60,13 +60,11 @@ func getSearchModulesHandler(ctx context.Context, request mcp.CallToolRequest, l
 	currentOffsetValue := request.GetInt("current_offset", 0)
 
 	// Get a simple http client to access the public Terraform registry from context
-	terraformClients, err := client.GetTerraformClientFromContext(ctx, logger)
+	httpClient, err := client.GetHttpClientFromContext(ctx, logger)
 	if err != nil {
 		logger.WithError(err).Error("failed to get http client for public Terraform registry")
 		return mcp.NewToolResultError(fmt.Sprintf("failed to get http client for public Terraform registry: %v", err)), nil
 	}
-
-	httpClient := terraformClients.HttpClient
 
 	var modulesData, errMsg string
 	response, err := sendSearchModulesCall(httpClient, moduleQuery, currentOffsetValue, logger)

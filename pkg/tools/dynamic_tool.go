@@ -120,8 +120,8 @@ func (r *DynamicToolRegistry) createDynamicTFETool(toolName string, toolFactory 
 		sessionID := session.SessionID()
 		if !r.HasSessionWithTFE(sessionID) {
 			// Double-check by looking at the actual client state
-			terraformClient := client.GetTerraformClient(sessionID)
-			if terraformClient == nil || terraformClient.TfeClient == nil {
+			tfeClient := client.GetTfeClient(sessionID)
+			if tfeClient == nil {
 				r.logger.WithFields(log.Fields{
 					"tool": toolName,
 				}).Warn("TFE tool called but session has no valid TFE client")

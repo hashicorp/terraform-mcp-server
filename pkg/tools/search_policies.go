@@ -57,13 +57,11 @@ func getSearchPoliciesHandler(ctx context.Context, request mcp.CallToolRequest, 
 	pq = strings.ToLower(pq)
 
 	// Get a simple http client to access the public Terraform registry from context
-	terraformClients, err := client.GetTerraformClientFromContext(ctx, logger)
+	httpClient, err := client.GetHttpClientFromContext(ctx, logger)
 	if err != nil {
 		logger.WithError(err).Error("failed to get http client for public Terraform registry")
 		return mcp.NewToolResultError(fmt.Sprintf("failed to get http client for public Terraform registry: %v", err)), nil
 	}
-
-	httpClient := terraformClients.HttpClient
 	uri := (&url.URL{
 		Path: "policies",
 		RawQuery: url.Values{

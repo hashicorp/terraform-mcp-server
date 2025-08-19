@@ -50,13 +50,11 @@ func getLatestProviderVersionHandler(ctx context.Context, request mcp.CallToolRe
 	name = strings.ToLower(name)
 
 	// Get a simple http client to access the public Terraform registry from context
-	terraformClients, err := client.GetTerraformClientFromContext(ctx, logger)
+	httpClient, err := client.GetHttpClientFromContext(ctx, logger)
 	if err != nil {
 		logger.WithError(err).Error("failed to get http client for public Terraform registry")
 		return mcp.NewToolResultError(fmt.Sprintf("failed to get http client for public Terraform registry: %v", err)), nil
 	}
-
-	httpClient := terraformClients.HttpClient
 
 	version, err := client.GetLatestProviderVersion(httpClient, namespace, name, logger)
 	if err != nil {

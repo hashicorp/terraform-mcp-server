@@ -41,12 +41,10 @@ func providerResourceTemplate(resourceURI string, description string, logger *lo
 			logger.Debugf("Provider resource template - resourceURI: %s", request.Params.URI)
 
 			// Get a simple http client to access the public Terraform registry from context
-			terraformClients, err := client.GetTerraformClientFromContext(ctx, logger)
+			httpClient, err := client.GetHttpClientFromContext(ctx, logger)
 			if err != nil {
 				return nil, utils.LogAndReturnError(logger, "failed to get http client for public Terraform registry", err)
 			}
-
-			httpClient := terraformClients.HttpClient
 			providerDocs, err := providerResourceTemplateHelper(httpClient, request.Params.URI, logger)
 			if err != nil {
 				return nil, utils.LogAndReturnError(logger, "Provider Resource: error getting provider details", err)

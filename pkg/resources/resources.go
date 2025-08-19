@@ -39,12 +39,10 @@ func TerraformStyleGuideResource(logger *log.Logger) (mcp.Resource, server.Resou
 		func(ctx context.Context, request mcp.ReadResourceRequest) ([]mcp.ResourceContents, error) {
 
 			// Get a simple http client to access the public Terraform registry from context
-			terraformClients, err := client.GetTerraformClientFromContext(ctx, logger)
+			httpClient, err := client.GetHttpClientFromContext(ctx, logger)
 			if err != nil {
 				return nil, utils.LogAndReturnError(logger, "failed to get http client for public Terraform registry", err)
 			}
-
-			httpClient := terraformClients.HttpClient
 			resp, err := httpClient.Get(fmt.Sprintf("%s/style.mdx", terraformGuideRawURL))
 			if err != nil {
 				return nil, utils.LogAndReturnError(logger, "Error fetching Terraform Style Guide markdown", err)
@@ -92,11 +90,10 @@ func TerraformModuleDevGuideResource(logger *log.Logger) (mcp.Resource, server.R
 		),
 		func(ctx context.Context, request mcp.ReadResourceRequest) ([]mcp.ResourceContents, error) {
 			// Get a simple http client to access the public Terraform registry from context
-			terraformClients, err := client.GetTerraformClientFromContext(ctx, logger)
+			httpClient, err := client.GetHttpClientFromContext(ctx, logger)
 			if err != nil {
 				return nil, utils.LogAndReturnError(logger, "failed to get http client for public Terraform registry", err)
 			}
-			httpClient := terraformClients.HttpClient
 
 			var contents []mcp.ResourceContents
 			for _, u := range urls {

@@ -5,6 +5,7 @@ package utils
 
 import (
 	"fmt"
+	"os"
 	"regexp"
 	"slices"
 	"strings"
@@ -96,4 +97,12 @@ func ExtractReadme(readme string) string {
 	}
 
 	return strings.TrimSuffix(builder.String(), "\n")
+}
+
+// GetEnv retrieves the value of an environment variable or returns a fallback value if not set
+func GetEnv(key, fallback string) string {
+	if value, ok := os.LookupEnv(key); ok {
+		return value
+	}
+	return fallback
 }

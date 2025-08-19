@@ -11,6 +11,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/hashicorp/terraform-mcp-server/pkg/utils"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -148,7 +149,7 @@ func TerraformContextMiddleware(logger *log.Logger) func(http.Handler) http.Hand
 				}
 
 				if headerValue == "" {
-					headerValue = getEnv(header, "")
+					headerValue = utils.GetEnv(header, "")
 				}
 
 				// Add to context using the header name as key

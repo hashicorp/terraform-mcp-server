@@ -47,13 +47,11 @@ func getPolicyDetailsHandler(ctx context.Context, request mcp.CallToolRequest, l
 	}
 
 	// Get a simple http client to access the public Terraform registry from context
-	terraformClients, err := client.GetTerraformClientFromContext(ctx, logger)
+	httpClient, err := client.GetHttpClientFromContext(ctx, logger)
 	if err != nil {
 		logger.WithError(err).Error("failed to get http client for public Terraform registry")
 		return mcp.NewToolResultError(fmt.Sprintf("failed to get http client for public Terraform registry: %v", err)), nil
 	}
-
-	httpClient := terraformClients.HttpClient
 	policyResp, err := client.SendRegistryCall(httpClient, "GET", (&url.URL{Path: terraformPolicyID, RawQuery: url.Values{"include": {"policies,policy-modules,policy-library"}}.Encode()}).String(), logger, "v2")
 	if err != nil {
 		return nil, utils.LogAndReturnError(logger, "Failed to fetch policy details: registry API did not return a successful response", err)
