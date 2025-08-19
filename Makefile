@@ -47,9 +47,12 @@ clean:
 deps:
 	$(GO) mod download
 
-# Build docker image
+# Build multi-platform docker image
 docker-build:
-	$(DOCKER) build --build-arg VERSION=$(VERSION) -t $(BINARY_NAME):$(VERSION) .
+	$(DOCKER) buildx build --platform linux/amd64,linux/arm64 \
+		--build-arg VERSION=$(VERSION) \
+		-t $(BINARY_NAME):$(VERSION) . \
+		--output type=docker
 
 # Run HTTP server locally
 run-http:
