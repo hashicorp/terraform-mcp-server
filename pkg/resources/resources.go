@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 
+	"github.com/hashicorp/terraform-mcp-server/pkg/prompts"
 	"github.com/hashicorp/terraform-mcp-server/pkg/utils"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
@@ -22,6 +23,9 @@ const terraformGuideRawURL = "https://raw.githubusercontent.com/hashicorp/web-un
 func RegisterResources(hcServer *server.MCPServer, registryClient *http.Client, logger *log.Logger) {
 	hcServer.AddResource(TerraformStyleGuideResource(registryClient, logger))
 	hcServer.AddResource(TerraformModuleDevGuideResource(registryClient, logger))
+	
+	// Register workspace prompts
+	prompts.RegisterWorkspacePrompts(hcServer, logger)
 }
 
 // TerraformStyleGuideResource returns the resource and handler for the style guide

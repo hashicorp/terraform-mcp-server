@@ -10,6 +10,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -1996,6 +1997,189 @@ func (c *Client) RemoveWorkspaceRemoteStateConsumers(token, workspaceID string, 
 
 	c.logger.Infof("Removed %d remote state consumers from workspace %s", len(consumerWorkspaceIDs), workspaceID)
 	return nil
+}
+
+// ===============================================================================
+// HIGH-LEVEL ORCHESTRATION METHODS
+// ===============================================================================
+
+// AnalyzeWorkspaceComprehensive performs comprehensive workspace analysis including details, variables, configurations, and state information.
+// This method aggregates data from multiple HCP Terraform APIs to provide a complete view of a workspace.
+// It retrieves workspace details, variables, configuration versions, current state, tags, and remote state consumers.
+// The method accepts either a workspace ID or organization name + workspace name combination.
+//
+// Returns a WorkspaceAnalysisResponse containing all collected information, or an error if the analysis fails.
+// Individual API failures for non-critical data (variables, tags, etc.) are logged as warnings but don't fail the entire operation.
+func (c *Client) AnalyzeWorkspaceComprehensive(request *WorkspaceAnalysisRequest) (*WorkspaceAnalysisResponse, error) {
+	if request == nil {
+		return nil, fmt.Errorf("request cannot be nil")
+	}
+
+	// Resolve authentication token
+	token, err := c.resolveToken(request)
+	if err != nil {
+		return nil, fmt.Errorf("failed to resolve token: %w", err)
+	}
+
+	// Get workspace details
+	var workspaceResp *SingleWorkspaceResponse
+	if request.WorkspaceID != "" {
+		workspaceResp, err = c.GetWorkspaceByID(token, request.WorkspaceID)
+	} else if request.OrganizationName != "" && request.WorkspaceName != "" {
+		workspaceResp, err = c.GetWorkspaceByName(token, request.OrganizationName, request.WorkspaceName)
+	} else {
+		return nil, fmt.Errorf("must provide either workspace_id or organization_name + workspace_name")
+	}
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to get workspace details: %w", err)
+	}
+
+	// Get workspace variables
+	variables, err := c.GetWorkspaceVariables(token, workspaceResp.Data.ID)
+	if err != nil {
+		c.logger.Warnf("Failed to get workspace variables: %v", err)
+	}
+
+	// Get configuration versions (using the actual method name)
+	configVersions, err := c.GetWorkspaceConfigurationVersions(token, workspaceResp.Data.ID, 1, 5)
+	if err != nil {
+		c.logger.Warnf("Failed to get configuration versions: %v", err)
+	}
+
+	// Get current state version
+	stateVersion, err := c.GetCurrentStateVersion(token, workspaceResp.Data.ID)
+	if err != nil {
+		c.logger.Warnf("Failed to get current state version: %v", err)
+	}
+
+	// Get workspace tags (using the actual method name)
+	tags, err := c.GetWorkspaceTagBindings(token, workspaceResp.Data.ID)
+	if err != nil {
+		c.logger.Warnf("Failed to get workspace tags: %v", err)
+	}
+
+	// Get remote state consumers (using the actual method name)
+	remoteStateConsumers, err := c.GetWorkspaceRemoteStateConsumers(token, workspaceResp.Data.ID)
+	if err != nil {
+		c.logger.Warnf("Failed to get remote state consumers: %v", err)
+	}
+
+	// Build comprehensive response
+	response := &WorkspaceAnalysisResponse{
+		WorkspaceDetails:      &workspaceResp.Data,
+		Variables:             variables,
+		ConfigurationVersions: configVersions,
+		StateVersion:          stateVersion,
+		TagBindings:           tags,
+		RemoteStateConsumers:  remoteStateConsumers,
+		AnalysisTimestamp:     time.Now(),
+	}
+
+	c.logger.Infof("Completed comprehensive analysis for workspace %s", workspaceResp.Data.ID)
+	return response, nil
+}
+
+// PrepareConfiguration prepares workspace configuration for replication or modification.
+// This method processes Terraform configuration files to apply tags, update provider configurations,
+// and prepare them for deployment to a new workspace. The input configuration should be provided
+// as a base64-encoded tar.gz archive.
+//
+// Currently implements a placeholder that returns the original configuration with modification summaries.
+// Future implementations will include actual HCL parsing, tag injection, and provider configuration updates.
+//
+// Returns a ConfigPreparationResponse containing the modified configuration and processing details,
+// or an error if the preparation fails.
+func (c *Client) PrepareConfiguration(request *ConfigPreparationRequest) (*ConfigPreparationResponse, error) {
+	if request == nil {
+		return nil, fmt.Errorf("request cannot be nil")
+	}
+
+	// For now, return a simple response indicating success
+	// TODO: Implement actual configuration parsing and modification when needed
+	response := &ConfigPreparationResponse{
+		ModifiedConfigContent:   request.ConfigurationArchive, // Return original for now
+		OriginalConfigVersionID: request.OriginalConfigVersionID,
+		ModificationsSummary:    []string{"Configuration processing placeholder"},
+		ParsedFiles:             []string{"main.tf"},
+		ProcessingTimeSeconds:   1,
+	}
+
+	// Add modifications summary based on request
+	response.ModificationsSummary = []string{}
+	if len(request.Tags) > 0 {
+		response.ModificationsSummary = append(response.ModificationsSummary, "Would add default tags")
+	}
+	if len(request.ProviderUpdates) > 0 {
+		response.ModificationsSummary = append(response.ModificationsSummary, "Would update provider configurations")
+	}
+	if len(response.ModificationsSummary) == 0 {
+		response.ModificationsSummary = append(response.ModificationsSummary, "No modifications requested")
+	}
+
+	c.logger.Infof("Prepared configuration with %d potential modifications", len(response.ModificationsSummary))
+	return response, nil
+}
+
+// ===============================================================================
+// UTILITY METHODS (moved from orchestrator/api_client.go)
+// ===============================================================================
+
+// resolveToken extracts authentication token from request or environment
+func (c *Client) resolveToken(request interface{}) (string, error) {
+	// Handle different request types that might have Authorization field
+	switch req := request.(type) {
+	case *WorkspaceAnalysisRequest:
+		if req.Authorization != "" {
+			return req.Authorization, nil
+		}
+	case *ConfigPreparationRequest:
+		if req.Authorization != "" {
+			return req.Authorization, nil
+		}
+	}
+
+	// Fallback to environment variable
+	if token := os.Getenv("HCP_TERRAFORM_TOKEN"); token != "" {
+		return token, nil
+	}
+
+	return "", fmt.Errorf("no authentication token provided")
+}
+
+// Helper functions for safe type conversion
+func (c *Client) getStringValue(data map[string]interface{}, key string) string {
+	if value, ok := data[key].(string); ok {
+		return value
+	}
+	return ""
+}
+
+func (c *Client) getBoolValue(data map[string]interface{}, key string) bool {
+	if value, ok := data[key].(bool); ok {
+		return value
+	}
+	return false
+}
+
+func (c *Client) getIntValue(data map[string]interface{}, key string) int {
+	if value, ok := data[key].(float64); ok {
+		return int(value)
+	}
+	if value, ok := data[key].(int); ok {
+		return value
+	}
+	return 0
+}
+
+func (c *Client) parseTimeValue(timeStr string) time.Time {
+	if timeStr == "" {
+		return time.Time{}
+	}
+	if t, err := time.Parse(time.RFC3339, timeStr); err == nil {
+		return t
+	}
+	return time.Time{}
 }
 
 // SetBaseURL allows customizing the base URL (useful for testing or enterprise installations)
