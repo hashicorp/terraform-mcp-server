@@ -26,6 +26,7 @@ You must call 'search_providers' tool first to obtain the exact tfprovider-compa
 			mcp.WithTitleAnnotation("Fetch detailed Terraform provider documentation using a document ID"),
 			mcp.WithOpenWorldHintAnnotation(true),
 			mcp.WithReadOnlyHintAnnotation(true),
+			mcp.WithDestructiveHintAnnotation(false),
 			mcp.WithString("provider_doc_id",
 				mcp.Required(),
 				mcp.Description("Exact tfprovider-compatible provider_doc_id, (e.g., '8894603', '8906901') retrieved from 'search_providers'")),
@@ -39,32 +40,30 @@ You must call 'search_providers' tool first to obtain the exact tfprovider-compa
 func getProviderDocsHandler(ctx context.Context, request mcp.CallToolRequest, logger *log.Logger) (*mcp.CallToolResult, error) {
 	providerDocID, err := request.RequireString("provider_doc_id")
 	if err != nil {
-		return nil, utils.LogAndReturnError(logger, "provider_doc_id is required", err)
+		return nil, utils.LogAndReturnError(logger, "required input: provider_doc_id is required", err)
 	}
 	if providerDocID == "" {
-		return nil, utils.LogAndReturnError(logger, "provider_doc_id cannot be empty", nil)
+		return nil, utils.LogAndReturnError(logger, "required input: provider_doc_id cannot be empty", nil)
 	}
 	if _, err := strconv.Atoi(providerDocID); err != nil {
-		return nil, utils.LogAndReturnError(logger, "provider_doc_id must be a valid number", err)
+		return nil, utils.LogAndReturnError(logger, "required input: provider_doc_id must be a valid number", err)
 	}
 
 	// Get a simple http client to access the public Terraform registry from context
-	terraformClients, err := client.GetTerraformClientFromContext(ctx, logger)
+	httpClient, err := client.GetHttpClientFromContext(ctx, logger)
 	if err != nil {
 		logger.WithError(err).Error("failed to get http client for public Terraform registry")
 		return mcp.NewToolResultError(fmt.Sprintf("failed to get http client for public Terraform registry: %v", err)), nil
 	}
 
-	httpClient := terraformClients.HttpClient
-
 	detailResp, err := client.SendRegistryCall(httpClient, "GET", path.Join("provider-docs", providerDocID), logger, "v2")
 	if err != nil {
-		return nil, utils.LogAndReturnError(logger, fmt.Sprintf("Error fetching provider-docs/%s, please make sure provider_doc_id is valid and the search_providers tool has run prior", providerDocID), err)
+		return nil, utils.LogAndReturnError(logger, fmt.Sprintf("fetching provider-docs/%s, please make sure provider_doc_id is valid and the search_providers tool has run prior", providerDocID), err)
 	}
 
 	var details client.ProviderResourceDetails
 	if err := json.Unmarshal(detailResp, &details); err != nil {
-		return nil, utils.LogAndReturnError(logger, fmt.Sprintf("error unmarshalling provider-docs/%s", providerDocID), err)
+		return nil, utils.LogAndReturnError(logger, fmt.Sprintf("unmarshalling provider-docs/%s", providerDocID), err)
 	}
 	return mcp.NewToolResultText(details.Data.Attributes.Content), nil
 }

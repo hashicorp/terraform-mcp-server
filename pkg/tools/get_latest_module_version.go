@@ -25,6 +25,7 @@ func GetLatestModuleVersion(logger *log.Logger) server.ServerTool {
 			mcp.WithTitleAnnotation("Get Latest Module Version"),
 			mcp.WithOpenWorldHintAnnotation(true),
 			mcp.WithReadOnlyHintAnnotation(true),
+			mcp.WithDestructiveHintAnnotation(false),
 			mcp.WithString("module_publisher",
 				mcp.Required(),
 				mcp.Description("The publisher of the module, e.g., 'hashicorp', 'aws-ia', 'terraform-google-modules', 'Azure' etc.")),
@@ -44,39 +45,37 @@ func GetLatestModuleVersion(logger *log.Logger) server.ServerTool {
 func getLatestModuleVersionHandler(ctx context.Context, request mcp.CallToolRequest, logger *log.Logger) (*mcp.CallToolResult, error) {
 	modulePublisher, err := request.RequireString("module_publisher")
 	if err != nil {
-		return nil, utils.LogAndReturnError(logger, "Input required: 'module_publisher' (the publisher of the module)", err)
+		return nil, utils.LogAndReturnError(logger, "required input: 'module_publisher' (the publisher of the module)", err)
 	}
 	modulePublisher = strings.ToLower(modulePublisher)
 
 	moduleName, err := request.RequireString("module_name")
 	if err != nil {
-		return nil, utils.LogAndReturnError(logger, "Input required: 'module_name' (the name of the module)", err)
+		return nil, utils.LogAndReturnError(logger, "required input: 'module_name' (the name of the module)", err)
 	}
 	moduleName = strings.ToLower(moduleName)
 
 	moduleProvider, err := request.RequireString("module_provider")
 	if err != nil {
-		return nil, utils.LogAndReturnError(logger, "Input required: 'module_provider' (the provider of the module)", err)
+		return nil, utils.LogAndReturnError(logger, "required input: 'module_provider' (the provider of the module)", err)
 	}
 	moduleProvider = strings.ToLower(moduleProvider)
 
 	// Get a simple http client to access the public Terraform registry from context
-	terraformClients, err := client.GetTerraformClientFromContext(ctx, logger)
+	httpClient, err := client.GetHttpClientFromContext(ctx, logger)
 	if err != nil {
 		logger.WithError(err).Error("failed to get http client for public Terraform registry")
 		return mcp.NewToolResultError(fmt.Sprintf("failed to get http client for public Terraform registry: %v", err)), nil
 	}
-
-	httpClient := terraformClients.HttpClient
 	uri := fmt.Sprintf("modules/%s/%s/%s", modulePublisher, moduleName, moduleProvider)
 	response, err := client.SendRegistryCall(httpClient, http.MethodGet, uri, logger)
 	if err != nil {
-		return nil, utils.LogAndReturnError(logger, fmt.Sprintf("error fetching module information for %s/%s from the %s provider", modulePublisher, moduleName, moduleProvider), err)
+		return nil, utils.LogAndReturnError(logger, fmt.Sprintf("fetching module information for %s/%s from the %s provider", modulePublisher, moduleName, moduleProvider), err)
 	}
 
 	var moduleVersionDetails client.TerraformModuleVersionDetails
 	if err := json.Unmarshal(response, &moduleVersionDetails); err != nil {
-		return nil, utils.LogAndReturnError(logger, fmt.Sprintf("error unmarshalling module information for %s/%s from the %s provider", modulePublisher, moduleName, moduleProvider), err)
+		return nil, utils.LogAndReturnError(logger, fmt.Sprintf("unmarshalling module information for %s/%s from the %s provider", modulePublisher, moduleName, moduleProvider), err)
 	}
 
 	return mcp.NewToolResultText(moduleVersionDetails.Version), nil

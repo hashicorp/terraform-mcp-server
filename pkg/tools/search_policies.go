@@ -34,6 +34,7 @@ If no policies were found, reattempt the search with a new policy_query.`),
 			mcp.WithTitleAnnotation("Search and match Terraform policies based on name and relevance"),
 			mcp.WithOpenWorldHintAnnotation(true),
 			mcp.WithReadOnlyHintAnnotation(true),
+			mcp.WithDestructiveHintAnnotation(false),
 			mcp.WithString("policy_query",
 				mcp.Required(),
 				mcp.Description("The query to search for Terraform modules."),
@@ -49,21 +50,19 @@ func getSearchPoliciesHandler(ctx context.Context, request mcp.CallToolRequest, 
 	var terraformPolicies client.TerraformPolicyList
 	pq, err := request.RequireString("policy_query")
 	if err != nil {
-		return nil, utils.LogAndReturnError(logger, "policy_query is required", err)
+		return nil, utils.LogAndReturnError(logger, "required input: policy_query is required", err)
 	}
 	if pq == "" {
-		return nil, utils.LogAndReturnError(logger, "policy_query cannot be empty", nil)
+		return nil, utils.LogAndReturnError(logger, "required input: policy_query cannot be empty", nil)
 	}
 	pq = strings.ToLower(pq)
 
 	// Get a simple http client to access the public Terraform registry from context
-	terraformClients, err := client.GetTerraformClientFromContext(ctx, logger)
+	httpClient, err := client.GetHttpClientFromContext(ctx, logger)
 	if err != nil {
 		logger.WithError(err).Error("failed to get http client for public Terraform registry")
 		return mcp.NewToolResultError(fmt.Sprintf("failed to get http client for public Terraform registry: %v", err)), nil
 	}
-
-	httpClient := terraformClients.HttpClient
 	uri := (&url.URL{
 		Path: "policies",
 		RawQuery: url.Values{
@@ -73,12 +72,12 @@ func getSearchPoliciesHandler(ctx context.Context, request mcp.CallToolRequest, 
 	}).String()
 	policyResp, err := client.SendRegistryCall(httpClient, "GET", uri, logger, "v2")
 	if err != nil {
-		return nil, utils.LogAndReturnError(logger, "Failed to fetch policies: registry API did not return a successful response", err)
+		return nil, utils.LogAndReturnError(logger, "fetching policies: registry API did not return a successful response", err)
 	}
 
 	err = json.Unmarshal(policyResp, &terraformPolicies)
 	if err != nil {
-		return nil, utils.LogAndReturnError(logger, "Unmarshalling policy list", err)
+		return nil, utils.LogAndReturnError(logger, "unmarshalling policy list", err)
 	}
 
 	var builder strings.Builder
@@ -104,7 +103,7 @@ func getSearchPoliciesHandler(ctx context.Context, request mcp.CallToolRequest, 
 
 	policyData := builder.String()
 	if !contentAvailable {
-		errMessage := fmt.Sprintf("No policies found matching the query: %s. Try a different policy_query.", pq)
+		errMessage := fmt.Sprintf("finding policies, none found matching the query: %s. Try a different policy_query.", pq)
 		return nil, utils.LogAndReturnError(logger, errMessage, nil)
 	}
 

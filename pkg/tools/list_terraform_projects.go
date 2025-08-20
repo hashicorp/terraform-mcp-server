@@ -22,6 +22,7 @@ func ListTerraformProjects(logger *log.Logger) server.ServerTool {
 			mcp.WithDescription(`Fetches a list of all Terraform projects.`),
 			mcp.WithTitleAnnotation("List all Terraform projects"),
 			mcp.WithReadOnlyHintAnnotation(true),
+			mcp.WithDestructiveHintAnnotation(false),
 			mcp.WithString("terraform_org_name",
 				mcp.Required(),
 				mcp.Description("The name of the Terraform organization to list projects for."),
@@ -37,10 +38,10 @@ func ListTerraformProjects(logger *log.Logger) server.ServerTool {
 func listTerraformProjectsHandler(ctx context.Context, request mcp.CallToolRequest, logger *log.Logger) (*mcp.CallToolResult, error) {
 	terraformOrgName, err := request.RequireString("terraform_org_name")
 	if err != nil {
-		return nil, utils.LogAndReturnError(logger, "terraform_org_name is required", err)
+		return nil, utils.LogAndReturnError(logger, "required input: terraform_org_name is required", err)
 	}
 	if terraformOrgName == "" {
-		return nil, utils.LogAndReturnError(logger, "terraform_org_name cannot be empty", nil)
+		return nil, utils.LogAndReturnError(logger, "required input: terraform_org_name cannot be empty", nil)
 	}
 
 	pagination, err := utils.OptionalPaginationParams(request)
@@ -49,13 +50,12 @@ func listTerraformProjectsHandler(ctx context.Context, request mcp.CallToolReque
 	}
 
 	// Get a Terraform client from context
-	terraformClients, err := client.GetTerraformClientFromContext(ctx, logger)
+	tfeClient, err := client.GetTfeClientFromContext(ctx, logger)
 	if err != nil {
-		return nil, utils.LogAndReturnError(logger, "failed to get Terraform client", err)
+		return nil, utils.LogAndReturnError(logger, "getting Terraform client", err)
 	}
-	tfeClient := terraformClients.TfeClient
 	if tfeClient == nil {
-		return nil, utils.LogAndReturnError(logger, "TFE client is not available - please ensure TFE_TOKEN and TFE_ADDRESS are properly configured", nil)
+		return nil, utils.LogAndReturnError(logger, "getting TFE client - please ensure TFE_TOKEN and TFE_ADDRESS are properly configured", nil)
 	}
 
 	// Fetch the list of projects
@@ -67,7 +67,7 @@ func listTerraformProjectsHandler(ctx context.Context, request mcp.CallToolReque
 	})
 
 	if err != nil {
-		return nil, utils.LogAndReturnError(logger, "failed to list Terraform projects, check if the organization exists and you have access", err)
+		return nil, utils.LogAndReturnError(logger, "listing Terraform projects, check if the organization exists and you have access", err)
 	}
 
 	projectNames := make([]string, 0, len(projects.Items))
@@ -77,7 +77,7 @@ func listTerraformProjectsHandler(ctx context.Context, request mcp.CallToolReque
 
 	projectJSON, err := json.Marshal(projectNames)
 	if err != nil {
-		return nil, utils.LogAndReturnError(logger, "failed to marshal project names", err)
+		return nil, utils.LogAndReturnError(logger, "marshalling project names", err)
 	}
 
 	return mcp.NewToolResultText(string(projectJSON)), nil

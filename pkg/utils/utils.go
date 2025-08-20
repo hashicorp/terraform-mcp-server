@@ -5,6 +5,7 @@ package utils
 
 import (
 	"fmt"
+	"os"
 	"regexp"
 	"slices"
 	"strings"
@@ -14,13 +15,18 @@ import (
 
 const PROVIDER_BASE_PATH = "registry://providers"
 
-func ExtractProviderNameAndVersion(uri string) (string, string, string) {
-	uri = strings.TrimPrefix(uri, fmt.Sprintf("%s/", PROVIDER_BASE_PATH))
+// ExtractProviderNameAndVersion parses a provider URI and extracts the provider namespace, name and version.
+// The URI is expected to have at least 5 segments separated by '/', if invalid, an error is returned.
+// Example format: registry://providers/<provider_namespace>/namespace/<provider_name>/version/<provider_version>
+func ExtractProviderNameAndVersion(uri string) (string, string, string, error) {
 	parts := strings.Split(uri, "/")
-	return parts[0], parts[2], parts[4]
+	if len(parts) < 5 {
+		return "", "", "", fmt.Errorf("invalid provider URI format")
+	}
+	return parts[len(parts)-5], parts[len(parts)-3], parts[len(parts)-1], nil
 }
 
-func ConstructProviderVersionURI(providerNamespace interface{}, providerName string, providerVersion interface{}) string {
+func ConstructProviderVersionURI(providerNamespace string, providerName string, providerVersion string) string {
 	return fmt.Sprintf("%s/%s/providers/%s/versions/%s", PROVIDER_BASE_PATH, providerNamespace, providerName, providerVersion)
 }
 
@@ -96,4 +102,12 @@ func ExtractReadme(readme string) string {
 	}
 
 	return strings.TrimSuffix(builder.String(), "\n")
+}
+
+// GetEnv retrieves the value of an environment variable or returns a fallback value if not set
+func GetEnv(key, fallback string) string {
+	if value, ok := os.LookupEnv(key); ok {
+		return value
+	}
+	return fallback
 }

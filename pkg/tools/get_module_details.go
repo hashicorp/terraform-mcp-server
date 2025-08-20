@@ -27,6 +27,7 @@ func ModuleDetails(logger *log.Logger) server.ServerTool {
 			mcp.WithTitleAnnotation("Retrieve documentation for a specific Terraform module"),
 			mcp.WithOpenWorldHintAnnotation(true),
 			mcp.WithReadOnlyHintAnnotation(true),
+			mcp.WithDestructiveHintAnnotation(false),
 			mcp.WithString("module_id",
 				mcp.Required(),
 				mcp.Description("Exact valid and compatible module_id retrieved from search_modules (e.g., 'squareops/terraform-kubernetes-mongodb/mongodb/2.1.1', 'GoogleCloudPlatform/vertex-ai/google/0.2.0')"),
@@ -41,26 +42,24 @@ func ModuleDetails(logger *log.Logger) server.ServerTool {
 func getModuleDetailsHandler(ctx context.Context, request mcp.CallToolRequest, logger *log.Logger) (*mcp.CallToolResult, error) {
 	moduleID, err := request.RequireString("module_id")
 	if err != nil {
-		return nil, utils.LogAndReturnError(logger, "module_id is required", err)
+		return nil, utils.LogAndReturnError(logger, "required input: module_id is required", err)
 	}
 	if moduleID == "" {
-		return nil, utils.LogAndReturnError(logger, "module_id cannot be empty", nil)
+		return nil, utils.LogAndReturnError(logger, "required input: module_id cannot be empty", nil)
 	}
 	moduleID = strings.ToLower(moduleID)
 
 	// Get a simple http client to access the public Terraform registry from context
-	terraformClients, err := client.GetTerraformClientFromContext(ctx, logger)
+	httpClient, err := client.GetHttpClientFromContext(ctx, logger)
 	if err != nil {
 		logger.WithError(err).Error("failed to get http client for public Terraform registry")
 		return mcp.NewToolResultError(fmt.Sprintf("failed to get http client for public Terraform registry: %v", err)), nil
 	}
 
-	httpClient := terraformClients.HttpClient
-
 	var errMsg string
 	response, err := getModuleDetails(httpClient, moduleID, 0, logger)
 	if err != nil {
-		errMsg = fmt.Sprintf("no module(s) found for %v,", moduleID)
+		errMsg = fmt.Sprintf("getting module(s), none found! module_id: %v,", moduleID)
 		return nil, utils.LogAndReturnError(logger, errMsg, nil)
 	}
 	moduleData, err := unmarshalTerraformModule(response)
