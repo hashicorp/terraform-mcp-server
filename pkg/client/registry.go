@@ -11,6 +11,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"path"
 	"strconv"
 	"time"
 
@@ -20,6 +21,8 @@ import (
 	"github.com/hashicorp/terraform-mcp-server/version"
 	log "github.com/sirupsen/logrus"
 )
+
+const DefaultPublicRegistryURL = "https://registry.terraform.io"
 
 // createHTTPClient initializes a retryable HTTP client
 func createHTTPClient(insecureSkipVerify bool, logger *log.Logger) *http.Client {
@@ -66,7 +69,7 @@ func SendRegistryCall(client *http.Client, method string, uri string, logger *lo
 		ver = callOptions[0] // API version will be the first optional arg to this function
 	}
 
-	url, err := url.Parse(fmt.Sprintf("https://registry.terraform.io/%s/%s", ver, uri))
+	url, err := url.Parse(path.Join(DefaultPublicRegistryURL, ver, uri))
 	if err != nil {
 		return nil, fmt.Errorf("error parsing terraform registry URL: %w", err)
 	}

@@ -80,15 +80,10 @@ func searchPrivateProvidersHandler(ctx context.Context, request mcp.CallToolRequ
 	}
 
 	// Get the terraform client from context
-	terraformClients, err := client.GetTerraformClientFromContext(ctx, logger)
+	tfeClient, err := client.GetTfeClientFromContext(ctx, logger)
 	if err != nil {
-		logger.WithError(err).Error("failed to get terraform client for TFE")
+		err = utils.LogAndReturnError(logger, "failed to get terraform client for TFE, ensure TFE_TOKEN and TFE_ADDRESS are properly set.", err)
 		return mcp.NewToolResultError(fmt.Sprintf("failed to get terraform client for TFE: %v", err)), nil
-	}
-
-	tfeClient := terraformClients.TfeClient
-	if tfeClient == nil {
-		return mcp.NewToolResultError("TFE client is not available. This tool requires a valid Terraform Cloud/Enterprise token and configuration. Please ensure TFE_TOKEN and TFE_ADDRESS environment variables are properly set."), nil
 	}
 
 	// Prepare list options
