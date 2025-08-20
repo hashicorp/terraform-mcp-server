@@ -21,10 +21,7 @@ func NewSessionHandler(ctx context.Context, session server.ClientSession, logger
 		logger.WithError(err).Error("NewSessionHandler failed to create TFE client")
 	}
 
-	_, err = CreateHttpClientForSession(ctx, session, logger)
-	if err != nil {
-		logger.WithError(err).Error("NewSessionHandler failed to create HTTP client")
-	}
+	CreateHttpClientForSession(ctx, session, logger)
 
 	// Check if the session has a valid TFE client and register with dynamic tool registry
 	if tfeClient != nil {

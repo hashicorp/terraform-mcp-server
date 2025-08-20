@@ -24,10 +24,10 @@ const (
 var activeTfeClients sync.Map
 
 // NewTfeClient creates a new TFE client for the given session
-func NewTfeClient(sessionId string, terraformAddress string, terraformSkipTLSVerify bool, terraformToken string, logger *log.Logger) *tfe.Client {
+func NewTfeClient(sessionId string, terraformAddress string, terraformSkipTLSVerify bool, terraformToken string, logger *log.Logger) (*tfe.Client, error) {
 	if terraformToken == "" {
 		logger.Warn("No Terraform token provided, TFE client will not be available")
-		return nil
+		return nil, utils.LogAndReturnError(logger, "required input: no Terraform token provided", nil)
 	}
 
 	config := &tfe.Config{
@@ -41,12 +41,12 @@ func NewTfeClient(sessionId string, terraformAddress string, terraformSkipTLSVer
 	client, err := tfe.NewClient(config)
 	if err != nil {
 		logger.Warnf("Failed to create a Terraform Cloud/Enterprise client: %v", err)
-		return nil
+		return nil, utils.LogAndReturnError(logger, "creating TFE client", err)
 	}
 
 	activeTfeClients.Store(sessionId, client)
 	logger.WithField("session_id", sessionId).Info("Created TFE client")
-	return client
+	return client, nil
 }
 
 // GetTfeClient retrieves the TFE client for the given session
@@ -91,5 +91,6 @@ func CreateTfeClientForSession(ctx context.Context, session server.ClientSession
 		terraformToken = utils.GetEnv(TerraformToken, "")
 	}
 
-	return NewTfeClient(session.SessionID(), terraformAddress, parseTerraformSkipTLSVerify(ctx), terraformToken, logger), nil
+	client, err := NewTfeClient(session.SessionID(), terraformAddress, parseTerraformSkipTLSVerify(ctx), terraformToken, logger)
+	return client, err
 }

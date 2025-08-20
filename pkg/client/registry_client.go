@@ -52,10 +52,10 @@ func GetHttpClientFromContext(ctx context.Context, logger *log.Logger) (*http.Cl
 	}
 
 	logger.Warnf("HTTP client not found, creating a new one")
-	return CreateHttpClientForSession(ctx, session, logger)
+	return CreateHttpClientForSession(ctx, session, logger), nil
 }
 
 // CreateHttpClientForSession creates only an HTTP client for the session
-func CreateHttpClientForSession(ctx context.Context, session server.ClientSession, logger *log.Logger) (*http.Client, error) {
-	return NewHttpClient(session.SessionID(), parseTerraformSkipTLSVerify(ctx), logger), nil
+func CreateHttpClientForSession(ctx context.Context, session server.ClientSession, logger *log.Logger) *http.Client {
+	return NewHttpClient(session.SessionID(), parseTerraformSkipTLSVerify(ctx), logger)
 }
