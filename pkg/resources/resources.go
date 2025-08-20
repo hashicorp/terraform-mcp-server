@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"net/url"
 	"path"
 
 	"github.com/hashicorp/terraform-mcp-server/pkg/client"
@@ -49,10 +48,6 @@ func TerraformStyleGuideResource(logger *log.Logger) (mcp.Resource, server.Resou
 			resp, err := httpClient.Get(fmt.Sprintf("%s/style.mdx", terraformGuideRawURL))
 			if err != nil {
 				return nil, utils.LogAndReturnError(logger, "getting URL for Terraform Style Guide markdown", err)
-			}
-			resp, err := httpClient.Get(styleGuideURL)
-			if err != nil {
-				return nil, utils.LogAndReturnError(logger, "fetching Terraform Style Guide markdown", err)
 			}
 			defer resp.Body.Close()
 			if resp.StatusCode != http.StatusOK {
