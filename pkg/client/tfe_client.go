@@ -6,7 +6,6 @@ package client
 import (
 	"context"
 	"fmt"
-	"strconv"
 	"sync"
 
 	"github.com/hashicorp/go-tfe"
@@ -16,12 +15,11 @@ import (
 )
 
 const (
-	TerraformAddress       = "TFE_ADDRESS"
-	TerraformToken         = "TFE_TOKEN"
-	TerraformSkipTLSVerify = "TFE_SKIP_VERIFY"
+	TerraformAddress        = "TFE_ADDRESS"
+	TerraformToken          = "TFE_TOKEN"
+	TerraformSkipTLSVerify  = "TFE_SKIP_VERIFY"
+	DefaultTerraformAddress = "https://app.terraform.io"
 )
-
-const DefaultTerraformAddress = "https://app.terraform.io"
 
 var activeTfeClients sync.Map
 
@@ -93,15 +91,5 @@ func CreateTfeClientForSession(ctx context.Context, session server.ClientSession
 		terraformToken = utils.GetEnv(TerraformToken, "")
 	}
 
-	terraformSkipTLSVerifyStr, ok := ctx.Value(contextKey(TerraformSkipTLSVerify)).(string)
-	terraformSkipTLSVerify := false
-	if ok && terraformSkipTLSVerifyStr != "" {
-		var err error
-		terraformSkipTLSVerify, err = strconv.ParseBool(terraformSkipTLSVerifyStr)
-		if err != nil {
-			terraformSkipTLSVerify = false
-		}
-	}
-
-	return NewTfeClient(session.SessionID(), terraformAddress, terraformSkipTLSVerify, terraformToken, logger), nil
+	return NewTfeClient(session.SessionID(), terraformAddress, parseTerraformSkipTLSVerify(ctx), terraformToken, logger), nil
 }

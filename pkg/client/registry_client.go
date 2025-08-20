@@ -7,7 +7,6 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"strconv"
 	"sync"
 
 	"github.com/mark3labs/mcp-go/server"
@@ -58,15 +57,5 @@ func GetHttpClientFromContext(ctx context.Context, logger *log.Logger) (*http.Cl
 
 // CreateHttpClientForSession creates only an HTTP client for the session
 func CreateHttpClientForSession(ctx context.Context, session server.ClientSession, logger *log.Logger) (*http.Client, error) {
-	terraformSkipTLSVerifyStr, ok := ctx.Value(contextKey(TerraformSkipTLSVerify)).(string)
-	terraformSkipTLSVerify := false
-	if ok && terraformSkipTLSVerifyStr != "" {
-		var err error
-		terraformSkipTLSVerify, err = strconv.ParseBool(terraformSkipTLSVerifyStr)
-		if err != nil {
-			terraformSkipTLSVerify = false
-		}
-	}
-
-	return NewHttpClient(session.SessionID(), terraformSkipTLSVerify, logger), nil
+	return NewHttpClient(session.SessionID(), parseTerraformSkipTLSVerify(ctx), logger), nil
 }

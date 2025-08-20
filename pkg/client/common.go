@@ -4,9 +4,11 @@
 package client
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strconv"
 
 	"github.com/hashicorp/terraform-mcp-server/pkg/utils"
 	log "github.com/sirupsen/logrus"
@@ -84,4 +86,15 @@ func GetProviderResourceDocs(httpClient *http.Client, providerDocsID string, log
 		return "", utils.LogAndReturnError(logger, "Error unmarshalling provider resource docs", err)
 	}
 	return providerServiceDetails.Data.Attributes.Content, nil
+}
+
+func parseTerraformSkipTLSVerify(ctx context.Context) bool {
+	terraformSkipTLSVerifyStr, ok := ctx.Value(contextKey(TerraformSkipTLSVerify)).(string)
+	if ok && terraformSkipTLSVerifyStr != "" {
+		terraformSkipTLSVerify, err := strconv.ParseBool(terraformSkipTLSVerifyStr)
+		if err == nil {
+			return terraformSkipTLSVerify
+		}
+	}
+	return false
 }
