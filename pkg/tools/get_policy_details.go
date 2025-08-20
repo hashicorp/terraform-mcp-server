@@ -41,10 +41,10 @@ func PolicyDetails(logger *log.Logger) server.ServerTool {
 func getPolicyDetailsHandler(ctx context.Context, request mcp.CallToolRequest, logger *log.Logger) (*mcp.CallToolResult, error) {
 	terraformPolicyID, err := request.RequireString("terraform_policy_id")
 	if err != nil {
-		return nil, utils.LogAndReturnError(logger, "terraform_policy_id is required and must be a string, it is fetched by running the search_policies tool", err)
+		return nil, utils.LogAndReturnError(logger, "required input: terraform_policy_id is required and must be a string, it is fetched by running the search_policies tool", err)
 	}
 	if terraformPolicyID == "" {
-		return nil, utils.LogAndReturnError(logger, "terraform_policy_id cannot be empty, it is fetched by running the search_policies tool", nil)
+		return nil, utils.LogAndReturnError(logger, "required input: terraform_policy_id cannot be empty, it is fetched by running the search_policies tool", nil)
 	}
 
 	// Get a simple http client to access the public Terraform registry from context
@@ -57,12 +57,12 @@ func getPolicyDetailsHandler(ctx context.Context, request mcp.CallToolRequest, l
 	httpClient := terraformClients.HttpClient
 	policyResp, err := client.SendRegistryCall(httpClient, "GET", (&url.URL{Path: terraformPolicyID, RawQuery: url.Values{"include": {"policies,policy-modules,policy-library"}}.Encode()}).String(), logger, "v2")
 	if err != nil {
-		return nil, utils.LogAndReturnError(logger, "Failed to fetch policy details: registry API did not return a successful response", err)
+		return nil, utils.LogAndReturnError(logger, "fetching policy details: registry API did not return a successful response", err)
 	}
 
 	var policyDetails client.TerraformPolicyDetails
 	if err := json.Unmarshal(policyResp, &policyDetails); err != nil {
-		return nil, utils.LogAndReturnError(logger, fmt.Sprintf("error unmarshalling policy details for %s", terraformPolicyID), err)
+		return nil, utils.LogAndReturnError(logger, fmt.Sprintf("unmarshalling policy details for %s", terraformPolicyID), err)
 	}
 
 	readme := utils.ExtractReadme(policyDetails.Data.Attributes.Readme)

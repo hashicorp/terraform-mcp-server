@@ -40,13 +40,13 @@ You must call 'search_providers' tool first to obtain the exact tfprovider-compa
 func getProviderDocsHandler(ctx context.Context, request mcp.CallToolRequest, logger *log.Logger) (*mcp.CallToolResult, error) {
 	providerDocID, err := request.RequireString("provider_doc_id")
 	if err != nil {
-		return nil, utils.LogAndReturnError(logger, "provider_doc_id is required", err)
+		return nil, utils.LogAndReturnError(logger, "required input: provider_doc_id is required", err)
 	}
 	if providerDocID == "" {
-		return nil, utils.LogAndReturnError(logger, "provider_doc_id cannot be empty", nil)
+		return nil, utils.LogAndReturnError(logger, "required input: provider_doc_id cannot be empty", nil)
 	}
 	if _, err := strconv.Atoi(providerDocID); err != nil {
-		return nil, utils.LogAndReturnError(logger, "provider_doc_id must be a valid number", err)
+		return nil, utils.LogAndReturnError(logger, "required input: provider_doc_id must be a valid number", err)
 	}
 
 	// Get a simple http client to access the public Terraform registry from context
@@ -60,12 +60,12 @@ func getProviderDocsHandler(ctx context.Context, request mcp.CallToolRequest, lo
 
 	detailResp, err := client.SendRegistryCall(httpClient, "GET", path.Join("provider-docs", providerDocID), logger, "v2")
 	if err != nil {
-		return nil, utils.LogAndReturnError(logger, fmt.Sprintf("Error fetching provider-docs/%s, please make sure provider_doc_id is valid and the search_providers tool has run prior", providerDocID), err)
+		return nil, utils.LogAndReturnError(logger, fmt.Sprintf("fetching provider-docs/%s, please make sure provider_doc_id is valid and the search_providers tool has run prior", providerDocID), err)
 	}
 
 	var details client.ProviderResourceDetails
 	if err := json.Unmarshal(detailResp, &details); err != nil {
-		return nil, utils.LogAndReturnError(logger, fmt.Sprintf("error unmarshalling provider-docs/%s", providerDocID), err)
+		return nil, utils.LogAndReturnError(logger, fmt.Sprintf("unmarshalling provider-docs/%s", providerDocID), err)
 	}
 	return mcp.NewToolResultText(details.Data.Attributes.Content), nil
 }

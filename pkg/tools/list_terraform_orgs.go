@@ -35,12 +35,12 @@ func listTerraformOrgsHandler(ctx context.Context, request mcp.CallToolRequest, 
 	// Get a Terraform client from context
 	terraformClients, err := client.GetTerraformClientFromContext(ctx, logger)
 	if err != nil {
-		return nil, utils.LogAndReturnError(logger, "failed to get Terraform client", err)
+		return nil, utils.LogAndReturnError(logger, "getting Terraform client", err)
 	}
 
 	tfeClient := terraformClients.TfeClient
 	if tfeClient == nil {
-		return nil, utils.LogAndReturnError(logger, "TFE client is not available - please ensure TFE_TOKEN and TFE_ADDRESS are properly configured", nil)
+		return nil, utils.LogAndReturnError(logger, "getting Terraform client - please ensure TFE_TOKEN and TFE_ADDRESS are properly configured", nil)
 	}
 
 	pagination, err := utils.OptionalPaginationParams(request)
@@ -56,8 +56,7 @@ func listTerraformOrgsHandler(ctx context.Context, request mcp.CallToolRequest, 
 	})
 
 	if err != nil {
-		logger.WithError(err).Error("failed to list Terraform organizations")
-		return nil, utils.LogAndReturnError(logger, "failed to list Terraform organizations", err)
+		return nil, utils.LogAndReturnError(logger, "listing Terraform organizations", err)
 	}
 
 	orgNames := make([]string, 0, len(orgs.Items))
@@ -67,7 +66,7 @@ func listTerraformOrgsHandler(ctx context.Context, request mcp.CallToolRequest, 
 
 	orgsJSON, err := json.Marshal(orgNames)
 	if err != nil {
-		return nil, utils.LogAndReturnError(logger, "failed to marshal organization names", err)
+		return nil, utils.LogAndReturnError(logger, "marshalling organization names", err)
 	}
 
 	return mcp.NewToolResultText(string(orgsJSON)), nil

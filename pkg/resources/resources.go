@@ -43,25 +43,25 @@ func TerraformStyleGuideResource(logger *log.Logger) (mcp.Resource, server.Resou
 			// Get a simple http client to access the public Terraform registry from context
 			terraformClients, err := client.GetTerraformClientFromContext(ctx, logger)
 			if err != nil {
-				return nil, utils.LogAndReturnError(logger, "failed to get http client for public Terraform registry", err)
+				return nil, utils.LogAndReturnError(logger, "getting http client for public Terraform registry", err)
 			}
 
 			httpClient := terraformClients.HttpClient
 			styleGuideURL, err := url.JoinPath(terraformGuideRawURL, "style.mdx")
 			if err != nil {
-				return nil, utils.LogAndReturnError(logger, "Error getting URL for Terraform Style Guide markdown", err)
+				return nil, utils.LogAndReturnError(logger, "getting URL for Terraform Style Guide markdown", err)
 			}
 			resp, err := httpClient.Get(styleGuideURL)
 			if err != nil {
-				return nil, utils.LogAndReturnError(logger, "Error fetching Terraform Style Guide markdown", err)
+				return nil, utils.LogAndReturnError(logger, "fetching Terraform Style Guide markdown", err)
 			}
 			defer resp.Body.Close()
 			if resp.StatusCode != http.StatusOK {
-				return nil, utils.LogAndReturnError(logger, "Non-200 response fetching Terraform Style Guide markdown", fmt.Errorf("status: %s", resp.Status))
+				return nil, utils.LogAndReturnError(logger, "fetching Terraform Style Guide markdown", fmt.Errorf("status: %s", resp.Status))
 			}
 			body, err := io.ReadAll(resp.Body)
 			if err != nil {
-				return nil, utils.LogAndReturnError(logger, "Error reading Terraform Style Guide markdown", err)
+				return nil, utils.LogAndReturnError(logger, "reading Terraform Style Guide markdown", err)
 			}
 			return []mcp.ResourceContents{
 				mcp.TextResourceContents{
@@ -100,7 +100,7 @@ func TerraformModuleDevGuideResource(logger *log.Logger) (mcp.Resource, server.R
 			// Get a simple http client to access the public Terraform registry from context
 			terraformClients, err := client.GetTerraformClientFromContext(ctx, logger)
 			if err != nil {
-				return nil, utils.LogAndReturnError(logger, "failed to get http client for public Terraform registry", err)
+				return nil, utils.LogAndReturnError(logger, "getting http client for public Terraform registry", err)
 			}
 			httpClient := terraformClients.HttpClient
 
@@ -108,16 +108,16 @@ func TerraformModuleDevGuideResource(logger *log.Logger) (mcp.Resource, server.R
 			for _, u := range urls {
 				resp, err := httpClient.Get(u.URL)
 				if err != nil {
-					return nil, utils.LogAndReturnError(logger, fmt.Sprintf("Error fetching %s markdown", u.Name), err)
+					return nil, utils.LogAndReturnError(logger, fmt.Sprintf("fetching %s markdown", u.Name), err)
 				}
 				if resp.StatusCode != http.StatusOK {
 					resp.Body.Close()
-					return nil, utils.LogAndReturnError(logger, fmt.Sprintf("Non-200 response fetching %s markdown", u.Name), fmt.Errorf("status: %s", resp.Status))
+					return nil, utils.LogAndReturnError(logger, fmt.Sprintf("fetching %s markdown, status not ok", u.Name), fmt.Errorf("status: %s", resp.Status))
 				}
 				body, err := io.ReadAll(resp.Body)
 				resp.Body.Close()
 				if err != nil {
-					return nil, utils.LogAndReturnError(logger, fmt.Sprintf("Error reading %s markdown", u.Name), err)
+					return nil, utils.LogAndReturnError(logger, fmt.Sprintf("reading %s markdown", u.Name), err)
 				}
 				contents = append(contents, mcp.TextResourceContents{
 					MIMEType: "text/markdown",

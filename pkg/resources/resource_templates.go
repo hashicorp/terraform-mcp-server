@@ -43,13 +43,13 @@ func providerResourceTemplate(resourceURI string, description string, logger *lo
 			// Get a simple http client to access the public Terraform registry from context
 			terraformClients, err := client.GetTerraformClientFromContext(ctx, logger)
 			if err != nil {
-				return nil, utils.LogAndReturnError(logger, "failed to get http client for public Terraform registry", err)
+				return nil, utils.LogAndReturnError(logger, "getting http client for public Terraform registry", err)
 			}
 
 			httpClient := terraformClients.HttpClient
 			providerDocs, err := providerResourceTemplateHelper(httpClient, request.Params.URI, logger)
 			if err != nil {
-				return nil, utils.LogAndReturnError(logger, "Provider Resource: error getting provider details", err)
+				return nil, utils.LogAndReturnError(logger, "getting provider details for resource template", err)
 			}
 			resourceContents := make([]mcp.ResourceContents, 1)
 			resourceContents[0] = mcp.TextResourceContents{
@@ -65,35 +65,35 @@ func providerResourceTemplate(resourceURI string, description string, logger *lo
 func providerResourceTemplateHelper(httpClient *http.Client, resourceURI string, logger *log.Logger) (string, error) {
 	namespace, name, version, err := utils.ExtractProviderNameAndVersion(resourceURI)
 	if err != nil {
-		return "", utils.LogAndReturnError(logger, "Extracting provider name and version", err)
+		return "", utils.LogAndReturnError(logger, "extracting provider name and version", err)
 	}
 	logger.Debugf("Extracted namespace: %s, name: %s, version: %s", namespace, name, version)
 
 	if version == "" || version == "latest" || !utils.IsValidProviderVersionFormat(version) {
 		version, err = client.GetLatestProviderVersion(httpClient, namespace, name, logger)
 		if err != nil {
-			return "", utils.LogAndReturnError(logger, fmt.Sprintf("Provider Resource: error getting %s/%s latest provider version", namespace, name), err)
+			return "", utils.LogAndReturnError(logger, fmt.Sprintf("getting %s/%s latest provider version for resource template", namespace, name), err)
 		}
 	}
 
 	providerVersionUri := path.Join(utils.PROVIDER_BASE_PATH, namespace, "name", name, "version", version)
 	logger.Debugf("Provider resource template - providerVersionUri: %s", providerVersionUri)
 	if err != nil {
-		return "", utils.LogAndReturnError(logger, "Provider Resource: error getting provider details", err)
+		return "", utils.LogAndReturnError(logger, "getting provider details for resource template", err)
 	}
 
 	// Get the provider-version-id for the specified provider version
 	providerVersionID, err := client.GetProviderVersionID(httpClient, namespace, name, version, logger)
 	logger.Debugf("Provider resource template - Provider version id providerVersionID: %s, providerVersionUri: %s", providerVersionID, providerVersionUri)
 	if err != nil {
-		return "", utils.LogAndReturnError(logger, "getting provider details", err)
+		return "", utils.LogAndReturnError(logger, "getting provider details for provider-version-id", err)
 	}
 
 	// Get all the docs based on provider version id
 	providerDocs, err := client.GetProviderOverviewDocs(httpClient, providerVersionID, logger)
 	logger.Debugf("Provider resource template - Provider docs providerVersionID: %s", providerVersionID)
 	if err != nil {
-		return "", utils.LogAndReturnError(logger, "getting provider details", err)
+		return "", utils.LogAndReturnError(logger, "getting provider details for docs with provider-version-id", err)
 	}
 
 	// Only return the provider overview

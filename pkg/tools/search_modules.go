@@ -55,7 +55,7 @@ If no modules were found, reattempt the search with a new moduleName query.`),
 func getSearchModulesHandler(ctx context.Context, request mcp.CallToolRequest, logger *log.Logger) (*mcp.CallToolResult, error) {
 	moduleQuery, err := request.RequireString("module_query")
 	if err != nil {
-		return nil, utils.LogAndReturnError(logger, "module_query is required", err)
+		return nil, utils.LogAndReturnError(logger, "required input: module_query is required", err)
 	}
 	moduleQuery = strings.ToLower(moduleQuery)
 	currentOffsetValue := request.GetInt("current_offset", 0)
@@ -72,9 +72,9 @@ func getSearchModulesHandler(ctx context.Context, request mcp.CallToolRequest, l
 	var modulesData, errMsg string
 	response, err := sendSearchModulesCall(httpClient, moduleQuery, currentOffsetValue, logger)
 	if err != nil {
-		return nil, utils.LogAndReturnError(logger, fmt.Sprintf("no module(s) found for moduleName: %s", moduleQuery), err)
+		return nil, utils.LogAndReturnError(logger, fmt.Sprintf("finding module(s): none found for moduleName: %s", moduleQuery), err)
 	} else {
-		modulesData, err = unmarshalTerraformModules(response, moduleQuery)
+		modulesData, err = unmarshalTerraformModules(response, moduleQuery, logger)
 		if err != nil {
 			return nil, utils.LogAndReturnError(logger, fmt.Sprintf("unmarshalling modules for moduleName: %s", moduleQuery), err)
 		}
@@ -105,16 +105,16 @@ func sendSearchModulesCall(providerClient *http.Client, moduleQuery string, curr
 	return response, nil
 }
 
-func unmarshalTerraformModules(response []byte, moduleQuery string) (string, error) {
+func unmarshalTerraformModules(response []byte, moduleQuery string, logger *log.Logger) (string, error) {
 	// Get the list of modules
 	var terraformModules client.TerraformModules
 	err := json.Unmarshal(response, &terraformModules)
 	if err != nil {
-		return "", utils.LogAndReturnError(nil, "unmarshalling modules", err)
+		return "", utils.LogAndReturnError(logger, "unmarshalling modules", err)
 	}
 
 	if len(terraformModules.Data) == 0 {
-		return "", fmt.Errorf("no modules found for query: %s", moduleQuery)
+		return "", utils.LogAndReturnError(logger, fmt.Sprintf("no modules found for query: %s", moduleQuery), nil)
 	}
 
 	// Sort by most downloaded

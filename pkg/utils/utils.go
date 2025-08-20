@@ -14,6 +14,9 @@ import (
 
 const PROVIDER_BASE_PATH = "registry://providers"
 
+// ExtractProviderNameAndVersion parses a provider URI and extracts the provider namespace, name and version.
+// The URI is expected to have at least 5 segments separated by '/', if invalid, an error is returned.
+// Example format: registry://providers/<provider_namespace>/namespace/<provider_name>/version/<provider_version>
 func ExtractProviderNameAndVersion(uri string) (string, string, string, error) {
 	parts := strings.Split(uri, "/")
 	if len(parts) < 5 {

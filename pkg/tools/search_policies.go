@@ -50,10 +50,10 @@ func getSearchPoliciesHandler(ctx context.Context, request mcp.CallToolRequest, 
 	var terraformPolicies client.TerraformPolicyList
 	pq, err := request.RequireString("policy_query")
 	if err != nil {
-		return nil, utils.LogAndReturnError(logger, "policy_query is required", err)
+		return nil, utils.LogAndReturnError(logger, "required input: policy_query is required", err)
 	}
 	if pq == "" {
-		return nil, utils.LogAndReturnError(logger, "policy_query cannot be empty", nil)
+		return nil, utils.LogAndReturnError(logger, "required input: policy_query cannot be empty", nil)
 	}
 	pq = strings.ToLower(pq)
 
@@ -74,12 +74,12 @@ func getSearchPoliciesHandler(ctx context.Context, request mcp.CallToolRequest, 
 	}).String()
 	policyResp, err := client.SendRegistryCall(httpClient, "GET", uri, logger, "v2")
 	if err != nil {
-		return nil, utils.LogAndReturnError(logger, "Failed to fetch policies: registry API did not return a successful response", err)
+		return nil, utils.LogAndReturnError(logger, "fetching policies: registry API did not return a successful response", err)
 	}
 
 	err = json.Unmarshal(policyResp, &terraformPolicies)
 	if err != nil {
-		return nil, utils.LogAndReturnError(logger, "Unmarshalling policy list", err)
+		return nil, utils.LogAndReturnError(logger, "unmarshalling policy list", err)
 	}
 
 	var builder strings.Builder
@@ -105,7 +105,7 @@ func getSearchPoliciesHandler(ctx context.Context, request mcp.CallToolRequest, 
 
 	policyData := builder.String()
 	if !contentAvailable {
-		errMessage := fmt.Sprintf("No policies found matching the query: %s. Try a different policy_query.", pq)
+		errMessage := fmt.Sprintf("finding policies, none found matching the query: %s. Try a different policy_query.", pq)
 		return nil, utils.LogAndReturnError(logger, errMessage, nil)
 	}
 

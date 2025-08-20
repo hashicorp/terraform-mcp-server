@@ -42,10 +42,10 @@ func ModuleDetails(logger *log.Logger) server.ServerTool {
 func getModuleDetailsHandler(ctx context.Context, request mcp.CallToolRequest, logger *log.Logger) (*mcp.CallToolResult, error) {
 	moduleID, err := request.RequireString("module_id")
 	if err != nil {
-		return nil, utils.LogAndReturnError(logger, "module_id is required", err)
+		return nil, utils.LogAndReturnError(logger, "required input: module_id is required", err)
 	}
 	if moduleID == "" {
-		return nil, utils.LogAndReturnError(logger, "module_id cannot be empty", nil)
+		return nil, utils.LogAndReturnError(logger, "required input: module_id cannot be empty", nil)
 	}
 	moduleID = strings.ToLower(moduleID)
 
@@ -61,7 +61,7 @@ func getModuleDetailsHandler(ctx context.Context, request mcp.CallToolRequest, l
 	var errMsg string
 	response, err := getModuleDetails(httpClient, moduleID, 0, logger)
 	if err != nil {
-		errMsg = fmt.Sprintf("no module(s) found for %v,", moduleID)
+		errMsg = fmt.Sprintf("getting module(s), none found! module_id: %v,", moduleID)
 		return nil, utils.LogAndReturnError(logger, errMsg, nil)
 	}
 	moduleData, err := unmarshalTerraformModule(response)
