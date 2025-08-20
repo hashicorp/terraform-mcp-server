@@ -2,7 +2,7 @@
 
 FEATURES
 
-* Authentication for HCP Terraform & TFE and restructure the repo. See [#121](https://github.com/hashicorp/terraform-mcp-server/pull/121)
+* Authentication for HCP Terraform & TFE and restructure the repo. See [#121](https://github.com/hashicorp/terraform-mcp-server/pull/121) See [#145](https://github.com/hashicorp/terraform-mcp-server/pull/145)
 * Implement dynamic tool registration. See [#121](https://github.com/hashicorp/terraform-mcp-server/pull/121)
 * Adding 2 new HCP TF/TFE tools. List Terraform organizations & projects. See [#121](https://github.com/hashicorp/terraform-mcp-server/pull/121)
 
