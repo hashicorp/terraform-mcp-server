@@ -11,7 +11,6 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"path"
 	"strconv"
 	"time"
 
@@ -69,7 +68,7 @@ func SendRegistryCall(client *http.Client, method string, uri string, logger *lo
 		ver = callOptions[0] // API version will be the first optional arg to this function
 	}
 
-	url, err := url.Parse(path.Join(DefaultPublicRegistryURL, ver, uri))
+	url, err := url.Parse(fmt.Sprintf("%s/%s/%s", DefaultPublicRegistryURL, ver, uri))
 	if err != nil {
 		return nil, fmt.Errorf("error parsing terraform registry URL: %w", err)
 	}
