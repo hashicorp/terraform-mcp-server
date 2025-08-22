@@ -36,7 +36,7 @@ This can be obtained by calling 'search_private_modules' first to obtain the exa
 			mcp.WithString("private_module_id",
 				mcp.Required(),
 				mcp.Description(`The private module ID obtained from search_private_modules in the format 'module-namespace/module-name/module-provider-name' 
-(e.g., 'my-tfc-org/vpc/aws' or 'my-module-namespace/vm/azurerm') module-namespace is usually the name of the Terraform organization.`),
+				mcp.Description(`The private module ID should be in the format 'module-namespace/module-name/module-provider-name' (for example, 'my-tfc-org/vpc/aws' or 'my-module-namespace/vm/azurerm'). The module-namespace is usually the name of the Terraform organization. Obtain this ID by calling 'search_private_modules'.`),
 			),
 			mcp.WithString("registry_name",
 				mcp.Description("The type of Terraform registry to search within Terraform Cloud/Enterprise (e.g., 'private', 'public')"),
