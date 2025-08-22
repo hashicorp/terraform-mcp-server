@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 	"path"
+	"regexp"
 	"strings"
 
 	"github.com/hashicorp/go-tfe"
@@ -35,8 +36,8 @@ This can be obtained by calling 'search_private_modules' first to obtain the exa
 			),
 			mcp.WithString("private_module_id",
 				mcp.Required(),
-				mcp.Description(`The private module ID obtained from search_private_modules in the format 'module-namespace/module-name/module-provider-name' 
-				mcp.Description(`The private module ID should be in the format 'module-namespace/module-name/module-provider-name' (for example, 'my-tfc-org/vpc/aws' or 'my-module-namespace/vm/azurerm'). The module-namespace is usually the name of the Terraform organization. Obtain this ID by calling 'search_private_modules'.`),
+				mcp.Description(`The private module ID should be in the format 'module-namespace/module-name/module-provider-name' (for example, 'my-tfc-org/vpc/aws' or 'my-module-namespace/vm/azurerm').
+The module-namespace is usually the name of the Terraform organization. Obtain this ID by calling 'search_private_modules'.`),
 			),
 			mcp.WithString("registry_name",
 				mcp.Description("The type of Terraform registry to search within Terraform Cloud/Enterprise (e.g., 'private', 'public')"),
@@ -172,15 +173,11 @@ func buildPrivateModuleDetailsResponse(registryModule *tfe.RegistryModule,
 		builder.WriteString("| Name | Type | Description | Default | Required |\n")
 		builder.WriteString("|------|------|-------------|---------|----------|\n")
 		for _, input := range terraformRegistryModule.Root.Inputs {
-			defaultValue := input.Default
-			if defaultValue == "" {
-				defaultValue = "null"
-			}
 			builder.WriteString(fmt.Sprintf("| %s | %s | %s | `%s` | %t |\n",
 				input.Name,
 				input.Type,
 				input.Description,
-				defaultValue,
+				input.Default,
 				input.Required,
 			))
 		}
@@ -290,41 +287,39 @@ func buildPrivateModuleDetailsResponse(registryModule *tfe.RegistryModule,
 
 // Manually remove README sections because it's already included in the response
 func removeReadmeSections(readme string) string {
-	// Define section headers to remove (case-insensitive)
-	sections := []string{
-		"## Inputs", "### Inputs", "#### Inputs",
-		"## Outputs", "### Outputs", "#### Outputs",
-		"## Dependencies", "### Dependencies", "#### Dependencies",
-		"## Provider Dependencies", "### Provider Dependencies", "#### Provider Dependencies",
-		"## Resources", "### Resources", "#### Resources",
-	}
+	// Split by lines and reconstruct, skipping sections we want to remove
+	lines := strings.Split(readme, "\n")
+	var result []string
+	skipSection := false
 
-	// Remove each section by finding its header and cutting until the next header or end
-	for _, section := range sections {
-		for {
-			idx := strings.Index(strings.ToLower(readme), strings.ToLower(section))
-			if idx == -1 {
-				break
-			}
-			// Find the next section header after the current one
-			nextIdx := -1
-			for _, s := range sections {
-				if s == section {
-					continue
-				}
-				tmpIdx := strings.Index(strings.ToLower(readme[idx+len(section):]), strings.ToLower(s))
-				if tmpIdx != -1 && (nextIdx == -1 || tmpIdx < nextIdx) {
-					nextIdx = idx + len(section) + tmpIdx
-				}
-			}
-			if nextIdx == -1 {
-				// No next section, remove till end
-				readme = readme[:idx]
+	for _, line := range lines {
+		// Check if this line is a section header we want to remove
+		lowerLine := strings.ToLower(strings.TrimSpace(line))
+		if strings.HasPrefix(lowerLine, "##") || strings.HasPrefix(lowerLine, "###") || strings.HasPrefix(lowerLine, "####") {
+			// Check if it's one of the sections we want to remove
+			if strings.Contains(lowerLine, "inputs") ||
+				strings.Contains(lowerLine, "outputs") ||
+				strings.Contains(lowerLine, "dependencies") ||
+				strings.Contains(lowerLine, "provider dependencies") ||
+				strings.Contains(lowerLine, "resources") {
+				skipSection = true
+				continue
 			} else {
-				// Remove from idx to nextIdx
-				readme = readme[:idx] + readme[nextIdx:]
+				// It's a different section header, stop skipping
+				skipSection = false
 			}
 		}
+
+		// If we're not skipping this section, add the line
+		if !skipSection {
+			result = append(result, line)
+		}
 	}
-	return readme
+
+	cleaned := strings.Join(result, "\n")
+
+	// Clean up multiple consecutive newlines that might result from section removal
+	cleaned = regexp.MustCompile(`\n{3,}`).ReplaceAllString(cleaned, "\n\n")
+
+	return strings.TrimSpace(cleaned)
 }
