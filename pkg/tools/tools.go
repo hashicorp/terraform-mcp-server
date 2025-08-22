@@ -130,5 +130,32 @@ func InitTools(hcServer *server.MCPServer, registryClient *http.Client, logger *
 	removeHCPRemoteStateConsumersTool := hcp_tools.RemoveRemoteStateConsumers(hcpClient, logger)
 	hcServer.AddTool(removeHCPRemoteStateConsumersTool.Tool, removeHCPRemoteStateConsumersTool.Handler)
 
-	logger.Infof("Initialized %d tools (including HCP Terraform tools)", 34) // Updated count: 8 registry tools + 26 HCP tools
+	// Run management tools (Phase 6: Run Management)
+	createHCPRunTool := hcp_tools.CreateRun(hcpClient, logger)
+	hcServer.AddTool(createHCPRunTool.Tool, createHCPRunTool.Handler)
+
+	getHCPRunTool := hcp_tools.GetRun(hcpClient, logger)
+	hcServer.AddTool(getHCPRunTool.Tool, getHCPRunTool.Handler)
+
+	listHCPRunsTool := hcp_tools.ListRuns(hcpClient, logger)
+	hcServer.AddTool(listHCPRunsTool.Tool, listHCPRunsTool.Handler)
+
+	// Run actions tools (Phase 6b: Run Actions)
+	applyHCPRunTool := hcp_tools.ApplyRun(hcpClient, logger)
+	hcServer.AddTool(applyHCPRunTool.Tool, applyHCPRunTool.Handler)
+
+	discardHCPRunTool := hcp_tools.DiscardRun(hcpClient, logger)
+	hcServer.AddTool(discardHCPRunTool.Tool, discardHCPRunTool.Handler)
+
+	cancelHCPRunTool := hcp_tools.CancelRun(hcpClient, logger)
+	hcServer.AddTool(cancelHCPRunTool.Tool, cancelHCPRunTool.Handler)
+
+	// Plan/Apply details tools (Phase 6c: Plan/Apply Details)
+	getHCPPlanTool := hcp_tools.GetPlan(hcpClient, logger)
+	hcServer.AddTool(getHCPPlanTool.Tool, getHCPPlanTool.Handler)
+
+	getHCPApplyTool := hcp_tools.GetApply(hcpClient, logger)
+	hcServer.AddTool(getHCPApplyTool.Tool, getHCPApplyTool.Handler)
+
+	logger.Infof("Initialized %d tools (including HCP Terraform tools)", 42) // Updated count: 8 registry tools + 34 HCP tools
 }

@@ -15,6 +15,7 @@ import (
 
 	"github.com/hashicorp/go-cleanhttp"
 	"github.com/hashicorp/go-retryablehttp"
+	"github.com/hashicorp/terraform-mcp-server/pkg/prompts"
 	"github.com/hashicorp/terraform-mcp-server/pkg/resources"
 	"github.com/hashicorp/terraform-mcp-server/pkg/tools"
 
@@ -106,6 +107,9 @@ func registryInit(hcServer *server.MCPServer, logger *log.Logger) {
 	tools.InitTools(hcServer, registryClient, logger)
 	resources.RegisterResources(hcServer, registryClient, logger)
 	resources.RegisterResourceTemplates(hcServer, registryClient, logger)
+
+	// Initialize prompts
+	prompts.InitPrompts(hcServer, logger)
 }
 
 func serverInit(ctx context.Context, hcServer *server.MCPServer, logger *log.Logger) error {

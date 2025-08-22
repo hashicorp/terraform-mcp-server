@@ -217,6 +217,7 @@ func NewServer(version string, opts ...server.ServerOption) *server.MCPServer {
 	defaultOpts := []server.ServerOption{
 		server.WithToolCapabilities(true),
 		server.WithResourceCapabilities(true, true),
+		server.WithPromptCapabilities(true),
 	}
 	opts = append(defaultOpts, opts...)
 

@@ -834,3 +834,263 @@ type RemoteStateConsumerData struct {
 	Type string `json:"type"` // "workspaces"
 	ID   string `json:"id"`   // workspace ID
 }
+
+// ====================
+// Run Types
+// ====================
+
+// RunResponse represents the API response for listing runs
+type RunResponse struct {
+	Data  []Run              `json:"data"`
+	Links PaginationLinks    `json:"links"`
+	Meta  PaginationMetadata `json:"meta"`
+}
+
+// SingleRunResponse represents the API response for a single run
+type SingleRunResponse struct {
+	Data     Run           `json:"data"`
+	Included []interface{} `json:"included,omitempty"`
+}
+
+// Run represents a single HCP Terraform run
+type Run struct {
+	ID            string           `json:"id"`
+	Type          string           `json:"type"`
+	Attributes    RunAttributes    `json:"attributes"`
+	Relationships RunRelationships `json:"relationships,omitempty"`
+	Links         RunLinks         `json:"links,omitempty"`
+}
+
+// RunAttributes contains run details
+type RunAttributes struct {
+	Status                string                 `json:"status"`
+	StatusTimestamps      RunStatusTimestamps    `json:"status-timestamps"`
+	Message               *string                `json:"message"`
+	Source                string                 `json:"source"`
+	IsDestroy             bool                   `json:"is-destroy"`
+	Refresh               bool                   `json:"refresh"`
+	RefreshOnly           bool                   `json:"refresh-only"`
+	PlanOnly              bool                   `json:"plan-only"`
+	AutoApply             bool                   `json:"auto-apply"`
+	CreatedAt             time.Time              `json:"created-at"`
+	HasChanges            *bool                  `json:"has-changes"`
+	Actions               RunActions             `json:"actions"`
+	Permissions           RunPermissions         `json:"permissions"`
+	TargetAddrs           []string               `json:"target-addrs,omitempty"`
+	ReplaceAddrs          []string               `json:"replace-addrs,omitempty"`
+	Variables             map[string]interface{} `json:"variables,omitempty"`
+	ErrorText             *string                `json:"error-text,omitempty"`
+	PositionInQueue       *int                   `json:"position-in-queue,omitempty"`
+	TerraformVersion      string                 `json:"terraform-version"`
+	AllowEmptyApply       bool                   `json:"allow-empty-apply"`
+	AllowConfigGeneration bool                   `json:"allow-config-generation"`
+}
+
+// RunStatusTimestamps contains timestamps for different run statuses
+type RunStatusTimestamps struct {
+	QueuedAt         *time.Time `json:"queued-at,omitempty"`
+	PlanQueueableAt  *time.Time `json:"plan-queueable-at,omitempty"`
+	PlanningAt       *time.Time `json:"planning-at,omitempty"`
+	PlannedAt        *time.Time `json:"planned-at,omitempty"`
+	ConfirmedAt      *time.Time `json:"confirmed-at,omitempty"`
+	ApplyQueueableAt *time.Time `json:"apply-queueable-at,omitempty"`
+	ApplyingAt       *time.Time `json:"applying-at,omitempty"`
+	AppliedAt        *time.Time `json:"applied-at,omitempty"`
+	DiscardedAt      *time.Time `json:"discarded-at,omitempty"`
+	ErroredAt        *time.Time `json:"errored-at,omitempty"`
+	CanceledAt       *time.Time `json:"canceled-at,omitempty"`
+	ForceCanceledAt  *time.Time `json:"force-canceled-at,omitempty"`
+}
+
+// RunActions contains available actions for the run
+type RunActions struct {
+	IsCancelable      bool `json:"is-cancelable"`
+	IsConfirmable     bool `json:"is-confirmable"`
+	IsDiscardable     bool `json:"is-discardable"`
+	IsForceCancelable bool `json:"is-force-cancelable"`
+}
+
+// RunPermissions contains user permissions for the run
+type RunPermissions struct {
+	CanApply               bool `json:"can-apply"`
+	CanCancel              bool `json:"can-cancel"`
+	CanDiscard             bool `json:"can-discard"`
+	CanForceCancel         bool `json:"can-force-cancel"`
+	CanForceExecute        bool `json:"can-force-execute"`
+	CanOverridePolicyCheck bool `json:"can-override-policy-check"`
+}
+
+// RunRelationships contains run relationships
+type RunRelationships struct {
+	Workspace            *RelationshipData `json:"workspace,omitempty"`
+	ConfigurationVersion *RelationshipData `json:"configuration-version,omitempty"`
+	Plan                 *RelationshipData `json:"plan,omitempty"`
+	Apply                *RelationshipData `json:"apply,omitempty"`
+	CreatedBy            *RelationshipData `json:"created-by,omitempty"`
+	Comments             *RelationshipData `json:"comments,omitempty"`
+	RunEvents            *RelationshipData `json:"run-events,omitempty"`
+	TaskStages           *RelationshipData `json:"task-stages,omitempty"`
+	PolicyChecks         *RelationshipData `json:"policy-checks,omitempty"`
+	CostEstimate         *RelationshipData `json:"cost-estimate,omitempty"`
+}
+
+// RunLinks contains run-related links
+type RunLinks struct {
+	Self string `json:"self"`
+}
+
+// RunCreateRequest represents the request to create a new run
+type RunCreateRequest struct {
+	Data RunCreateData `json:"data"`
+}
+
+// RunCreateData contains the data for creating a run
+type RunCreateData struct {
+	Type          string                 `json:"type"`
+	Attributes    RunCreateAttributes    `json:"attributes"`
+	Relationships RunCreateRelationships `json:"relationships"`
+}
+
+// RunCreateAttributes contains the attributes for creating a run
+type RunCreateAttributes struct {
+	Message               *string                `json:"message,omitempty"`
+	IsDestroy             bool                   `json:"is-destroy"`
+	Refresh               bool                   `json:"refresh"`
+	RefreshOnly           bool                   `json:"refresh-only"`
+	PlanOnly              bool                   `json:"plan-only"`
+	AutoApply             *bool                  `json:"auto-apply,omitempty"`
+	TargetAddrs           []string               `json:"target-addrs,omitempty"`
+	ReplaceAddrs          []string               `json:"replace-addrs,omitempty"`
+	Variables             map[string]interface{} `json:"variables,omitempty"`
+	AllowEmptyApply       *bool                  `json:"allow-empty-apply,omitempty"`
+	AllowConfigGeneration *bool                  `json:"allow-config-generation,omitempty"`
+	TerraformVersion      *string                `json:"terraform-version,omitempty"`
+}
+
+// RunCreateRelationships contains the relationships for creating a run
+type RunCreateRelationships struct {
+	Workspace            RelationshipDataItem  `json:"workspace"`
+	ConfigurationVersion *RelationshipDataItem `json:"configuration-version,omitempty"`
+}
+
+// RunListOptions contains options for listing runs
+type RunListOptions struct {
+	PageSize   int      `json:"page[size],omitempty"`
+	PageNumber int      `json:"page[number],omitempty"`
+	Status     string   `json:"filter[status],omitempty"`
+	Operation  string   `json:"filter[operation],omitempty"`
+	Source     string   `json:"filter[source],omitempty"`
+	Include    []string `json:"include,omitempty"`
+}
+
+// RunActionRequest represents a request to perform an action on a run
+type RunActionRequest struct {
+	Comment *string `json:"comment,omitempty"`
+}
+
+// ====================
+// Plan Types
+// ====================
+
+// SinglePlanResponse represents an API response for a single plan
+type SinglePlanResponse struct {
+	Data     Plan          `json:"data"`
+	Included []interface{} `json:"included,omitempty"`
+}
+
+// Plan represents a single HCP Terraform plan
+type Plan struct {
+	ID            string            `json:"id"`
+	Type          string            `json:"type"`
+	Attributes    PlanAttributes    `json:"attributes"`
+	Relationships PlanRelationships `json:"relationships,omitempty"`
+	Links         PlanLinks         `json:"links,omitempty"`
+}
+
+// PlanAttributes contains plan details
+type PlanAttributes struct {
+	Status               string               `json:"status"`
+	StatusTimestamps     PlanStatusTimestamps `json:"status-timestamps"`
+	HasChanges           bool                 `json:"has-changes"`
+	ResourceAdditions    int                  `json:"resource-additions"`
+	ResourceChanges      int                  `json:"resource-changes"`
+	ResourceDestructions int                  `json:"resource-destructions"`
+	ErrorMessage         *string              `json:"error-message,omitempty"`
+	LogReadURL           *string              `json:"log-read-url,omitempty"`
+	ExecutionMode        string               `json:"execution-mode"`
+}
+
+// PlanStatusTimestamps contains timestamps for different plan statuses
+type PlanStatusTimestamps struct {
+	QueuedAt   *time.Time `json:"queued-at,omitempty"`
+	PendingAt  *time.Time `json:"pending-at,omitempty"`
+	RunningAt  *time.Time `json:"running-at,omitempty"`
+	FinishedAt *time.Time `json:"finished-at,omitempty"`
+	ErroredAt  *time.Time `json:"errored-at,omitempty"`
+	CanceledAt *time.Time `json:"canceled-at,omitempty"`
+}
+
+// PlanRelationships contains plan relationship data
+type PlanRelationships struct {
+	Workspace struct {
+		Data RelationshipData `json:"data"`
+	} `json:"workspace,omitempty"`
+}
+
+// PlanLinks contains plan-related links
+type PlanLinks struct {
+	Self string `json:"self,omitempty"`
+}
+
+// ====================
+// Apply Types
+// ====================
+
+// SingleApplyResponse represents an API response for a single apply
+type SingleApplyResponse struct {
+	Data     Apply         `json:"data"`
+	Included []interface{} `json:"included,omitempty"`
+}
+
+// Apply represents a single HCP Terraform apply
+type Apply struct {
+	ID            string             `json:"id"`
+	Type          string             `json:"type"`
+	Attributes    ApplyAttributes    `json:"attributes"`
+	Relationships ApplyRelationships `json:"relationships,omitempty"`
+	Links         ApplyLinks         `json:"links,omitempty"`
+}
+
+// ApplyAttributes contains apply details
+type ApplyAttributes struct {
+	Status               string                `json:"status"`
+	StatusTimestamps     ApplyStatusTimestamps `json:"status-timestamps"`
+	ResourceAdditions    int                   `json:"resource-additions"`
+	ResourceChanges      int                   `json:"resource-changes"`
+	ResourceDestructions int                   `json:"resource-destructions"`
+	ErrorMessage         *string               `json:"error-message,omitempty"`
+	LogReadURL           *string               `json:"log-read-url,omitempty"`
+	ExecutionMode        string                `json:"execution-mode"`
+}
+
+// ApplyStatusTimestamps contains timestamps for different apply statuses
+type ApplyStatusTimestamps struct {
+	QueuedAt   *time.Time `json:"queued-at,omitempty"`
+	PendingAt  *time.Time `json:"pending-at,omitempty"`
+	RunningAt  *time.Time `json:"running-at,omitempty"`
+	FinishedAt *time.Time `json:"finished-at,omitempty"`
+	ErroredAt  *time.Time `json:"errored-at,omitempty"`
+	CanceledAt *time.Time `json:"canceled-at,omitempty"`
+}
+
+// ApplyRelationships contains apply relationship data
+type ApplyRelationships struct {
+	Workspace struct {
+		Data RelationshipData `json:"data"`
+	} `json:"workspace,omitempty"`
+}
+
+// ApplyLinks contains apply-related links
+type ApplyLinks struct {
+	Self string `json:"self,omitempty"`
+}

@@ -2007,3 +2007,635 @@ func (c *Client) SetBaseURL(baseURL string) {
 func (c *Client) SetTimeout(timeout time.Duration) {
 	c.httpClient.Timeout = timeout
 }
+
+// ====================
+// Run Methods
+// ====================
+
+// CreateRun creates a new run for a workspace
+func (c *Client) CreateRun(token string, request *RunCreateRequest) (*SingleRunResponse, error) {
+	endpoint := fmt.Sprintf("%s/runs", c.baseURL)
+
+	// Convert request to JSON
+	requestBody, err := json.Marshal(request)
+	if err != nil {
+		return nil, NewValidationError(fmt.Sprintf("failed to marshal request: %v", err))
+	}
+
+	c.logger.Debugf("Creating run at: %s", endpoint)
+	c.logger.Tracef("Request body: %s", string(requestBody))
+
+	// Create request
+	req, err := http.NewRequest("POST", endpoint, bytes.NewBuffer(requestBody))
+	if err != nil {
+		return nil, err
+	}
+
+	// Set headers
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
+	req.Header.Set("Content-Type", "application/vnd.api+json")
+
+	// Make request
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	// Read response body
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	// Check status code
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return nil, NewErrorFromResponse(resp, nil)
+	}
+
+	// Parse response
+	var response SingleRunResponse
+	if err := json.Unmarshal(body, &response); err != nil {
+		return nil, fmt.Errorf("failed to parse response: %w", err)
+	}
+
+	c.logger.Infof("Created run %s with status: %s", response.Data.ID, response.Data.Attributes.Status)
+	return &response, nil
+}
+
+// GetRun retrieves a specific run by ID
+func (c *Client) GetRun(token, runID string, include []string) (*SingleRunResponse, error) {
+	endpoint := fmt.Sprintf("%s/runs/%s", c.baseURL, runID)
+
+	// Add include parameter if provided
+	if len(include) > 0 {
+		params := url.Values{}
+		params.Set("include", strings.Join(include, ","))
+		endpoint = fmt.Sprintf("%s?%s", endpoint, params.Encode())
+	}
+
+	c.logger.Debugf("Getting run at: %s", endpoint)
+
+	// Create request
+	req, err := http.NewRequest("GET", endpoint, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	// Set headers
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
+	req.Header.Set("Content-Type", "application/vnd.api+json")
+
+	// Make request
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	// Read response body
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	// Check status code
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return nil, NewErrorFromResponse(resp, nil)
+	}
+
+	// Parse response
+	var response SingleRunResponse
+	if err := json.Unmarshal(body, &response); err != nil {
+		return nil, fmt.Errorf("failed to parse response: %w", err)
+	}
+
+	c.logger.Debugf("Retrieved run %s with status: %s", response.Data.ID, response.Data.Attributes.Status)
+	return &response, nil
+}
+
+// ListRuns lists runs for a workspace with optional filtering
+func (c *Client) ListRuns(token, workspaceID string, options *RunListOptions) (*RunResponse, error) {
+	endpoint := fmt.Sprintf("%s/workspaces/%s/runs", c.baseURL, workspaceID)
+
+	// Build query parameters
+	params := url.Values{}
+	if options != nil {
+		if options.PageSize > 0 {
+			params.Set("page[size]", strconv.Itoa(options.PageSize))
+		}
+		if options.PageNumber > 0 {
+			params.Set("page[number]", strconv.Itoa(options.PageNumber))
+		}
+		if options.Status != "" {
+			params.Set("filter[status]", options.Status)
+		}
+		if options.Operation != "" {
+			params.Set("filter[operation]", options.Operation)
+		}
+		if options.Source != "" {
+			params.Set("filter[source]", options.Source)
+		}
+		if len(options.Include) > 0 {
+			params.Set("include", strings.Join(options.Include, ","))
+		}
+	}
+
+	if len(params) > 0 {
+		endpoint = fmt.Sprintf("%s?%s", endpoint, params.Encode())
+	}
+
+	c.logger.Debugf("Listing runs at: %s", endpoint)
+
+	// Create request
+	req, err := http.NewRequest("GET", endpoint, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	// Set headers
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
+	req.Header.Set("Content-Type", "application/vnd.api+json")
+
+	// Make request
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	// Read response body
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	// Check status code
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return nil, NewErrorFromResponse(resp, nil)
+	}
+
+	// Parse response
+	var response RunResponse
+	if err := json.Unmarshal(body, &response); err != nil {
+		return nil, fmt.Errorf("failed to parse response: %w", err)
+	}
+
+	c.logger.Debugf("Retrieved %d runs for workspace %s", len(response.Data), workspaceID)
+	return &response, nil
+}
+
+// ApplyRun applies a planned run
+func (c *Client) ApplyRun(token, runID, comment string) (*SingleRunResponse, error) {
+	if token == "" {
+		return nil, NewAuthenticationError("authentication token is required")
+	}
+	if runID == "" {
+		return nil, NewValidationError("run ID is required")
+	}
+
+	endpoint := fmt.Sprintf("%s/runs/%s/actions/apply", c.baseURL, runID)
+
+	// Build request body
+	applyRequest := map[string]interface{}{
+		"comment": comment,
+	}
+
+	requestBody, err := json.Marshal(applyRequest)
+	if err != nil {
+		return nil, NewValidationError(fmt.Sprintf("failed to marshal request body: %v", err))
+	}
+
+	c.logger.Debugf("Applying run at: %s", endpoint)
+
+	// Create request
+	req, err := http.NewRequest("POST", endpoint, bytes.NewBuffer(requestBody))
+	if err != nil {
+		return nil, err
+	}
+
+	// Set headers
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
+	req.Header.Set("Content-Type", "application/vnd.api+json")
+
+	// Make request
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	// Read response
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	// Check for errors
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return nil, NewErrorFromResponse(resp, nil)
+	}
+
+	// Parse response
+	var response SingleRunResponse
+	if err := json.Unmarshal(body, &response); err != nil {
+		return nil, fmt.Errorf("failed to parse response: %w", err)
+	}
+
+	c.logger.Debugf("Successfully applied run %s", runID)
+	return &response, nil
+}
+
+// DiscardRun discards a planned run
+func (c *Client) DiscardRun(token, runID, comment string) (*SingleRunResponse, error) {
+	if token == "" {
+		return nil, NewAuthenticationError("authentication token is required")
+	}
+	if runID == "" {
+		return nil, NewValidationError("run ID is required")
+	}
+
+	endpoint := fmt.Sprintf("%s/runs/%s/actions/discard", c.baseURL, runID)
+
+	// Build request body
+	discardRequest := map[string]interface{}{
+		"comment": comment,
+	}
+
+	requestBody, err := json.Marshal(discardRequest)
+	if err != nil {
+		return nil, NewValidationError(fmt.Sprintf("failed to marshal request body: %v", err))
+	}
+
+	c.logger.Debugf("Discarding run at: %s", endpoint)
+
+	// Create request
+	req, err := http.NewRequest("POST", endpoint, bytes.NewBuffer(requestBody))
+	if err != nil {
+		return nil, err
+	}
+
+	// Set headers
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
+	req.Header.Set("Content-Type", "application/vnd.api+json")
+
+	// Make request
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	// Read response
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	// Check for errors
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return nil, NewErrorFromResponse(resp, nil)
+	}
+
+	// Parse response
+	var response SingleRunResponse
+	if err := json.Unmarshal(body, &response); err != nil {
+		return nil, fmt.Errorf("failed to parse response: %w", err)
+	}
+
+	c.logger.Debugf("Successfully discarded run %s", runID)
+	return &response, nil
+}
+
+// CancelRun cancels a running run
+func (c *Client) CancelRun(token, runID, comment string, forceCancel bool) (*SingleRunResponse, error) {
+	if token == "" {
+		return nil, NewAuthenticationError("authentication token is required")
+	}
+	if runID == "" {
+		return nil, NewValidationError("run ID is required")
+	}
+
+	var endpoint string
+	if forceCancel {
+		endpoint = fmt.Sprintf("%s/runs/%s/actions/force-cancel", c.baseURL, runID)
+	} else {
+		endpoint = fmt.Sprintf("%s/runs/%s/actions/cancel", c.baseURL, runID)
+	}
+
+	// Build request body
+	cancelRequest := map[string]interface{}{
+		"comment": comment,
+	}
+
+	requestBody, err := json.Marshal(cancelRequest)
+	if err != nil {
+		return nil, NewValidationError(fmt.Sprintf("failed to marshal request body: %v", err))
+	}
+
+	c.logger.Debugf("Canceling run at: %s", endpoint)
+
+	// Create request
+	req, err := http.NewRequest("POST", endpoint, bytes.NewBuffer(requestBody))
+	if err != nil {
+		return nil, err
+	}
+
+	// Set headers
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
+	req.Header.Set("Content-Type", "application/vnd.api+json")
+
+	// Make request
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	// Read response
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	// Check for errors
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return nil, NewErrorFromResponse(resp, nil)
+	}
+
+	// Parse response
+	var response SingleRunResponse
+	if err := json.Unmarshal(body, &response); err != nil {
+		return nil, fmt.Errorf("failed to parse response: %w", err)
+	}
+
+	action := "canceled"
+	if forceCancel {
+		action = "force-canceled"
+	}
+	c.logger.Debugf("Successfully %s run %s", action, runID)
+	return &response, nil
+}
+
+// GetPlan gets detailed information about a plan
+func (c *Client) GetPlan(token, planID string) (*SinglePlanResponse, error) {
+	if token == "" {
+		return nil, NewAuthenticationError("authentication token is required")
+	}
+	if planID == "" {
+		return nil, NewValidationError("plan ID is required")
+	}
+
+	endpoint := fmt.Sprintf("%s/plans/%s", c.baseURL, planID)
+
+	c.logger.Debugf("Getting plan at: %s", endpoint)
+
+	// Create request
+	req, err := http.NewRequest("GET", endpoint, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	// Set headers
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
+	req.Header.Set("Content-Type", "application/vnd.api+json")
+
+	// Make request
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	// Read response body
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	// Check status code
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return nil, NewErrorFromResponse(resp, nil)
+	}
+
+	// Parse response
+	var response SinglePlanResponse
+	if err := json.Unmarshal(body, &response); err != nil {
+		return nil, fmt.Errorf("failed to parse response: %w", err)
+	}
+
+	c.logger.Debugf("Retrieved plan %s", planID)
+	return &response, nil
+}
+
+// GetApply gets detailed information about an apply
+func (c *Client) GetApply(token, applyID string) (*SingleApplyResponse, error) {
+	if token == "" {
+		return nil, NewAuthenticationError("authentication token is required")
+	}
+	if applyID == "" {
+		return nil, NewValidationError("apply ID is required")
+	}
+
+	endpoint := fmt.Sprintf("%s/applies/%s", c.baseURL, applyID)
+
+	c.logger.Debugf("Getting apply at: %s", endpoint)
+
+	// Create request
+	req, err := http.NewRequest("GET", endpoint, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	// Set headers
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
+	req.Header.Set("Content-Type", "application/vnd.api+json")
+
+	// Make request
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	// Read response body
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	// Check status code
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return nil, NewErrorFromResponse(resp, nil)
+	}
+
+	// Parse response
+	var response SingleApplyResponse
+	if err := json.Unmarshal(body, &response); err != nil {
+		return nil, fmt.Errorf("failed to parse response: %w", err)
+	}
+
+	c.logger.Debugf("Retrieved apply %s", applyID)
+	return &response, nil
+}
+
+// GetRunLogs gets logs for a specific run
+func (c *Client) GetRunLogs(token, runID, logType string) (string, error) {
+	if token == "" {
+		return "", NewAuthenticationError("authentication token is required")
+	}
+	if runID == "" {
+		return "", NewValidationError("run ID is required")
+	}
+	if logType == "" {
+		return "", NewValidationError("log type is required")
+	}
+
+	var endpoint string
+	if logType == "plan" {
+		// Get plan ID from run first, then fetch plan logs
+		run, err := c.GetRun(token, runID, []string{"plan"})
+		if err != nil {
+			return "", fmt.Errorf("failed to get run details: %w", err)
+		}
+
+		// Extract plan ID from run relationships
+		planID, err := extractRelationshipID(run.Data.Relationships.Plan)
+		if err != nil {
+			return "", fmt.Errorf("no plan found for run %s: %w", runID, err)
+		}
+
+		endpoint = fmt.Sprintf("%s/plans/%s/log", c.baseURL, planID)
+	} else if logType == "apply" {
+		// Get apply ID from run first, then fetch apply logs
+		run, err := c.GetRun(token, runID, []string{"apply"})
+		if err != nil {
+			return "", fmt.Errorf("failed to get run details: %w", err)
+		}
+
+		// Extract apply ID from run relationships
+		applyID, err := extractRelationshipID(run.Data.Relationships.Apply)
+		if err != nil {
+			return "", fmt.Errorf("no apply found for run %s: %w", runID, err)
+		}
+
+		endpoint = fmt.Sprintf("%s/applies/%s/log", c.baseURL, applyID)
+	} else {
+		return "", NewValidationError("log_type must be 'plan' or 'apply'")
+	}
+
+	c.logger.Debugf("Getting %s logs at: %s", logType, endpoint)
+
+	// Create request
+	req, err := http.NewRequest("GET", endpoint, nil)
+	if err != nil {
+		return "", err
+	}
+
+	// Set headers
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
+
+	// Make request
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+
+	// Read response body
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", err
+	}
+
+	// Check status code
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return "", NewErrorFromResponse(resp, nil)
+	}
+
+	c.logger.Debugf("Retrieved %s logs for run %s", logType, runID)
+	return string(body), nil
+}
+
+// GetRunOutput gets structured output for a run including plan and apply details
+func (c *Client) GetRunOutput(token, runID string, includePlan, includeApply bool) (map[string]interface{}, error) {
+	if token == "" {
+		return nil, NewAuthenticationError("authentication token is required")
+	}
+	if runID == "" {
+		return nil, NewValidationError("run ID is required")
+	}
+
+	c.logger.Debugf("Getting run output for: %s", runID)
+
+	// Get run details with plan and apply relationships
+	include := []string{}
+	if includePlan {
+		include = append(include, "plan")
+	}
+	if includeApply {
+		include = append(include, "apply")
+	}
+
+	run, err := c.GetRun(token, runID, include)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get run details: %w", err)
+	}
+
+	result := map[string]interface{}{
+		"run_id": runID,
+		"run":    run.Data,
+	}
+
+	// Get plan details if requested and available
+	if includePlan {
+		planID, err := extractRelationshipID(run.Data.Relationships.Plan)
+		if err == nil {
+			plan, err := c.GetPlan(token, planID)
+			if err != nil {
+				c.logger.Warnf("Failed to get plan details: %v", err)
+			} else {
+				result["plan"] = plan.Data
+			}
+		}
+	}
+
+	// Get apply details if requested and available
+	if includeApply {
+		applyID, err := extractRelationshipID(run.Data.Relationships.Apply)
+		if err == nil {
+			apply, err := c.GetApply(token, applyID)
+			if err != nil {
+				c.logger.Warnf("Failed to get apply details: %v", err)
+			} else {
+				result["apply"] = apply.Data
+			}
+		}
+	}
+
+	c.logger.Debugf("Retrieved run output for %s", runID)
+	return result, nil
+}
+
+// extractRelationshipID extracts the ID from a RelationshipData object
+func extractRelationshipID(rel *RelationshipData) (string, error) {
+	if rel == nil {
+		return "", fmt.Errorf("relationship is nil")
+	}
+
+	// Handle the case where Data is a map
+	if dataMap, ok := rel.Data.(map[string]interface{}); ok {
+		if id, exists := dataMap["id"]; exists {
+			if idStr, ok := id.(string); ok {
+				return idStr, nil
+			}
+		}
+	}
+
+	// Handle the case where Data is a struct with ID field
+	if dataStruct, ok := rel.Data.(struct{ ID string }); ok {
+		return dataStruct.ID, nil
+	}
+
+	return "", fmt.Errorf("could not extract ID from relationship data")
+}
