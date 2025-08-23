@@ -8,6 +8,7 @@ FEATURES
 
 IMPROVEMENTS
 
+* Enhanced documentation with Cursor and Claude Code usage instructions, one-click install badges, and improved organization. See [#149](https://github.com/hashicorp/terraform-mcp-server/pull/149)
 * Changes to tool names to be more consistent. See [#121](https://github.com/hashicorp/terraform-mcp-server/pull/121)
 * Implement pagination utility. See [#121](https://github.com/hashicorp/terraform-mcp-server/pull/121)
 * Updating `mark3labs/mcp-go` and `hashicorp/tfe-go` versions. See [#121](https://github.com/hashicorp/terraform-mcp-server/pull/121)
