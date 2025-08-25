@@ -143,6 +143,7 @@ Add environment-specific tags for resource organization and cost tracking.
 ### Step 4: Configuration Upload (If You Have Terraform Files)
 Upload your Terraform configuration files to the workspace.
 
+**Traditional Method:**
 **Step 4a:** Create configuration version
 **Tool:** `create_hcp_terraform_configuration_version`
 
@@ -158,8 +159,41 @@ Upload your Terraform configuration files to the workspace.
 - `upload_url` - URL from Step 4a response
 - `configuration_files` - Base64-encoded tar.gz of your Terraform files
 
+**Streaming Method (NEW):**
+**Tool:** `create_hcp_terraform_configuration_version_with_streaming`
+
+This new tool combines configuration version creation, file upload, and real-time run status streaming into a single operation with HTTP streaming support.
+
+**Required Information:**
+- `workspace_id` - Workspace ID from Step 1
+- `configuration_files_base64` - Base64-encoded tar.gz of your Terraform files
+
+**Optional Streaming Configuration:**
+- `auto_queue_runs` - Whether to auto-trigger plans (default: true)
+- `speculative` - Mark as speculative run (default: false)
+- `polling_interval_seconds` - How often to check run status (default: 5, min: 2, max: 30)
+- `timeout_minutes` - How long to stream before stopping (default: 10, max: 60)
+
+**Advanced Streaming Method (NEW):**
+**Tool:** `create_hcp_terraform_configuration_version_with_advanced_streaming`
+
+This advanced tool provides detailed run monitoring with plan details and logs.
+
+**Additional Advanced Options:**
+- `include_plan_details` - Include plan information in status updates (default: false)
+- `include_logs` - Include run logs in final status (default: false)
+- `wait_for_apply` - Continue streaming through apply phase (default: false)
+
+**Streaming Benefits:**
+- Real-time status updates every 5 seconds (configurable)
+- Automatic timeout after 10 minutes (configurable)
+- No need to manually poll run status
+- Immediate feedback on plan/apply progress
+- Built-in error handling and recovery
+
 **Example Sequence:**
 ```json
+// Traditional Method
 // Step 4a
 {
   "workspace_id": "ws-abc123",
@@ -171,6 +205,27 @@ Upload your Terraform configuration files to the workspace.
 {
   "upload_url": "https://archivist.terraform.io/v1/...",
   "configuration_files": "H4sIAAAAA...base64content..."
+}
+
+// Streaming Method (Single Call)
+{
+  "workspace_id": "ws-abc123",
+  "configuration_files_base64": "H4sIAAAAA...base64content...",
+  "auto_queue_runs": true,
+  "polling_interval_seconds": 5,
+  "timeout_minutes": 10
+}
+
+// Advanced Streaming Method (Single Call with Details)
+{
+  "workspace_id": "ws-abc123",
+  "configuration_files_base64": "H4sIAAAAA...base64content...",
+  "auto_queue_runs": true,
+  "polling_interval_seconds": 5,
+  "timeout_minutes": 10,
+  "include_plan_details": true,
+  "include_logs": true,
+  "wait_for_apply": true
 }
 ```
 
@@ -488,7 +543,42 @@ After completing the setup:
 6. **Monitor Runs:** Check run status and logs in HCP Terraform UI
 7. **Verify Infrastructure:** Confirm resources are created as expected
 
-## Workflow Summary
+### Streaming Workflow (NEW)
+
+The new streaming tools provide real-time feedback during configuration upload and run execution:
+
+**Streaming Tool Workflow:**
+```
+Upload Config → Auto Plan Detection → Status Streaming → Terminal State
+     ↓                    ↓                  ↓              ↓
+[single_tool_call]    [automatic]      [5s_polling]    [completion]
+```
+
+**Streaming Features:**
+- **Real-time Updates**: Get status updates every 5 seconds (configurable 2-30s)
+- **Automatic Timeout**: Stops streaming after 10 minutes (configurable 1-60min)
+- **Terminal Detection**: Automatically stops when runs reach final states
+- **Error Recovery**: Continues streaming even if individual polls fail
+- **Detailed Logging**: Comprehensive logging of all status changes
+
+**Streaming Events:**
+- `run_detected` - New run found in workspace
+- `new_run` - Different run ID detected
+- `status_change` - Run status transition
+- `terminal_status` - Run reached final state
+- `timeout` - Streaming timeout reached
+
+**Advanced Streaming Features:**
+- **Plan Details**: Include full plan information when status reaches 'planned'
+- **Log Inclusion**: Retrieve plan and apply logs with final status
+- **Apply Waiting**: Continue streaming through apply phase
+- **Rich Context**: Include full run details with each update
+
+**Use Cases:**
+- **Development**: Quick feedback on configuration changes
+- **CI/CD Integration**: Automated deployment pipelines with real-time status
+- **Interactive Workflows**: User-facing tools that need live updates
+- **Monitoring**: Real-time tracking of infrastructure changes
 
 ### Basic Setup Flow
 ```
@@ -637,6 +727,8 @@ All the tools used in this guide are already implemented in the MCP server:
 - `create_hcp_terraform_configuration_version` - Create new config version
 - `download_hcp_terraform_configuration_files` - Download existing configs
 - `upload_hcp_terraform_configuration_files` - Upload configuration files
+- `create_hcp_terraform_configuration_version_with_streaming` - Create, upload, and stream run status (NEW)
+- `create_hcp_terraform_configuration_version_with_advanced_streaming` - Advanced streaming with plan details and logs (NEW)
 
 **State Management:**
 - `get_hcp_terraform_current_state_version` - Get current state version

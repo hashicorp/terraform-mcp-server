@@ -878,7 +878,7 @@ type RunAttributes struct {
 	Permissions           RunPermissions         `json:"permissions"`
 	TargetAddrs           []string               `json:"target-addrs,omitempty"`
 	ReplaceAddrs          []string               `json:"replace-addrs,omitempty"`
-	Variables             map[string]interface{} `json:"variables,omitempty"`
+	Variables             []interface{}          `json:"variables,omitempty"`
 	ErrorText             *string                `json:"error-text,omitempty"`
 	PositionInQueue       *int                   `json:"position-in-queue,omitempty"`
 	TerraformVersion      string                 `json:"terraform-version"`

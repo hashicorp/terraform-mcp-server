@@ -90,6 +90,10 @@ func InitTools(hcServer *server.MCPServer, registryClient *http.Client, logger *
 	uploadHCPConfigurationFilesTool := hcp_tools.UploadConfigurationFiles(hcpClient, logger)
 	hcServer.AddTool(uploadHCPConfigurationFilesTool.Tool, uploadHCPConfigurationFilesTool.Handler)
 
+	// Streaming configuration tools (NEW)
+	createAndUploadConfigStreamingTool := hcp_tools.CreateAndUploadConfigurationWithStreaming(hcpClient, logger)
+	hcServer.AddTool(createAndUploadConfigStreamingTool.Tool, createAndUploadConfigStreamingTool.Handler)
+
 	// State management tools (Phase 4: State Management)
 	getCurrentHCPStateVersionTool := hcp_tools.GetCurrentStateVersion(hcpClient, logger)
 	hcServer.AddTool(getCurrentHCPStateVersionTool.Tool, getCurrentHCPStateVersionTool.Handler)
@@ -157,5 +161,5 @@ func InitTools(hcServer *server.MCPServer, registryClient *http.Client, logger *
 	getHCPApplyTool := hcp_tools.GetApply(hcpClient, logger)
 	hcServer.AddTool(getHCPApplyTool.Tool, getHCPApplyTool.Handler)
 
-	logger.Infof("Initialized %d tools (including HCP Terraform tools)", 42) // Updated count: 8 registry tools + 34 HCP tools
+	logger.Infof("Initialized %d tools (including HCP Terraform tools)", 43) // Updated count: 8 registry tools + 35 HCP tools (including 1 new streaming tool)
 }
