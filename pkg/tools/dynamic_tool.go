@@ -100,6 +100,22 @@ func (r *DynamicToolRegistry) registerTFETools() {
 	listTerraformProjectsTool := r.createDynamicTFETool("list_terraform_projects", ListTerraformProjects)
 	r.mcpServer.AddTool(listTerraformProjectsTool.Tool, listTerraformProjectsTool.Handler)
 
+	// Workspace management tools
+	searchWorkspacesTool := r.createDynamicTFETool("search_workspaces", SearchWorkspaces)
+	r.mcpServer.AddTool(searchWorkspacesTool.Tool, searchWorkspacesTool.Handler)
+
+	getWorkspaceDetailsTool := r.createDynamicTFETool("get_workspace_details", GetWorkspaceDetails)
+	r.mcpServer.AddTool(getWorkspaceDetailsTool.Tool, getWorkspaceDetailsTool.Handler)
+
+	createWorkspaceTool := r.createDynamicTFETool("create_workspace", CreateWorkspace)
+	r.mcpServer.AddTool(createWorkspaceTool.Tool, createWorkspaceTool.Handler)
+
+	updateWorkspaceTool := r.createDynamicTFETool("update_workspace", UpdateWorkspace)
+	r.mcpServer.AddTool(updateWorkspaceTool.Tool, updateWorkspaceTool.Handler)
+
+	deleteWorkspaceSafelyTool := r.createDynamicTFETool("delete_workspace_safely", DeleteWorkspaceSafely)
+	r.mcpServer.AddTool(deleteWorkspaceSafelyTool.Tool, deleteWorkspaceSafelyTool.Handler)
+
 	r.tfeToolsRegistered = true
 }
 
