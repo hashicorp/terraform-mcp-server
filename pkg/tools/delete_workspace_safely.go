@@ -24,6 +24,7 @@ func DeleteWorkspaceSafely(logger *log.Logger) server.ServerTool {
 			mcp.WithDescription(`Safely deletes a Terraform workspace by ID only if it is not managing any resources. This prevents accidental deletion of workspaces that still have active infrastructure. This is a destructive operation.`),
 			mcp.WithTitleAnnotation("Safely delete a Terraform workspace by ID"),
 			mcp.WithReadOnlyHintAnnotation(false),
+			mcp.WithOpenWorldHintAnnotation(true),
 			mcp.WithDestructiveHintAnnotation(true),
 			mcp.WithString("workspace_id",
 				mcp.Required(),

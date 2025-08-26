@@ -24,6 +24,7 @@ func GetWorkspaceDetails(logger *log.Logger) server.ServerTool {
 		Tool: mcp.NewTool("get_workspace_details",
 			mcp.WithDescription(`Fetches detailed information about a specific Terraform workspace, including configuration, variables, and current state information.`),
 			mcp.WithTitleAnnotation("Get detailed information about a Terraform workspace"),
+			mcp.WithOpenWorldHintAnnotation(true),
 			mcp.WithReadOnlyHintAnnotation(true),
 			mcp.WithDestructiveHintAnnotation(false),
 			mcp.WithString("terraform_org_name",
