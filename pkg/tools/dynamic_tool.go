@@ -100,6 +100,20 @@ func (r *DynamicToolRegistry) registerTFETools() {
 	listTerraformProjectsTool := r.createDynamicTFETool("list_terraform_projects", ListTerraformProjects)
 	r.mcpServer.AddTool(listTerraformProjectsTool.Tool, listTerraformProjectsTool.Handler)
 
+	// Private provider tools
+	searchPrivateProvidersTool := r.createDynamicTFETool("search_private_providers", SearchPrivateProviders)
+	r.mcpServer.AddTool(searchPrivateProvidersTool.Tool, searchPrivateProvidersTool.Handler)
+
+	getPrivateProviderDetailsTool := r.createDynamicTFETool("get_private_provider_details", GetPrivateProviderDetails)
+	r.mcpServer.AddTool(getPrivateProviderDetailsTool.Tool, getPrivateProviderDetailsTool.Handler)
+
+	// Private module tools
+	searchPrivateModulesTool := r.createDynamicTFETool("search_private_modules", SearchPrivateModules)
+	r.mcpServer.AddTool(searchPrivateModulesTool.Tool, searchPrivateModulesTool.Handler)
+
+	getPrivateModuleDetailsTool := r.createDynamicTFETool("get_private_module_details", GetPrivateModuleDetails)
+	r.mcpServer.AddTool(getPrivateModuleDetailsTool.Tool, getPrivateModuleDetailsTool.Handler)
+
 	r.tfeToolsRegistered = true
 }
 
