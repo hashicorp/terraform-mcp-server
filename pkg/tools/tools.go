@@ -4,6 +4,7 @@
 package tools
 
 import (
+	registryTools "github.com/hashicorp/terraform-mcp-server/pkg/tools/registry"
 	"github.com/mark3labs/mcp-go/server"
 	log "github.com/sirupsen/logrus"
 )
@@ -13,29 +14,29 @@ func RegisterTools(hcServer *server.MCPServer, logger *log.Logger) {
 	registerDynamicTools(hcServer, logger)
 
 	// Provider tools (always available)
-	getResolveProviderDocIDTool := ResolveProviderDocID(logger)
+	getResolveProviderDocIDTool := registryTools.ResolveProviderDocID(logger)
 	hcServer.AddTool(getResolveProviderDocIDTool.Tool, getResolveProviderDocIDTool.Handler)
 
-	getProviderDocsTool := GetProviderDocs(logger)
+	getProviderDocsTool := registryTools.GetProviderDocs(logger)
 	hcServer.AddTool(getProviderDocsTool.Tool, getProviderDocsTool.Handler)
 
-	getLatestProviderVersionTool := GetLatestProviderVersion(logger)
+	getLatestProviderVersionTool := registryTools.GetLatestProviderVersion(logger)
 	hcServer.AddTool(getLatestProviderVersionTool.Tool, getLatestProviderVersionTool.Handler)
 
 	// Module tools
-	getSearchModulesTool := SearchModules(logger)
+	getSearchModulesTool := registryTools.SearchModules(logger)
 	hcServer.AddTool(getSearchModulesTool.Tool, getSearchModulesTool.Handler)
 
-	getModuleDetailsTool := ModuleDetails(logger)
+	getModuleDetailsTool := registryTools.ModuleDetails(logger)
 	hcServer.AddTool(getModuleDetailsTool.Tool, getModuleDetailsTool.Handler)
 
-	getLatestModuleVersionTool := GetLatestModuleVersion(logger)
+	getLatestModuleVersionTool := registryTools.GetLatestModuleVersion(logger)
 	hcServer.AddTool(getLatestModuleVersionTool.Tool, getLatestModuleVersionTool.Handler)
 
 	// Policy tools
-	getSearchPoliciesTool := SearchPolicies(logger)
+	getSearchPoliciesTool := registryTools.SearchPolicies(logger)
 	hcServer.AddTool(getSearchPoliciesTool.Tool, getSearchPoliciesTool.Handler)
 
-	getPolicyDetailsTool := PolicyDetails(logger)
+	getPolicyDetailsTool := registryTools.PolicyDetails(logger)
 	hcServer.AddTool(getPolicyDetailsTool.Tool, getPolicyDetailsTool.Handler)
 }
