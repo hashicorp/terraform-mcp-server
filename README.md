@@ -34,7 +34,7 @@ Modern HTTP-based transport supporting both direct HTTP requests and Server-Sent
 **Features:**
 - **Endpoint**: `http://{hostname}:8080/mcp`
 - **Health Check**: `http://{hostname}:8080/health`
-- **Environment Configuration**: Set `TRANSPORT_MODE=http` or `TRANSPORT_PORT=8080` to enable
+**Environment Configuration**: Set `TRANSPORT_MODE=streamable-http` or `TRANSPORT_PORT=8080` to enable
 
 **Environment Variables:**
 
@@ -114,6 +114,60 @@ Optionally, you can add a similar example (i.e. without the mcp key) to a file c
 }
 ```
 
+[<img alt="Install in VS Code (docker)" src="https://img.shields.io/badge/VS_Code-VS_Code?style=flat-square&label=Install%20Terraform%20MCP&color=0098FF">](https://vscode.dev/redirect?url=vscode%3Amcp%2Finstall%3F%7B%22name%22%3A%22terraform%22%2C%22command%22%3A%22docker%22%2C%22args%22%3A%5B%22run%22%2C%22-i%22%2C%22--rm%22%2C%22hashicorp%2Fterraform-mcp-server%22%5D%7D)
+[<img alt="Install in VS Code Insiders (docker)" src="https://img.shields.io/badge/VS_Code_Insiders-VS_Code_Insiders?style=flat-square&label=Install%20Terraform%20MCP&color=24bfa5">](https://insiders.vscode.dev/redirect?url=vscode-insiders%3Amcp%2Finstall%3F%7B%22name%22%3A%22terraform%22%2C%22command%22%3A%22docker%22%2C%22args%22%3A%5B%22run%22%2C%22-i%22%2C%22--rm%22%2C%22hashicorp%2Fterraform-mcp-server%22%5D%7D)
+
+### Usage with Cursor
+
+Add this to your Cursor config (`~/.cursor/mcp.json`) or via Settings → Cursor Settings → MCP:
+
+```json
+{
+  "mcpServers": {
+    "terraform": {
+      "command": "docker",
+      "args": [
+        "run",
+        "-i",
+        "--rm",
+        "hashicorp/terraform-mcp-server"
+      ]
+    }
+  }
+}
+```
+
+ 
+<a href="cursor://anysphere.cursor-deeplink/mcp/install?name=terraform&config=eyJjb21tYW5kIjoiZG9ja2VyIiwiYXJncyI6WyJydW4iLCItaSIsIi0tcm0iLCJoYXNoaWNvcnAvdGVycmFmb3JtLW1jcC1zZXJ2ZXIiXX0%3D">
+  <img alt="Add terraform MCP server to Cursor" src="https://cursor.com/deeplink/mcp-install-dark.png" height="48" />
+</a>
+
+[Install terraform MCP server in Cursor](cursor://anysphere.cursor-deeplink/mcp/install?name=terraform&config=eyJjb21tYW5kIjoiZG9ja2VyIiwiYXJncyI6WyJydW4iLCItaSIsIi0tcm0iLCJoYXNoaWNvcnAvdGVycmFmb3JtLW1jcC1zZXJ2ZXIiXX0%3D)
+
+### Usage with Claude Code
+
+Use the Claude Code CLI to add this MCP server.
+
+#### Local (stdio via Docker)
+
+```sh
+claude mcp add terraform -- docker run -i --rm hashicorp/terraform-mcp-server
+```
+
+#### Remote (HTTP transport)
+
+First run the server in HTTP mode, then add it:
+
+```sh
+# run server (example)
+docker run -p 8080:8080 --rm -e TRANSPORT_MODE=streamable-http -e TRANSPORT_HOST=0.0.0.0 hashicorp/terraform-mcp-server
+
+# add to Claude Code
+claude mcp add --transport http terraform http://localhost:8080/mcp
+```
+
+See: [Claude Code MCP docs](https://docs.anthropic.com/en/docs/agents-and-tools/claude-code/tutorials#set-up-model-context-protocol-mcp).
+
 ### Usage with Claude Desktop / Amazon Q Developer / Amazon Q CLI
 
 More about using MCP server tools in Claude Desktop [user documentation](https://modelcontextprotocol.io/quickstart/user).
@@ -141,16 +195,16 @@ Read more about using MCP server in Amazon Q from the [documentation](https://do
 
 The following sets of tools are available for the [public Terraform registry](https://registry.terraform.io):
 
-| Toolset     | Tool                         | Description                                                                                                                                                                                                                                                     |
-|-------------|------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| Toolset     | Tool                         | Description                                                                                                                                                                                     |
+|-------------|------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | `providers` | `search_providers`           | Queries the Terraform Registry to find and list available documentation for a specific provider using the specified `service_slug`. Returns a list of provider document IDs with their titles and categories for resources, data sources, functions, or guides. |
 | `providers` | `get_provider_details`       | Fetches the complete documentation content for a specific provider resource, data source, or function using a document ID obtained from the `search_providers` tool. Returns the raw documentation in markdown format.                                          |
 | `providers` | `get_latest_provider_version`| Fetches the complete documentation content for a specific provider resource, data source, or function using a document ID obtained from the `search_providers` tool. Returns the raw documentation in markdown format.                                          |
 | `modules`   | `search_modules`             | Searches the Terraform Registry for modules based on specified `module_query` with pagination. Returns a list of module IDs with their names, descriptions, download counts, verification status, and publish dates                                             |
-| `modules`   | `get_module_details`         | Retrieves detailed documentation for a module using a module ID obtained from the `search_modules` tool including inputs, outputs, configuration, submodules, and examples.                                                                                     |
-| `modules`   | `get_latest_module_version`  | Retrieves detailed documentation for a module using a module ID obtained from the `search_modules` tool including inputs, outputs, configuration, submodules, and examples.                                                                                     |
+| `modules`   | `get_module_details`         | Retrieves detailed documentation for a module using a module ID obtained from the `search_modules` tool including inputs, outputs, configuration, submodules, and examples.                                                         |
+| `modules`   | `get_latest_module_version`  | Retrieves detailed documentation for a module using a module ID obtained from the `search_modules` tool including inputs, outputs, configuration, submodules, and examples.                                                         |
 | `policies`  | `search_policies`            | Queries the Terraform Registry to find and list the appropriate Sentinel Policy based on the provided query `policy_query`. Returns a list of matching policies with terraform_policy_id(s) with their name, title and download counts.                         |
-| `policies`  | `get_policy_details`         | Retrieves detailed documentation for a policy set using a terraform_policy_id obtained from the `search_policies` tool including policy readme and implementation details.                                                                                      |
+| `policies`  | `get_policy_details`         | Retrieves detailed documentation for a policy set using a terraform_policy_id obtained from the `search_policies` tool including policy readme and implementation details.                                                          |
 
 The following sets of tools are available for HCP Terraform or Terraform Enterprise:
 
