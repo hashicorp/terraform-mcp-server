@@ -60,7 +60,7 @@ Organize your Terraform modules and repositories as follows:
 - Use descriptive nouns separated by underscores
 - Do not include the resource type in the resource name
 - Wrap resource type and name in double quotes
-- Example: `resource "aws_instance" "web_server" {}` not `resource aws_instance webserver_instance {}`
+- Example: `resource "aws_instance" "web_server" {}` not `resource "aws_instance" "webserver_instance" {}`
 
 ## Variables and Outputs
 - Define `type` and `description` for every variable
