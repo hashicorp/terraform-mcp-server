@@ -12,6 +12,7 @@ IMPROVEMENTS
 * Changes to tool names to be more consistent. See [#121](https://github.com/hashicorp/terraform-mcp-server/pull/121)
 * Implement pagination utility. See [#121](https://github.com/hashicorp/terraform-mcp-server/pull/121)
 * Updating `mark3labs/mcp-go` and `hashicorp/tfe-go` versions. See [#121](https://github.com/hashicorp/terraform-mcp-server/pull/121)
+* Adding instructions to the server. See [#156](https://github.com/hashicorp/terraform-mcp-server/pull/156)
 
 FIXES
 * Fixing paths using in-built library instead of string manipulation. See [#143](https://github.com/hashicorp/terraform-mcp-server/pull/143)
