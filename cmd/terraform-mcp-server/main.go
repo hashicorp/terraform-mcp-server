@@ -21,7 +21,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-//go:embed default-instructions.md
+//go:embed instructions.md
 var instructions string
 
 func runHTTPServer(logger *log.Logger, host string, port string, endpointPath string) error {
