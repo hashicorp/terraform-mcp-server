@@ -1,3 +1,5 @@
+>Note: In order to implement these custom instructions into the MCP server copy them into `cmd/terraform-mcp-server/instructions.md` and rebuild the MCP binary or docker image to use it.
+
 # Terraform MCP Server Usage Instructions
 
 ## Overview
