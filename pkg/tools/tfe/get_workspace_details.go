@@ -4,12 +4,14 @@
 package tools
 
 import (
+	"bytes"
 	"context"
-	"fmt"
+	_ "embed"
 	"io"
 	"strings"
 
 	"github.com/hashicorp/go-tfe"
+	"github.com/hashicorp/jsonapi"
 	"github.com/hashicorp/terraform-mcp-server/pkg/client"
 	"github.com/hashicorp/terraform-mcp-server/pkg/utils"
 	log "github.com/sirupsen/logrus"
@@ -17,6 +19,9 @@ import (
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 )
+
+//go:embed static/default-cli-run.md
+var defaultReadme string
 
 // GetWorkspaceDetails creates a tool to get detailed information about a specific Terraform workspace.
 func GetWorkspaceDetails(logger *log.Logger) server.ServerTool {
@@ -62,121 +67,66 @@ func getWorkspaceDetailsHandler(ctx context.Context, request mcp.CallToolRequest
 		return nil, utils.LogAndReturnError(logger, "getting Terraform client - please ensure TFE_TOKEN and TFE_ADDRESS are properly configured", err)
 	}
 
-	// Get workspace details
-	workspace, err := tfeClient.Workspaces.ReadWithOptions(ctx, terraformOrgName, workspaceName, &tfe.WorkspaceReadOptions{
-		Include: []tfe.WSIncludeOpt{
-			tfe.WSOrganization,
-			tfe.WSProject,
-			tfe.WSReadme,
-			tfe.WSOutputs,
-			tfe.WSCurrentRun,
-		},
-	})
+	workspace, err := tfeClient.Workspaces.Read(ctx, terraformOrgName, workspaceName)
 	if err != nil {
 		return nil, utils.LogAndReturnError(logger, "reading workspace details", err)
 	}
 
-	var builder strings.Builder
-	builder.WriteString(fmt.Sprintf("Workspace Details for: %s/%s\n\n", terraformOrgName, workspaceName))
-	builder.WriteString("---\n\n")
-	builder.WriteString("Basic Information:\n")
-	builder.WriteString(fmt.Sprintf("- Organization: %s\n", workspace.Organization.Name))
-	builder.WriteString(fmt.Sprintf("- Project: %s\n", workspace.Project.Name))
-	builder.WriteString(fmt.Sprintf("- Name: %s\n", workspace.Name))
-	builder.WriteString(fmt.Sprintf("- Description: %s\n", workspace.Description))
-	builder.WriteString(fmt.Sprintf("- Execution Mode: %s\n", workspace.ExecutionMode))
-	builder.WriteString(fmt.Sprintf("- Terraform Version: %s\n", workspace.TerraformVersion))
-	builder.WriteString(fmt.Sprintf("- Auto Apply: %t\n", workspace.AutoApply))
-	builder.WriteString(fmt.Sprintf("- Created At: %s\n", workspace.CreatedAt))
-	builder.WriteString(fmt.Sprintf("- Updated At: %s\n", workspace.UpdatedAt))
-
-	if workspace.VCSRepo != nil {
-		builder.WriteString("---\n\n")
-		builder.WriteString("VCS Configuration:\n")
-		builder.WriteString(fmt.Sprintf("- Provider: %s\n", workspace.VCSRepo.ServiceProvider))
-		builder.WriteString(fmt.Sprintf("- Repository: %s\n", workspace.VCSRepo.RepositoryHTTPURL))
-		builder.WriteString(fmt.Sprintf("- Branch: %s\n", workspace.VCSRepo.Branch))
-	}
-
-	// Fetch variables separately since they're not included in the workspace read options
-	variables, err := tfeClient.Variables.List(ctx, workspace.ID, &tfe.VariableListOptions{})
+	buf, err := getWorkspaceDetailsForTools(ctx, "get_workspace_details", tfeClient, workspace, logger, true)
 	if err != nil {
-		logger.WithError(err).Warn("failed to fetch workspace variables")
-		variables = &tfe.VariableList{} // Initialize empty list if fetch fails
+		return nil, utils.LogAndReturnError(logger, "getting workspace details for tools", err)
 	}
 
-	builder.WriteString("---\n\n")
-	if len(variables.Items) > 0 {
-		builder.WriteString("Variables:\n")
-		builder.WriteString("| Key | Description | Category | HCL | Sensitive | Value |\n")
-		builder.WriteString("|-----|-------------|----------|-----|-----------|-------|\n")
-		for _, variable := range variables.Items {
-			value := "<sensitive>"
-			if !variable.Sensitive {
-				value = variable.Value
+	return mcp.NewToolResultText(buf.String()), nil
+}
+
+func getWorkspaceDetailsForTools(ctx context.Context, toolType string, tfeClient *tfe.Client, workspace *tfe.Workspace, logger *log.Logger, opts ...interface{}) (*bytes.Buffer, error) {
+	includeDetails := false
+	// Check if detailed information is requested
+	for _, opt := range opts {
+		if includeOpt, ok := opt.(bool); ok && includeOpt {
+			includeDetails = true
+			break
+		}
+	}
+
+	result := &client.WorkspaceToolResponse{
+		Success:   true,
+		Type:      toolType,
+		Workspace: workspace,
+	}
+
+	if includeDetails {
+		// Fetch variables separately since they're not included in the workspace read options
+		variables, err := tfeClient.Variables.List(ctx, workspace.ID, &tfe.VariableListOptions{})
+		if err != nil {
+			logger.WithError(err).Warn("failed to fetch workspace variables")
+			variables = &tfe.VariableList{} // Initialize empty list if fetch fails
+		}
+
+		readme := defaultReadme
+		workspaceReadmeReader, err := tfeClient.Workspaces.Readme(ctx, workspace.ID)
+		if err == nil && workspaceReadmeReader != nil {
+			readmeBytes, err := io.ReadAll(workspaceReadmeReader)
+			if err == nil && len(readmeBytes) > 0 {
+				readme = string(readmeBytes)
 			}
-			description := variable.Description
-			if description == "" {
-				description = "N/A"
-			}
-			builder.WriteString(fmt.Sprintf(
-				"| %s | %s | %s | %t | %t | %s |\n",
-				variable.Key,
-				strings.ReplaceAll(description, "|", "\\|"),
-				string(variable.Category),
-				variable.HCL,
-				variable.Sensitive,
-				strings.ReplaceAll(value, "|", "\\|"),
-			))
 		}
-	} else {
-		builder.WriteString("No variables configured.\n")
-	}
 
-	if len(workspace.Outputs) > 0 {
-		builder.WriteString("---\n\n")
-		builder.WriteString("Outputs:\n")
-		builder.WriteString("| Name | Type | Sensitive | Value |\n")
-		builder.WriteString("|------|------|-----------|-------|\n")
-		for _, output := range workspace.Outputs {
-			var value interface{} = "<sensitive>"
-			if !output.Sensitive {
-				value = output.Value
-			}
-			builder.WriteString(fmt.Sprintf(
-				"| %s | %s | %t | %s |\n",
-				output.Name,
-				output.Type,
-				output.Sensitive,
-				value,
-			))
-		}
-	} else {
-		builder.WriteString("No outputs available.\n")
-	}
-
-	if workspace.CurrentRun != nil {
-		builder.WriteString("---\n\n")
-		builder.WriteString("Current Run Details:\n")
-		run, err := tfeClient.Runs.Read(ctx, workspace.CurrentRun.ID)
-		if err == nil {
-			builder.WriteString(fmt.Sprintf("- Message: %s\n", strings.ReplaceAll(run.Message, "|", "\\|")))
-			builder.WriteString(fmt.Sprintf("- Source: %s\n", run.Source))
-			builder.WriteString(fmt.Sprintf("- Status: %s\n", run.Status))
-		}
-	} else {
-		builder.WriteString("No current run.\n")
-	}
-
-	builder.WriteString("---\n\n")
-	workspaceReadmeReader, err := tfeClient.Workspaces.Readme(ctx, workspace.ID)
-	if err == nil && workspaceReadmeReader != nil {
-		readmeBytes, err := io.ReadAll(workspaceReadmeReader)
-		if err == nil && len(readmeBytes) > 0 {
-			builder.WriteString("Workspace README:\n")
-			builder.WriteString(string(readmeBytes))
+		result = &client.WorkspaceToolResponse{
+			Success:   true,
+			Type:      toolType,
+			Workspace: workspace,
+			Variables: variables.Items,
+			Readme:    readme,
 		}
 	}
 
-	return mcp.NewToolResultText(builder.String()), nil
+	buf := bytes.NewBuffer(nil)
+	err := jsonapi.MarshalPayload(buf, result)
+	if err != nil {
+		return nil, utils.LogAndReturnError(logger, "marshalling workspace creation result", err)
+	}
+
+	return buf, nil
 }

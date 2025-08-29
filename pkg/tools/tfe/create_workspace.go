@@ -5,7 +5,6 @@ package tools
 
 import (
 	"context"
-	"encoding/json"
 	"strings"
 
 	"github.com/hashicorp/go-tfe"
@@ -16,6 +15,8 @@ import (
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 )
+
+const SourceName = "terraform-mcp-server"
 
 // CreateWorkspace creates a tool to create a new Terraform workspace.
 func CreateWorkspace(logger *log.Logger) server.ServerTool {
@@ -134,9 +135,10 @@ func createWorkspaceHandler(ctx context.Context, request mcp.CallToolRequest, lo
 
 	// Build workspace creation options
 	options := &tfe.WorkspaceCreateOptions{
-		Name:      &workspaceName,
-		AutoApply: &autoApply,
-		Tags:      tags,
+		Name:       &workspaceName,
+		AutoApply:  &autoApply,
+		Tags:       tags,
+		SourceName: tfe.String(SourceName),
 	}
 
 	if description != "" {
@@ -188,10 +190,10 @@ func createWorkspaceHandler(ctx context.Context, request mcp.CallToolRequest, lo
 		return nil, utils.LogAndReturnError(logger, "creating workspace", err)
 	}
 
-	resultJSON, err := json.Marshal(workspace)
+	buf, err := getWorkspaceDetailsForTools(ctx, "create_workspace", tfeClient, workspace, logger)
 	if err != nil {
-		return nil, utils.LogAndReturnError(logger, "marshalling workspace creation result", err)
+		return nil, utils.LogAndReturnError(logger, "getting workspace details for tools", err)
 	}
 
-	return mcp.NewToolResultText(string(resultJSON)), nil
+	return mcp.NewToolResultText(buf.String()), nil
 }

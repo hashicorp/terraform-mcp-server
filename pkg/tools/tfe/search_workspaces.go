@@ -4,11 +4,12 @@
 package tools
 
 import (
+	"bytes"
 	"context"
-	"fmt"
 	"strings"
 
 	"github.com/hashicorp/go-tfe"
+	"github.com/hashicorp/jsonapi"
 	"github.com/hashicorp/terraform-mcp-server/pkg/client"
 	"github.com/hashicorp/terraform-mcp-server/pkg/utils"
 	log "github.com/sirupsen/logrus"
@@ -107,39 +108,11 @@ func searchTerraformWorkspacesHandler(ctx context.Context, request mcp.CallToolR
 		return nil, utils.LogAndReturnError(logger, "listing Terraform workspaces", err)
 	}
 
-	// Build a formatted string with basic workspace information
-	var result strings.Builder
-	result.WriteString(fmt.Sprintf("Searching workspaces in organization: %s\n\n", terraformOrgName))
-	if len(workspaces.Items) == 0 {
-		result.WriteString("No workspaces found matching the search criteria.\n")
-	} else {
-		result.WriteString(fmt.Sprintf("Found %d workspace(s):\n\n", len(workspaces.Items)))
-
-		for i, workspace := range workspaces.Items {
-			result.WriteString(fmt.Sprintf("%d. Workspace: %s\n", i+1, workspace.Name))
-			result.WriteString(fmt.Sprintf("   ID: %s\n", workspace.ID))
-
-			if workspace.Description != "" {
-				result.WriteString(fmt.Sprintf("   Description: %s\n", workspace.Description))
-			}
-
-			if len(workspace.TagNames) > 0 {
-				result.WriteString(fmt.Sprintf("   Tags: %s\n", strings.Join(workspace.TagNames, ", ")))
-			}
-
-			if workspace.Project != nil {
-				result.WriteString(fmt.Sprintf("   Project ID: %s\n", workspace.Project.ID))
-			}
-
-			if workspace.SourceURL != "" {
-				result.WriteString(fmt.Sprintf("   Source URL: %s\n", workspace.SourceURL))
-			}
-
-			if i < len(workspaces.Items)-1 {
-				result.WriteString("\n")
-			}
-		}
+	buf := bytes.NewBuffer(nil)
+	err = jsonapi.MarshalPayloadWithoutIncluded(buf, workspaces.Items)
+	if err != nil {
+		return nil, utils.LogAndReturnError(logger, "marshalling workspace creation result", err)
 	}
 
-	return mcp.NewToolResultText(result.String()), nil
+	return mcp.NewToolResultText(buf.String()), nil
 }

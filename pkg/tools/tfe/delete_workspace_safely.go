@@ -5,7 +5,6 @@ package tools
 
 import (
 	"context"
-	"fmt"
 	"strings"
 
 	"github.com/hashicorp/terraform-mcp-server/pkg/client"
@@ -63,6 +62,10 @@ func deleteWorkspaceSafelyHandler(ctx context.Context, request mcp.CallToolReque
 		return nil, utils.LogAndReturnError(logger, "deleting workspace", err)
 	}
 
-	msg := fmt.Sprintf("Workspace '%s' (%s) deleted successfully", workspace.Name, workspace.ID)
-	return mcp.NewToolResultText(msg), nil
+	buf, err := getWorkspaceDetailsForTools(ctx, "delete_workspace_safely", tfeClient, workspace, logger)
+	if err != nil {
+		return nil, utils.LogAndReturnError(logger, "getting workspace details for tools", err)
+	}
+
+	return mcp.NewToolResultText(buf.String()), nil
 }
