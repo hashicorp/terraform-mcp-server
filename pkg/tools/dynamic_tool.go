@@ -101,6 +101,22 @@ func (r *DynamicToolRegistry) registerTFETools() {
 	listTerraformProjectsTool := r.createDynamicTFETool("list_terraform_projects", tfeTools.ListTerraformProjects)
 	r.mcpServer.AddTool(listTerraformProjectsTool.Tool, listTerraformProjectsTool.Handler)
 
+	// Workspace management tools
+	searchWorkspacesTool := r.createDynamicTFETool("search_workspaces", tfeTools.SearchWorkspaces)
+	r.mcpServer.AddTool(searchWorkspacesTool.Tool, searchWorkspacesTool.Handler)
+
+	getWorkspaceDetailsTool := r.createDynamicTFETool("get_workspace_details", tfeTools.GetWorkspaceDetails)
+	r.mcpServer.AddTool(getWorkspaceDetailsTool.Tool, getWorkspaceDetailsTool.Handler)
+
+	createWorkspaceTool := r.createDynamicTFETool("create_workspace", tfeTools.CreateWorkspace)
+	r.mcpServer.AddTool(createWorkspaceTool.Tool, createWorkspaceTool.Handler)
+
+	updateWorkspaceTool := r.createDynamicTFETool("update_workspace", tfeTools.UpdateWorkspace)
+	r.mcpServer.AddTool(updateWorkspaceTool.Tool, updateWorkspaceTool.Handler)
+
+	deleteWorkspaceSafelyTool := r.createDynamicTFETool("delete_workspace_safely", tfeTools.DeleteWorkspaceSafely)
+	r.mcpServer.AddTool(deleteWorkspaceSafelyTool.Tool, deleteWorkspaceSafelyTool.Handler)
+
 	// Private provider tools
 	searchPrivateProvidersTool := r.createDynamicTFETool("search_private_providers", tfeTools.SearchPrivateProviders)
 	r.mcpServer.AddTool(searchPrivateProvidersTool.Tool, searchPrivateProvidersTool.Handler)
@@ -113,7 +129,7 @@ func (r *DynamicToolRegistry) registerTFETools() {
 	r.mcpServer.AddTool(searchPrivateModulesTool.Tool, searchPrivateModulesTool.Handler)
 
 	getPrivateModuleDetailsTool := r.createDynamicTFETool("get_private_module_details", tfeTools.GetPrivateModuleDetails)
-	r.mcpServer.AddTool(getPrivateModuleDetailsTool.Tool, getPrivateModuleDetailsTool.Handler)
+  r.mcpServer.AddTool(getPrivateModuleDetailsTool.Tool, getPrivateModuleDetailsTool.Handler)
 
 	r.tfeToolsRegistered = true
 }

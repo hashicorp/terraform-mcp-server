@@ -70,14 +70,17 @@ func listTerraformProjectsHandler(ctx context.Context, request mcp.CallToolReque
 		return nil, utils.LogAndReturnError(logger, "listing Terraform projects, check if the organization exists and you have access", err)
 	}
 
-	projectNames := make([]string, 0, len(projects.Items))
+	projectInfos := make([]map[string]string, 0, len(projects.Items))
 	for _, project := range projects.Items {
-		projectNames = append(projectNames, project.Name)
+		projectInfos = append(projectInfos, map[string]string{
+			"project_name": project.Name,
+			"project_id":   project.ID,
+		})
 	}
 
-	projectJSON, err := json.Marshal(projectNames)
+	projectJSON, err := json.Marshal(projectInfos)
 	if err != nil {
-		return nil, utils.LogAndReturnError(logger, "marshalling project names", err)
+		return nil, utils.LogAndReturnError(logger, "marshalling project infos", err)
 	}
 
 	return mcp.NewToolResultText(string(projectJSON)), nil

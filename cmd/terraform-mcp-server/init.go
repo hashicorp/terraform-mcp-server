@@ -176,9 +176,6 @@ func serverInit(ctx context.Context, hcServer *server.MCPServer, logger *log.Log
 }
 
 func streamableHTTPServerInit(ctx context.Context, hcServer *server.MCPServer, logger *log.Logger, host string, port string, endpointPath string) error {
-	// Check if stateless mode is enabled
-	isStateless := shouldUseStatelessMode()
-
 	// Ensure endpoint path starts with /
 	endpointPath = path.Join("/", endpointPath)
 	// Create StreamableHTTP server which implements the new streamable-http transport
@@ -191,14 +188,10 @@ func streamableHTTPServerInit(ctx context.Context, hcServer *server.MCPServer, l
 	// Log the endpoint path being used
 	logger.Infof("Using endpoint path: %s", endpointPath)
 
-	// Only add the WithStateLess option if stateless mode is enabled
-	// TODO: fix this in mcp-go ver 0.33.0 or higher
-	if isStateless {
-		opts = append(opts, server.WithStateLess(true))
-		logger.Infof("Running in stateless mode")
-	} else {
-		logger.Infof("Running in stateful mode (default)")
-	}
+	// Check if stateless mode is enabled
+	isStateless := shouldUseStatelessMode()
+	opts = append(opts, server.WithStateLess(isStateless))
+	logger.Infof("Running with stateless mode: %v", isStateless)
 
 	baseStreamableServer := server.NewStreamableHTTPServer(hcServer, opts...)
 

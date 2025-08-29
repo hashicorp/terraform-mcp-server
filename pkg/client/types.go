@@ -3,7 +3,11 @@
 
 package client
 
-import "time"
+import (
+	"time"
+
+	"github.com/hashicorp/go-tfe"
+)
 
 type ProviderDetail struct {
 	ProviderName      string
@@ -433,4 +437,12 @@ type TerraformPolicyDetails struct {
 			Self string `json:"self"`
 		} `json:"links"`
 	} `json:"included"`
+}
+
+type WorkspaceToolResponse struct {
+	Type      string          `jsonapi:"primary,tool"`
+	Success   bool            `jsonapi:"attr,success"`
+	Workspace *tfe.Workspace  `jsonapi:"attr,workspace,omitempty"`
+	Variables []*tfe.Variable `jsonapi:"polyrelation,variables,omitempty"`
+	Readme    string          `jsonapi:"attr,readme,omitempty"`
 }
