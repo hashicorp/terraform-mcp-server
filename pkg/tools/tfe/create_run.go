@@ -24,7 +24,7 @@ func CreateRun(logger *log.Logger) server.ServerTool {
 			mcp.WithDescription(`Creates a new Terraform run in the specified workspace.`),
 			mcp.WithTitleAnnotation("Create a new Terraform run"),
 			mcp.WithReadOnlyHintAnnotation(false),
-			mcp.WithDestructiveHintAnnotation(false),
+			mcp.WithDestructiveHintAnnotation(true),
 			mcp.WithString("terraform_org_name",
 				mcp.Required(),
 				mcp.Description("The Terraform Cloud/Enterprise organization name"),
