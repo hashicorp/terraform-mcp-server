@@ -8,39 +8,53 @@ The Terraform MCP (Model Context Protocol) server is a specialized tool that ena
 ## Core Capabilities
 
 ### 1. Code Generation Enhancement
+
 - **Registry Integration**: Connects to both public and private Terraform registries for module and provider information
+
 - **Style Guide Compliance**: Provides access to Terraform styling guide resources for consistent HCL/TF file generation
+
 - **Module Development**: Supports creation of reusable Terraform modules following best practices
 
 ### 2. Workflow Automation
+
 - **API Operations**: Executes HCP Terraform and Terraform Enterprise commands via API calls
+
 - **Iterative Development**: Enables automated testing, refinement, and enhancement of Terraform configurations
+
 - **State Management**: Facilitates proper state handling and workspace management
 
 ## Operational Guidelines
 
 ### Pre-Generation Phase
+
 **ALWAYS** consult the MCP server before generating any Terraform code to:
+
 1. Retrieve latest provider documentation and constraints
 2. Access organization-specific styling guidelines
 3. Identify available modules and their requirements
 4. Understand enterprise-specific policies and compliance requirements
 
 ### Registry Search Priority
+
 When enterprise tools are enabled AND a Terraform token is provided:
+
 1. **First**: Search private registries for modules and providers
 2. **Second**: If no results found in private registries, fall back to public registry
 3. **Document**: Note the source registry in comments for transparency
 
 ### Provider Consistency Rules
+
 **CRITICAL**: Maintain provider version consistency across all modules in a project:
+
 - Verify provider requirements before module creation
 - Ensure all modules declare compatible provider version constraints
 - Flag any provider version conflicts before code generation
 - Use explicit version pinning when required by organization policies
 
 ### Validation Workflow
+
 Execute validation in this specific order:
+
 1. **terraform validate**: Run immediately after code generation
    - Verify syntax correctness
    - Check resource attribute validity
@@ -66,6 +80,7 @@ Execute validation in this specific order:
 ## Error Handling
 
 ### Common Scenarios
+
 1. **Registry Access Failure**: 
    - Log the error
    - Attempt fallback to alternative registry

@@ -63,12 +63,20 @@ terraform-mcp-server streamable-http [--transport-port 8080] [--transport-host 1
 The Terraform MCP Server supports two session modes when using the StreamableHTTP transport:
 
 - **Stateful Mode (Default)**: Maintains session state between requests, enabling context-aware operations.
+
 - **Stateless Mode**: Each request is processed independently without maintaining session state, which can be useful for high-availability deployments or when using load balancers.
 
 To enable stateless mode, set the environment variable:
+
 ```bash
 export MCP_SESSION_MODE=stateless
 ```
+
+## Instructions
+
+Default instructions for the MCP server is located in `cmd/terraform-mcp-server/instructions.md`, if those do not seem appropriate for your organization's Terraform practices or if the MCP server is producing inccurate responses, please replace them with your own instructions and rebuild the container or binary. An example of such instruction is located in `instructions/example-mcp-instructions.md`
+
+`AGENTS.md` essentially behaves as READMEs for coding agents: a dedicated, predictable place to provide the context and instructions to help AI coding agents work on your project. One `AGENTS.md` file works with different coding agents. An example of such instruction is located in `instructions/example-AGENTS.md`, in order to use it commit a file name `AGENTS.md` to the directory where your Terraform configurations reside.
 
 ## Installation
 

@@ -8,12 +8,34 @@ description: "HashiCorp style guidelines for writing Terraform code"
 This project follows HashiCorp's official Terraform style guide for consistent, maintainable infrastructure-as-code.
 
 ## Project Context
+
 Terraform configurations define infrastructure resources using HashiCorp Configuration Language (HCL). 
 These instructions ensure code consistency, readability, and maintainability across all Terraform files.
 
 ## Module and Repository Structure
 
 Organize your Terraform modules and repositories as follows:
+
+```
+├── README.md
+├── main.tf
+├── variables.tf
+├── outputs.tf
+├── ...
+├── modules/
+│   ├── nestedA/
+│   │   ├── README.md
+│   │   ├── variables.tf
+│   │   ├── main.tf
+│   │   ├── outputs.tf
+│   ├── nestedB/
+│   ├── .../
+├── examples/
+│   ├── exampleA/
+│   │   ├── main.tf
+│   ├── exampleB/
+│   ├── .../
+```
 
 ### Required Files and Directories
 - `main.tf` – Primary resource and data source definitions. Must exist in every module, even if empty.
@@ -74,6 +96,7 @@ Organize your Terraform modules and repositories as follows:
 - Use `#` for single and multi-line comments (not `//` or `/* */`)
 - Write self-documenting code; use comments only to clarify complexity
 - Add comments above resource blocks to explain non-obvious business logic
+- Use the workspace name and project name as tags, if applicable, to resources
 
 ## Local Values
 - Use local values sparingly to avoid making code harder to understand
@@ -85,7 +108,7 @@ Organize your Terraform modules and repositories as follows:
 - Use `count` for nearly identical resources
 - Use `for_each` when resources need distinct values that cannot be derived from integers
 - Use `count` with conditional expressions for optional resources: `count = var.enable_feature ? 1 : 0`
-- Use meta-arguments sparingly and add comments when the effect is not obvious
+- Use meta-arguments sparingly and add comments whenever applicable
 
 ## Provider Configuration
 - Always include a default provider configuration
