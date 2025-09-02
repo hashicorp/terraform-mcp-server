@@ -47,7 +47,7 @@ Organize your Terraform modules and repositories as follows:
 - `LICENSE` – Recommended in the root of the module, especially for public modules, to clarify usage rights.
 - `providers.tf` – Provider configurations and requirements.
 - `terraform.tf` – Terraform version and provider requirements.
-- `backend.tf` – Backend configuration for state storage.
+- `backend.tf` – Backend configuration for state storage. (only needed for root modules)
 - `locals.tf` – Local value definitions.
 - `modules/` – Local module definitions in `./modules/<module_name>`. Nested modules with a `README.md` are considered public; those without are considered internal.
 - `examples/` – Directory containing usage examples for the module and submodules. Each example may have its own README. Example `module` blocks should use the external source address, not a relative path.
