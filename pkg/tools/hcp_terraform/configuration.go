@@ -310,8 +310,12 @@ func UploadConfigurationFiles(hcpClient *hcp_terraform.Client, logger *log.Logge
 						"type":        "string",
 						"description": "Base64-encoded tar.gz archive containing the Terraform configuration files",
 					},
+					"authorization": map[string]interface{}{
+						"type":        "string",
+						"description": "Optional Bearer token for authentication (if not provided via HCP_TERRAFORM_TOKEN environment variable)",
+					},
 				},
-				Required: []string{"upload_url", "configuration_files_base64"},
+				Required: []string{"upload_url", "configuration_files_base64", "authorization"},
 			},
 		},
 		Handler: func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
