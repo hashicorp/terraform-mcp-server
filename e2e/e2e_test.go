@@ -374,6 +374,8 @@ func createStdioClient(t *testing.T) (mcpClient.MCPClient, func()) {
 		"run",
 		"-i",
 		"--rm",
+		"-e", "MCP_RATE_LIMIT_GLOBAL=50:100",
+		"-e", "MCP_RATE_LIMIT_SESSION=50:100",
 		"terraform-mcp-server:test-e2e",
 	}
 	t.Log("Starting Stdio MCP client...")
@@ -428,6 +430,8 @@ func startHTTPContainer(t *testing.T, port string) string {
 		"-e", "TRANSPORT_MODE=streamable-http",
 		"-e", "TRANSPORT_HOST=0.0.0.0",
 		"-e", "MCP_SESSION_MODE=stateful",
+		"-e", "MCP_RATE_LIMIT_GLOBAL=50:100",
+		"-e", "MCP_RATE_LIMIT_SESSION=50:100",
 		"-p", portMapping,
 		"terraform-mcp-server:test-e2e",
 	)
