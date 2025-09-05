@@ -435,7 +435,7 @@ func TestTerraformContextMiddleware(t *testing.T) {
 			headers: map[string]string{
 				"tfe_address":         "https://canonical.terraform.io", // lowercase
 				"TFE_TOKEN":           "canonical-token",                // uppercase
-				"Tfe_Skip_Tls_Verify": "true",                           // mixed case
+				"tfe_skip_tls_verify": "true",                           // mixed case
 			},
 			queryParams:    map[string]string{},
 			envVars:        map[string]string{},
