@@ -16,6 +16,7 @@ IMPROVEMENTS
 FIXES
 * Fixing paths using in-built library instead of string manipulation. See [#143](https://github.com/hashicorp/terraform-mcp-server/pull/143)
 * Explicitly setting destructive annotation to false. See [#143](https://github.com/hashicorp/terraform-mcp-server/pull/143)
+* Rename TFE_SKIP_TLS_VERIFY environment variable and fix GitHub Action security issue. See [#164](https://github.com/hashicorp/terraform-mcp-server/pull/164)
 
 ## 0.2.3 (Aug 13, 2025)
 
