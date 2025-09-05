@@ -14,9 +14,14 @@ IMPROVEMENTS
 * Updating `mark3labs/mcp-go` and `hashicorp/tfe-go` versions. See [#121](https://github.com/hashicorp/terraform-mcp-server/pull/121)
 
 FIXES
+
 * Fixing paths using in-built library instead of string manipulation. See [#143](https://github.com/hashicorp/terraform-mcp-server/pull/143)
 * Explicitly setting destructive annotation to false. See [#143](https://github.com/hashicorp/terraform-mcp-server/pull/143)
+
+SECURITY
+
 * Rename TFE_SKIP_TLS_VERIFY environment variable and fix GitHub Action security issue. See [#164](https://github.com/hashicorp/terraform-mcp-server/pull/164)
+* Update go version from 1.24.6 to 1.24.7
 
 ## 0.2.3 (Aug 13, 2025)
 
