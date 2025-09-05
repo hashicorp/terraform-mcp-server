@@ -21,6 +21,6 @@ terraform {
 
 
 3. Run terraform init to initialize the workspace.
-1. Run terraform apply to start the first run for this workspace.
+4. Run terraform apply to start the first run for this workspace.
 
 For more details, see the [CLI workflow guide](https://developer.hashicorp.com/terraform/cloud-docs/run/cli).
