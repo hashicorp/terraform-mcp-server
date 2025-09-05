@@ -35,6 +35,9 @@ func ListWorkspaces(logger *log.Logger) server.ServerTool {
 			mcp.WithString("search_query",
 				mcp.Description("Optional search query to filter workspaces by name"),
 			),
+			mcp.WithString("project_id",
+				mcp.Description("Optional project ID to filter workspaces"),
+			),
 			mcp.WithString("tags",
 				mcp.Description("Optional comma-separated list of tags to filter workspaces"),
 			),
@@ -60,6 +63,7 @@ func searchTerraformWorkspacesHandler(ctx context.Context, request mcp.CallToolR
 	terraformOrgName = strings.TrimSpace(terraformOrgName)
 
 	// Get optional parameters
+	projectID := request.GetString("project_id", "")
 	searchQuery := request.GetString("search_query", "")
 	tagsStr := request.GetString("tags", "")
 	excludeTagsStr := request.GetString("exclude_tags", "")
@@ -94,6 +98,7 @@ func searchTerraformWorkspacesHandler(ctx context.Context, request mcp.CallToolR
 	}
 
 	workspaces, err := tfeClient.Workspaces.List(ctx, terraformOrgName, &tfe.WorkspaceListOptions{
+		ProjectID:    projectID,
 		Search:       searchQuery,
 		Tags:         strings.Join(tags, ","),
 		ExcludeTags:  strings.Join(excludeTags, ","),
