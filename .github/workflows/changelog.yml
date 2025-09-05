@@ -27,7 +27,7 @@ jobs:
     name: "Check Changelog Entry"
     runs-on: ubuntu-latest
     concurrency:
-      group: changelog-${{ github.head_ref }}
+      group: changelog-${{ github.event.number }}
       cancel-in-progress: true
 
     steps:
@@ -41,6 +41,8 @@ jobs:
 
       - name: "Check for changelog entry"
         uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
+        env:
+          CHANGELOG_CHANGES: ${{steps.changelog.outputs.changelog}}
         with:
           script: |
             async function createOrUpdateChangelogComment(commentDetails, deleteComment) {
@@ -90,7 +92,8 @@ jobs:
                 }
             }
             
-            const changelogChangesPresent = ${{steps.changelog.outputs.changelog}};
+            // Safely get the changelog output from environment variable
+            const changelogChangesPresent = process.env.CHANGELOG_CHANGES === 'true';
 
             const prAuthor = context.payload.pull_request.user.login;
             if (prAuthor === 'dependabot[bot]') {

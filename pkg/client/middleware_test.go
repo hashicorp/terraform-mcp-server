@@ -425,17 +425,17 @@ func TestTerraformContextMiddleware(t *testing.T) {
 				TerraformAddress: "https://query.terraform.io",
 				TerraformToken:   "query-token", // This should cause an error
 			},
-			envVars:      map[string]string{},
+			envVars:        map[string]string{},
 			expectedStatus: http.StatusBadRequest,
-			expectError:  true,
-			errorMessage: "Terraform token should not be provided in query parameters for security reasons, use the terraform_token header",
+			expectError:    true,
+			errorMessage:   "Terraform token should not be provided in query parameters for security reasons, use the terraform_token header",
 		},
 		{
 			name: "canonical header names are handled correctly",
 			headers: map[string]string{
-				"tfe_address":        "https://canonical.terraform.io", // lowercase
-				"TFE_TOKEN":          "canonical-token",                // uppercase
-				"Tfe_Skip_Verify":    "true",                           // mixed case
+				"tfe_address":         "https://canonical.terraform.io", // lowercase
+				"TFE_TOKEN":           "canonical-token",                // uppercase
+				"tfe_skip_tls_verify": "true",                           // mixed case
 			},
 			queryParams:    map[string]string{},
 			envVars:        map[string]string{},
@@ -457,7 +457,7 @@ func TestTerraformContextMiddleware(t *testing.T) {
 			envVars: map[string]string{
 				TerraformAddress:       "https://env.terraform.io", // Overridden by header
 				TerraformToken:         "env-token",                // Used since not in header/query
-				TerraformSkipTLSVerify: "false",                   // Overridden by query param
+				TerraformSkipTLSVerify: "false",                    // Overridden by query param
 			},
 			expectedStatus: http.StatusOK,
 			expectedContextVals: map[string]string{
@@ -485,7 +485,7 @@ func TestTerraformContextMiddleware(t *testing.T) {
 			mockHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				capturedContext = make(map[string]string)
 				ctx := r.Context()
-				
+
 				// Extract all terraform-related context values
 				for _, key := range []string{TerraformAddress, TerraformToken, TerraformSkipTLSVerify} {
 					if val := ctx.Value(contextKey(key)); val != nil {
@@ -496,7 +496,7 @@ func TestTerraformContextMiddleware(t *testing.T) {
 						capturedContext[key] = "" // Explicitly track nil/missing values as empty strings
 					}
 				}
-				
+
 				w.WriteHeader(http.StatusOK)
 				w.Write([]byte("success"))
 			})
@@ -507,12 +507,12 @@ func TestTerraformContextMiddleware(t *testing.T) {
 
 			// Create request with headers and query parameters
 			req := httptest.NewRequest("GET", "/mcp", nil)
-			
+
 			// Set headers
 			for key, value := range tt.headers {
 				req.Header.Set(key, value)
 			}
-			
+
 			// Set query parameters
 			q := req.URL.Query()
 			for key, value := range tt.queryParams {
@@ -549,7 +549,7 @@ func TestTerraformContextMiddleware_SecurityLogging(t *testing.T) {
 	// Create a custom logger that captures log output
 	logger := log.New()
 	logger.SetLevel(log.DebugLevel)
-	
+
 	// Create a mock handler
 	mockHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
@@ -561,10 +561,10 @@ func TestTerraformContextMiddleware_SecurityLogging(t *testing.T) {
 	t.Run("token provided via header is logged without exposing value", func(t *testing.T) {
 		req := httptest.NewRequest("GET", "/mcp", nil)
 		req.Header.Set(TerraformToken, "secret-token")
-		
+
 		rr := httptest.NewRecorder()
 		handler.ServeHTTP(rr, req)
-		
+
 		assert.Equal(t, http.StatusOK, rr.Code)
 		// Note: In a real test, you'd capture the log output and verify it contains
 		// "Terraform token provided via request context" but doesn't contain "secret-token"
@@ -573,10 +573,10 @@ func TestTerraformContextMiddleware_SecurityLogging(t *testing.T) {
 	t.Run("address provided via header is logged", func(t *testing.T) {
 		req := httptest.NewRequest("GET", "/mcp", nil)
 		req.Header.Set(TerraformAddress, "https://custom.terraform.io")
-		
+
 		rr := httptest.NewRecorder()
 		handler.ServeHTTP(rr, req)
-		
+
 		assert.Equal(t, http.StatusOK, rr.Code)
 		// Note: In a real test, you'd capture the log output and verify it contains
 		// "Terraform address configured via request context"
@@ -598,7 +598,7 @@ func TestTerraformContextMiddleware_EdgeCases(t *testing.T) {
 		assert.NotPanics(t, func() {
 			middleware := TerraformContextMiddleware(nil)
 			handler := middleware(mockHandler)
-			
+
 			req := httptest.NewRequest("GET", "/mcp", nil)
 			rr := httptest.NewRecorder()
 			handler.ServeHTTP(rr, req)
@@ -615,7 +615,7 @@ func TestTerraformContextMiddleware_EdgeCases(t *testing.T) {
 
 		// Create request with malformed query string
 		req := httptest.NewRequest("GET", "/mcp?%invalid", nil)
-		
+
 		rr := httptest.NewRecorder()
 		// This should not panic even with malformed query parameters
 		assert.NotPanics(t, func() {
@@ -636,13 +636,13 @@ func TestTerraformContextMiddleware_EdgeCases(t *testing.T) {
 
 		// Create a very long address value
 		longAddress := "https://" + strings.Repeat("a", 1000) + ".terraform.io"
-		
+
 		req := httptest.NewRequest("GET", "/mcp", nil)
 		req.Header.Set(TerraformAddress, longAddress)
-		
+
 		rr := httptest.NewRecorder()
 		handler.ServeHTTP(rr, req)
-		
+
 		assert.Equal(t, http.StatusOK, rr.Code)
 	})
 }
