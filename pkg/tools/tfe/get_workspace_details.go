@@ -105,6 +105,9 @@ func getWorkspaceDetailsForTools(ctx context.Context, toolType string, tfeClient
 		}
 
 		readme := defaultReadme
+		readme = strings.ReplaceAll(readme, "<<your-terraform-org>>", workspace.Organization.Name)
+		readme = strings.ReplaceAll(readme, "<<your-terraform-workspace>>", workspace.Name)
+
 		workspaceReadmeReader, err := tfeClient.Workspaces.Readme(ctx, workspace.ID)
 		if err == nil && workspaceReadmeReader != nil {
 			readmeBytes, err := io.ReadAll(workspaceReadmeReader)

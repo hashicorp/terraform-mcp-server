@@ -18,19 +18,19 @@ import (
 	"github.com/mark3labs/mcp-go/server"
 )
 
-// SearchWorkspaces creates a tool to search for Terraform workspaces.
-func SearchWorkspaces(logger *log.Logger) server.ServerTool {
+// ListWorkspaces creates a tool to list Terraform workspaces.
+func ListWorkspaces(logger *log.Logger) server.ServerTool {
 	return server.ServerTool{
-		Tool: mcp.NewTool("search_workspaces",
-			mcp.WithDescription(`This tool searches for Terraform workspaces in your Terraform Cloud/Enterprise organization. It will list all the workspaces if no search criteria are specified.`),
-			mcp.WithTitleAnnotation("Search for Terraform workspaces"),
+		Tool: mcp.NewTool("list_workspaces",
+			mcp.WithDescription(`Search and list Terraform workspaces within a specified organization. Returns all workspaces when no filters are applied, or filters results based on name patterns, tags, or search queries. Supports pagination for large result sets.`),
+			mcp.WithTitleAnnotation("List Terraform workspaces with queries"),
 			mcp.WithOpenWorldHintAnnotation(true),
 			mcp.WithReadOnlyHintAnnotation(true),
 			mcp.WithDestructiveHintAnnotation(false),
 			utils.WithPagination(),
 			mcp.WithString("terraform_org_name",
 				mcp.Required(),
-				mcp.Description("The Terraform Cloud/Enterprise organization name"),
+				mcp.Description("The Terraform organization name"),
 			),
 			mcp.WithString("search_query",
 				mcp.Description("Optional search query to filter workspaces by name"),

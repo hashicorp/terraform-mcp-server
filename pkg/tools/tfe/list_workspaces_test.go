@@ -51,18 +51,18 @@ func TestSearchWorkspaces(t *testing.T) {
 	logger.SetLevel(log.ErrorLevel) // Reduce noise in tests
 
 	t.Run("tool creation", func(t *testing.T) {
-		tool := SearchWorkspaces(logger)
-		
-		assert.Equal(t, "search_workspaces", tool.Tool.Name)
-		assert.Contains(t, tool.Tool.Description, "searches for Terraform workspaces")
+		tool := ListWorkspaces(logger)
+
+		assert.Equal(t, "list_workspaces", tool.Tool.Name)
+		assert.Contains(t, tool.Tool.Annotations.Title, "List Terraform workspaces with queries")
 		assert.NotNil(t, tool.Handler)
-		
+
 		// Check annotations
 		assert.NotNil(t, tool.Tool.Annotations.ReadOnlyHint)
 		assert.True(t, *tool.Tool.Annotations.ReadOnlyHint)
 		assert.NotNil(t, tool.Tool.Annotations.DestructiveHint)
 		assert.False(t, *tool.Tool.Annotations.DestructiveHint)
-		
+
 		// Check that terraform_org_name is in required parameters
 		assert.Contains(t, tool.Tool.InputSchema.Required, "terraform_org_name")
 	})
@@ -71,32 +71,32 @@ func TestSearchWorkspaces(t *testing.T) {
 		// Create mock workspaces
 		mockWorkspaces := []*tfe.Workspace{
 			{
-				ID:                "ws-123",
-				Name:              "test-workspace-1",
-				Description:       "Test workspace 1",
-				AutoApply:         false,
-				ExecutionMode:     "remote",
-				ResourceCount:     5,
-				Locked:            false,
-				TerraformVersion:  "1.5.0",
-				WorkingDirectory:  "/",
+				ID:               "ws-123",
+				Name:             "test-workspace-1",
+				Description:      "Test workspace 1",
+				AutoApply:        false,
+				ExecutionMode:    "remote",
+				ResourceCount:    5,
+				Locked:           false,
+				TerraformVersion: "1.5.0",
+				WorkingDirectory: "/",
 			},
 			{
-				ID:                "ws-456",
-				Name:              "test-workspace-2", 
-				Description:       "Test workspace 2",
-				AutoApply:         true,
-				ExecutionMode:     "local",
-				ResourceCount:     10,
-				Locked:            true,
-				TerraformVersion:  "1.4.0",
-				WorkingDirectory:  "/modules",
+				ID:               "ws-456",
+				Name:             "test-workspace-2",
+				Description:      "Test workspace 2",
+				AutoApply:        true,
+				ExecutionMode:    "local",
+				ResourceCount:    10,
+				Locked:           true,
+				TerraformVersion: "1.4.0",
+				WorkingDirectory: "/modules",
 			},
 		}
 
 		mockWorkspaceList := &tfe.WorkspaceList{
-			Items:       mockWorkspaces,
-			Pagination:  &tfe.Pagination{CurrentPage: 1, TotalCount: 2},
+			Items:      mockWorkspaces,
+			Pagination: &tfe.Pagination{CurrentPage: 1, TotalCount: 2},
 		}
 
 		// Verify the mock workspace list structure
@@ -153,23 +153,23 @@ func TestSearchWorkspaces(t *testing.T) {
 	t.Run("workspace info structure", func(t *testing.T) {
 		// Test the WorkspaceInfo structure used in the response
 		type WorkspaceInfo struct {
-			ID                string     `json:"id"`
-			Name              string     `json:"name"`
-			Description       string     `json:"description,omitempty"`
-			Environment       string     `json:"environment,omitempty"`
-			AutoApply         bool       `json:"auto_apply"`
-			TerraformVersion  string     `json:"terraform_version,omitempty"`
-			WorkingDirectory  string     `json:"working_directory,omitempty"`
-			Locked            bool       `json:"locked"`
-			ExecutionMode     string     `json:"execution_mode,omitempty"`
-			ResourceCount     int        `json:"resource_count"`
-			ApplyDurationAvg  int64      `json:"apply_duration_average,omitempty"`
-			PlanDurationAvg   int64      `json:"plan_duration_average,omitempty"`
-			PolicyCheckFails  int        `json:"policy_check_failures,omitempty"`
-			RunFailures       int        `json:"run_failures,omitempty"`
-			Tags              []*tfe.Tag `json:"tags,omitempty"`
-			CreatedAt         string     `json:"created_at,omitempty"`
-			UpdatedAt         string     `json:"updated_at,omitempty"`
+			ID               string     `json:"id"`
+			Name             string     `json:"name"`
+			Description      string     `json:"description,omitempty"`
+			Environment      string     `json:"environment,omitempty"`
+			AutoApply        bool       `json:"auto_apply"`
+			TerraformVersion string     `json:"terraform_version,omitempty"`
+			WorkingDirectory string     `json:"working_directory,omitempty"`
+			Locked           bool       `json:"locked"`
+			ExecutionMode    string     `json:"execution_mode,omitempty"`
+			ResourceCount    int        `json:"resource_count"`
+			ApplyDurationAvg int64      `json:"apply_duration_average,omitempty"`
+			PlanDurationAvg  int64      `json:"plan_duration_average,omitempty"`
+			PolicyCheckFails int        `json:"policy_check_failures,omitempty"`
+			RunFailures      int        `json:"run_failures,omitempty"`
+			Tags             []*tfe.Tag `json:"tags,omitempty"`
+			CreatedAt        string     `json:"created_at,omitempty"`
+			UpdatedAt        string     `json:"updated_at,omitempty"`
 		}
 
 		info := WorkspaceInfo{

@@ -10,10 +10,10 @@ Example code
 terraform { 
   cloud { 
     
-    organization = "tfc-integration-sandbox" 
+    organization = "<<your-terraform-org>>" 
 
     workspaces { 
-      name = "gcp-oidc-0x7a" 
+      name = "<<your-terraform-workspace>>" 
     } 
   } 
 }

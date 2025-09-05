@@ -102,8 +102,8 @@ func (r *DynamicToolRegistry) registerTFETools() {
 	r.mcpServer.AddTool(listTerraformProjectsTool.Tool, listTerraformProjectsTool.Handler)
 
 	// Workspace management tools
-	searchWorkspacesTool := r.createDynamicTFETool("search_workspaces", tfeTools.SearchWorkspaces)
-	r.mcpServer.AddTool(searchWorkspacesTool.Tool, searchWorkspacesTool.Handler)
+	ListWorkspacesTool := r.createDynamicTFETool("list_workspaces", tfeTools.ListWorkspaces)
+	r.mcpServer.AddTool(ListWorkspacesTool.Tool, ListWorkspacesTool.Handler)
 
 	getWorkspaceDetailsTool := r.createDynamicTFETool("get_workspace_details", tfeTools.GetWorkspaceDetails)
 	r.mcpServer.AddTool(getWorkspaceDetailsTool.Tool, getWorkspaceDetailsTool.Handler)
@@ -129,7 +129,7 @@ func (r *DynamicToolRegistry) registerTFETools() {
 	r.mcpServer.AddTool(searchPrivateModulesTool.Tool, searchPrivateModulesTool.Handler)
 
 	getPrivateModuleDetailsTool := r.createDynamicTFETool("get_private_module_details", tfeTools.GetPrivateModuleDetails)
-  r.mcpServer.AddTool(getPrivateModuleDetailsTool.Tool, getPrivateModuleDetailsTool.Handler)
+	r.mcpServer.AddTool(getPrivateModuleDetailsTool.Tool, getPrivateModuleDetailsTool.Handler)
 
 	r.tfeToolsRegistered = true
 }
