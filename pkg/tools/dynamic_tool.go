@@ -115,6 +115,19 @@ func (r *DynamicToolRegistry) registerTFETools() {
 	getPrivateModuleDetailsTool := r.createDynamicTFETool("get_private_module_details", tfeTools.GetPrivateModuleDetails)
 	r.mcpServer.AddTool(getPrivateModuleDetailsTool.Tool, getPrivateModuleDetailsTool.Handler)
 
+	// Terraform run tools
+	searchRunsTool := r.createDynamicTFETool("search_runs", tfeTools.SearchRuns)
+	r.mcpServer.AddTool(searchRunsTool.Tool, searchRunsTool.Handler)
+
+	createRunTool := r.createDynamicTFETool("create_run", tfeTools.CreateRun)
+	r.mcpServer.AddTool(createRunTool.Tool, createRunTool.Handler)
+
+	actionRunTool := r.createDynamicTFETool("action_run", tfeTools.ActionRun)
+	r.mcpServer.AddTool(actionRunTool.Tool, actionRunTool.Handler)
+
+	getRunDetailsTool := r.createDynamicTFETool("get_run_details", tfeTools.GetRunDetails)
+	r.mcpServer.AddTool(getRunDetailsTool.Tool, getRunDetailsTool.Handler)
+
 	r.tfeToolsRegistered = true
 }
 
