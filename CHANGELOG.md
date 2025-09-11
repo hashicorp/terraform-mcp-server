@@ -13,6 +13,7 @@ IMPROVEMENTS
 * Changes to tool names to be more consistent. See [#121](https://github.com/hashicorp/terraform-mcp-server/pull/121)
 * Implement pagination utility. See [#121](https://github.com/hashicorp/terraform-mcp-server/pull/121)
 * Updating `mark3labs/mcp-go` and `hashicorp/tfe-go` versions. See [#121](https://github.com/hashicorp/terraform-mcp-server/pull/121)
+* Implementing TLS for the http mode of the MCP server. See [#168](https://github.com/hashicorp/terraform-mcp-server/pull/168)
 
 FIXES
 

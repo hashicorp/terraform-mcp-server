@@ -47,6 +47,8 @@ Modern HTTP-based transport supporting both direct HTTP requests and Server-Sent
 | `MCP_SESSION_MODE` | Session mode: `stateful` or `stateless` | `stateful` |
 | `MCP_ALLOWED_ORIGINS` | Comma-separated list of allowed origins for CORS | `""` (empty) |
 | `MCP_CORS_MODE` | CORS mode: `strict`, `development`, or `disabled` | `strict` |
+| `MCP_TLS_CERT_FILE` | Path for certificate file for TLS (e.g. `/path/to/cert.pem`) | `""` (empty) |
+| `MCP_TLS_KEY_FILE` |  Path for key file for TLS (e.g. `/path/to/key.pem`)| `""` (empty) |
 
 ## Command Line Options
 
