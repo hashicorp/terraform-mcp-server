@@ -7,6 +7,7 @@ FEATURES
 * Implement dynamic tool registration. See [#121](https://github.com/hashicorp/terraform-mcp-server/pull/121)
 * Adding 2 new HCP TF/TFE tools for admins. List Terraform organizations & projects. See [#121](https://github.com/hashicorp/terraform-mcp-server/pull/121)
 * Adding 4 new HCP TF/TFE tools for private registry support. See [#142](https://github.com/hashicorp/terraform-mcp-server/pull/142)
+* Implemented rate limiting with the MCP server. See [#155](https://github.com/hashicorp/terraform-mcp-server/pull/155)
 
 IMPROVEMENTS
 
