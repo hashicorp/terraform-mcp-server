@@ -185,6 +185,12 @@ func streamableHTTPServerInit(ctx context.Context, hcServer *server.MCPServer, l
 		server.WithLogger(logger),
 	}
 
+	// Load TLS configuration
+	tlsConfig := client.GetTLSConfigFromEnv()
+	if tlsConfig != nil {
+		opts = append(opts, server.WithTLSCert(tlsConfig.CertFile, tlsConfig.KeyFile))
+	}
+
 	// Log the endpoint path being used
 	logger.Infof("Using endpoint path: %s", endpointPath)
 
