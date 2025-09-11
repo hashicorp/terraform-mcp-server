@@ -17,12 +17,12 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-// SearchRuns creates a tool to search for Terraform runs in a workspace.
-func SearchRuns(logger *log.Logger) server.ServerTool {
+// ListRuns creates a tool to list Terraform runs in a workspace.
+func ListRuns(logger *log.Logger) server.ServerTool {
 	return server.ServerTool{
-		Tool: mcp.NewTool("search_runs",
-			mcp.WithDescription(`Lists Terraform runs in a specific workspace with optional filtering.`),
-			mcp.WithTitleAnnotation("Search for Terraform runs"),
+		Tool: mcp.NewTool("list_runs",
+			mcp.WithDescription(`List or search Terraform runs in a specific workspace with optional filtering.`),
+			mcp.WithTitleAnnotation("List Terraform runs"),
 			mcp.WithReadOnlyHintAnnotation(true),
 			mcp.WithDestructiveHintAnnotation(false),
 			mcp.WithString("terraform_org_name",
@@ -71,12 +71,12 @@ func SearchRuns(logger *log.Logger) server.ServerTool {
 			utils.WithPagination(),
 		),
 		Handler: func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-			return searchRunsHandler(ctx, req, logger)
+			return listRunsHandler(ctx, req, logger)
 		},
 	}
 }
 
-func searchRunsHandler(ctx context.Context, request mcp.CallToolRequest, logger *log.Logger) (*mcp.CallToolResult, error) {
+func listRunsHandler(ctx context.Context, request mcp.CallToolRequest, logger *log.Logger) (*mcp.CallToolResult, error) {
 	terraformOrgName, err := request.RequireString("terraform_org_name")
 	if err != nil {
 		return nil, utils.LogAndReturnError(logger, "The 'terraform_org_name' parameter is required", err)
