@@ -45,6 +45,9 @@ func LoadRateLimitConfigFromEnv() RateLimitConfig {
 		if rps, burst := parseRateLimit(globalLimit); rps > 0 && burst > 0 {
 			config.GlobalLimit = rate.Limit(rps)
 			config.GlobalBurst = burst
+			log.Infof("Global rate limit set to %f rps with burst %d", rps, burst)
+		} else {
+			log.Warnf("Invalid MCP_RATE_LIMIT_GLOBAL format, using default %f rps with burst %d", config.GlobalLimit, config.GlobalBurst)
 		}
 	}
 
@@ -53,6 +56,9 @@ func LoadRateLimitConfigFromEnv() RateLimitConfig {
 		if rps, burst := parseRateLimit(sessionLimit); rps > 0 && burst > 0 {
 			config.PerSessionLimit = rate.Limit(rps)
 			config.PerSessionBurst = burst
+			log.Infof("Per-session rate limit set to %f rps with burst %d", rps, burst)
+		} else {
+			log.Warnf("Invalid MCP_RATE_LIMIT_SESSION format, using default %f rps with burst %d", config.PerSessionLimit, config.PerSessionBurst)
 		}
 	}
 
