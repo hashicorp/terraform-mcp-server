@@ -2,6 +2,7 @@
 
 FEATURES
 
+* Adding tools for working with workspaces in HCP Terraform and TFE.
 * Authentication for HCP Terraform & TFE and restructure the repo. See [#121](https://github.com/hashicorp/terraform-mcp-server/pull/121) See [#145](https://github.com/hashicorp/terraform-mcp-server/pull/145)
 * Implement dynamic tool registration. See [#121](https://github.com/hashicorp/terraform-mcp-server/pull/121)
 * Adding 2 new HCP TF/TFE tools for admins. List Terraform organizations & projects. See [#121](https://github.com/hashicorp/terraform-mcp-server/pull/121)
@@ -15,8 +16,14 @@ IMPROVEMENTS
 * Adding instructions to the server. See [#156](https://github.com/hashicorp/terraform-mcp-server/pull/156)
 
 FIXES
+
 * Fixing paths using in-built library instead of string manipulation. See [#143](https://github.com/hashicorp/terraform-mcp-server/pull/143)
 * Explicitly setting destructive annotation to false. See [#143](https://github.com/hashicorp/terraform-mcp-server/pull/143)
+
+SECURITY
+
+* Rename TFE_SKIP_TLS_VERIFY environment variable and fix GitHub Action security issue. See [#164](https://github.com/hashicorp/terraform-mcp-server/pull/164)
+* Update go version from 1.24.6 to 1.24.7
 
 ## 0.2.3 (Aug 13, 2025)
 
