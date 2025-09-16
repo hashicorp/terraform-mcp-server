@@ -22,9 +22,18 @@ func CreateWorkspaceTags(logger *log.Logger) server.ServerTool {
 	return server.ServerTool{
 		Tool: mcp.NewTool("create_workspace_tags",
 			mcp.WithDescription("Add tags to a Terraform workspace."),
-			mcp.WithString("terraform_org_name", mcp.Required(), mcp.Description("Organization name")),
-			mcp.WithString("workspace_name", mcp.Required(), mcp.Description("Workspace name")),
-			mcp.WithString("tags", mcp.Required(), mcp.Description("Comma-separated list of tag names to add")),
+			mcp.WithString("terraform_org_name",
+				mcp.Required(),
+				mcp.Description("Organization name"),
+			),
+			mcp.WithString("workspace_name",
+				mcp.Required(),
+				mcp.Description("Workspace name"),
+			),
+			mcp.WithString("tags",
+				mcp.Required(),
+				mcp.Description("Comma-separated list of tag names to add"),
+			),
 		),
 		Handler: func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			orgName, err := request.RequireString("terraform_org_name")
@@ -80,9 +89,20 @@ func UpdateWorkspaceTags(logger *log.Logger) server.ServerTool {
 	return server.ServerTool{
 		Tool: mcp.NewTool("update_workspace_tags",
 			mcp.WithDescription("Replace all tags on a Terraform workspace."),
-			mcp.WithString("terraform_org_name", mcp.Required(), mcp.Description("Organization name")),
-			mcp.WithString("workspace_name", mcp.Required(), mcp.Description("Workspace name")),
-			mcp.WithString("tags", mcp.Required(), mcp.Description("Comma-separated list of tag names to set")),
+			mcp.WithReadOnlyHintAnnotation(false),
+			mcp.WithDestructiveHintAnnotation(true),
+			mcp.WithString("terraform_org_name",
+				mcp.Required(),
+				mcp.Description("Organization name"),
+			),
+			mcp.WithString("workspace_name",
+				mcp.Required(),
+				mcp.Description("Workspace name"),
+			),
+			mcp.WithString("tags",
+				mcp.Required(),
+				mcp.Description("Comma-separated list of tag names to set"),
+			),
 		),
 		Handler: func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			orgName, err := request.RequireString("terraform_org_name")
@@ -154,8 +174,16 @@ func ReadWorkspaceTags(logger *log.Logger) server.ServerTool {
 	return server.ServerTool{
 		Tool: mcp.NewTool("read_workspace_tags",
 			mcp.WithDescription("Read all tags from a Terraform workspace."),
-			mcp.WithString("terraform_org_name", mcp.Required(), mcp.Description("Organization name")),
-			mcp.WithString("workspace_name", mcp.Required(), mcp.Description("Workspace name")),
+			mcp.WithReadOnlyHintAnnotation(true),
+			mcp.WithDestructiveHintAnnotation(false),
+			mcp.WithString("terraform_org_name",
+				mcp.Required(),
+				mcp.Description("Organization name"),
+			),
+			mcp.WithString("workspace_name",
+				mcp.Required(),
+				mcp.Description("Workspace name"),
+			),
 		),
 		Handler: func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			orgName, err := request.RequireString("terraform_org_name")
@@ -172,7 +200,9 @@ func ReadWorkspaceTags(logger *log.Logger) server.ServerTool {
 				return nil, utils.LogAndReturnError(logger, "getting Terraform client", err)
 			}
 
-			workspace, err := tfeClient.Workspaces.Read(ctx, orgName, workspaceName)
+			workspace, err := tfeClient.Workspaces.ReadWithOptions(ctx, orgName, workspaceName, &tfe.WorkspaceReadOptions{
+				Include: []tfe.WSIncludeOpt{"tags"},
+			})
 			if err != nil {
 				return nil, utils.LogAndReturnError(logger, "reading workspace", err)
 			}
@@ -196,9 +226,20 @@ func DeleteWorkspaceTags(logger *log.Logger) server.ServerTool {
 	return server.ServerTool{
 		Tool: mcp.NewTool("delete_workspace_tags",
 			mcp.WithDescription("Remove tags from a Terraform workspace."),
-			mcp.WithString("terraform_org_name", mcp.Required(), mcp.Description("Organization name")),
-			mcp.WithString("workspace_name", mcp.Required(), mcp.Description("Workspace name")),
-			mcp.WithString("tags", mcp.Required(), mcp.Description("Comma-separated list of tag names to remove")),
+			mcp.WithReadOnlyHintAnnotation(false),
+			mcp.WithDestructiveHintAnnotation(true),
+			mcp.WithString("terraform_org_name",
+				mcp.Required(),
+				mcp.Description("Organization name"),
+			),
+			mcp.WithString("workspace_name",
+				mcp.Required(),
+				mcp.Description("Workspace name"),
+			),
+			mcp.WithString("tags",
+				mcp.Required(),
+				mcp.Description("Comma-separated list of tag names to remove"),
+			),
 		),
 		Handler: func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			orgName, err := request.RequireString("terraform_org_name")
