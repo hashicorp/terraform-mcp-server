@@ -17,7 +17,7 @@ import (
 const (
 	TerraformAddress        = "TFE_ADDRESS"
 	TerraformToken          = "TFE_TOKEN"
-	TerraformSkipTLSVerify  = "TFE_SKIP_VERIFY"
+	TerraformSkipTLSVerify  = "TFE_SKIP_TLS_VERIFY"
 	DefaultTerraformAddress = "https://app.terraform.io"
 )
 
