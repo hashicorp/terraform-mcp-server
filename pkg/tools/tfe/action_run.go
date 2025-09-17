@@ -55,7 +55,7 @@ func actionRunHandler(ctx context.Context, request mcp.CallToolRequest, logger *
 		return nil, utils.LogAndReturnError(logger, "The 'run_id' parameter is required", err)
 	}
 
-	comment := request.GetString("comment", "run via Terraform MCP Server")
+	comment := request.GetString("comment", "Triggered via Terraform MCP Server")
 
 	tfeClient, err := client.GetTfeClientFromContext(ctx, logger)
 	if err != nil {

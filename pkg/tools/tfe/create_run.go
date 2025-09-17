@@ -35,7 +35,7 @@ func CreateRun(logger *log.Logger) server.ServerTool {
 			),
 			mcp.WithString("run_type",
 				mcp.Description("A run type for the run"),
-				mcp.Enum("plan_and_apply", "refresh_state", "plan_only", "allow_empty_apply", "auto_approve"),
+				mcp.Enum("plan_and_apply", "refresh_state", "plan_only", "allow_empty_apply", "auto_approve", "is_destroy"),
 				mcp.DefaultString("plan_and_apply"),
 			),
 			mcp.WithString("message",
@@ -62,7 +62,7 @@ func createRunHandler(ctx context.Context, request mcp.CallToolRequest, logger *
 	workspaceName = strings.TrimSpace(workspaceName)
 
 	runType := request.GetString("run_type", "plan_and_apply")
-	message := request.GetString("message", "run via Terraform MCP Server")
+	message := request.GetString("message", "Triggered via Terraform MCP Server")
 
 	tfeClient, err := client.GetTfeClientFromContext(ctx, logger)
 	if err != nil {
@@ -88,6 +88,8 @@ func createRunHandler(ctx context.Context, request mcp.CallToolRequest, logger *
 		options.AllowEmptyApply = tfe.Bool(true)
 	case "auto_approve":
 		options.AutoApply = tfe.Bool(true)
+	case "is_destroy":
+		options.IsDestroy = tfe.Bool(true)
 	}
 
 	if message != "" {
