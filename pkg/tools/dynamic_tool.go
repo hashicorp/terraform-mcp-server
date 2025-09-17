@@ -144,6 +144,58 @@ func (r *DynamicToolRegistry) registerTFETools() {
 	getRunDetailsTool := r.createDynamicTFETool("get_run_details", tfeTools.GetRunDetails)
 	r.mcpServer.AddTool(getRunDetailsTool.Tool, getRunDetailsTool.Handler)
 
+	// Variable tools
+	listWorkspaceVariablesTool := r.createDynamicTFETool("list_workspace_variables", tfeTools.ListWorkspaceVariables)
+	r.mcpServer.AddTool(listWorkspaceVariablesTool.Tool, listWorkspaceVariablesTool.Handler)
+
+	createWorkspaceVariableTool := r.createDynamicTFETool("create_workspace_variable", tfeTools.CreateWorkspaceVariable)
+	r.mcpServer.AddTool(createWorkspaceVariableTool.Tool, createWorkspaceVariableTool.Handler)
+
+	updateWorkspaceVariableTool := r.createDynamicTFETool("update_workspace_variable", tfeTools.UpdateWorkspaceVariable)
+	r.mcpServer.AddTool(updateWorkspaceVariableTool.Tool, updateWorkspaceVariableTool.Handler)
+
+	deleteWorkspaceVariableTool := r.createDynamicTFETool("delete_workspace_variable", tfeTools.DeleteWorkspaceVariable)
+	r.mcpServer.AddTool(deleteWorkspaceVariableTool.Tool, deleteWorkspaceVariableTool.Handler)
+
+	// Variable in variable set tools
+	createVariableInVariableSet := r.createDynamicTFETool("create_variable_in_variable_set", tfeTools.CreateVariableInVariableSet)
+	r.mcpServer.AddTool(createVariableInVariableSet.Tool, createVariableInVariableSet.Handler)
+
+	updateVariableInVariableSet := r.createDynamicTFETool("update_variable_in_variable_set", tfeTools.UpdateVariableInVariableSet)
+	r.mcpServer.AddTool(updateVariableInVariableSet.Tool, updateVariableInVariableSet.Handler)
+
+	deleteVariableInVariableSet := r.createDynamicTFETool("delete_variable_in_variable_set", tfeTools.DeleteVariableInVariableSet)
+	r.mcpServer.AddTool(deleteVariableInVariableSet.Tool, deleteVariableInVariableSet.Handler)
+
+	// Variable set tools
+	listVariableSetsTool := r.createDynamicTFETool("list_variable_sets", tfeTools.ListVariableSets)
+	r.mcpServer.AddTool(listVariableSetsTool.Tool, listVariableSetsTool.Handler)
+
+	getVariableSetDetailsTool := r.createDynamicTFETool("get_variable_set_details", tfeTools.GetVariableSetDetails)
+	r.mcpServer.AddTool(getVariableSetDetailsTool.Tool, getVariableSetDetailsTool.Handler)
+
+	createVariableSetTool := r.createDynamicTFETool("create_variable_set", tfeTools.CreateVariableSet)
+	r.mcpServer.AddTool(createVariableSetTool.Tool, createVariableSetTool.Handler)
+
+	updateVariableSetTool := r.createDynamicTFETool("update_variable_set", tfeTools.UpdateVariableSet)
+	r.mcpServer.AddTool(updateVariableSetTool.Tool, updateVariableSetTool.Handler)
+
+	deleteVariableSetTool := r.createDynamicTFETool("delete_variable_set", tfeTools.DeleteVariableSet)
+	r.mcpServer.AddTool(deleteVariableSetTool.Tool, deleteVariableSetTool.Handler)
+
+	// Variable set attachment tools
+	attachVariableSetToWorkspaces := r.createDynamicTFETool("attach_variable_set_to_workspace", tfeTools.AttachVariableSetToWorkspaces)
+	r.mcpServer.AddTool(attachVariableSetToWorkspaces.Tool, attachVariableSetToWorkspaces.Handler)
+
+	detachVariableSetFromWorkspaces := r.createDynamicTFETool("detach_variable_set_from_workspaces", tfeTools.DetachVariableSetFromWorkspaces)
+	r.mcpServer.AddTool(detachVariableSetFromWorkspaces.Tool, detachVariableSetFromWorkspaces.Handler)
+
+	attachVariableSetToProjects := r.createDynamicTFETool("attach_variable_set_to_projects", tfeTools.AttachVariableSetToProjects)
+	r.mcpServer.AddTool(attachVariableSetToProjects.Tool, attachVariableSetToProjects.Handler)
+
+	detachVariableSetFromProjects := r.createDynamicTFETool("detach_variable_set_from_projects", tfeTools.DetachVariableSetFromProjects)
+	r.mcpServer.AddTool(detachVariableSetFromProjects.Tool, detachVariableSetFromProjects.Handler)
+
 	r.tfeToolsRegistered = true
 }
 

@@ -356,11 +356,11 @@ func UpdateVariableInVariableSet(logger *log.Logger) server.ServerTool {
 	}
 }
 
-// DeleteVariableFromVariableSet creates a tool to delete a variable from a variable set.
-func DeleteVariableFromVariableSet(logger *log.Logger) server.ServerTool {
+// DeleteVariableInVariableSet creates a tool to delete a variable from a variable set.
+func DeleteVariableInVariableSet(logger *log.Logger) server.ServerTool {
 	return server.ServerTool{
-		Tool: mcp.NewTool("delete_variable_from_variable_set",
-			mcp.WithDescription("Delete a variable from a variable set."),
+		Tool: mcp.NewTool("delete_variable_in_variable_set",
+			mcp.WithDescription("Delete a variable in a variable set."),
 			mcp.WithString("variable_set_id", mcp.Required(), mcp.Description("Variable set ID")),
 			mcp.WithString("variable_id", mcp.Required(), mcp.Description("Variable ID to delete")),
 		),

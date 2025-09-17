@@ -124,10 +124,10 @@ func TestDeleteVariableFromVariableSet(t *testing.T) {
 	logger.SetLevel(log.ErrorLevel)
 
 	t.Run("tool creation", func(t *testing.T) {
-		tool := DeleteVariableFromVariableSet(logger)
+		tool := DeleteVariableInVariableSet(logger)
 
-		assert.Equal(t, "delete_variable_from_variable_set", tool.Tool.Name)
-		assert.Contains(t, tool.Tool.Description, "Delete a variable from a variable set")
+		assert.Equal(t, "delete_variable_in_variable_set", tool.Tool.Name)
+		assert.Contains(t, tool.Tool.Description, "Delete a variable in a variable set")
 		assert.NotNil(t, tool.Handler)
 
 		assert.Contains(t, tool.Tool.InputSchema.Required, "variable_set_id")
