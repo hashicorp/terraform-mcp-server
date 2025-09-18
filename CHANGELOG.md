@@ -7,6 +7,7 @@ FEATURES
 * Implement dynamic tool registration. See [#121](https://github.com/hashicorp/terraform-mcp-server/pull/121)
 * Adding 2 new HCP TF/TFE tools for admins. List Terraform organizations & projects. See [#121](https://github.com/hashicorp/terraform-mcp-server/pull/121)
 * Adding 4 new HCP TF/TFE tools for private registry support. See [#142](https://github.com/hashicorp/terraform-mcp-server/pull/142)
+* Adding 4 new HCP TF/TFE tools for creating Terraform runs. See [#159](https://github.com/hashicorp/terraform-mcp-server/pull/159)
 
 IMPROVEMENTS
 
@@ -14,6 +15,7 @@ IMPROVEMENTS
 * Implement pagination utility. See [#121](https://github.com/hashicorp/terraform-mcp-server/pull/121)
 * Updating `mark3labs/mcp-go` and `hashicorp/tfe-go` versions. See [#121](https://github.com/hashicorp/terraform-mcp-server/pull/121)
 * Implementing TLS for the http mode of the MCP server. See [#168](https://github.com/hashicorp/terraform-mcp-server/pull/168)
+* Implemented rate limiting with the MCP server. See [#155](https://github.com/hashicorp/terraform-mcp-server/pull/155)
 
 FIXES
 
