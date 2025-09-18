@@ -137,6 +137,14 @@ Read more about using MCP server in Amazon Q from the [documentation](https://do
 }
 ```
 
+### Usage with Claude Code
+
+More about using and adding MCP server tools in Claude Code [user documentation](https://docs.claude.com/en/docs/claude-code/mcp)
+
+```sh
+claude mcp add terraform -s user -t stdio -- docker run -i --rm hashicorp/terraform-mcp-server
+```
+
 ## Tool Configuration
 
 ### Available Toolsets
