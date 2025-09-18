@@ -94,6 +94,7 @@ func startHTTPContainerWithCORS(t *testing.T, port, mode, origins string) string
 		"-e", "TRANSPORT_MODE=streamable-http",
 		"-e", "TRANSPORT_HOST=0.0.0.0",
 		"-e", "MCP_SESSION_MODE=stateful",
+		"-e", "MCP_RATE_LIMIT_GLOBAL=50:100",
 		"-e", fmt.Sprintf("MCP_CORS_MODE=%s", mode),
 		"-e", fmt.Sprintf("MCP_ALLOWED_ORIGINS=%s", origins),
 		"-p", portMapping,

@@ -143,6 +143,19 @@ func (r *DynamicToolRegistry) registerTFETools() {
 
 	deleteWorkspaceTagsTool := r.createDynamicTFETool("delete_workspace_tags", tfeTools.DeleteWorkspaceTags)
 	r.mcpServer.AddTool(deleteWorkspaceTagsTool.Tool, deleteWorkspaceTagsTool.Handler)
+  
+	// Terraform run tools
+	listRunsTool := r.createDynamicTFETool("list_runs", tfeTools.ListRuns)
+	r.mcpServer.AddTool(listRunsTool.Tool, listRunsTool.Handler)
+
+	createRunTool := r.createDynamicTFETool("create_run", tfeTools.CreateRun)
+	r.mcpServer.AddTool(createRunTool.Tool, createRunTool.Handler)
+
+	actionRunTool := r.createDynamicTFETool("action_run", tfeTools.ActionRun)
+	r.mcpServer.AddTool(actionRunTool.Tool, actionRunTool.Handler)
+
+	getRunDetailsTool := r.createDynamicTFETool("get_run_details", tfeTools.GetRunDetails)
+	r.mcpServer.AddTool(getRunDetailsTool.Tool, getRunDetailsTool.Handler)
 
 	r.tfeToolsRegistered = true
 }

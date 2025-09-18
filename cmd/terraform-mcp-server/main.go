@@ -41,10 +41,15 @@ func runStdioServer(logger *log.Logger) error {
 }
 
 func NewServer(version string, logger *log.Logger, opts ...server.ServerOption) *server.MCPServer {
+	// Create rate limiting middleware with environment-based configuration
+	rateLimitConfig := client.LoadRateLimitConfigFromEnv()
+	rateLimitMiddleware := client.NewRateLimitMiddleware(rateLimitConfig, logger)
+
 	// Add default options
 	defaultOpts := []server.ServerOption{
 		server.WithToolCapabilities(true),
 		server.WithResourceCapabilities(true, true),
+		server.WithToolHandlerMiddleware(rateLimitMiddleware.Middleware()),
 	}
 	opts = append(defaultOpts, opts...)
 
