@@ -10,9 +10,6 @@ automation and interaction capabilities for Infrastructure as Code (IaC) develop
 - **Terraform Registry Integration**: Direct integration with public Terraform Registry APIs for providers, modules, and policies
 - **HCP Terraform & Terraform Enterprise Support**: Full workspace management, organization/project listing, and private registry access
 - **Workspace Operations**: Create, update, delete workspaces with support for variables, tags, and run management
-- **Authentication & Security**: Built-in authentication for HCP Terraform/TFE with configurable CORS and rate limiting
-- **Dynamic Tool Registration**: Intelligent tool discovery and registration based on available services
-- **Container Ready**: Docker support with secure base images for easy deployment
 
 > **Security Note:** At this stage, the MCP server is intended for local use only. If using the StreamableHTTP transport, always configure the MCP_ALLOWED_ORIGINS environment variable to restrict access to trusted origins only. This helps prevent DNS rebinding attacks and other cross-origin vulnerabilities.
 
@@ -52,21 +49,6 @@ terraform-mcp-server streamable-http [--transport-port 8080] [--transport-host 1
 ```
 
 ## Installation
-
-<table>
-  <tr>
-    <td>
-      <a href="https://vscode.dev/redirect?url=vscode%3Amcp%2Finstall%3F%7B%22name%22%3A%22terraform%22%2C%22command%22%3A%22docker%22%2C%22args%22%3A%5B%22run%22%2C%22-i%22%2C%22--rm%22%2C%22hashicorp%2Fterraform-mcp-server%22%5D%7D">
-        <img alt="Install in VS Code (docker)" src="https://img.shields.io/badge/VS_Code-Install-0098FF?style=flat-square&logoColor=ffffff)">
-      </a>
-    </td>
-    <td>
-      <a href="cursor://anysphere.cursor-deeplink/mcp/install?name=terraform&config=eyJjb21tYW5kIjoiZG9ja2VyIHJ1biAtaSAtLXJtIGhhc2hpY29ycC90ZXJyYWZvcm0tbWNwLXNlcnZlcjowLjIuMyJ9">
-        <img alt="Add to Cursor (docker)" src="https://img.shields.io/badge/Cursor-Install-0098FF?style=flat-square&color=888888">
-      </a>
-    </td>
-  </tr>
-</table>
 
 ### Usage with Visual Studio Code
 
@@ -206,22 +188,50 @@ Optionally, you can add a similar example (i.e. without the mcp key) to a file c
 
 Add this to your Cursor config (`~/.cursor/mcp.json`) or via Settings → Cursor Settings → MCP:
 
+<table>
+<tr><th>Version 0.3.0+ or greater</th><th>Version 0.2.3 or lower</th></tr>
+<tr valign=top>
+<td>
+
 ```json
 {
-  "mcpServers": {
+  "servers": {
     "terraform": {
       "command": "docker",
       "args": [
         "run",
         "-i",
         "--rm",
-        "hashicorp/terraform-mcp-server"
+        "-e", "<<PASTE_TFE_HOSTNAME_HERE>>",
+        "-e", "<<PASTE_TFE_TOKEN_HERE>>",
+        "hashicorp/terraform-mcp-server:0.3.0"
       ]
     }
   }
 }
 ```
 
+</td>
+<td>
+
+```json
+{
+  "servers": {
+    "terraform": {
+      "command": "docker",
+      "args": [
+        "run",
+        "-i",
+        "--rm",
+        "hashicorp/terraform-mcp-server:0.2.3"
+      ]
+    }
+  }
+}
+```
+</td>
+</tr>
+</table>
 
 <a href="cursor://anysphere.cursor-deeplink/mcp/install?name=terraform&config=eyJjb21tYW5kIjoiZG9ja2VyIiwiYXJncyI6WyJydW4iLCItaSIsIi0tcm0iLCJoYXNoaWNvcnAvdGVycmFmb3JtLW1jcC1zZXJ2ZXIiXX0%3D">
   <img alt="Add terraform MCP server to Cursor" src="https://cursor.com/deeplink/mcp-install-dark.png" height="48" />
@@ -298,14 +308,6 @@ docker run -p 8080:8080 --rm -e TRANSPORT_MODE=streamable-http -e TRANSPORT_HOST
 claude mcp add --transport http terraform http://localhost:8080/mcp
 ```
 
-## Available Tools
-
-[Check out available tools here :link:](https://developer.hashicorp.com/terraform/docs/tools/mcp-server/reference#available-tools)
-
-## Available Resources
-
-[Check out available resources here :link:](https://developer.hashicorp.com/terraform/docs/tools/mcp-server/reference#available-tools)
-
 ## Install from source
 
 Use the latest release version:
@@ -349,8 +351,8 @@ go install github.com/hashicorp/terraform-mcp-server/cmd/terraform-mcp-server@ma
   "mcp": {
     "servers": {
       "terraform": {
-        "command": "/path/to/terraform-mcp-server",
-        "args": ["stdio"]
+        "type": "stdio",
+        "command": "/path/to/terraform-mcp-server"
       }
     }
   }
@@ -411,6 +413,14 @@ curl http://localhost:8080/health
   }
 }
 ```
+
+## Available Tools
+
+[Check out available tools here :link:](https://developer.hashicorp.com/terraform/docs/tools/mcp-server/reference#available-tools)
+
+## Available Resources
+
+[Check out available resources here :link:](https://developer.hashicorp.com/terraform/docs/tools/mcp-server/reference#available-tools)
 
 ## Transport Support
 
