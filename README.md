@@ -30,6 +30,9 @@ automation and interaction capabilities for Infrastructure as Code (IaC) develop
 
 | Variable | Description | Default |
 |----------|-------------|---------|
+| `TFE_ADDRESS` | HCP Terraform or Terraform Enterprise address | `"https://app.terraform.io"` |
+| `TFE_TOKEN` | Terraform Enterprise API token | `""` (empty) |
+| `TFE_SKIP_TLS_VERIFY` | Skip HCP Terraform or Terraform Enterprise TLS verification | `false` |
 | `TRANSPORT_MODE` | Set to `streamable-http` to enable HTTP transport (legacy `http` value still supported) | `stdio` |
 | `TRANSPORT_HOST` | Host to bind the HTTP server | `127.0.0.1` |
 | `TRANSPORT_PORT` | HTTP server port | `8080` |
@@ -234,10 +237,8 @@ Add this to your Cursor config (`~/.cursor/mcp.json`) or via Settings → Cursor
 </table>
 
 <a href="cursor://anysphere.cursor-deeplink/mcp/install?name=terraform&config=eyJjb21tYW5kIjoiZG9ja2VyIiwiYXJncyI6WyJydW4iLCItaSIsIi0tcm0iLCJoYXNoaWNvcnAvdGVycmFmb3JtLW1jcC1zZXJ2ZXIiXX0%3D">
-  <img alt="Add terraform MCP server to Cursor" src="https://cursor.com/deeplink/mcp-install-dark.png" height="48" />
+  <img alt="Add terraform MCP server to Cursor" src="https://cursor.com/deeplink/mcp-install-dark.png" height="32" />
 </a>
-
-[Install Terraform MCP server in Cursor](cursor://anysphere.cursor-deeplink/mcp/install?name=terraform&config=eyJjb21tYW5kIjoiZG9ja2VyIiwiYXJncyI6WyJydW4iLCItaSIsIi0tcm0iLCJoYXNoaWNvcnAvdGVycmFmb3JtLW1jcC1zZXJ2ZXIiXX0%3D)
 
 ### Usage with Claude Desktop / Amazon Q Developer / Amazon Q CLI
 
