@@ -30,7 +30,7 @@ automation and interaction capabilities for Infrastructure as Code (IaC) develop
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `TFE_ADDRESS` | HCP Terraform or Terraform Enterprise address | `"https://app.terraform.io"` |
+| `TFE_ADDRESS` | HCP Terraform or TFE address | `"https://app.terraform.io"` |
 | `TFE_TOKEN` | Terraform Enterprise API token | `""` (empty) |
 | `TFE_SKIP_TLS_VERIFY` | Skip HCP Terraform or Terraform Enterprise TLS verification | `false` |
 | `TRANSPORT_MODE` | Set to `streamable-http` to enable HTTP transport (legacy `http` value still supported) | `stdio` |
