@@ -68,7 +68,7 @@ terraform-mcp-server streamable-http [--transport-port 8080] [--transport-host 1
   </tr>
 </table>
 
-### Usage with VS Code
+### Usage with Visual Studio Code
 
 Add the following JSON block to your User Settings (JSON) file in VS Code. You can do this by pressing `Ctrl + Shift + P` and typing `Preferences: Open User Settings (JSON)`. 
 
