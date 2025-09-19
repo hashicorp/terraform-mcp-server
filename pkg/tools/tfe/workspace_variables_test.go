@@ -60,20 +60,3 @@ func TestUpdateWorkspaceVariable(t *testing.T) {
 		assert.Contains(t, tool.Tool.InputSchema.Required, "variable_id")
 	})
 }
-
-func TestDeleteWorkspaceVariable(t *testing.T) {
-	logger := log.New()
-	logger.SetLevel(log.ErrorLevel)
-
-	t.Run("tool creation", func(t *testing.T) {
-		tool := DeleteWorkspaceVariable(logger)
-
-		assert.Equal(t, "delete_workspace_variable", tool.Tool.Name)
-		assert.Contains(t, tool.Tool.Description, "Delete a variable from a Terraform workspace")
-		assert.NotNil(t, tool.Handler)
-
-		assert.Contains(t, tool.Tool.InputSchema.Required, "terraform_org_name")
-		assert.Contains(t, tool.Tool.InputSchema.Required, "workspace_name")
-		assert.Contains(t, tool.Tool.InputSchema.Required, "variable_id")
-	})
-}

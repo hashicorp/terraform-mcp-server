@@ -4,11 +4,12 @@
 package tools
 
 import (
+	"bytes"
 	"context"
 	"fmt"
-	"strings"
 
 	"github.com/hashicorp/go-tfe"
+	"github.com/hashicorp/jsonapi"
 	"github.com/hashicorp/terraform-mcp-server/pkg/client"
 	"github.com/hashicorp/terraform-mcp-server/pkg/utils"
 	log "github.com/sirupsen/logrus"
@@ -24,7 +25,7 @@ func ListWorkspaceVariables(logger *log.Logger) server.ServerTool {
 			mcp.WithDescription("List all variables in a Terraform workspace. Returns all variables if query is empty."),
 			mcp.WithString("terraform_org_name", mcp.Required(), mcp.Description("Organization name")),
 			mcp.WithString("workspace_name", mcp.Required(), mcp.Description("Workspace name")),
-			mcp.WithString("query", mcp.Description("Optional filter query for variable names")),
+			utils.WithPagination(),
 		),
 		Handler: func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			orgName, err := request.RequireString("terraform_org_name")
@@ -35,11 +36,15 @@ func ListWorkspaceVariables(logger *log.Logger) server.ServerTool {
 			if err != nil {
 				return nil, utils.LogAndReturnError(logger, "workspace_name is required", err)
 			}
-			query := request.GetString("query", "")
 
 			tfeClient, err := client.GetTfeClientFromContext(ctx, logger)
 			if err != nil {
 				return nil, utils.LogAndReturnError(logger, "getting Terraform client", err)
+			}
+
+			pagination, err := utils.OptionalPaginationParams(request)
+			if err != nil {
+				return mcp.NewToolResultError(err.Error()), nil
 			}
 
 			workspace, err := tfeClient.Workspaces.Read(ctx, orgName, workspaceName)
@@ -47,21 +52,25 @@ func ListWorkspaceVariables(logger *log.Logger) server.ServerTool {
 				return nil, utils.LogAndReturnError(logger, "reading workspace", err)
 			}
 
-			vars, err := tfeClient.Variables.List(ctx, workspace.ID, &tfe.VariableListOptions{})
+			vars, err := tfeClient.Variables.List(ctx, workspace.ID, &tfe.VariableListOptions{
+				ListOptions: tfe.ListOptions{
+					PageNumber: pagination.Page,
+					PageSize:   pagination.PageSize,
+				},
+			})
 			if err != nil {
 				return nil, utils.LogAndReturnError(logger, "listing variables", err)
 			}
 
-			var filteredVars []*tfe.Variable
-			for _, v := range vars.Items {
-				if query == "" || strings.Contains(strings.ToLower(v.Key), strings.ToLower(query)) {
-					filteredVars = append(filteredVars, v)
-				}
+			buf := bytes.NewBuffer(nil)
+			err = jsonapi.MarshalPayload(buf, vars.Items)
+			if err != nil {
+				return nil, utils.LogAndReturnError(logger, "marshalling variables to JSON", err)
 			}
 
 			return &mcp.CallToolResult{
 				Content: []mcp.Content{
-					mcp.NewTextContent(fmt.Sprintf("Found %d variables", len(filteredVars))),
+					mcp.NewTextContent(buf.String()),
 				},
 			}, nil
 		},
@@ -77,10 +86,14 @@ func CreateWorkspaceVariable(logger *log.Logger) server.ServerTool {
 			mcp.WithString("workspace_name", mcp.Required(), mcp.Description("Workspace name")),
 			mcp.WithString("key", mcp.Required(), mcp.Description("Variable key/name")),
 			mcp.WithString("value", mcp.Required(), mcp.Description("Variable value")),
-			mcp.WithString("category", mcp.Description("Variable category: terraform or env")),
-			mcp.WithString("sensitive", mcp.Description("Whether variable is sensitive: true or false")),
-			mcp.WithString("hcl", mcp.Description("Whether variable is HCL: true or false")),
-			mcp.WithString("description", mcp.Description("Variable description")),
+			mcp.WithString("description", mcp.Description("Variable description"), mcp.DefaultString("")),
+			mcp.WithString("category",
+				mcp.Description("Variable category: terraform or env"),
+				mcp.Enum("terraform", "env"),
+				mcp.DefaultString("env"),
+			),
+			mcp.WithBoolean("sensitive", mcp.Description("Whether variable is sensitive: true or false"), mcp.DefaultBool(false)),
+			mcp.WithBoolean("hcl", mcp.Description("Whether variable is HCL: true or false"), mcp.DefaultBool(false)),
 		),
 		Handler: func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			orgName, err := request.RequireString("terraform_org_name")
@@ -100,13 +113,13 @@ func CreateWorkspaceVariable(logger *log.Logger) server.ServerTool {
 				return nil, utils.LogAndReturnError(logger, "value is required", err)
 			}
 
-			category := tfe.CategoryTerraform
-			if request.GetString("category", "") == "env" {
-				category = tfe.CategoryEnv
+			category := tfe.CategoryEnv
+			if request.GetString("category", "") == "terraform" {
+				category = tfe.CategoryTerraform
 			}
 
-			sensitive := request.GetString("sensitive", "false") == "true"
-			hcl := request.GetString("hcl", "false") == "true"
+			sensitive := request.GetBool("sensitive", false)
+			hcl := request.GetBool("hcl", false)
 			description := request.GetString("description", "")
 
 			tfeClient, err := client.GetTfeClientFromContext(ctx, logger)
@@ -148,10 +161,10 @@ func UpdateWorkspaceVariable(logger *log.Logger) server.ServerTool {
 			mcp.WithString("terraform_org_name", mcp.Required(), mcp.Description("Organization name")),
 			mcp.WithString("workspace_name", mcp.Required(), mcp.Description("Workspace name")),
 			mcp.WithString("variable_id", mcp.Required(), mcp.Description("Variable ID to update")),
-			mcp.WithString("key", mcp.Description("New variable key/name")),
-			mcp.WithString("value", mcp.Description("New variable value")),
-			mcp.WithString("sensitive", mcp.Description("Whether variable is sensitive: true or false")),
-			mcp.WithString("hcl", mcp.Description("Whether variable is HCL: true or false")),
+			mcp.WithString("key", mcp.Required(), mcp.Description("Variable key/name")),
+			mcp.WithString("value", mcp.Required(), mcp.Description("Variable value")),
+			mcp.WithBoolean("sensitive", mcp.Description("Whether variable is sensitive: true or false"), mcp.DefaultBool(false)),
+			mcp.WithBoolean("hcl", mcp.Description("Whether variable is HCL: true or false"), mcp.DefaultBool(false)),
 			mcp.WithString("description", mcp.Description("Variable description")),
 		),
 		Handler: func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -167,13 +180,18 @@ func UpdateWorkspaceVariable(logger *log.Logger) server.ServerTool {
 			if err != nil {
 				return nil, utils.LogAndReturnError(logger, "variable_id is required", err)
 			}
-
-			options := tfe.VariableUpdateOptions{}
-			if key := request.GetString("key", ""); key != "" {
-				options.Key = &key
+			key, err := request.RequireString("key")
+			if err != nil {
+				return nil, utils.LogAndReturnError(logger, "key is required", err)
 			}
-			if value := request.GetString("value", ""); value != "" {
-				options.Value = &value
+			value, err := request.RequireString("value")
+			if err != nil {
+				return nil, utils.LogAndReturnError(logger, "value is required", err)
+			}
+
+			options := tfe.VariableUpdateOptions{
+				Key:   &key,
+				Value: &value,
 			}
 			if sensitiveStr := request.GetString("sensitive", ""); sensitiveStr != "" {
 				sensitive := sensitiveStr == "true"
@@ -204,54 +222,7 @@ func UpdateWorkspaceVariable(logger *log.Logger) server.ServerTool {
 
 			return &mcp.CallToolResult{
 				Content: []mcp.Content{
-					mcp.NewTextContent(fmt.Sprintf("Updated variable %s", variable.Key)),
-				},
-			}, nil
-		},
-	}
-}
-
-// DeleteWorkspaceVariable creates a tool to delete a workspace variable.
-func DeleteWorkspaceVariable(logger *log.Logger) server.ServerTool {
-	return server.ServerTool{
-		Tool: mcp.NewTool("delete_workspace_variable",
-			mcp.WithDescription("Delete a variable from a Terraform workspace."),
-			mcp.WithString("terraform_org_name", mcp.Required(), mcp.Description("Organization name")),
-			mcp.WithString("workspace_name", mcp.Required(), mcp.Description("Workspace name")),
-			mcp.WithString("variable_id", mcp.Required(), mcp.Description("Variable ID to delete")),
-		),
-		Handler: func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-			orgName, err := request.RequireString("terraform_org_name")
-			if err != nil {
-				return nil, utils.LogAndReturnError(logger, "terraform_org_name is required", err)
-			}
-			workspaceName, err := request.RequireString("workspace_name")
-			if err != nil {
-				return nil, utils.LogAndReturnError(logger, "workspace_name is required", err)
-			}
-			variableID, err := request.RequireString("variable_id")
-			if err != nil {
-				return nil, utils.LogAndReturnError(logger, "variable_id is required", err)
-			}
-
-			tfeClient, err := client.GetTfeClientFromContext(ctx, logger)
-			if err != nil {
-				return nil, utils.LogAndReturnError(logger, "getting Terraform client", err)
-			}
-
-			workspace, err := tfeClient.Workspaces.Read(ctx, orgName, workspaceName)
-			if err != nil {
-				return nil, utils.LogAndReturnError(logger, "reading workspace", err)
-			}
-
-			err = tfeClient.Variables.Delete(ctx, workspace.ID, variableID)
-			if err != nil {
-				return nil, utils.LogAndReturnError(logger, "deleting variable", err)
-			}
-
-			return &mcp.CallToolResult{
-				Content: []mcp.Content{
-					mcp.NewTextContent(fmt.Sprintf("Deleted variable %s", variableID)),
+					mcp.NewTextContent(fmt.Sprintf("Updated variable %s with ID %s", variable.Key, variable.ID)),
 				},
 			}, nil
 		},
