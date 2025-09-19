@@ -57,12 +57,12 @@ terraform-mcp-server streamable-http [--transport-port 8080] [--transport-host 1
   <tr>
     <td>
       <a href="https://vscode.dev/redirect?url=vscode%3Amcp%2Finstall%3F%7B%22name%22%3A%22terraform%22%2C%22command%22%3A%22docker%22%2C%22args%22%3A%5B%22run%22%2C%22-i%22%2C%22--rm%22%2C%22hashicorp%2Fterraform-mcp-server%22%5D%7D">
-        <img alt="Install in VS Code (docker)" src="https://img.shields.io/badge/VS_Code-Install-0098FF?style=plastic&logo=visualstudiocode&logoColor=ffffff)">
+        <img alt="Install in VS Code (docker)" src="https://img.shields.io/badge/VS_Code-Install-0098FF?style=flat-square&logoColor=ffffff)">
       </a>
     </td>
     <td>
-      <a href="cursor://anysphere.cursor-deeplink/mcp/install?name=terraform&config=eyJjb21tYW5kIjoiZG9ja2VyIHJ1biAtaSAtLXJtIGhhc2hpY29ycC90ZXJyYWZvcm0tbWNwLXNlcnZlcjowLjIuMyJ9">
-        <img alt="Add to Cursor (docker)" src="https://img.shields.io/badge/Add_To_Cursor-Install?style=plastic&logo=visualstudiocode&color=888888">
+      <a href="https://cursor.com/install-mcp?name=terraform&config=eyJjb21tYW5kIjoiZG9ja2VyIHJ1biAtaSAtLXJtIGhhc2hpY29ycC90ZXJyYWZvcm0tbWNwLXNlcnZlcjowLjIuMyJ9">
+        <img alt="Add to Cursor (docker)" src="https://img.shields.io/badge/Cursor-Install-0098FF?style=flat-square&color=888888">
       </a>
     </td>
   </tr>
