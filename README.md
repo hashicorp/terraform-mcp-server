@@ -6,35 +6,28 @@ automation and interaction capabilities for Infrastructure as Code (IaC) develop
 
 ## Features
 
-- **Dual Transport Support**: Both Stdio and StreamableHTTP transports
-- **Terraform Provider Discovery**: Query and explore Terraform providers and their documentation
-- **Module Search & Analysis**: Search and retrieve detailed information about Terraform modules
-- **Registry Integration**: Direct integration with Terraform Registry APIs
-- **Container Ready**: Docker support for easy deployment
+- **Dual Transport Support**: Both Stdio and StreamableHTTP transports with configurable endpoints
+- **Terraform Registry Integration**: Direct integration with public Terraform Registry APIs for providers, modules, and policies
+- **HCP Terraform & Terraform Enterprise Support**: Full workspace management, organization/project listing, and private registry access
+- **Workspace Operations**: Create, update, delete workspaces with support for variables, tags, and run management
+- **Authentication & Security**: Built-in authentication for HCP Terraform/TFE with configurable CORS and rate limiting
+- **Dynamic Tool Registration**: Intelligent tool discovery and registration based on available services
+- **Container Ready**: Docker support with secure base images for easy deployment
 
-> **Caution:** The outputs and recommendations provided by the MCP server are generated dynamically and may vary based on the query, model, and the connected MCP server. Users should **thoroughly review all outputs/recommendations** to ensure they align with their organization's **security best practices**, **cost-efficiency goals**, and **compliance requirements** before implementation.
+> **Security Note:** At this stage, the MCP server is intended for local use only. If using the StreamableHTTP transport, always configure the MCP_ALLOWED_ORIGINS environment variable to restrict access to trusted origins only. This helps prevent DNS rebinding attacks and other cross-origin vulnerabilities.
 
-> **Security Note:** When using the StreamableHTTP transport in production, always configure the `MCP_ALLOWED_ORIGINS` environment variable to restrict access to trusted origins only. This helps prevent DNS rebinding attacks and other cross-origin vulnerabilities.
+> **Security Note:** Depending on the query, the MCP server may expose certain Vault data, including Vault secrets, to the MCP client and LLM. Do not use the MCP server with untrusted MCP clients or LLMs.
+
+> **Legal Note:** Your use of a third party MCP Client/LLM is subject solely to the terms of use for such MCP/LLM, and IBM is not responsible for the performance of such third party tools. IBM expressly disclaims any and all warranties and liability for third party MCP Clients/LLMs, and may not be able to provide support to resolve issues which are caused by the third party tools. 
+
+> **Caution:**  The outputs and recommendations provided by the MCP server are generated dynamically and may vary based on the query, model, and the connected MCP client. Users should thoroughly review all outputs/recommendations to ensure they align with their organization’s security best practices, cost-efficiency goals, and compliance requirements before implementation.
 
 ## Prerequisites
 
-1. To run the server in a container, you will need to have [Docker](https://www.docker.com/) installed.
-2. Once Docker is installed, you will need to ensure Docker is running.
+1. Ensure [Docker](https://www.docker.com/) is installed and running to use the server in a containerized environment.
+1. Install an AI assistant that supports the Model Context Protocol (MCP).
 
-## Transport Support
-
-The Terraform MCP Server supports multiple transport protocols:
-
-### 1. Stdio Transport (Default)
-Standard input/output communication using JSON-RPC messages. Ideal for local development and direct integration with MCP clients.
-
-### 2. StreamableHTTP Transport
-Modern HTTP-based transport supporting both direct HTTP requests and Server-Sent Events (SSE) streams. This is the recommended transport for remote/distributed setups.
-
-**Features:**
-- **Endpoint**: `http://{hostname}:8080/mcp`
-- **Health Check**: `http://{hostname}:8080/health`
-- **Environment Configuration**: Set `TRANSPORT_MODE=http` or `TRANSPORT_PORT=8080` to enable
+## Command Line Options
 
 **Environment Variables:**
 
@@ -50,8 +43,6 @@ Modern HTTP-based transport supporting both direct HTTP requests and Server-Sent
 | `MCP_RATE_LIMIT_GLOBAL` | Global rate limit (format: `rps:burst`) | `10:20` |
 | `MCP_RATE_LIMIT_SESSION` | Per-session rate limit (format: `rps:burst`) | `5:10` |
 
-## Command Line Options
-
 ```bash
 # Stdio mode
 terraform-mcp-server stdio [--log-file /path/to/log]
@@ -60,25 +51,33 @@ terraform-mcp-server stdio [--log-file /path/to/log]
 terraform-mcp-server streamable-http [--transport-port 8080] [--transport-host 127.0.0.1] [--mcp-endpoint /mcp] [--log-file /path/to/log]
 ```
 
-## Session Modes
-
-The Terraform MCP Server supports two session modes when using the StreamableHTTP transport:
-
-- **Stateful Mode (Default)**: Maintains session state between requests, enabling context-aware operations.
-- **Stateless Mode**: Each request is processed independently without maintaining session state, which can be useful for high-availability deployments or when using load balancers.
-
-To enable stateless mode, set the environment variable:
-```bash
-export MCP_SESSION_MODE=stateless
-```
-
 ## Installation
 
-### Usage with VS Code
+### Usage with VS Code 
+
+<table>
+  <tr>
+    <td>
+      <a href="https://vscode.dev/redirect?url=vscode%3Amcp%2Finstall%3F%7B%22name%22%3A%22terraform%22%2C%22command%22%3A%22docker%22%2C%22args%22%3A%5B%22run%22%2C%22-i%22%2C%22--rm%22%2C%22hashicorp%2Fterraform-mcp-server%22%5D%7D">
+        <img alt="Install in VS Code (docker)" src="https://img.shields.io/badge/VS_Code-VS_Code?style=flat-square&label=Install%20Terraform%20MCP&color=0098FF">
+      </a>
+    </td>
+    <td>
+      <a href="cursor://anysphere.cursor-deeplink/mcp/install?name=terraform&config=eyJjb21tYW5kIjoiZG9ja2VyIiwiYXJncyI6WyJydW4iLCItaSIsIi0tcm0iLCJoYXNoaWNvcnAvdGVycmFmb3JtLW1jcC1zZXJ2ZXIiXX0%3D">
+        <img alt="Install in Cursor (docker)" src="https://img.shields.io/badge/Cursor-Cursor?style=flat-square&label=Install%20Terraform%20MCP&color=000000">
+      </a>
+    </td>
+  </tr>
+</table>
 
 Add the following JSON block to your User Settings (JSON) file in VS Code. You can do this by pressing `Ctrl + Shift + P` and typing `Preferences: Open User Settings (JSON)`. 
 
 More about using MCP server tools in VS Code's [agent mode documentation](https://code.visualstudio.com/docs/copilot/chat/mcp-servers).
+
+<table>
+<tr><th>Version 0.3.0+ or greater</th><th>Version 0.2.3 or lower</th></tr>
+<tr valign=top>
+<td>
 
 ```json
 {
@@ -90,7 +89,43 @@ More about using MCP server tools in VS Code's [agent mode documentation](https:
           "run",
           "-i",
           "--rm",
-          "hashicorp/terraform-mcp-server"
+          "-e", "${input:tfe_token}",
+          "-e", "${input:tfe_hostname}",
+          "hashicorp/terraform-mcp-server:0.3.0"
+        ]
+      }
+    },
+    "inputs": [
+      {
+        "type": "promptString",
+        "id": "tfe_token",
+        "description": "Terraform API Token",
+        "password": true
+      },
+      {
+        "type": "promptString",
+        "id": "tfe_hostname",
+        "description": "Terraform hostname",
+        "password": false
+      }
+    ]
+  }
+}
+```
+</td>
+<td>
+
+```json
+{
+  "mcp": {
+    "servers": {
+      "terraform": {
+        "command": "docker",
+        "args": [
+          "run",
+          "-i",
+          "--rm",
+          "hashicorp/terraform-mcp-server:0.2.3"
         ]
       }
     }
@@ -98,7 +133,16 @@ More about using MCP server tools in VS Code's [agent mode documentation](https:
 }
 ```
 
+</td>
+</tr>
+</table>
+
 Optionally, you can add a similar example (i.e. without the mcp key) to a file called `.vscode/mcp.json` in your workspace. This will allow you to share the configuration with others.
+
+<table>
+<tr><th>Version 0.3.0+ or greater</th><th>Version 0.2.3 or lower</th></tr>
+<tr valign=top>
+<td>
 
 ```json
 {
@@ -109,17 +153,63 @@ Optionally, you can add a similar example (i.e. without the mcp key) to a file c
         "run",
         "-i",
         "--rm",
-        "hashicorp/terraform-mcp-server"
+        "-e", "${input:tfe_token}",
+        "-e", "${input:tfe_hostname}",
+        "hashicorp/terraform-mcp-server:0.3.0"
       ]
+    }
+  },
+  "inputs": [
+    {
+      "type": "promptString",
+      "id": "tfe_token",
+      "description": "Terraform API Token",
+      "password": true
+    },
+    {
+      "type": "promptString",
+      "id": "tfe_hostname",
+      "description": "Terraform hostname",
+      "password": false
+    }
+  ]
+}
+```
+
+</td>
+<td>
+
+```json
+{
+  "mcp": {
+    "servers": {
+      "terraform": {
+        "command": "docker",
+        "args": [
+          "run",
+          "-i",
+          "--rm",
+          "hashicorp/terraform-mcp-server:0.2.3"
+        ]
+      }
     }
   }
 }
 ```
+</td>
+</tr>
+</table>
 
 ### Usage with Claude Desktop / Amazon Q Developer / Amazon Q CLI
 
 More about using MCP server tools in Claude Desktop [user documentation](https://modelcontextprotocol.io/quickstart/user).
+
 Read more about using MCP server in Amazon Q from the [documentation](https://docs.aws.amazon.com/amazonq/latest/qdeveloper-ug/qdev-mcp.html).
+
+<table>
+<tr><th>Version 0.3.0+ or greater</th><th>Version 0.2.3 or lower</th></tr>
+<tr valign=top>
+<td>
 
 ```json
 {
@@ -130,52 +220,52 @@ Read more about using MCP server in Amazon Q from the [documentation](https://do
         "run",
         "-i",
         "--rm",
-        "hashicorp/terraform-mcp-server"
+        "-e", "<<PASTE_TFE_HOSTNAME_HERE>>",
+        "-e", "<<PASTE_TFE_TOKEN_HERE>>",
+        "hashicorp/terraform-mcp-server:0.3.0"
       ]
     }
   }
 }
 ```
 
-## Tool Configuration
+</td>
+<td>
 
-### Available Toolsets
+```json
+{
+  "mcpServers": {
+    "terraform": {
+      "command": "docker",
+      "args": [
+        "run",
+        "-i",
+        "--rm",
+        "hashicorp/terraform-mcp-server:0.2.3"
+      ]
+    }
+  }
+}
+```
+</td>
+</tr>
+</table>
 
-The following sets of tools are available for the [public Terraform registry](https://registry.terraform.io):
+### Usage with Claude Code
 
-| Toolset     | Tool                         | Description                                                                                                                                                                                                                                                     |
-|-------------|------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `providers` | `search_providers`           | Queries the Terraform Registry to find and list available documentation for a specific provider using the specified `service_slug`. Returns a list of provider document IDs with their titles and categories for resources, data sources, functions, or guides. |
-| `providers` | `get_provider_details`       | Fetches the complete documentation content for a specific provider resource, data source, or function using a document ID obtained from the `search_providers` tool. Returns the raw documentation in markdown format.                                          |
-| `providers` | `get_latest_provider_version`| Fetches the complete documentation content for a specific provider resource, data source, or function using a document ID obtained from the `search_providers` tool. Returns the raw documentation in markdown format.                                          |
-| `modules`   | `search_modules`             | Searches the Terraform Registry for modules based on specified `module_query` with pagination. Returns a list of module IDs with their names, descriptions, download counts, verification status, and publish dates                                             |
-| `modules`   | `get_module_details`         | Retrieves detailed documentation for a module using a module ID obtained from the `search_modules` tool including inputs, outputs, configuration, submodules, and examples.                                                                                     |
-| `modules`   | `get_latest_module_version`  | Retrieves detailed documentation for a module using a module ID obtained from the `search_modules` tool including inputs, outputs, configuration, submodules, and examples.                                                                                     |
-| `policies`  | `search_policies`            | Queries the Terraform Registry to find and list the appropriate Sentinel Policy based on the provided query `policy_query`. Returns a list of matching policies with terraform_policy_id(s) with their name, title and download counts.                         |
-| `policies`  | `get_policy_details`         | Retrieves detailed documentation for a policy set using a terraform_policy_id obtained from the `search_policies` tool including policy readme and implementation details.                                                                                      |
+More about using and adding MCP server tools in Claude Code [user documentation](https://docs.claude.com/en/docs/claude-code/mcp)
 
-The following sets of tools are available for HCP Terraform or Terraform Enterprise:
+```sh
+claude mcp add terraform -s user -t stdio -- docker run -i --rm hashicorp/terraform-mcp-server
+```
 
-| Toolset     | Tool                        | Description                                                             |
-|-------------|-----------------------------|-------------------------------------------------------------------------|
-| `orgs`      | `list_organizations`        | Lists all Terraform organizations accessible to the authenticated user. |
-| `projects`  | `list_projects`             | Lists all projects within a specified Terraform organization.           |
+## Available Tools
 
-## Resource Configuration
+[Check out available tools here :link:](https://developer.hashicorp.com/terraform/docs/tools/mcp-server/reference#available-tools)
 
-### Available resources
+## Available Resources
 
-| Resource URI | Description |
-|--------------|-------------|
-| `/terraform/style-guide` | Terraform Style Guide - Provides access to the official Terraform style guide documentation in markdown format |
-| `/terraform/module-development` | Terraform Module Development Guide - Comprehensive guide covering module composition, structure, providers, publishing, and refactoring best practices |
-
-### Available Resource Templates
-
-| Resouce Template URI | Description |
-|--------------|-------------|
-| `/terraform/providers/{namespace}/name/{name}/version/{version}` | Provider Resource Template - Dynamically retrieves detailed documentation and overview for any Terraform provider by namespace, name, and version |
-
+[Check out available resources here :link:](https://developer.hashicorp.com/terraform/docs/tools/mcp-server/reference#available-tools)
 
 ### Install from source
 
@@ -254,6 +344,33 @@ curl http://localhost:8080/health
     }
   }
 }
+```
+
+## Transport Support
+
+The Terraform MCP Server supports multiple transport protocols:
+
+### 1. Stdio Transport (Default)
+Standard input/output communication using JSON-RPC messages. Ideal for local development and direct integration with MCP clients.
+
+### 2. StreamableHTTP Transport
+Modern HTTP-based transport supporting both direct HTTP requests and Server-Sent Events (SSE) streams. This is the recommended transport for remote/distributed setups.
+
+**Features:**
+- **Endpoint**: `http://{hostname}:8080/mcp`
+- **Health Check**: `http://{hostname}:8080/health`
+- **Environment Configuration**: Set `TRANSPORT_MODE=http` or `TRANSPORT_PORT=8080` to enable
+
+## Session Modes
+
+The Terraform MCP Server supports two session modes when using the StreamableHTTP transport:
+
+- **Stateful Mode (Default)**: Maintains session state between requests, enabling context-aware operations.
+- **Stateless Mode**: Each request is processed independently without maintaining session state, which can be useful for high-availability deployments or when using load balancers.
+
+To enable stateless mode, set the environment variable:
+```bash
+export MCP_SESSION_MODE=stateless
 ```
 
 ## Development
