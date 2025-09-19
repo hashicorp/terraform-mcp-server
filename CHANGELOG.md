@@ -18,6 +18,7 @@ IMPROVEMENTS
 * Implement pagination utility. See [#121](https://github.com/hashicorp/terraform-mcp-server/pull/121)
 * Updating `mark3labs/mcp-go` and `hashicorp/tfe-go` versions. See [#121](https://github.com/hashicorp/terraform-mcp-server/pull/121)
 * Implemented rate limiting with the MCP server. See [#155](https://github.com/hashicorp/terraform-mcp-server/pull/155)
+* Update customer warning message. See [#176](https://github.com/hashicorp/terraform-mcp-server/pull/176)
 
 FIXES
 
