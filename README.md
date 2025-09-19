@@ -53,22 +53,22 @@ terraform-mcp-server streamable-http [--transport-port 8080] [--transport-host 1
 
 ## Installation
 
-### Usage with VS Code 
-
 <table>
   <tr>
     <td>
       <a href="https://vscode.dev/redirect?url=vscode%3Amcp%2Finstall%3F%7B%22name%22%3A%22terraform%22%2C%22command%22%3A%22docker%22%2C%22args%22%3A%5B%22run%22%2C%22-i%22%2C%22--rm%22%2C%22hashicorp%2Fterraform-mcp-server%22%5D%7D">
-        <img alt="Install in VS Code (docker)" src="https://img.shields.io/badge/VS_Code-VS_Code?style=flat-square&label=Install%20Terraform%20MCP&color=0098FF">
+        <img alt="Install in VS Code (docker)" src="https://img.shields.io/badge/VS_Code-Install-0098FF?style=plastic&logo=visualstudiocode&logoColor=ffffff)">
       </a>
     </td>
     <td>
       <a href="cursor://anysphere.cursor-deeplink/mcp/install?name=terraform&config=eyJjb21tYW5kIjoiZG9ja2VyIHJ1biAtaSAtLXJtIGhhc2hpY29ycC90ZXJyYWZvcm0tbWNwLXNlcnZlcjowLjIuMyJ9">
-        <img alt="Add to Cursor (docker)" src="https://img.shields.io/badge/Terraform-Cursor?style=flat-square&label=Add%20To%20Cursor&color=777777">
+        <img alt="Add to Cursor (docker)" src="https://img.shields.io/badge/Add_To_Cursor-Install?style=plastic&logo=visualstudiocode&color=888888">
       </a>
     </td>
   </tr>
 </table>
+
+### Usage with VS Code
 
 Add the following JSON block to your User Settings (JSON) file in VS Code. You can do this by pressing `Ctrl + Shift + P` and typing `Preferences: Open User Settings (JSON)`. 
 
@@ -105,7 +105,7 @@ More about using MCP server tools in VS Code's [agent mode documentation](https:
       {
         "type": "promptString",
         "id": "tfe_hostname",
-        "description": "Terraform hostname",
+        "description": "Terraform Hostname",
         "password": false
       }
     ]
@@ -200,9 +200,7 @@ Optionally, you can add a similar example (i.e. without the mcp key) to a file c
 
 ### Usage with Claude Desktop / Amazon Q Developer / Amazon Q CLI
 
-More about using MCP server tools in Claude Desktop [user documentation](https://modelcontextprotocol.io/quickstart/user).
-
-Read more about using MCP server in Amazon Q from the [documentation](https://docs.aws.amazon.com/amazonq/latest/qdeveloper-ug/qdev-mcp.html).
+More about using MCP server tools in Claude Desktop [user documentation](https://modelcontextprotocol.io/quickstart/user). Read more about using MCP server in Amazon Q from the [documentation](https://docs.aws.amazon.com/amazonq/latest/qdeveloper-ug/qdev-mcp.html).
 
 <table>
 <tr><th>Version 0.3.0+ or greater</th><th>Version 0.2.3 or lower</th></tr>
@@ -265,7 +263,7 @@ claude mcp add terraform -s user -t stdio -- docker run -i --rm hashicorp/terraf
 
 [Check out available resources here :link:](https://developer.hashicorp.com/terraform/docs/tools/mcp-server/reference#available-tools)
 
-### Install from source
+## Install from source
 
 Use the latest release version:
 
@@ -279,6 +277,30 @@ Use the main branch:
 go install github.com/hashicorp/terraform-mcp-server/cmd/terraform-mcp-server@main
 ```
 
+<table>
+<tr><th>Version 0.3.0+ or greater</th><th>Version 0.2.3 or lower</th></tr>
+<tr valign=top>
+<td>
+
+```json
+{
+  "mcp": {
+    "servers": {
+      "terraform": {
+        "type": "stdio",
+        "command": "/path/to/terraform-mcp-server",
+        "env": {
+          "TFE_TOKEN": "<<TFE_TOKEN_HERE>>"
+        },
+      }
+    }
+  }
+}
+```
+
+</td>
+<td>
+
 ```json
 {
   "mcp": {
@@ -291,6 +313,9 @@ go install github.com/hashicorp/terraform-mcp-server/cmd/terraform-mcp-server@ma
   }
 }
 ```
+</td>
+</tr>
+</table>
 
 ## Building the Docker Image locally
 
