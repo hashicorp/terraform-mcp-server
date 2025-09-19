@@ -131,6 +131,13 @@ func (r *DynamicToolRegistry) registerTFETools() {
 	getPrivateModuleDetailsTool := r.createDynamicTFETool("get_private_module_details", tfeTools.GetPrivateModuleDetails)
 	r.mcpServer.AddTool(getPrivateModuleDetailsTool.Tool, getPrivateModuleDetailsTool.Handler)
 
+	// Workspace tags tools
+	createWorkspaceTagsTool := r.createDynamicTFETool("create_workspace_tags", tfeTools.CreateWorkspaceTags)
+	r.mcpServer.AddTool(createWorkspaceTagsTool.Tool, createWorkspaceTagsTool.Handler)
+
+	readWorkspaceTagsTool := r.createDynamicTFETool("read_workspace_tags", tfeTools.ReadWorkspaceTags)
+	r.mcpServer.AddTool(readWorkspaceTagsTool.Tool, readWorkspaceTagsTool.Handler)
+
 	// Terraform run tools
 	listRunsTool := r.createDynamicTFETool("list_runs", tfeTools.ListRuns)
 	r.mcpServer.AddTool(listRunsTool.Tool, listRunsTool.Handler)
