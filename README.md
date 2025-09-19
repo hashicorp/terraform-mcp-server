@@ -47,6 +47,8 @@ Modern HTTP-based transport supporting both direct HTTP requests and Server-Sent
 | `MCP_SESSION_MODE` | Session mode: `stateful` or `stateless` | `stateful` |
 | `MCP_ALLOWED_ORIGINS` | Comma-separated list of allowed origins for CORS | `""` (empty) |
 | `MCP_CORS_MODE` | CORS mode: `strict`, `development`, or `disabled` | `strict` |
+| `MCP_TLS_CERT_FILE` | Path to TLS cert file, required for non-localhost deployment (e.g. `/path/to/cert.pem`) | `""` (empty) |
+| `MCP_TLS_KEY_FILE` |  Path to TLS key file, required for non-localhost deployment (e.g. `/path/to/key.pem`)| `""` (empty) |
 | `MCP_RATE_LIMIT_GLOBAL` | Global rate limit (format: `rps:burst`) | `10:20` |
 | `MCP_RATE_LIMIT_SESSION` | Per-session rate limit (format: `rps:burst`) | `5:10` |
 

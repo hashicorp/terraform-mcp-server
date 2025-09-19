@@ -185,6 +185,15 @@ func streamableHTTPServerInit(ctx context.Context, hcServer *server.MCPServer, l
 		server.WithLogger(logger),
 	}
 
+	// Load TLS configuration
+	tlsConfig, err := client.GetTLSConfigFromEnv()
+	if err != nil {
+		return fmt.Errorf("TLS configuration error: %w", err)
+	}
+	if tlsConfig != nil {
+		opts = append(opts, server.WithTLSCert(tlsConfig.CertFile, tlsConfig.KeyFile))
+	}
+
 	// Log the endpoint path being used
 	logger.Infof("Using endpoint path: %s", endpointPath)
 
@@ -238,6 +247,16 @@ func streamableHTTPServerInit(ctx context.Context, hcServer *server.MCPServer, l
 		ReadHeaderTimeout: 30 * time.Second,
 		WriteTimeout:      30 * time.Second,
 		IdleTimeout:       60 * time.Second,
+	}
+
+	if tlsConfig != nil {
+		httpServer.TLSConfig = tlsConfig.Config
+		logger.Infof("TLS enabled with certificate: %s", tlsConfig.CertFile)
+	} else {
+		if !client.IsLocalHost(host) {
+			return fmt.Errorf("TLS is required for non-localhost binding (%s). Set MCP_TLS_CERT_FILE and MCP_TLS_KEY_FILE environment variables", host)
+		}
+		logger.Warnf("TLS is disabled on StreamableHTTP server; this is not recommended for production")
 	}
 
 	// Start server in goroutine
