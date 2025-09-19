@@ -27,23 +27,6 @@ func TestCreateWorkspaceTags(t *testing.T) {
 	})
 }
 
-func TestUpdateWorkspaceTags(t *testing.T) {
-	logger := log.New()
-	logger.SetLevel(log.ErrorLevel)
-
-	t.Run("tool creation", func(t *testing.T) {
-		tool := UpdateWorkspaceTags(logger)
-
-		assert.Equal(t, "update_workspace_tags", tool.Tool.Name)
-		assert.Contains(t, tool.Tool.Description, "Replace all tags on a Terraform workspace")
-		assert.NotNil(t, tool.Handler)
-
-		assert.Contains(t, tool.Tool.InputSchema.Required, "terraform_org_name")
-		assert.Contains(t, tool.Tool.InputSchema.Required, "workspace_name")
-		assert.Contains(t, tool.Tool.InputSchema.Required, "tags")
-	})
-}
-
 func TestReadWorkspaceTags(t *testing.T) {
 	logger := log.New()
 	logger.SetLevel(log.ErrorLevel)
@@ -57,22 +40,5 @@ func TestReadWorkspaceTags(t *testing.T) {
 
 		assert.Contains(t, tool.Tool.InputSchema.Required, "terraform_org_name")
 		assert.Contains(t, tool.Tool.InputSchema.Required, "workspace_name")
-	})
-}
-
-func TestDeleteWorkspaceTags(t *testing.T) {
-	logger := log.New()
-	logger.SetLevel(log.ErrorLevel)
-
-	t.Run("tool creation", func(t *testing.T) {
-		tool := DeleteWorkspaceTags(logger)
-
-		assert.Equal(t, "delete_workspace_tags", tool.Tool.Name)
-		assert.Contains(t, tool.Tool.Description, "Remove tags from a Terraform workspace")
-		assert.NotNil(t, tool.Handler)
-
-		assert.Contains(t, tool.Tool.InputSchema.Required, "terraform_org_name")
-		assert.Contains(t, tool.Tool.InputSchema.Required, "workspace_name")
-		assert.Contains(t, tool.Tool.InputSchema.Required, "tags")
 	})
 }
