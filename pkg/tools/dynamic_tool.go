@@ -171,6 +171,17 @@ func (r *DynamicToolRegistry) registerTFETools() {
 	detachVariableSetTool := r.createDynamicTFETool("detach_variable_set_from_workspaces", tfeTools.DetachVariableSetFromWorkspaces)
 	r.mcpServer.AddTool(detachVariableSetTool.Tool, detachVariableSetTool.Handler)
 
+	// Variable tools
+	listWorkspaceVariablesTool := r.createDynamicTFETool("list_workspace_variables", tfeTools.ListWorkspaceVariables)
+	r.mcpServer.AddTool(listWorkspaceVariablesTool.Tool, listWorkspaceVariablesTool.Handler)
+
+	createWorkspaceVariableTool := r.createDynamicTFETool("create_workspace_variable", tfeTools.CreateWorkspaceVariable)
+	r.mcpServer.AddTool(createWorkspaceVariableTool.Tool, createWorkspaceVariableTool.Handler)
+
+	updateWorkspaceVariableTool := r.createDynamicTFETool("update_workspace_variable", tfeTools.UpdateWorkspaceVariable)
+	r.mcpServer.AddTool(updateWorkspaceVariableTool.Tool, updateWorkspaceVariableTool.Handler)
+
+
 	r.tfeToolsRegistered = true
 }
 
