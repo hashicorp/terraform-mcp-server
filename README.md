@@ -61,7 +61,7 @@ terraform-mcp-server streamable-http [--transport-port 8080] [--transport-host 1
       </a>
     </td>
     <td>
-      <a href="https://cursor.com/install-mcp?name=terraform&config=eyJjb21tYW5kIjoiZG9ja2VyIHJ1biAtaSAtLXJtIGhhc2hpY29ycC90ZXJyYWZvcm0tbWNwLXNlcnZlcjowLjIuMyJ9">
+      <a href="cursor://anysphere.cursor-deeplink/mcp/install?name=terraform&config=eyJjb21tYW5kIjoiZG9ja2VyIHJ1biAtaSAtLXJtIGhhc2hpY29ycC90ZXJyYWZvcm0tbWNwLXNlcnZlcjowLjIuMyJ9">
         <img alt="Add to Cursor (docker)" src="https://img.shields.io/badge/Cursor-Install-0098FF?style=flat-square&color=888888">
       </a>
     </td>
