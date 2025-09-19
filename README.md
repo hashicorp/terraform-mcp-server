@@ -64,7 +64,7 @@ terraform-mcp-server streamable-http [--transport-port 8080] [--transport-host 1
     </td>
     <td>
       <a href="cursor://anysphere.cursor-deeplink/mcp/install?name=terraform&config=eyJjb21tYW5kIjoiZG9ja2VyIHJ1biAtaSAtLXJtIGhhc2hpY29ycC90ZXJyYWZvcm0tbWNwLXNlcnZlcjowLjIuMyJ9">
-      <img alt="Add postgres MCP server to Cursor" src="https://cursor.com/deeplink/mcp-install-dark.png" style="max-height: 26px;">
+        <img alt="Add to Cursor (docker)" src="https://img.shields.io/badge/Terraform-Cursor?style=flat-square&label=Add%20To%20Cursor&color=777777">
       </a>
     </td>
   </tr>
