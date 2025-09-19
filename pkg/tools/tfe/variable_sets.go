@@ -71,44 +71,6 @@ func ListVariableSets(logger *log.Logger) server.ServerTool {
 	}
 }
 
-// GetVariableSetDetails creates a tool to get variable set details.
-func GetVariableSetDetails(logger *log.Logger) server.ServerTool {
-	return server.ServerTool{
-		Tool: mcp.NewTool("get_variable_set_details",
-			mcp.WithDescription("Get detailed information about a variable set."),
-			mcp.WithString("variable_set_id", mcp.Required(), mcp.Description("Variable set ID")),
-		),
-		Handler: func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-			varSetID, err := request.RequireString("variable_set_id")
-			if err != nil {
-				return nil, utils.LogAndReturnError(logger, "variable_set_id is required", err)
-			}
-
-			tfeClient, err := client.GetTfeClientFromContext(ctx, logger)
-			if err != nil {
-				return nil, utils.LogAndReturnError(logger, "getting Terraform client", err)
-			}
-
-			varSet, err := tfeClient.VariableSets.Read(ctx, varSetID, &tfe.VariableSetReadOptions{})
-			if err != nil {
-				return nil, utils.LogAndReturnError(logger, "reading variable set", err)
-			}
-
-			buf := bytes.NewBuffer(nil)
-			err = jsonapi.MarshalPayloadWithoutIncluded(buf, varSet)
-			if err != nil {
-				return nil, utils.LogAndReturnError(logger, "marshalling variable set result", err)
-			}
-
-			return &mcp.CallToolResult{
-				Content: []mcp.Content{
-					mcp.NewTextContent(buf.String()),
-				},
-			}, nil
-		},
-	}
-}
-
 // CreateVariableSet creates a tool to create a variable set.
 func CreateVariableSet(logger *log.Logger) server.ServerTool {
 	return server.ServerTool{
@@ -147,54 +109,7 @@ func CreateVariableSet(logger *log.Logger) server.ServerTool {
 
 			return &mcp.CallToolResult{
 				Content: []mcp.Content{
-					mcp.NewTextContent(fmt.Sprintf("Created variable set %s with ID %s", varSet.Name, varSet.ID)),
-				},
-			}, nil
-		},
-	}
-}
-
-// UpdateVariableSet creates a tool to update a variable set.
-func UpdateVariableSet(logger *log.Logger) server.ServerTool {
-	return server.ServerTool{
-		Tool: mcp.NewTool("update_variable_set",
-			mcp.WithDescription("Update an existing variable set."),
-			mcp.WithString("variable_set_id", mcp.Required(), mcp.Description("Variable set ID to update")),
-			mcp.WithString("name", mcp.Description("New variable set name")),
-			mcp.WithString("description", mcp.Description("New variable set description")),
-			mcp.WithString("global", mcp.Description("Whether variable set is global: true or false")),
-		),
-		Handler: func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-			varSetID, err := request.RequireString("variable_set_id")
-			if err != nil {
-				return nil, utils.LogAndReturnError(logger, "variable_set_id is required", err)
-			}
-
-			options := tfe.VariableSetUpdateOptions{}
-			if name := request.GetString("name", ""); name != "" {
-				options.Name = &name
-			}
-			if description := request.GetString("description", ""); description != "" {
-				options.Description = &description
-			}
-			if globalStr := request.GetString("global", ""); globalStr != "" {
-				global := globalStr == "true"
-				options.Global = &global
-			}
-
-			tfeClient, err := client.GetTfeClientFromContext(ctx, logger)
-			if err != nil {
-				return nil, utils.LogAndReturnError(logger, "getting Terraform client", err)
-			}
-
-			varSet, err := tfeClient.VariableSets.Update(ctx, varSetID, &options)
-			if err != nil {
-				return nil, utils.LogAndReturnError(logger, "updating variable set", err)
-			}
-
-			return &mcp.CallToolResult{
-				Content: []mcp.Content{
-					mcp.NewTextContent(fmt.Sprintf("Updated variable set %s with ID %s", varSet.Name, varSet.ID)),
+					mcp.NewTextContent(fmt.Sprintf("Successfully created variable set %s with ID %s", varSet.Name, varSet.ID)),
 				},
 			}, nil
 		},
@@ -209,10 +124,10 @@ func CreateVariableInVariableSet(logger *log.Logger) server.ServerTool {
 			mcp.WithString("variable_set_id", mcp.Required(), mcp.Description("Variable set ID")),
 			mcp.WithString("key", mcp.Required(), mcp.Description("Variable key/name")),
 			mcp.WithString("value", mcp.Required(), mcp.Description("Variable value")),
-			mcp.WithString("category", mcp.Description("Variable category: terraform or env")),
-			mcp.WithString("sensitive", mcp.Description("Whether variable is sensitive: true or false")),
-			mcp.WithString("hcl", mcp.Description("Whether variable is HCL: true or false")),
 			mcp.WithString("description", mcp.Description("Variable description")),
+			mcp.WithString("category", mcp.Description("Variable category: terraform or env"), mcp.Enum("terraform", "env"), mcp.DefaultString("terraform")),
+			mcp.WithBoolean("hcl", mcp.Description("Whether variable is HCL: true or false"), mcp.DefaultBool(false)),
+			mcp.WithBoolean("sensitive", mcp.Description("Whether variable is sensitive: true or false"), mcp.DefaultBool(false)),
 		),
 		Handler: func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			varSetID, err := request.RequireString("variable_set_id")
@@ -233,8 +148,8 @@ func CreateVariableInVariableSet(logger *log.Logger) server.ServerTool {
 				category = tfe.CategoryEnv
 			}
 
-			sensitive := request.GetString("sensitive", "false") == "true"
-			hcl := request.GetString("hcl", "false") == "true"
+			hcl := request.GetBool("hcl", false)
+			sensitive := request.GetBool("sensitive", false)
 			description := request.GetString("description", "")
 
 			tfeClient, err := client.GetTfeClientFromContext(ctx, logger)
@@ -256,68 +171,7 @@ func CreateVariableInVariableSet(logger *log.Logger) server.ServerTool {
 
 			return &mcp.CallToolResult{
 				Content: []mcp.Content{
-					mcp.NewTextContent(fmt.Sprintf("Created variable %s with ID %s in variable set", variable.Key, variable.ID)),
-				},
-			}, nil
-		},
-	}
-}
-
-// UpdateVariableInVariableSet creates a tool to update a variable in a variable set.
-func UpdateVariableInVariableSet(logger *log.Logger) server.ServerTool {
-	return server.ServerTool{
-		Tool: mcp.NewTool("update_variable_in_variable_set",
-			mcp.WithDescription("Update a variable in a variable set."),
-			mcp.WithString("variable_set_id", mcp.Required(), mcp.Description("Variable set ID")),
-			mcp.WithString("variable_id", mcp.Required(), mcp.Description("Variable ID to update")),
-			mcp.WithString("key", mcp.Description("New variable key/name")),
-			mcp.WithString("value", mcp.Description("New variable value")),
-			mcp.WithString("sensitive", mcp.Description("Whether variable is sensitive: true or false")),
-			mcp.WithString("hcl", mcp.Description("Whether variable is HCL: true or false")),
-			mcp.WithString("description", mcp.Description("Variable description")),
-		),
-		Handler: func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-			varSetID, err := request.RequireString("variable_set_id")
-			if err != nil {
-				return nil, utils.LogAndReturnError(logger, "variable_set_id is required", err)
-			}
-			variableID, err := request.RequireString("variable_id")
-			if err != nil {
-				return nil, utils.LogAndReturnError(logger, "variable_id is required", err)
-			}
-
-			options := tfe.VariableSetVariableUpdateOptions{}
-			if key := request.GetString("key", ""); key != "" {
-				options.Key = &key
-			}
-			if value := request.GetString("value", ""); value != "" {
-				options.Value = &value
-			}
-			if sensitiveStr := request.GetString("sensitive", ""); sensitiveStr != "" {
-				sensitive := sensitiveStr == "true"
-				options.Sensitive = &sensitive
-			}
-			if hclStr := request.GetString("hcl", ""); hclStr != "" {
-				hcl := hclStr == "true"
-				options.HCL = &hcl
-			}
-			if description := request.GetString("description", ""); description != "" {
-				options.Description = &description
-			}
-
-			tfeClient, err := client.GetTfeClientFromContext(ctx, logger)
-			if err != nil {
-				return nil, utils.LogAndReturnError(logger, "getting Terraform client", err)
-			}
-
-			variable, err := tfeClient.VariableSetVariables.Update(ctx, varSetID, variableID, &options)
-			if err != nil {
-				return nil, utils.LogAndReturnError(logger, "updating variable in variable set", err)
-			}
-
-			return &mcp.CallToolResult{
-				Content: []mcp.Content{
-					mcp.NewTextContent(fmt.Sprintf("Updated variable %s in variable set", variable.Key)),
+					mcp.NewTextContent(fmt.Sprintf("Successfully created variable %s with ID %s in variable set %s", variable.Key, variable.ID, varSetID)),
 				},
 			}, nil
 		},
@@ -354,7 +208,7 @@ func DeleteVariableInVariableSet(logger *log.Logger) server.ServerTool {
 
 			return &mcp.CallToolResult{
 				Content: []mcp.Content{
-					mcp.NewTextContent(fmt.Sprintf("Deleted variable %s from variable set", variableID)),
+					mcp.NewTextContent(fmt.Sprintf("Successfully deleted variable %s from variable set %s", variableID, varSetID)),
 				},
 			}, nil
 		},
@@ -399,7 +253,7 @@ func AttachVariableSetToWorkspaces(logger *log.Logger) server.ServerTool {
 
 			return &mcp.CallToolResult{
 				Content: []mcp.Content{
-					mcp.NewTextContent(fmt.Sprintf("Attached variable set %s to %d workspaces", varSetID, len(workspaces))),
+					mcp.NewTextContent(fmt.Sprintf("Successfully attached variable set %s to %d workspaces", varSetID, len(workspaces))),
 				},
 			}, nil
 		},
@@ -444,97 +298,7 @@ func DetachVariableSetFromWorkspaces(logger *log.Logger) server.ServerTool {
 
 			return &mcp.CallToolResult{
 				Content: []mcp.Content{
-					mcp.NewTextContent(fmt.Sprintf("Detached variable set %s from %d workspaces", varSetID, len(workspaces))),
-				},
-			}, nil
-		},
-	}
-}
-
-// AttachVariableSetToProjects creates a tool to attach a variable set to projects.
-func AttachVariableSetToProjects(logger *log.Logger) server.ServerTool {
-	return server.ServerTool{
-		Tool: mcp.NewTool("attach_variable_set_to_projects",
-			mcp.WithDescription("Attach a variable set to one or more projects."),
-			mcp.WithString("variable_set_id", mcp.Required(), mcp.Description("Variable set ID")),
-			mcp.WithString("project_ids", mcp.Required(), mcp.Description("Comma-separated list of project IDs")),
-		),
-		Handler: func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-			varSetID, err := request.RequireString("variable_set_id")
-			if err != nil {
-				return nil, utils.LogAndReturnError(logger, "variable_set_id is required", err)
-			}
-			projectIDsStr, err := request.RequireString("project_ids")
-			if err != nil {
-				return nil, utils.LogAndReturnError(logger, "project_ids is required", err)
-			}
-			projectIDsList := strings.Split(projectIDsStr, ",")
-
-			var projects []*tfe.Project
-			for _, id := range projectIDsList {
-				projects = append(projects, &tfe.Project{ID: strings.TrimSpace(id)})
-			}
-
-			tfeClient, err := client.GetTfeClientFromContext(ctx, logger)
-			if err != nil {
-				return nil, utils.LogAndReturnError(logger, "getting Terraform client", err)
-			}
-
-			err = tfeClient.VariableSets.ApplyToProjects(ctx, varSetID, tfe.VariableSetApplyToProjectsOptions{
-				Projects: projects,
-			})
-			if err != nil {
-				return nil, utils.LogAndReturnError(logger, "attaching variable set to projects", err)
-			}
-
-			return &mcp.CallToolResult{
-				Content: []mcp.Content{
-					mcp.NewTextContent(fmt.Sprintf("Attached variable set %s to %d projects", varSetID, len(projects))),
-				},
-			}, nil
-		},
-	}
-}
-
-// DetachVariableSetFromProjects creates a tool to detach a variable set from projects.
-func DetachVariableSetFromProjects(logger *log.Logger) server.ServerTool {
-	return server.ServerTool{
-		Tool: mcp.NewTool("detach_variable_set_from_projects",
-			mcp.WithDescription("Detach a variable set from one or more projects."),
-			mcp.WithString("variable_set_id", mcp.Required(), mcp.Description("Variable set ID")),
-			mcp.WithString("project_ids", mcp.Required(), mcp.Description("Comma-separated list of project IDs")),
-		),
-		Handler: func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-			varSetID, err := request.RequireString("variable_set_id")
-			if err != nil {
-				return nil, utils.LogAndReturnError(logger, "variable_set_id is required", err)
-			}
-			projectIDsStr, err := request.RequireString("project_ids")
-			if err != nil {
-				return nil, utils.LogAndReturnError(logger, "project_ids is required", err)
-			}
-			projectIDsList := strings.Split(projectIDsStr, ",")
-
-			var projects []*tfe.Project
-			for _, id := range projectIDsList {
-				projects = append(projects, &tfe.Project{ID: strings.TrimSpace(id)})
-			}
-
-			tfeClient, err := client.GetTfeClientFromContext(ctx, logger)
-			if err != nil {
-				return nil, utils.LogAndReturnError(logger, "getting Terraform client", err)
-			}
-
-			err = tfeClient.VariableSets.RemoveFromProjects(ctx, varSetID, tfe.VariableSetRemoveFromProjectsOptions{
-				Projects: projects,
-			})
-			if err != nil {
-				return nil, utils.LogAndReturnError(logger, "detaching variable set from projects", err)
-			}
-
-			return &mcp.CallToolResult{
-				Content: []mcp.Content{
-					mcp.NewTextContent(fmt.Sprintf("Detached variable set %s from %d projects", varSetID, len(projects))),
+					mcp.NewTextContent(fmt.Sprintf("Successfully detached variable set %s from %d workspaces", varSetID, len(workspaces))),
 				},
 			}, nil
 		},

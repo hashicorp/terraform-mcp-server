@@ -9,6 +9,7 @@ FEATURES
 * Adding 4 new HCP TF/TFE tools for private registry support. See [#142](https://github.com/hashicorp/terraform-mcp-server/pull/142)
 * Adding 2 new HCP TF/TFE tools for workspace tags. See [#171](https://github.com/hashicorp/terraform-mcp-server/pull/171)
 * Adding 4 new HCP TF/TFE tools for creating Terraform runs. See [#159](https://github.com/hashicorp/terraform-mcp-server/pull/159)
+* Adding 6 new HCP TF/TFE tools for Variable Sets. See [#174](https://github.com/hashicorp/terraform-mcp-server/pull/174)
 
 IMPROVEMENTS
 
