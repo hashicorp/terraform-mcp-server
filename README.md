@@ -63,8 +63,8 @@ terraform-mcp-server streamable-http [--transport-port 8080] [--transport-host 1
       </a>
     </td>
     <td>
-      <a href="cursor://anysphere.cursor-deeplink/mcp/install?name=terraform&config=eyJjb21tYW5kIjoiZG9ja2VyIiwiYXJncyI6WyJydW4iLCItaSIsIi0tcm0iLCJoYXNoaWNvcnAvdGVycmFmb3JtLW1jcC1zZXJ2ZXIiXX0%3D">
-        <img alt="Install in Cursor (docker)" src="https://img.shields.io/badge/Cursor-Cursor?style=flat-square&label=Install%20Terraform%20MCP&color=000000">
+      <a href="https://cursor.com/install-mcp?name=terraform&config=eyJjb21tYW5kIjoiZG9ja2VyIHJ1biAtaSAtLXJtIGhhc2hpY29ycC90ZXJyYWZvcm0tbWNwLXNlcnZlcjowLjIuMyJ9">
+        <img alt="Add to Cursor (docker)" src="https://img.shields.io/badge/Terraform-Cursor?style=flat-square&label=Add%20To%20Cursor&color=777777">
       </a>
     </td>
   </tr>
@@ -181,17 +181,15 @@ Optionally, you can add a similar example (i.e. without the mcp key) to a file c
 
 ```json
 {
-  "mcp": {
-    "servers": {
-      "terraform": {
-        "command": "docker",
-        "args": [
-          "run",
-          "-i",
-          "--rm",
-          "hashicorp/terraform-mcp-server:0.2.3"
-        ]
-      }
+  "servers": {
+    "terraform": {
+      "command": "docker",
+      "args": [
+        "run",
+        "-i",
+        "--rm",
+        "hashicorp/terraform-mcp-server:0.2.3"
+      ]
     }
   }
 }
