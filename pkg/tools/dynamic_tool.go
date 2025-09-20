@@ -5,10 +5,12 @@ package tools
 
 import (
 	"context"
+	"strings"
 	"sync"
 
 	"github.com/hashicorp/terraform-mcp-server/pkg/client"
 	tfeTools "github.com/hashicorp/terraform-mcp-server/pkg/tools/tfe"
+	"github.com/hashicorp/terraform-mcp-server/pkg/utils"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 	log "github.com/sirupsen/logrus"
@@ -86,6 +88,12 @@ func (r *DynamicToolRegistry) HasAnySessionWithTFE() bool {
 	return len(r.sessionsWithTFE) > 0
 }
 
+// isTerraformOperationsEnabled checks if ENABLE_TF_OPERATIONS is set to true
+func isTerraformOperationsEnabled() bool {
+	envVar := utils.GetEnv("ENABLE_TF_OPERATIONS", "false")
+	return strings.ToLower(envVar) == "true"
+}
+
 // registerTFETools registers TFE tools with the MCP server
 func (r *DynamicToolRegistry) registerTFETools() {
 	if r.tfeToolsRegistered {
@@ -114,8 +122,11 @@ func (r *DynamicToolRegistry) registerTFETools() {
 	updateWorkspaceTool := r.createDynamicTFETool("update_workspace", tfeTools.UpdateWorkspace)
 	r.mcpServer.AddTool(updateWorkspaceTool.Tool, updateWorkspaceTool.Handler)
 
-	deleteWorkspaceSafelyTool := r.createDynamicTFETool("delete_workspace_safely", tfeTools.DeleteWorkspaceSafely)
-	r.mcpServer.AddTool(deleteWorkspaceSafelyTool.Tool, deleteWorkspaceSafelyTool.Handler)
+	// Only register delete_workspace_safely if TF operations are enabled
+	if isTerraformOperationsEnabled() {
+		deleteWorkspaceSafelyTool := r.createDynamicTFETool("delete_workspace_safely", tfeTools.DeleteWorkspaceSafely)
+		r.mcpServer.AddTool(deleteWorkspaceSafelyTool.Tool, deleteWorkspaceSafelyTool.Handler)
+	}
 
 	// Private provider tools
 	searchPrivateProvidersTool := r.createDynamicTFETool("search_private_providers", tfeTools.SearchPrivateProviders)
@@ -142,11 +153,20 @@ func (r *DynamicToolRegistry) registerTFETools() {
 	listRunsTool := r.createDynamicTFETool("list_runs", tfeTools.ListRuns)
 	r.mcpServer.AddTool(listRunsTool.Tool, listRunsTool.Handler)
 
-	createRunTool := r.createDynamicTFETool("create_run", tfeTools.CreateRun)
+	// Create run tool with conditional options based on TF operations setting
+	var createRunTool server.ServerTool
+	if isTerraformOperationsEnabled() {
+		createRunTool = r.createDynamicTFETool("create_run", tfeTools.CreateRun)
+	} else {
+		createRunTool = r.createDynamicTFETool("create_run", tfeTools.CreateRunSafe)
+	}
 	r.mcpServer.AddTool(createRunTool.Tool, createRunTool.Handler)
 
-	actionRunTool := r.createDynamicTFETool("action_run", tfeTools.ActionRun)
-	r.mcpServer.AddTool(actionRunTool.Tool, actionRunTool.Handler)
+	// Only register action_run if TF operations are enabled
+	if isTerraformOperationsEnabled() {
+		actionRunTool := r.createDynamicTFETool("action_run", tfeTools.ActionRun)
+		r.mcpServer.AddTool(actionRunTool.Tool, actionRunTool.Handler)
+	}
 
 	getRunDetailsTool := r.createDynamicTFETool("get_run_details", tfeTools.GetRunDetails)
 	r.mcpServer.AddTool(getRunDetailsTool.Tool, getRunDetailsTool.Handler)
