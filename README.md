@@ -117,6 +117,37 @@ Optionally, you can add a similar example (i.e. without the mcp key) to a file c
 }
 ```
 
+
+[<img alt="Install in VS Code (docker)" src="https://img.shields.io/badge/VS_Code-VS_Code?style=flat-square&label=Install%20Terraform%20MCP&color=0098FF">](https://vscode.dev/redirect?url=vscode%3Amcp%2Finstall%3F%7B%22name%22%3A%22terraform%22%2C%22command%22%3A%22docker%22%2C%22args%22%3A%5B%22run%22%2C%22-i%22%2C%22--rm%22%2C%22hashicorp%2Fterraform-mcp-server%22%5D%7D)
+[<img alt="Install in VS Code Insiders (docker)" src="https://img.shields.io/badge/VS_Code_Insiders-VS_Code_Insiders?style=flat-square&label=Install%20Terraform%20MCP&color=24bfa5">](https://insiders.vscode.dev/redirect?url=vscode-insiders%3Amcp%2Finstall%3F%7B%22name%22%3A%22terraform%22%2C%22command%22%3A%22docker%22%2C%22args%22%3A%5B%22run%22%2C%22-i%22%2C%22--rm%22%2C%22hashicorp%2Fterraform-mcp-server%22%5D%7D)
+
+### Usage with Cursor
+
+Add this to your Cursor config (`~/.cursor/mcp.json`) or via Settings → Cursor Settings → MCP:
+
+```json
+{
+  "mcpServers": {
+    "terraform": {
+      "command": "docker",
+      "args": [
+        "run",
+        "-i",
+        "--rm",
+        "hashicorp/terraform-mcp-server"
+      ]
+    }
+  }
+}
+```
+
+
+<a href="cursor://anysphere.cursor-deeplink/mcp/install?name=terraform&config=eyJjb21tYW5kIjoiZG9ja2VyIiwiYXJncyI6WyJydW4iLCItaSIsIi0tcm0iLCJoYXNoaWNvcnAvdGVycmFmb3JtLW1jcC1zZXJ2ZXIiXX0%3D">
+  <img alt="Add terraform MCP server to Cursor" src="https://cursor.com/deeplink/mcp-install-dark.png" height="48" />
+</a>
+
+[Install Terraform MCP server in Cursor](cursor://anysphere.cursor-deeplink/mcp/install?name=terraform&config=eyJjb21tYW5kIjoiZG9ja2VyIiwiYXJncyI6WyJydW4iLCItaSIsIi0tcm0iLCJoYXNoaWNvcnAvdGVycmFmb3JtLW1jcC1zZXJ2ZXIiXX0%3D)
+
 ### Usage with Claude Desktop / Amazon Q Developer / Amazon Q CLI
 
 More about using MCP server tools in Claude Desktop [user documentation](https://modelcontextprotocol.io/quickstart/user).
@@ -136,6 +167,26 @@ Read more about using MCP server in Amazon Q from the [documentation](https://do
     }
   }
 }
+```
+
+### Usage with Claude Code
+
+More about using and adding MCP server tools in Claude Code [user documentation](https://docs.claude.com/en/docs/claude-code/mcp)
+
+#### Local (stdio) Transport
+
+```sh
+claude mcp add terraform -s user -t stdio -- docker run -i --rm hashicorp/terraform-mcp-server
+```
+
+#### Remote (streamable-http) Transport
+
+```sh
+# Run server (example)
+docker run -p 8080:8080 --rm -e TRANSPORT_MODE=streamable-http -e TRANSPORT_HOST=0.0.0.0 hashicorp/terraform-mcp-server
+
+# Add to Claude Code
+claude mcp add --transport http terraform http://localhost:8080/mcp
 ```
 
 ## Tool Configuration
