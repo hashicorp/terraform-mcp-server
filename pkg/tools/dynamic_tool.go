@@ -131,6 +131,13 @@ func (r *DynamicToolRegistry) registerTFETools() {
 	getPrivateModuleDetailsTool := r.createDynamicTFETool("get_private_module_details", tfeTools.GetPrivateModuleDetails)
 	r.mcpServer.AddTool(getPrivateModuleDetailsTool.Tool, getPrivateModuleDetailsTool.Handler)
 
+	// Workspace tags tools
+	createWorkspaceTagsTool := r.createDynamicTFETool("create_workspace_tags", tfeTools.CreateWorkspaceTags)
+	r.mcpServer.AddTool(createWorkspaceTagsTool.Tool, createWorkspaceTagsTool.Handler)
+
+	readWorkspaceTagsTool := r.createDynamicTFETool("read_workspace_tags", tfeTools.ReadWorkspaceTags)
+	r.mcpServer.AddTool(readWorkspaceTagsTool.Tool, readWorkspaceTagsTool.Handler)
+
 	// Terraform run tools
 	listRunsTool := r.createDynamicTFETool("list_runs", tfeTools.ListRuns)
 	r.mcpServer.AddTool(listRunsTool.Tool, listRunsTool.Handler)
@@ -143,6 +150,37 @@ func (r *DynamicToolRegistry) registerTFETools() {
 
 	getRunDetailsTool := r.createDynamicTFETool("get_run_details", tfeTools.GetRunDetails)
 	r.mcpServer.AddTool(getRunDetailsTool.Tool, getRunDetailsTool.Handler)
+
+	// Variable set tools
+	listVariableSetsTool := r.createDynamicTFETool("list_variable_sets", tfeTools.ListVariableSets)
+	r.mcpServer.AddTool(listVariableSetsTool.Tool, listVariableSetsTool.Handler)
+
+	createVariableSetTool := r.createDynamicTFETool("create_variable_set", tfeTools.CreateVariableSet)
+	r.mcpServer.AddTool(createVariableSetTool.Tool, createVariableSetTool.Handler)
+
+	createVariableInVariableSetTool := r.createDynamicTFETool("create_variable_in_variable_set", tfeTools.CreateVariableInVariableSet)
+	r.mcpServer.AddTool(createVariableInVariableSetTool.Tool, createVariableInVariableSetTool.Handler)
+
+	deleteVariableInVariableSetTool := r.createDynamicTFETool("delete_variable_in_variable_set", tfeTools.DeleteVariableInVariableSet)
+	r.mcpServer.AddTool(deleteVariableInVariableSetTool.Tool, deleteVariableInVariableSetTool.Handler)
+
+	// Attach/detach variable sets to/from workspaces
+	attachVariableSetTool := r.createDynamicTFETool("attach_variable_set_to_workspaces", tfeTools.AttachVariableSetToWorkspaces)
+	r.mcpServer.AddTool(attachVariableSetTool.Tool, attachVariableSetTool.Handler)
+
+	detachVariableSetTool := r.createDynamicTFETool("detach_variable_set_from_workspaces", tfeTools.DetachVariableSetFromWorkspaces)
+	r.mcpServer.AddTool(detachVariableSetTool.Tool, detachVariableSetTool.Handler)
+
+	// Variable tools
+	listWorkspaceVariablesTool := r.createDynamicTFETool("list_workspace_variables", tfeTools.ListWorkspaceVariables)
+	r.mcpServer.AddTool(listWorkspaceVariablesTool.Tool, listWorkspaceVariablesTool.Handler)
+
+	createWorkspaceVariableTool := r.createDynamicTFETool("create_workspace_variable", tfeTools.CreateWorkspaceVariable)
+	r.mcpServer.AddTool(createWorkspaceVariableTool.Tool, createWorkspaceVariableTool.Handler)
+
+	updateWorkspaceVariableTool := r.createDynamicTFETool("update_workspace_variable", tfeTools.UpdateWorkspaceVariable)
+	r.mcpServer.AddTool(updateWorkspaceVariableTool.Tool, updateWorkspaceVariableTool.Handler)
+
 
 	r.tfeToolsRegistered = true
 }

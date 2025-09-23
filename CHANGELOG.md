@@ -7,7 +7,10 @@ FEATURES
 * Implement dynamic tool registration. See [#121](https://github.com/hashicorp/terraform-mcp-server/pull/121)
 * Adding 2 new HCP TF/TFE tools for admins. List Terraform organizations & projects. See [#121](https://github.com/hashicorp/terraform-mcp-server/pull/121)
 * Adding 4 new HCP TF/TFE tools for private registry support. See [#142](https://github.com/hashicorp/terraform-mcp-server/pull/142)
+* Adding 3 HCP TF/TFE tools for workspace variables support. See [#170](https://github.com/hashicorp/terraform-mcp-server/pull/170)
+* Adding 2 new HCP TF/TFE tools for workspace tags. See [#171](https://github.com/hashicorp/terraform-mcp-server/pull/171)
 * Adding 4 new HCP TF/TFE tools for creating Terraform runs. See [#159](https://github.com/hashicorp/terraform-mcp-server/pull/159)
+* Adding 6 new HCP TF/TFE tools for Variable Sets. See [#174](https://github.com/hashicorp/terraform-mcp-server/pull/174)
 
 IMPROVEMENTS
 
@@ -15,7 +18,11 @@ IMPROVEMENTS
 * Implement pagination utility. See [#121](https://github.com/hashicorp/terraform-mcp-server/pull/121)
 * Updating `mark3labs/mcp-go` and `hashicorp/tfe-go` versions. See [#121](https://github.com/hashicorp/terraform-mcp-server/pull/121)
 * Adding instructions to the server. See [#156](https://github.com/hashicorp/terraform-mcp-server/pull/156)
+* Implementing TLS for the http mode of the MCP server. See [#168](https://github.com/hashicorp/terraform-mcp-server/pull/168)
 * Implemented rate limiting with the MCP server. See [#155](https://github.com/hashicorp/terraform-mcp-server/pull/155)
+* Improved and expanded README with usage instructions for Claude Code. See [#173](https://github.com/hashicorp/terraform-mcp-server/pull/173)
+* Improved and expanded README with usage instructions for Cursor. See [#173](https://github.com/hashicorp/terraform-mcp-server/pull/173)
+* Improved README with one-click install badges for VSCode/VSCode Insiders/Cursor. See [#173](https://github.com/hashicorp/terraform-mcp-server/pull/173) 
 
 FIXES
 
