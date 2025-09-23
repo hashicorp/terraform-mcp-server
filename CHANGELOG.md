@@ -27,6 +27,7 @@ FIXES
 
 * Fixing paths using in-built library instead of string manipulation. See [#143](https://github.com/hashicorp/terraform-mcp-server/pull/143)
 * Explicitly setting destructive annotation to false. See [#143](https://github.com/hashicorp/terraform-mcp-server/pull/143)
+* Fix provider search prioritization to show official providers first in search results. See [#179](https://github.com/hashicorp/terraform-mcp-server/pull/179)
 
 SECURITY
 
