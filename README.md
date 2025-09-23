@@ -51,6 +51,7 @@ Modern HTTP-based transport supporting both direct HTTP requests and Server-Sent
 | `MCP_TLS_KEY_FILE` |  Path to TLS key file, required for non-localhost deployment (e.g. `/path/to/key.pem`)| `""` (empty) |
 | `MCP_RATE_LIMIT_GLOBAL` | Global rate limit (format: `rps:burst`) | `10:20` |
 | `MCP_RATE_LIMIT_SESSION` | Per-session rate limit (format: `rps:burst`) | `5:10` |
+| `ENABLE_TF_OPERATIONS` | Enable tools that require explicit approval | `false` |
 
 ## Command Line Options
 
