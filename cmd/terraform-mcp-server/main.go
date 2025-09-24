@@ -5,6 +5,7 @@ package main
 
 import (
 	"context"
+	_ "embed"
 	"fmt"
 	stdlog "log"
 	"os"
@@ -19,6 +20,9 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 )
+
+//go:embed instructions.md
+var instructions string
 
 func runHTTPServer(logger *log.Logger, host string, port string, endpointPath string) error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
@@ -49,6 +53,7 @@ func NewServer(version string, logger *log.Logger, opts ...server.ServerOption) 
 	defaultOpts := []server.ServerOption{
 		server.WithToolCapabilities(true),
 		server.WithResourceCapabilities(true, true),
+		server.WithInstructions(instructions),
 		server.WithToolHandlerMiddleware(rateLimitMiddleware.Middleware()),
 	}
 	opts = append(defaultOpts, opts...)
