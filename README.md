@@ -214,8 +214,8 @@ Add this to your Cursor config (`~/.cursor/mcp.json`) or via Settings → Cursor
         "run",
         "-i",
         "--rm",
-        "-e", "<<PASTE_TFE_HOSTNAME_HERE>>",
-        "-e", "<<PASTE_TFE_TOKEN_HERE>>",
+        "-e", "TFE_HOSTNAME=<<PASTE_TFE_HOSTNAME_HERE>>",
+        "-e", "TFE_TOKEN=<<PASTE_TFE_TOKEN_HERE>>",
         "hashicorp/terraform-mcp-server:0.3.0"
       ]
     }
@@ -267,8 +267,8 @@ More about using MCP server tools in Claude Desktop [user documentation](https:/
         "run",
         "-i",
         "--rm",
-        "-e", "<<PASTE_TFE_HOSTNAME_HERE>>",
-        "-e", "<<PASTE_TFE_TOKEN_HERE>>",
+        "-e", "TFE_HOSTNAME=<<PASTE_TFE_HOSTNAME_HERE>>",
+        "-e", "TFE_TOKEN=<<PASTE_TFE_TOKEN_HERE>>",
         "hashicorp/terraform-mcp-server:0.3.0"
       ]
     }
