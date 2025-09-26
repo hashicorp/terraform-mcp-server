@@ -83,8 +83,8 @@ More about using MCP server tools in VS Code's [agent mode documentation](https:
           "run",
           "-i",
           "--rm",
-          "-e", "${input:tfe_token}",
-          "-e", "${input:tfe_hostname}",
+          "-e", "TFE_TOKEN=${input:tfe_token}",
+          "-e", "TFE_HOSTNAME=${input:tfe_hostname}",
           "hashicorp/terraform-mcp-server:0.3.0"
         ]
       }
@@ -147,8 +147,8 @@ Optionally, you can add a similar example (i.e. without the mcp key) to a file c
         "run",
         "-i",
         "--rm",
-        "-e", "${input:tfe_token}",
-        "-e", "${input:tfe_hostname}",
+        "-e", "TFE_TOKEN=${input:tfe_token}",
+        "-e", "TFE_HOSTNAME=${input:tfe_hostname}",
         "hashicorp/terraform-mcp-server:0.3.0"
       ]
     }
