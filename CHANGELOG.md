@@ -1,3 +1,9 @@
+## Unreleased
+
+FIXES
+
+* Minor fixes to example configuration for VS Code, Cursor, etc.
+
 ## 0.3.0 (Sep 24, 2025)
 
 FEATURES
