@@ -62,7 +62,9 @@ func createHTTPClient(insecureSkipVerify bool, logger *log.Logger) *http.Client 
 	return retryClient.StandardClient()
 }
 
-func SendRegistryCall(client *http.Client, method string, uri string, logger *log.Logger, callOptions ...string) ([]byte, error) {
+// SendRegistryCallFn is a package-level function variable so callers (and tests)
+// can override registry call behavior for testing.
+var SendRegistryCallFn = func(client *http.Client, method string, uri string, logger *log.Logger, callOptions ...string) ([]byte, error) {
 	ver := "v1"
 	if len(callOptions) > 0 {
 		ver = callOptions[0] // API version will be the first optional arg to this function
@@ -98,6 +100,11 @@ func SendRegistryCall(client *http.Client, method string, uri string, logger *lo
 	logger.Debugf("Response status: %s", resp.Status)
 	logger.Tracef("Response body: %s", string(body))
 	return body, nil
+}
+
+// Backwards-compatible wrapper
+func SendRegistryCall(client *http.Client, method string, uri string, logger *log.Logger, callOptions ...string) ([]byte, error) {
+	return SendRegistryCallFn(client, method, uri, logger, callOptions...)
 }
 
 func SendPaginatedRegistryCall(client *http.Client, uriPrefix string, logger *log.Logger) ([]ProviderDocData, error) {
