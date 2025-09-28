@@ -207,7 +207,7 @@ Add this to your Cursor config (`~/.cursor/mcp.json`) or via Settings → Cursor
 
 ```json
 {
-  "servers": {
+  "mcpServers": {
     "terraform": {
       "command": "docker",
       "args": [
