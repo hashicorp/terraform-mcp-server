@@ -496,10 +496,10 @@ type WorkspaceInfo struct {
 // StateAndConfigJSONResponse represents the JSON response for fetching both state and configuration
 // This uses regular JSON tags instead of JSONAPI tags to preserve raw state content
 type StateAndConfigJSONResponse struct {
-	Type       string             `json:"type"`
-	Success    bool               `json:"success"`
-	Workspace  *WorkspaceInfo     `json:"workspace,omitempty"`
-	StateData  *StateData         `json:"state_data,omitempty"`
-	ConfigData *ConfigurationData `json:"config_data,omitempty"`
-	Metadata   *ResponseMetadata  `json:"metadata,omitempty"`
+	Type                 string                 `json:"type"`
+	Success              bool                   `json:"success"`
+	Workspace            *WorkspaceInfo         `json:"workspace,omitempty"`
+	TfStateFileContent   map[string]interface{} `json:"tf_state_file_content,omitempty"`
+	ConfigData           *ConfigurationData     `json:"config_data,omitempty"`
+	Metadata             *ResponseMetadata      `json:"metadata,omitempty"`
 }

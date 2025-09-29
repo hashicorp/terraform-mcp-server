@@ -100,11 +100,11 @@ func getTfStateAndConfigHandler(ctx context.Context, request mcp.CallToolRequest
 	}
 
 	// Fetch state data
-	stateData, err := fetchStateData(ctx, tfeClient, workspace.ID, logger)
+	stateContent, err := fetchStateContent(ctx, tfeClient, workspace.ID, logger)
 	if err != nil {
 		logger.WithError(err).Warn("failed to fetch state data, continuing without it")
 	} else {
-		response.StateData = stateData
+		response.TfStateFileContent = stateContent
 	}
 
 	// Fetch configuration data
@@ -116,11 +116,11 @@ func getTfStateAndConfigHandler(ctx context.Context, request mcp.CallToolRequest
 	}
 
 	// Debug: Log what we're about to return
-	if response.StateData != nil && response.StateData.StateFileContent != nil {
+	if response.TfStateFileContent != nil {
 		logger.WithFields(log.Fields{
-			"state_data_keys": getMapKeys(response.StateData.StateFileContent),
-			"has_state_data":  response.StateData != nil,
-		}).Info("Response state data summary")
+			"tf_state_file_content_keys": getMapKeys(response.TfStateFileContent),
+			"has_tf_state_file_content":  response.TfStateFileContent != nil,
+		}).Info("Response state content summary")
 	}
 
 	// Try standard JSON marshalling instead of JSONAPI to preserve all state content
@@ -137,8 +137,8 @@ func getTfStateAndConfigHandler(ctx context.Context, request mcp.CallToolRequest
 	return mcp.NewToolResultText(string(responseJSON)), nil
 }
 
-// fetchStateData retrieves and parses the complete Terraform state file
-func fetchStateData(ctx context.Context, tfeClient *tfe.Client, workspaceID string, logger *log.Logger) (*client.StateData, error) {
+// fetchStateContent retrieves and parses the complete Terraform state file
+func fetchStateContent(ctx context.Context, tfeClient *tfe.Client, workspaceID string, logger *log.Logger) (map[string]interface{}, error) {
 	// Get current state version
 	stateVersion, err := tfeClient.StateVersions.ReadCurrent(ctx, workspaceID)
 	if err != nil {
@@ -152,11 +152,7 @@ func fetchStateData(ctx context.Context, tfeClient *tfe.Client, workspaceID stri
 			return nil, utils.LogAndReturnError(logger, "failed to download state file", err)
 		}
 
-		stateData := &client.StateData{
-			StateFileContent: stateFileContent,
-		}
-		
-		return stateData, nil
+		return stateFileContent, nil
 	}
 
 	return nil, utils.LogAndReturnError(logger, "no state file download URL available", nil)
