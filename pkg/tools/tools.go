@@ -5,6 +5,7 @@ package tools
 
 import (
 	registryTools "github.com/hashicorp/terraform-mcp-server/pkg/tools/registry"
+	tfeTools "github.com/hashicorp/terraform-mcp-server/pkg/tools/tfe"
 	"github.com/mark3labs/mcp-go/server"
 	log "github.com/sirupsen/logrus"
 )
@@ -39,4 +40,8 @@ func RegisterTools(hcServer *server.MCPServer, logger *log.Logger) {
 
 	getPolicyDetailsTool := registryTools.PolicyDetails(logger)
 	hcServer.AddTool(getPolicyDetailsTool.Tool, getPolicyDetailsTool.Handler)
+
+	// TFE tools
+	getTfStateAndConfigTool := tfeTools.GetTfStateAndConfig(logger)
+	hcServer.AddTool(getTfStateAndConfigTool.Tool, getTfStateAndConfigTool.Handler)
 }

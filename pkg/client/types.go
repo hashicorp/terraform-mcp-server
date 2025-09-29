@@ -446,3 +446,60 @@ type WorkspaceToolResponse struct {
 	Variables []*tfe.Variable `jsonapi:"polyrelation,variables,omitempty"`
 	Readme    string          `jsonapi:"attr,readme,omitempty"`
 }
+
+// WorkspaceStateAndConfigResponse represents the response for fetching both state and configuration
+type WorkspaceStateAndConfigResponse struct {
+	Type       string             `jsonapi:"primary,tool"`
+	Success    bool               `jsonapi:"attr,success"`
+	Workspace  *tfe.Workspace     `jsonapi:"attr,workspace,omitempty"`
+	StateData  *StateData         `jsonapi:"attr,state_data,omitempty"`
+	ConfigData *ConfigurationData `jsonapi:"attr,config_data,omitempty"`
+	Metadata   *ResponseMetadata  `jsonapi:"attr,metadata,omitempty"`
+}
+
+// StateData contains the raw Terraform state file content
+type StateData struct {
+	StateFileContent map[string]interface{} `json:"state_file_content"`
+}
+
+// ConfigurationData contains current Terraform configuration information
+type ConfigurationData struct {
+	ConfigVersionID string `json:"config_version_id,omitempty"`
+	Status         string `json:"status,omitempty"`
+	Source         string `json:"source,omitempty"`
+	ConfigContent  string `json:"config_content,omitempty"`
+}
+
+// ResponseMetadata contains metadata about the response
+type ResponseMetadata struct {
+	RetrievedAt      time.Time `json:"retrieved_at"`
+	WorkspaceID      string    `json:"workspace_id"`
+	OrganizationName string    `json:"organization_name"`
+	WorkspaceName    string    `json:"workspace_name"`
+}
+
+// WorkspaceInfo represents basic workspace information that can be JSON serialized
+type WorkspaceInfo struct {
+	ID                   string `json:"id"`
+	Name                 string `json:"name"`
+	Description          string `json:"description,omitempty"`
+	Environment          string `json:"environment,omitempty"`
+	AutoApply            bool   `json:"auto_apply"`
+	TerraformVersion     string `json:"terraform_version,omitempty"`
+	WorkingDirectory     string `json:"working_directory,omitempty"`
+	ExecutionMode        string `json:"execution_mode,omitempty"`
+	ResourceCount        int    `json:"resource_count"`
+	ApplyDurationAverage int64  `json:"apply_duration_average,omitempty"`
+	PlanDurationAverage  int64  `json:"plan_duration_average,omitempty"`
+}
+
+// StateAndConfigJSONResponse represents the JSON response for fetching both state and configuration
+// This uses regular JSON tags instead of JSONAPI tags to preserve raw state content
+type StateAndConfigJSONResponse struct {
+	Type       string             `json:"type"`
+	Success    bool               `json:"success"`
+	Workspace  *WorkspaceInfo     `json:"workspace,omitempty"`
+	StateData  *StateData         `json:"state_data,omitempty"`
+	ConfigData *ConfigurationData `json:"config_data,omitempty"`
+	Metadata   *ResponseMetadata  `json:"metadata,omitempty"`
+}
