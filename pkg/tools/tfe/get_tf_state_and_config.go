@@ -123,18 +123,14 @@ func getTfStateAndConfigHandler(ctx context.Context, request mcp.CallToolRequest
 		}).Info("Response state content summary")
 	}
 
-	// Try standard JSON marshalling instead of JSONAPI to preserve all state content
-	responseJSON, err := json.MarshalIndent(response, "", "  ")
-	if err != nil {
-		return nil, utils.LogAndReturnError(logger, "marshalling workspace state and config response to JSON", err)
-	}
-
-	// Debug: Log response size
+	// Debug: Log response preparation
 	logger.WithFields(log.Fields{
-		"response_size_bytes": len(responseJSON),
-	}).Info("Final response prepared")
+		"has_tf_state_content": response.TfStateFileContent != nil,
+		"has_config_data":      response.ConfigData != nil,
+		"workspace_id":         response.Workspace.ID,
+	}).Info("Final structured response prepared")
 
-	return mcp.NewToolResultText(string(responseJSON)), nil
+	return mcp.NewToolResultStructuredOnly(response), nil
 }
 
 // fetchStateContent retrieves and parses the complete Terraform state file
