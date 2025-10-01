@@ -47,10 +47,15 @@ If there are multiple good matches, mention this but proceed with the most relev
 				mcp.Required(),
 				mcp.Description("The slug of the service you want to deploy or read using the Terraform provider, prefer using a single word, use underscores for multiple words and if unsure about the service_slug, use the provider_name for its value"),
 			),
-			mcp.WithString("provider_data_type",
-				mcp.Description("The type of the document to retrieve, for general information use 'guides', for deploying resources use 'resources', for reading pre-deployed resources use 'data-sources', for functions use 'functions', and for overview of the provider use 'overview'"),
-				mcp.Enum("resources", "data-sources", "functions", "guides", "overview"),
-				mcp.DefaultString("resources"),
+			mcp.WithString("provider_document_type",
+				mcp.Required(),
+				mcp.Description(`The type of the document to retrieve,
+for general overview of the provider use 'overview',
+for guidance on upgrading a provider or custom configuration information use 'guides',
+for deploying resources use 'resources', for reading pre-deployed resources use 'data-sources',
+for functions use 'functions',
+for Terraform actions use 'actions'`),
+				mcp.Enum("resources", "data-sources", "functions", "guides", "overview", "actions"),
 			),
 			mcp.WithString("provider_version",
 				mcp.Description("The version of the Terraform provider to retrieve in the format 'x.y.z', or 'latest' to get the latest version")),
@@ -85,15 +90,15 @@ func resolveProviderDocIDHandler(ctx context.Context, request mcp.CallToolReques
 	}
 	serviceSlug = strings.ToLower(serviceSlug)
 
-	providerDataType := request.GetString("provider_data_type", "resources")
-	providerDetail.ProviderDataType = providerDataType
+	providerDocumentType := request.GetString("provider_document_type", "resources")
+	providerDetail.ProviderDocumentType = providerDocumentType
 
 	// Check if we need to use v2 API for guides, functions, or overview
-	if utils.IsV2ProviderDataType(providerDetail.ProviderDataType) {
+	if utils.IsV2ProviderDocumentType(providerDetail.ProviderDocumentType) {
 		content, err := providerDetailsV2(httpClient, providerDetail, logger)
 		if err != nil {
 			errMessage := fmt.Sprintf(`finding %s documentation for provider '%s' in the '%s' namespace, %s`,
-				providerDetail.ProviderDataType, providerDetail.ProviderName, providerDetail.ProviderNamespace, defaultErrorGuide)
+				providerDetail.ProviderDocumentType, providerDetail.ProviderName, providerDetail.ProviderNamespace, defaultErrorGuide)
 			return nil, utils.LogAndReturnError(logger, errMessage, err)
 		}
 
@@ -116,13 +121,13 @@ func resolveProviderDocIDHandler(ctx context.Context, request mcp.CallToolReques
 	}
 
 	var builder strings.Builder
-	builder.WriteString(fmt.Sprintf("Available Documentation (top matches) for %s in Terraform provider %s/%s version: %s\n\n", providerDetail.ProviderDataType, providerDetail.ProviderNamespace, providerDetail.ProviderName, providerDetail.ProviderVersion))
+	builder.WriteString(fmt.Sprintf("Available Documentation (top matches) for %s in Terraform provider %s/%s version: %s\n\n", providerDetail.ProviderDocumentType, providerDetail.ProviderNamespace, providerDetail.ProviderName, providerDetail.ProviderVersion))
 	builder.WriteString("Each result includes:\n- providerDocID: tfprovider-compatible identifier\n- Title: Service or resource name\n- Category: Type of document\n- Description: Brief summary of the document\n")
 	builder.WriteString("For best results, select libraries based on the service_slug match and category of information requested.\n\n---\n\n")
 
 	contentAvailable := false
 	for _, doc := range providerDocs.Docs {
-		if doc.Language == "hcl" && doc.Category == providerDetail.ProviderDataType {
+		if doc.Language == "hcl" && doc.Category == providerDetail.ProviderDocumentType {
 			cs, err := utils.ContainsSlug(doc.Slug, serviceSlug)
 			cs_pn, err_pn := utils.ContainsSlug(fmt.Sprintf("%s_%s", providerDetail.ProviderName, doc.Slug), serviceSlug)
 			if (cs || cs_pn) && err == nil && err_pn == nil {
@@ -199,7 +204,7 @@ func resolveProviderDetails(request mcp.CallToolRequest, httpClient *http.Client
 	providerDetail.ProviderName = providerName
 	providerDetail.ProviderNamespace = providerNamespace
 	providerDetail.ProviderVersion = providerVersionValue
-	providerDetail.ProviderDataType = providerDataTypeValue
+	providerDetail.ProviderDocumentType = providerDataTypeValue
 	return providerDetail, nil
 }
 
@@ -209,7 +214,7 @@ func providerDetailsV2(httpClient *http.Client, providerDetail client.ProviderDe
 	if err != nil {
 		return "", utils.LogAndReturnError(logger, "getting provider version ID", err)
 	}
-	category := providerDetail.ProviderDataType
+	category := providerDetail.ProviderDocumentType
 	if category == "overview" {
 		return client.GetProviderOverviewDocs(httpClient, providerVersionID, logger)
 	}
@@ -227,7 +232,7 @@ func providerDetailsV2(httpClient *http.Client, providerDetail client.ProviderDe
 	}
 
 	var builder strings.Builder
-	builder.WriteString(fmt.Sprintf("Available Documentation (top matches) for %s in Terraform provider %s/%s version: %s\n\n", providerDetail.ProviderDataType, providerDetail.ProviderNamespace, providerDetail.ProviderName, providerDetail.ProviderVersion))
+	builder.WriteString(fmt.Sprintf("Available Documentation (top matches) for %s in Terraform provider %s/%s version: %s\n\n", providerDetail.ProviderDocumentType, providerDetail.ProviderNamespace, providerDetail.ProviderName, providerDetail.ProviderVersion))
 	builder.WriteString("Each result includes:\n- providerDocID: tfprovider-compatible identifier\n- Title: Service or resource name\n- Category: Type of document\n- Description: Brief summary of the document\n")
 	builder.WriteString("For best results, select libraries based on the service_slug match and category of information requested.\n\n---\n\n")
 	for _, doc := range docs {

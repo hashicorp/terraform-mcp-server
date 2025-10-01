@@ -95,12 +95,12 @@ func TestIsV2ProviderDataType(t *testing.T) {
 	valid := []string{"guides", "functions", "overview"}
 	invalid := []string{"resources", "data-sources", "foo"}
 	for _, v := range valid {
-		if !IsV2ProviderDataType(v) {
+		if !IsV2ProviderDocumentType(v) {
 			t.Errorf("expected %q to be valid v2 data type", v)
 		}
 	}
 	for _, v := range invalid {
-		if IsV2ProviderDataType(v) {
+		if IsV2ProviderDocumentType(v) {
 			t.Errorf("expected %q to be invalid v2 data type", v)
 		}
 	}

@@ -10,10 +10,10 @@ import (
 )
 
 type ProviderDetail struct {
-	ProviderName      string
-	ProviderNamespace string
-	ProviderVersion   string
-	ProviderDataType  string
+	ProviderName         string
+	ProviderNamespace    string
+	ProviderVersion      string
+	ProviderDocumentType string
 }
 
 type ModuleDetail struct {
