@@ -61,9 +61,9 @@ func IsValidProviderVersionFormat(version string) bool {
 	return matched
 }
 
-func IsValidProviderDataType(providerDataType string) bool {
+func IsValidProviderDocumentType(providerDocumentType string) bool {
 	validTypes := []string{"resources", "data-sources", "functions", "guides", "overview"}
-	return slices.Contains(validTypes, providerDataType)
+	return slices.Contains(validTypes, providerDocumentType)
 }
 
 // LogAndReturnError logs the error with context and returns a formatted error.

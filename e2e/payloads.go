@@ -11,6 +11,7 @@ const (
 	CONST_TYPE_GUIDES      ContentType = "guides"
 	CONST_TYPE_FUNCTIONS   ContentType = "functions"
 	CONST_TYPE_OVERVIEW    ContentType = "overview"
+	CONST_TYPE_ACTIONS     ContentType = "actions"
 )
 
 type RegistryTestCase struct {
@@ -80,10 +81,10 @@ var searchProviderTestCases = []RegistryTestCase{
 		TestDescription: "Testing search_providers only with required values with the provider_name prefix",
 		TestContentType: CONST_TYPE_DATA_SOURCE,
 		TestPayload: map[string]interface{}{
-			"provider_name":      "dns",
-			"provider_namespace": "hashicorp",
-			"provider_data_type": "data-sources",
-			"service_slug":       "dns_ns_record_set",
+			"provider_name":          "dns",
+			"provider_namespace":     "hashicorp",
+			"provider_document_type": "data-sources",
+			"service_slug":           "dns_ns_record_set",
 		},
 	},
 	{
@@ -92,11 +93,11 @@ var searchProviderTestCases = []RegistryTestCase{
 		TestDescription: "Testing search_providers resources with all values for non-hashicorp provider_namespace",
 		TestContentType: CONST_TYPE_RESOURCE,
 		TestPayload: map[string]interface{}{
-			"provider_name":      "pinecone",
-			"provider_namespace": "pinecone-io",
-			"provider_version":   "latest",
-			"provider_data_type": "resources",
-			"service_slug":       "pinecone_index",
+			"provider_name":          "pinecone",
+			"provider_namespace":     "pinecone-io",
+			"provider_version":       "latest",
+			"provider_document_type": "resources",
+			"service_slug":           "pinecone_index",
 		},
 	},
 	{
@@ -105,10 +106,10 @@ var searchProviderTestCases = []RegistryTestCase{
 		TestDescription: "Testing search_providers data-sources for non-hashicorp provider_namespace",
 		TestContentType: CONST_TYPE_DATA_SOURCE,
 		TestPayload: map[string]interface{}{
-			"provider_name":      "terracurl",
-			"provider_namespace": "devops-rob",
-			"provider_data_type": "data-sources",
-			"service_slug":       "terracurl",
+			"provider_name":          "terracurl",
+			"provider_namespace":     "devops-rob",
+			"provider_document_type": "data-sources",
+			"service_slug":           "terracurl",
 		},
 	},
 	{
@@ -138,11 +139,11 @@ var searchProviderTestCases = []RegistryTestCase{
 		TestDescription: "Testing search_providers guides documentation with v2 API",
 		TestContentType: CONST_TYPE_GUIDES,
 		TestPayload: map[string]interface{}{
-			"provider_name":      "aws",
-			"provider_namespace": "hashicorp",
-			"provider_version":   "latest",
-			"provider_data_type": "guides",
-			"service_slug":       "custom-service-endpoints",
+			"provider_name":          "aws",
+			"provider_namespace":     "hashicorp",
+			"provider_version":       "latest",
+			"provider_document_type": "guides",
+			"service_slug":           "custom-service-endpoints",
 		},
 	},
 	{
@@ -151,11 +152,11 @@ var searchProviderTestCases = []RegistryTestCase{
 		TestDescription: "Testing search_providers functions documentation with v2 API",
 		TestContentType: CONST_TYPE_FUNCTIONS,
 		TestPayload: map[string]interface{}{
-			"provider_name":      "google",
-			"provider_namespace": "hashicorp",
-			"provider_version":   "latest",
-			"provider_data_type": "functions",
-			"service_slug":       "name_from_id",
+			"provider_name":          "google",
+			"provider_namespace":     "hashicorp",
+			"provider_version":       "latest",
+			"provider_document_type": "functions",
+			"service_slug":           "name_from_id",
 		},
 	},
 	{
@@ -164,11 +165,24 @@ var searchProviderTestCases = []RegistryTestCase{
 		TestDescription: "Testing search_providers overview documentation with v2 API",
 		TestContentType: CONST_TYPE_OVERVIEW,
 		TestPayload: map[string]interface{}{
-			"provider_name":      "google",
-			"provider_namespace": "hashicorp",
-			"provider_version":   "latest",
-			"provider_data_type": "overview",
-			"service_slug":       "index",
+			"provider_name":          "google",
+			"provider_namespace":     "hashicorp",
+			"provider_version":       "latest",
+			"provider_document_type": "overview",
+			"service_slug":           "index",
+		},
+	},
+	{
+		TestName:        "actions_documentation",
+		TestShouldFail:  false,
+		TestDescription: "Testing search_providers actions documentation with v2 API",
+		TestContentType: CONST_TYPE_ACTIONS,
+		TestPayload: map[string]interface{}{
+			"provider_name":          "aws",
+			"provider_namespace":     "hashicorp",
+			"provider_version":       "latest",
+			"provider_document_type": "actions",
+			"service_slug":           "ec2",
 		},
 	},
 }

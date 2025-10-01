@@ -23,13 +23,13 @@ import (
 func ResolveProviderDocID(logger *log.Logger) server.ServerTool {
 	return server.ServerTool{
 		Tool: mcp.NewTool("search_providers",
-			mcp.WithDescription(`This tool retrieves a list of potential documents based on the service_slug and provider_data_type provided.
-You MUST call this function before 'get_provider_details' to obtain a valid tfprovider-compatible provider_doc_id.
-Use the most relevant single word as the search query for service_slug, if unsure about the service_slug, use the provider_name for its value.
+			mcp.WithDescription(`This tool retrieves a list of potential documents based on the 'service_slug' and 'provider_document_type' provided.
+You MUST call this function before 'get_provider_details' to obtain a valid tfprovider-compatible 'provider_doc_id'.
+Use the most relevant single word as the search query for 'service_slug', if unsure about the 'service_slug', use the 'provider_name' for its value.
 When selecting the best match, consider the following:
 	- Title similarity to the query
 	- Category relevance
-Return the selected provider_doc_id and explain your choice.
+Return the selected 'provider_doc_id' and explain your choice.
 If there are multiple good matches, mention this but proceed with the most relevant one.`),
 			mcp.WithTitleAnnotation("Identify the most relevant provider document ID for a Terraform service"),
 			mcp.WithOpenWorldHintAnnotation(true),
@@ -167,8 +167,8 @@ func resolveProviderDetails(request mcp.CallToolRequest, httpClient *http.Client
 	providerVersion := request.GetString("provider_version", "latest")
 	providerVersion = strings.ToLower(providerVersion)
 
-	providerDataType := request.GetString("provider_data_type", "resources")
-	providerDataType = strings.ToLower(providerDataType)
+	providerDocumentType := request.GetString("provider_document_type", "resources")
+	providerDocumentType = strings.ToLower(providerDocumentType)
 
 	var err error
 	providerVersionValue := ""
@@ -196,15 +196,15 @@ func resolveProviderDetails(request mcp.CallToolRequest, httpClient *http.Client
 		providerNamespace = tryProviderNamespace // Update the namespace to hashicorp, if successful
 	}
 
-	providerDataTypeValue := ""
-	if utils.IsValidProviderDataType(providerDataType) {
-		providerDataTypeValue = providerDataType
+	providerDocumentTypeValue := ""
+	if utils.IsValidProviderDocumentType(providerDocumentType) {
+		providerDocumentTypeValue = providerDocumentType
 	}
 
 	providerDetail.ProviderName = providerName
 	providerDetail.ProviderNamespace = providerNamespace
 	providerDetail.ProviderVersion = providerVersionValue
-	providerDetail.ProviderDocumentType = providerDataTypeValue
+	providerDetail.ProviderDocumentType = providerDocumentTypeValue
 	return providerDetail, nil
 }
 
