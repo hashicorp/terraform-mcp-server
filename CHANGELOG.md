@@ -1,5 +1,9 @@
 ## Unreleased
 
+IMPROVEMENTS
+
+* Adding support for searching Terraform Actions documentation
+
 FIXES
 
 * Minor fixes to example configuration for VS Code, Cursor, etc.
