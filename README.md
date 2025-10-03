@@ -302,13 +302,13 @@ More about using MCP server tools in Claude Desktop [user documentation](https:/
 
 More about using and adding MCP server tools in Claude Code [user documentation](https://docs.claude.com/en/docs/claude-code/mcp)
 
-#### Local (stdio) Transport
+- Local (`stdio`) Transport
 
 ```sh
 claude mcp add terraform -s user -t stdio -- docker run -i --rm hashicorp/terraform-mcp-server
 ```
 
-#### Remote (streamable-http) Transport
+- Remote (`streamable-http`) Transport
 
 ```sh
 # Run server (example)
@@ -316,6 +316,23 @@ docker run -p 8080:8080 --rm -e TRANSPORT_MODE=streamable-http -e TRANSPORT_HOST
 
 # Add to Claude Code
 claude mcp add --transport http terraform http://localhost:8080/mcp
+```
+
+### Usage with Gemini extensions
+
+For security, avoid hardcoding your credentials, create or update `~/.gemini/.env` (where ~ is your home or project directory) for storing HCP Terraform or Terraform Enterprise credentials
+
+```
+# ~/.gemini/.env
+TFE_ADDRESS=your_tfe_address_here
+TFE_TOKEN=your_tfe_token_here
+```
+
+Install the extension & run Gemini
+
+```
+gemini extensions install https://github.com/hashicorp/terraform-mcp-server
+gemini
 ```
 
 ## Install from source

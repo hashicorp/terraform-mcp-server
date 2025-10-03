@@ -1,5 +1,9 @@
 ## Unreleased
 
+FEATURES
+
+* Adding Gemini extension. See [189](https://github.com/hashicorp/terraform-mcp-server/pull/189)
+
 IMPROVEMENTS
 
 * Adding support for searching Terraform Actions documentation
