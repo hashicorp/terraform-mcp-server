@@ -1,4 +1,4 @@
-## Unreleased
+## 0.3.1 (Oct 3, 2025)
 
 FEATURES
 
