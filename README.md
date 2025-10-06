@@ -84,7 +84,7 @@ More about using MCP server tools in VS Code's [agent mode documentation](https:
           "-i",
           "--rm",
           "-e", "TFE_TOKEN=${input:tfe_token}",
-          "-e", "TFE_HOSTNAME=${input:tfe_hostname}",
+          "-e", "TFE_ADDRESS=${input:tfe_address}",
           "hashicorp/terraform-mcp-server:0.3.0"
         ]
       }
@@ -98,8 +98,8 @@ More about using MCP server tools in VS Code's [agent mode documentation](https:
       },
       {
         "type": "promptString",
-        "id": "tfe_hostname",
-        "description": "Terraform Hostname",
+        "id": "tfe_address",
+        "description": "Terraform Address",
         "password": false
       }
     ]
@@ -148,7 +148,7 @@ Optionally, you can add a similar example (i.e. without the mcp key) to a file c
         "-i",
         "--rm",
         "-e", "TFE_TOKEN=${input:tfe_token}",
-        "-e", "TFE_HOSTNAME=${input:tfe_hostname}",
+        "-e", "TFE_ADDRESS=${input:tfe_address}",
         "hashicorp/terraform-mcp-server:0.3.0"
       ]
     }
@@ -162,8 +162,8 @@ Optionally, you can add a similar example (i.e. without the mcp key) to a file c
     },
     {
       "type": "promptString",
-      "id": "tfe_hostname",
-      "description": "Terraform hostname",
+      "id": "tfe_address",
+      "description": "Terraform Address",
       "password": false
     }
   ]
@@ -214,7 +214,7 @@ Add this to your Cursor config (`~/.cursor/mcp.json`) or via Settings → Cursor
         "run",
         "-i",
         "--rm",
-        "-e", "TFE_HOSTNAME=<<PASTE_TFE_HOSTNAME_HERE>>",
+        "-e", "TFE_ADDRESS=<<PASTE_TFE_ADDRESS_HERE>>",
         "-e", "TFE_TOKEN=<<PASTE_TFE_TOKEN_HERE>>",
         "hashicorp/terraform-mcp-server:0.3.0"
       ]
@@ -267,7 +267,7 @@ More about using MCP server tools in Claude Desktop [user documentation](https:/
         "run",
         "-i",
         "--rm",
-        "-e", "TFE_HOSTNAME=<<PASTE_TFE_HOSTNAME_HERE>>",
+        "-e", "TFE_ADDRESS=<<PASTE_TFE_ADDRESS_HERE>>",
         "-e", "TFE_TOKEN=<<PASTE_TFE_TOKEN_HERE>>",
         "hashicorp/terraform-mcp-server:0.3.0"
       ]
