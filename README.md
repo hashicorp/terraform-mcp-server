@@ -445,6 +445,8 @@ curl http://localhost:8080/health
 
 [Check out available tools here :link:](https://developer.hashicorp.com/terraform/docs/tools/mcp-server/reference#available-tools)
 
+> **Note:** Provider capability discovery is a best-effort implementation. Some providers may not have effective discovery methods for all capability types (resources, data sources, functions, actions, ephemeral resources). The server uses documentation analysis and heuristics to determine capabilities, which may not capture all available features or may occasionally misclassify resource types.
+
 ## Available Resources
 
 [Check out available resources here :link:](https://developer.hashicorp.com/terraform/docs/tools/mcp-server/reference#available-tools)

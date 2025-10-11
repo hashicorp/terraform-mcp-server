@@ -1,5 +1,9 @@
 ## Unreleased
 
+FEATURES
+
+* Adding provider capability discovery tool to analyze available resources, data sources, functions, and actions
+
 FIXES
 
 * Fixes in readme for `TFE_HOSTNAME` v/s `TFE_ADDRESS`

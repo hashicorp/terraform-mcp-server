@@ -23,6 +23,9 @@ func RegisterTools(hcServer *server.MCPServer, logger *log.Logger) {
 	getLatestProviderVersionTool := registryTools.GetLatestProviderVersion(logger)
 	hcServer.AddTool(getLatestProviderVersionTool.Tool, getLatestProviderVersionTool.Handler)
 
+	getProviderCapabilitiesTool := registryTools.GetProviderCapabilities(logger)
+	hcServer.AddTool(getProviderCapabilitiesTool.Tool, getProviderCapabilitiesTool.Handler)
+
 	// Module tools
 	getSearchModulesTool := registryTools.SearchModules(logger)
 	hcServer.AddTool(getSearchModulesTool.Tool, getSearchModulesTool.Handler)
