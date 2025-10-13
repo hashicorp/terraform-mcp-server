@@ -112,3 +112,45 @@ func TestUnmarshalModuleSingular_InvalidJSON(t *testing.T) {
 		t.Errorf("expected unmarshalling error, got %v", err)
 	}
 }
+
+// --- ValidateModuleID ---
+func TestValidateModuleID_ValidFormat(t *testing.T) {
+	validIDs := []string{
+		"hashicorp/consul/aws/0.1.0",
+		"terraform-aws-modules/vpc/aws/3.14.0",
+		"namespace/name/provider/1.0.0",
+	}
+	
+	for _, id := range validIDs {
+		err := validateModuleID(id)
+		if err != nil {
+			t.Errorf("expected no error for valid module ID %q, got %v", id, err)
+		}
+	}
+}
+
+func TestValidateModuleID_InvalidFormat(t *testing.T) {
+	testCases := []struct {
+		moduleID string
+		name     string
+	}{
+		{"", "empty string"},
+		{"hashicorp", "single part"},
+		{"hashicorp/consul", "two parts"},
+		{"hashicorp/consul/aws", "three parts"},
+		{"hashicorp/consul/aws/1.0.0/extra", "five parts"},
+	}
+	
+	for _, tc := range testCases {
+		err := validateModuleID(tc.moduleID)
+		if err == nil {
+			t.Errorf("expected error for %s (%q), got nil", tc.name, tc.moduleID)
+		}
+		if !strings.Contains(err.Error(), "invalid module ID format") {
+			t.Errorf("expected error message to contain 'invalid module ID format', got %q", err.Error())
+		}
+		if !strings.Contains(err.Error(), "Expected format: namespace/name/provider/version (4 parts)") {
+			t.Errorf("expected error message to contain format hint, got %q", err.Error())
+		}
+	}
+}
