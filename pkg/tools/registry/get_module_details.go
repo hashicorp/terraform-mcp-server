@@ -47,6 +47,12 @@ func getModuleDetailsHandler(ctx context.Context, request mcp.CallToolRequest, l
 	if moduleID == "" {
 		return nil, utils.LogAndReturnError(logger, "required input: module_id cannot be empty", nil)
 	}
+	
+	// Validate module ID format
+	if err := validateModuleID(moduleID); err != nil {
+		return nil, utils.LogAndReturnError(logger, err.Error(), nil)
+	}
+	
 	moduleID = strings.ToLower(moduleID)
 
 	// Get a simple http client to access the public Terraform registry from context
@@ -171,4 +177,12 @@ func unmarshalTerraformModule(response []byte) (string, error) {
 
 	content := builder.String()
 	return content, nil
+}
+
+func validateModuleID(moduleID string) error {
+	parts := strings.Split(moduleID, "/")
+	if len(parts) != 4 {
+		return fmt.Errorf("invalid module ID format '%s'. Expected format: namespace/name/provider/version (4 parts). Use search_modules to find valid module IDs", moduleID)
+	}
+	return nil
 }
