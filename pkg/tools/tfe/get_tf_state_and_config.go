@@ -21,12 +21,12 @@ import (
 	"github.com/mark3labs/mcp-go/server"
 )
 
-// GetTfStateAndConfig creates a tool to fetch both Terraform state and configuration for a workspace
+// GetTfStateAndConfig creates a tool to fetch Terraform state for a workspace
 func GetTfStateAndConfig(logger *log.Logger) server.ServerTool {
 	return server.ServerTool{
 		Tool: mcp.NewTool("get_tf_state_and_config",
-			mcp.WithDescription(`Fetches both the current Terraform state and configuration for a workspace. Downloads the complete state file and provides raw state content without manipulation, suitable for comprehensive infrastructure analysis.`),
-			mcp.WithTitleAnnotation("Get Terraform state and configuration for a workspace"),
+			mcp.WithDescription(`Fetches the current Terraform state for a workspace. Downloads the complete state file and provides raw state content without manipulation, suitable for comprehensive infrastructure analysis.`),
+			mcp.WithTitleAnnotation("Get Terraform state for a workspace"),
 			mcp.WithOpenWorldHintAnnotation(true),
 			mcp.WithReadOnlyHintAnnotation(true),
 			mcp.WithDestructiveHintAnnotation(false),
@@ -36,7 +36,7 @@ func GetTfStateAndConfig(logger *log.Logger) server.ServerTool {
 			),
 			mcp.WithString("workspace_name",
 				mcp.Required(),
-				mcp.Description("The name of the workspace to fetch state and configuration for"),
+				mcp.Description("The name of the workspace to fetch state for"),
 			),
 		),
 		Handler: func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -107,13 +107,7 @@ func getTfStateAndConfigHandler(ctx context.Context, request mcp.CallToolRequest
 		response.TfStateFileContent = stateContent
 	}
 
-	// Fetch configuration data
-	configData, err := fetchConfigurationData(ctx, tfeClient, workspace, logger)
-	if err != nil {
-		logger.WithError(err).Warn("failed to fetch configuration data, continuing without it")
-	} else {
-		response.ConfigData = configData
-	}
+
 
 	// Debug: Log what we're about to return
 	if response.TfStateFileContent != nil {
@@ -126,7 +120,6 @@ func getTfStateAndConfigHandler(ctx context.Context, request mcp.CallToolRequest
 	// Debug: Log response preparation
 	logger.WithFields(log.Fields{
 		"has_tf_state_content": response.TfStateFileContent != nil,
-		"has_config_data":      response.ConfigData != nil,
 		"workspace_id":         response.Workspace.ID,
 	}).Info("Final structured response prepared")
 
@@ -154,35 +147,7 @@ func fetchStateContent(ctx context.Context, tfeClient *tfe.Client, workspaceID s
 	return nil, utils.LogAndReturnError(logger, "no state file download URL available", nil)
 }
 
-// fetchConfigurationData retrieves the current configuration version data
-func fetchConfigurationData(ctx context.Context, tfeClient *tfe.Client, workspace *tfe.Workspace, logger *log.Logger) (*client.ConfigurationData, error) {
-	// Get configuration versions for the workspace
-	configVersions, err := tfeClient.ConfigurationVersions.List(ctx, workspace.ID, &tfe.ConfigurationVersionListOptions{
-		ListOptions: tfe.ListOptions{
-			PageNumber: 1,
-			PageSize:   1, // We only need the latest one
-		},
-	})
-	if err != nil {
-		return nil, utils.LogAndReturnError(logger, "listing configuration versions", err)
-	}
 
-	if len(configVersions.Items) == 0 {
-		logger.Warn("no configuration versions found for workspace")
-		return &client.ConfigurationData{}, nil
-	}
-
-	// Get the latest configuration version (extract only essential fields)
-	latestConfig := configVersions.Items[0]
-	
-	configData := &client.ConfigurationData{
-		ConfigVersionID: latestConfig.ID,
-		Status:         string(latestConfig.Status),
-		Source:         string(latestConfig.Source),
-	}
-	
-	return configData, nil
-}
 
 // downloadStateFile downloads the Terraform state file and returns it as raw JSON content
 func downloadStateFile(ctx context.Context, downloadURL string, logger *log.Logger) (map[string]interface{}, error) {
