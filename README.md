@@ -15,7 +15,7 @@ automation and interaction capabilities for Infrastructure as Code (IaC) develop
 
 > **Security Note:** Depending on the query, the MCP server may expose certain Terraform data to the MCP client and LLM. Do not use the MCP server with untrusted MCP clients or LLMs.
 
-> **Legal Note:** Your use of a third party MCP Client/LLM is subject solely to the terms of use for such MCP/LLM, and IBM is not responsible for the performance of such third party tools. IBM expressly disclaims any and all warranties and liability for third party MCP Clients/LLMs, and may not be able to provide support to resolve issues which are caused by the third party tools. 
+> **Legal Note:** Your use of a third party MCP Client/LLM is subject solely to the terms of use for such MCP/LLM, and IBM is not responsible for the performance of such third party tools. IBM expressly disclaims any and all warranties and liability for third party MCP Clients/LLMs, and may not be able to provide support to resolve issues which are caused by the third party tools.
 
 > **Caution:**  The outputs and recommendations provided by the MCP server are generated dynamically and may vary based on the query, model, and the connected MCP client. Users should thoroughly review all outputs/recommendations to ensure they align with their organization’s security best practices, cost-efficiency goals, and compliance requirements before implementation.
 
@@ -64,7 +64,7 @@ Default instructions for the MCP server is located in `cmd/terraform-mcp-server/
 
 ### Usage with Visual Studio Code
 
-Add the following JSON block to your User Settings (JSON) file in VS Code. You can do this by pressing `Ctrl + Shift + P` and typing `Preferences: Open User Settings (JSON)`. 
+Add the following JSON block to your User Settings (JSON) file in VS Code. You can do this by pressing `Ctrl + Shift + P` and typing `Preferences: Open User Settings (JSON)`.
 
 More about using MCP server tools in VS Code's [agent mode documentation](https://code.visualstudio.com/docs/copilot/chat/mcp-servers).
 
@@ -417,7 +417,7 @@ docker run -p 8080:8080 --rm -e TRANSPORT_MODE=streamable-http -e TRANSPORT_HOST
 > **Note:** When running in Docker, you should set `TRANSPORT_HOST=0.0.0.0` to allow connections from outside the container.
 
 4. (Optional) Test connection in http mode
-  
+
 ```bash
 # Test the connection
 curl http://localhost:8080/health
@@ -444,8 +444,6 @@ curl http://localhost:8080/health
 ## Available Tools
 
 [Check out available tools here :link:](https://developer.hashicorp.com/terraform/docs/tools/mcp-server/reference#available-tools)
-
-> **Note:** Provider capability discovery is a best-effort implementation. Some providers may not have effective discovery methods for all capability types (resources, data sources, functions, actions, ephemeral resources). The server uses documentation analysis and heuristics to determine capabilities, which may not capture all available features or may occasionally misclassify resource types.
 
 ## Available Resources
 

@@ -2,7 +2,7 @@
 
 FEATURES
 
-* Adding provider capability discovery tool to analyze available resources, data sources, functions, and actions
+* Adding provider capability discovery tool to analyze available resources, data sources, functions, guides, and actions
 
 FIXES
 
@@ -46,7 +46,7 @@ IMPROVEMENTS
 * Implementing TLS for the http mode of the MCP server. See [#168](https://github.com/hashicorp/terraform-mcp-server/pull/168)
 * Implemented rate limiting with the MCP server. See [#155](https://github.com/hashicorp/terraform-mcp-server/pull/155)
 * Enabled explicit approval for certain tools. See [#172](https://github.com/hashicorp/terraform-mcp-server/pull/172)
-* Improved README with one-click install badges for VSCode/VSCode Insiders/Cursor. See [#173](https://github.com/hashicorp/terraform-mcp-server/pull/173) 
+* Improved README with one-click install badges for VSCode/VSCode Insiders/Cursor. See [#173](https://github.com/hashicorp/terraform-mcp-server/pull/173)
 
 FIXES
 
