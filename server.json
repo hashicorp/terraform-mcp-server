@@ -1,0 +1,278 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-10-17/server.schema.json",
+  "name": "io.modelcontextprotocol.anonymous/terraform-mcp-server",
+  "title": "Terraform MCP Server",
+  "description": "HashiCorp MCP server for executing Terraform Cloud and Enterprise workflows, resources, and tools.",
+  "websiteUrl": "https://github.com/hashicorp/terraform-mcp-server",
+  "repository": {
+    "url": "https://github.com/hashicorp/terraform-mcp-server",
+    "source": "github"
+  },
+  "version": "0.3.0",
+  "packages": [
+    {
+      "registryType": "oci",
+      "registryBaseUrl": "https://docker.io",
+      "identifier": "docker.io/hashicorp/terraform-mcp-server:0.3.0",
+      "version": "0.3.0",
+      "transport": {
+        "type": "stdio"
+      },
+      "runtimeHint": "docker",
+      "runtimeArguments": [
+        {
+          "type": "positional",
+          "value": "run"
+        },
+        {
+          "type": "named",
+          "name": "--rm"
+        },
+        {
+          "type": "named",
+          "name": "-i"
+        },
+        {
+          "type": "positional",
+          "value": "hashicorp/terraform-mcp-server:0.3.0"
+        }
+      ],
+      "environmentVariables": [
+        {
+          "name": "TFE_ADDRESS",
+          "description": "Terraform Cloud or Terraform Enterprise base URL.",
+          "default": "https://app.terraform.io"
+        },
+        {
+          "name": "TFE_TOKEN",
+          "description": "Terraform Cloud or Terraform Enterprise API token used to authenticate requests.",
+          "isRequired": true,
+          "isSecret": true
+        },
+        {
+          "name": "TFE_SKIP_TLS_VERIFY",
+          "description": "Set to true to disable TLS verification when connecting to Terraform Cloud or Terraform Enterprise.",
+          "default": "false",
+          "format": "boolean",
+          "choices": [
+            "true",
+            "false"
+          ]
+        },
+        {
+          "name": "TRANSPORT_MODE",
+          "description": "Selects the active transport; use streamable-http to serve HTTP clients.",
+          "default": "stdio"
+        },
+        {
+          "name": "TRANSPORT_HOST",
+          "description": "Interface to bind when running in streamable-http mode.",
+          "default": "127.0.0.1"
+        },
+        {
+          "name": "TRANSPORT_PORT",
+          "description": "Port to bind when running in streamable-http mode.",
+          "default": "8080"
+        },
+        {
+          "name": "MCP_ENDPOINT",
+          "description": "HTTP endpoint path exposed when streamable-http transport is enabled.",
+          "default": "/mcp"
+        },
+        {
+          "name": "MCP_SESSION_MODE",
+          "description": "Session management mode for the MCP server.",
+          "default": "stateful",
+          "choices": [
+            "stateful",
+            "stateless"
+          ]
+        },
+        {
+          "name": "MCP_ALLOWED_ORIGINS",
+          "description": "Comma-separated list of allowed origins for CORS when using streamable-http transport."
+        },
+        {
+          "name": "MCP_CORS_MODE",
+          "description": "CORS enforcement mode; strict enforces allowed origins while development trusts localhost.",
+          "default": "strict",
+          "choices": [
+            "strict",
+            "development",
+            "disabled"
+          ]
+        },
+        {
+          "name": "MCP_TLS_CERT_FILE",
+          "description": "Path to the TLS certificate file to enable HTTPS for streamable-http transport.",
+          "format": "filepath"
+        },
+        {
+          "name": "MCP_TLS_KEY_FILE",
+          "description": "Path to the TLS key file to enable HTTPS for streamable-http transport.",
+          "format": "filepath"
+        },
+        {
+          "name": "MCP_RATE_LIMIT_GLOBAL",
+          "description": "Global rate limit in requests-per-second:burst format applied across all sessions.",
+          "default": "10:20"
+        },
+        {
+          "name": "MCP_RATE_LIMIT_SESSION",
+          "description": "Per-session rate limit in requests-per-second:burst format.",
+          "default": "5:10"
+        },
+        {
+          "name": "ENABLE_TF_OPERATIONS",
+          "description": "Set to true to enable tools that execute Terraform operations requiring explicit approval.",
+          "default": "false",
+          "format": "boolean",
+          "choices": [
+            "true",
+            "false"
+          ]
+        }
+      ]
+    },
+    {
+      "registryType": "oci",
+      "registryBaseUrl": "https://docker.io",
+      "identifier": "docker.io/hashicorp/terraform-mcp-server:0.3.0",
+      "version": "0.3.0",
+      "transport": {
+        "type": "streamable-http",
+        "url": "http://127.0.0.1:8080/mcp"
+      },
+      "runtimeHint": "docker",
+      "runtimeArguments": [
+        {
+          "type": "positional",
+          "value": "run"
+        },
+        {
+          "type": "named",
+          "name": "--rm"
+        },
+        {
+          "type": "named",
+          "name": "-p",
+          "value": "8080:8080"
+        },
+        {
+          "type": "named",
+          "name": "-e",
+          "value": "TRANSPORT_MODE=streamable-http"
+        },
+        {
+          "type": "named",
+          "name": "-e",
+          "value": "TRANSPORT_HOST=0.0.0.0"
+        },
+        {
+          "type": "named",
+          "name": "-i"
+        },
+        {
+          "type": "positional",
+          "value": "hashicorp/terraform-mcp-server:0.3.0"
+        }
+      ],
+      "environmentVariables": [
+        {
+          "name": "TFE_ADDRESS",
+          "description": "Terraform Cloud or Terraform Enterprise base URL.",
+          "default": "https://app.terraform.io"
+        },
+        {
+          "name": "TFE_TOKEN",
+          "description": "Terraform Cloud or Terraform Enterprise API token used to authenticate requests.",
+          "isRequired": true,
+          "isSecret": true
+        },
+        {
+          "name": "TFE_SKIP_TLS_VERIFY",
+          "description": "Set to true to disable TLS verification when connecting to Terraform Cloud or Terraform Enterprise.",
+          "default": "false",
+          "format": "boolean",
+          "choices": [
+            "true",
+            "false"
+          ]
+        },
+        {
+          "name": "TRANSPORT_MODE",
+          "description": "Selects the active transport; use streamable-http to serve HTTP clients.",
+          "default": "streamable-http"
+        },
+        {
+          "name": "TRANSPORT_HOST",
+          "description": "Interface to bind when running in streamable-http mode.",
+          "default": "127.0.0.1"
+        },
+        {
+          "name": "TRANSPORT_PORT",
+          "description": "Port to bind when running in streamable-http mode.",
+          "default": "8080"
+        },
+        {
+          "name": "MCP_ENDPOINT",
+          "description": "HTTP endpoint path exposed when streamable-http transport is enabled.",
+          "default": "/mcp"
+        },
+        {
+          "name": "MCP_SESSION_MODE",
+          "description": "Session management mode for the MCP server.",
+          "default": "stateful",
+          "choices": [
+            "stateful",
+            "stateless"
+          ]
+        },
+        {
+          "name": "MCP_ALLOWED_ORIGINS",
+          "description": "Comma-separated list of allowed origins for CORS when using streamable-http transport."
+        },
+        {
+          "name": "MCP_CORS_MODE",
+          "description": "CORS enforcement mode; strict enforces allowed origins while development trusts localhost.",
+          "default": "strict",
+          "choices": [
+            "strict",
+            "development",
+            "disabled"
+          ]
+        },
+        {
+          "name": "MCP_TLS_CERT_FILE",
+          "description": "Path to the TLS certificate file to enable HTTPS for streamable-http transport.",
+          "format": "filepath"
+        },
+        {
+          "name": "MCP_TLS_KEY_FILE",
+          "description": "Path to the TLS key file to enable HTTPS for streamable-http transport.",
+          "format": "filepath"
+        },
+        {
+          "name": "MCP_RATE_LIMIT_GLOBAL",
+          "description": "Global rate limit in requests-per-second:burst format applied across all sessions.",
+          "default": "10:20"
+        },
+        {
+          "name": "MCP_RATE_LIMIT_SESSION",
+          "description": "Per-session rate limit in requests-per-second:burst format.",
+          "default": "5:10"
+        },
+        {
+          "name": "ENABLE_TF_OPERATIONS",
+          "description": "Set to true to enable tools that execute Terraform operations requiring explicit approval.",
+          "default": "false",
+          "format": "boolean",
+          "choices": [
+            "true",
+            "false"
+          ]
+        }
+      ]
+    }
+  ]
+}

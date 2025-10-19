@@ -61,6 +61,7 @@ ARG PRODUCT_NAME=$BIN_NAME
 ARG TARGETOS TARGETARCH
 LABEL version=$PRODUCT_VERSION
 LABEL revision=$PRODUCT_REVISION
+LABEL io.modelcontextprotocol.server.name="io.github.hashicorp/terraform-mcp-server"
 COPY dist/$TARGETOS/$TARGETARCH/$BIN_NAME /bin/terraform-mcp-server
 COPY --from=certbuild /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
 # Command to run the server (mode determined by environment variables or defaults to stdio)
