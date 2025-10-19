@@ -24,11 +24,12 @@ import (
 func GetProviderCapabilities(logger *log.Logger) server.ServerTool {
 	return server.ServerTool{
 		Tool: mcp.NewTool("get_provider_capabilities",
-			mcp.WithDescription(`Get the capabilities of a Terraform provider including the types of resources, data sources, functions, and other features it supports.
+			mcp.WithDescription(`Get the capabilities of a Terraform provider including the types of resources, data sources, functions, guides, and other features it supports.
 This tool analyzes the provider documentation to determine what types of capabilities are available:
 - resources: Infrastructure resources that can be created/managed
 - data-sources: Read-only data sources for querying existing infrastructure  
 - functions: Provider-specific functions for data transformation
+- guides: Documentation guides and tutorials for using the provider
 - actions: Available provider actions (if any)
 - ephemeral resources: Temporary resources for credentials and tokens
 - list resources: Resources for listing multiple items of specific types
@@ -107,7 +108,7 @@ func getProviderCapabilitiesHandler(ctx context.Context, request mcp.CallToolReq
 }
 
 func analyzeAndFormatCapabilities(docs client.ProviderDocs, namespace, name, version string) string {
-	capabilities := make(map[string][]string)
+	capabilities := make(map[string][]client.ProviderDoc)
 
 	// Analyze documentation
 	for _, doc := range docs.Docs {
@@ -116,7 +117,7 @@ func analyzeAndFormatCapabilities(docs client.ProviderDocs, namespace, name, ver
 		}
 
 		category := strings.ToLower(doc.Category)
-		capabilities[category] = append(capabilities[category], doc.Title)
+		capabilities[category] = append(capabilities[category], doc)
 	}
 
 	var builder strings.Builder
@@ -133,13 +134,18 @@ func analyzeAndFormatCapabilities(docs client.ProviderDocs, namespace, name, ver
 		title = cases.Title(language.English).String(title)
 		builder.WriteString(fmt.Sprintf("%s: %d available\n", title, len(items)))
 
-		// Show first 3 examples
+		// Dynamic listing: show all if ≤10, otherwise show 3 with "more" message
+		limit := 3
+		if len(items) <= 10 {
+			limit = len(items)
+		}
+
 		for i, item := range items {
-			if i >= 3 {
-				builder.WriteString(fmt.Sprintf("  ... and %d more\n", len(items)-3))
+			if i >= limit {
+				builder.WriteString(fmt.Sprintf("  ... and %d more\n", len(items)-limit))
 				break
 			}
-			builder.WriteString(fmt.Sprintf("  - %s\n", item))
+			builder.WriteString(fmt.Sprintf("  - %s (provider_doc_id: %s)\n", item.Title, item.ID))
 		}
 		builder.WriteString("\n")
 	}
