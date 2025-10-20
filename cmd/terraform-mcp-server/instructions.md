@@ -16,7 +16,7 @@ The Terraform MCP server provides tools for generating better Terraform code thr
 
 ### Registry Tools (Always Available)
 
-- **Provider Discovery**: `get_latest_provider_version` (if unavailable in code) → `get_provider_capabilities` → `search_providers` → `get_provider_details`
+- **Provider Discovery**: `get_latest_provider_version` (if unavailable in code) → `get_provider_capabilities` → `get_provider_details`
   - `get_provider_capabilities` shows what types of resources, data sources, functions, and guides are available
   
 - **Module Discovery**: `get_latest_module_version` (if unavailable in code) → `search_modules` → `get_module_details`
