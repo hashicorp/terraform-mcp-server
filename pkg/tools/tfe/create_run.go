@@ -40,6 +40,7 @@ func CreateRunSafe(logger *log.Logger) server.ServerTool {
 			),
 			mcp.WithString("message",
 				mcp.Description("Optional message for the run"),
+				mcp.DefaultString("Triggered via Terraform MCP Server"),
 			),
 		),
 		Handler: func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {

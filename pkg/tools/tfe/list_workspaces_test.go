@@ -95,8 +95,7 @@ func TestSearchWorkspaces(t *testing.T) {
 		}
 
 		mockWorkspaceList := &tfe.WorkspaceList{
-			Items:      mockWorkspaces,
-			Pagination: &tfe.Pagination{CurrentPage: 1, TotalCount: 2},
+			Items: mockWorkspaces,
 		}
 
 		// Verify the mock workspace list structure
