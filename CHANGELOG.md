@@ -5,6 +5,10 @@ FIXES
 * Added a module id validator to fix issue [182](https://github.com/hashicorp/terraform-mcp-server/issues/182)
 * Fixes in readme for `TFE_HOSTNAME` v/s `TFE_ADDRESS`
 
+IMPROVEMENTS
+
+* Added official MCP Registry Server JSON Specification file [server.json](server.json) to the repo. See [#200](https://github.com/hashicorp/terraform-mcp-server/pull/200)
+
 ## 0.3.1 (Oct 3, 2025)
 
 FEATURES
