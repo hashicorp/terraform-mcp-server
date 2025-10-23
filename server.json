@@ -8,11 +8,11 @@
     "url": "https://github.com/hashicorp/terraform-mcp-server",
     "source": "github"
   },
-  "version": "0.3.0",
+  "version": "0.3.1",
   "packages": [
     {
       "registryType": "oci",
-      "identifier": "docker.io/hashicorp/terraform-mcp-server:0.3.0",
+      "identifier": "docker.io/hashicorp/terraform-mcp-server:0.3.1",
       "transport": {
         "type": "stdio"
       },
@@ -263,7 +263,7 @@
         },
         {
           "type": "positional",
-          "value": "hashicorp/terraform-mcp-server:0.3.0"
+          "value": "hashicorp/terraform-mcp-server:0.3.1"
         }
       ],
       "environmentVariables": [
@@ -383,8 +383,8 @@
     {
       "registryType": "oci",
       "registryBaseUrl": "https://docker.io",
-      "identifier": "docker.io/hashicorp/terraform-mcp-server:0.3.0",
-      "version": "0.3.0",
+      "identifier": "docker.io/hashicorp/terraform-mcp-server:0.3.1",
+      "version": "0.3.1",
       "transport": {
         "type": "streamable-http",
         "url": "http://127.0.0.1:8080/mcp"
@@ -641,7 +641,7 @@
         },
         {
           "type": "positional",
-          "value": "hashicorp/terraform-mcp-server:0.3.0"
+          "value": "hashicorp/terraform-mcp-server:0.3.1"
         }
       ],
       "environmentVariables": [
