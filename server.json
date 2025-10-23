@@ -34,10 +34,10 @@
           "type": "named",
           "name": "-e",
           "value": "TFE_ADDRESS={tfe_address}",
-          "description": "Terraform Cloud or Terraform Enterprise base URL.",
+          "description": "HCP Terraform or Terraform Enterprise base URL.",
           "variables": {
             "tfe_address": {
-              "description": "Terraform Cloud or Terraform Enterprise base URL.",
+              "description": "HCP Terraform or Terraform Enterprise base URL.",
               "default": "https://app.terraform.io",
               "isRequired": false
             }
@@ -48,10 +48,10 @@
           "type": "named",
           "name": "-e",
           "value": "TFE_TOKEN={tfe_token}",
-          "description": "Terraform Cloud or Terraform Enterprise API token used to authenticate requests.",
+          "description": "HCP Terraform or Terraform Enterprise API token used to authenticate requests.",
           "variables": {
             "tfe_token": {
-              "description": "Terraform Cloud or Terraform Enterprise API token used to authenticate requests.",
+              "description": "HCP Terraform or Terraform Enterprise API token used to authenticate requests.",
               "isRequired": false,
               "isSecret": true
             }
@@ -62,10 +62,10 @@
           "type": "named",
           "name": "-e",
           "value": "TFE_SKIP_TLS_VERIFY={tfe_skip_tls_verify}",
-          "description": "Set to true to disable TLS verification when connecting to Terraform Cloud or Terraform Enterprise.",
+          "description": "Set to true to disable TLS verification when connecting to HCP Terraform or Terraform Enterprise.",
           "variables": {
             "tfe_skip_tls_verify": {
-              "description": "Set to true to disable TLS verification when connecting to Terraform Cloud or Terraform Enterprise.",
+              "description": "Set to true to disable TLS verification when connecting to HCP Terraform or Terraform Enterprise.",
               "default": "false",
               "choices": [
                 "true",
@@ -269,19 +269,19 @@
       "environmentVariables": [
         {
           "name": "TFE_ADDRESS",
-          "description": "Terraform Cloud or Terraform Enterprise base URL.",
+          "description": "HCP Terraform or Terraform Enterprise base URL.",
           "default": "https://app.terraform.io",
           "isRequired": false
         },
         {
           "name": "TFE_TOKEN",
-          "description": "Terraform Cloud or Terraform Enterprise API token used to authenticate requests.",
+          "description": "HCP Terraform or Terraform Enterprise API token used to authenticate requests.",
           "isRequired": false,
           "isSecret": true
         },
         {
           "name": "TFE_SKIP_TLS_VERIFY",
-          "description": "Set to true to disable TLS verification when connecting to Terraform Cloud or Terraform Enterprise.",
+          "description": "Set to true to disable TLS verification when connecting to HCP Terraform or Terraform Enterprise.",
           "default": "false",
           "format": "boolean",
           "choices": [
@@ -412,10 +412,10 @@
           "type": "named",
           "name": "-e",
           "value": "TFE_ADDRESS={tfe_address}",
-          "description": "Terraform Cloud or Terraform Enterprise base URL.",
+          "description": "HCP Terraform or Terraform Enterprise base URL.",
           "variables": {
             "tfe_address": {
-              "description": "Terraform Cloud or Terraform Enterprise base URL.",
+              "description": "HCP Terraform or Terraform Enterprise base URL.",
               "default": "https://app.terraform.io",
               "isRequired": false
             }
@@ -426,10 +426,10 @@
           "type": "named",
           "name": "-e",
           "value": "TFE_TOKEN={tfe_token}",
-          "description": "Terraform Cloud or Terraform Enterprise API token used to authenticate requests.",
+          "description": "HCP Terraform or Terraform Enterprise API token used to authenticate requests.",
           "variables": {
             "tfe_token": {
-              "description": "Terraform Cloud or Terraform Enterprise API token used to authenticate requests.",
+              "description": "HCP Terraform or Terraform Enterprise API token used to authenticate requests.",
               "isRequired": false,
               "isSecret": true
             }
@@ -440,10 +440,10 @@
           "type": "named",
           "name": "-e",
           "value": "TFE_SKIP_TLS_VERIFY={tfe_skip_tls_verify}",
-          "description": "Set to true to disable TLS verification when connecting to Terraform Cloud or Terraform Enterprise.",
+          "description": "Set to true to disable TLS verification when connecting to HCP Terraform or Terraform Enterprise.",
           "variables": {
             "tfe_skip_tls_verify": {
-              "description": "Set to true to disable TLS verification when connecting to Terraform Cloud or Terraform Enterprise.",
+              "description": "Set to true to disable TLS verification when connecting to HCP Terraform or Terraform Enterprise.",
               "default": "false",
               "choices": [
                 "true",
@@ -647,19 +647,19 @@
       "environmentVariables": [
         {
           "name": "TFE_ADDRESS",
-          "description": "Terraform Cloud or Terraform Enterprise base URL.",
+          "description": "HCP Terraform or Terraform Enterprise base URL.",
           "default": "https://app.terraform.io",
           "isRequired": false
         },
         {
           "name": "TFE_TOKEN",
-          "description": "Terraform Cloud or Terraform Enterprise API token used to authenticate requests.",
+          "description": "HCP Terraform or Terraform Enterprise API token used to authenticate requests.",
           "isRequired": false,
           "isSecret": true
         },
         {
           "name": "TFE_SKIP_TLS_VERIFY",
-          "description": "Set to true to disable TLS verification when connecting to Terraform Cloud or Terraform Enterprise.",
+          "description": "Set to true to disable TLS verification when connecting to HCP Terraform or Terraform Enterprise.",
           "default": "false",
           "format": "boolean",
           "choices": [
