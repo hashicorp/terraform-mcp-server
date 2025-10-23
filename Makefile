@@ -67,14 +67,14 @@ docker-run-http:
 update-json-version:
 	@VERSION_FILE="$(CURDIR)/version/VERSION"; \
 	SERVER_JSON="$(CURDIR)/server.json"; \
-	"$(CURDIR)/scripts/update-json-version.sh" "$$SERVER_JSON" "$$VERSION_FILE" 
+	"$(CURDIR)/scripts/update-json-version.sh" "$$SERVER_JSON" "$$VERSION_FILE"
 
 
 # Synchronise gemini-extension.json version fields with version/VERSION
 update-gemini-version:
 	@VERSION_FILE="$(CURDIR)/version/VERSION"; \
 	SERVER_JSON="$(CURDIR)/gemini-extension.json"; \
-	"$(CURDIR)/scripts/update-json-version.sh" "$$SERVER_JSON" "$$VERSION_FILE" 
+	"$(CURDIR)/scripts/update-json-version.sh" "$$SERVER_JSON" "$$VERSION_FILE"
 
 # Test HTTP endpoint
 test-http:
@@ -100,18 +100,20 @@ cleanup-test-containers:
 # Show help
 help:
 	@echo "Available targets:"
-	@echo "  all            - Build the binary (default)"
-	@echo "  build          - Build the binary"
-	@echo "  test           - Run all tests"
-	@echo "  test-e2e       - Run end-to-end tests"
-	@echo "  test-security  - Run security-related tests"
-	@echo "  clean          - Remove build artifacts"
-	@echo "  deps           - Download dependencies"
-	@echo "  docker-build   - Build docker image"
-	@echo "  run-http       - Run StreamableHTTP server locally on port 8080"
-	@echo "  run-http-secure - Run StreamableHTTP server with security settings"
-	@echo "  docker-run-http - Run StreamableHTTP server in Docker on port 8080"
-	@echo "  test-http      - Test StreamableHTTP health endpoint"
+	@echo "  all                     - Build the binary (default)"
+	@echo "  build                   - Build the binary"
+	@echo "  crt-build               - Build using crt-build script"
+	@echo "  test                    - Run all tests"
+	@echo "  test-e2e                - Run end-to-end tests"
+	@echo "  test-security           - Run security-related tests"
+	@echo "  test-http               - Test StreamableHTTP health endpoint"
+	@echo "  clean                   - Remove build artifacts"
+	@echo "  deps                    - Download dependencies"
+	@echo "  docker-build            - Build docker image"
+	@echo "  run-http                - Run StreamableHTTP server locally on port 8080"
+	@echo "  run-http-secure         - Run StreamableHTTP server with security settings"
+	@echo "  docker-run-http         - Run StreamableHTTP server in Docker on port 8080"
+	@echo "  update-json-version     - Update server.json to match version/VERSION"
+	@echo "  update-gemini-version   - Update gemini-extension.json to match version/VERSION"
 	@echo "  cleanup-test-containers - Stop and remove all test containers"
-	@echo "  update-server-json-version - Update server.json to match version/VERSION"
-	@echo "  help           - Show this help message"
+	@echo "  help                    - Show this help message"

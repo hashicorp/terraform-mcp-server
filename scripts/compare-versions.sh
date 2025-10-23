@@ -1,6 +1,6 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Script to compare version numbers using version/VERSION as source of truth
-set -e
+set -euo pipefail
 echo "Checking version consistency using version/VERSION as source of truth..."
 
 # Read version from version/VERSION file (source of truth)
