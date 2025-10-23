@@ -168,6 +168,9 @@ func (r *DynamicToolRegistry) registerTFETools() {
 		r.mcpServer.AddTool(actionRunTool.Tool, actionRunTool.Handler)
 	}
 
+	createNoCodeModuleWorkspaceTool := r.createDynamicTFEToolWithMCPServer("create_nocode_module_workspace", tfeTools.CreateNoCodeModuleWorkspace)
+	r.mcpServer.AddTool(createNoCodeModuleWorkspaceTool.Tool, createNoCodeModuleWorkspaceTool.Handler)
+
 	getRunDetailsTool := r.createDynamicTFETool("get_run_details", tfeTools.GetRunDetails)
 	r.mcpServer.AddTool(getRunDetailsTool.Tool, getRunDetailsTool.Handler)
 
@@ -201,13 +204,51 @@ func (r *DynamicToolRegistry) registerTFETools() {
 	updateWorkspaceVariableTool := r.createDynamicTFETool("update_workspace_variable", tfeTools.UpdateWorkspaceVariable)
 	r.mcpServer.AddTool(updateWorkspaceVariableTool.Tool, updateWorkspaceVariableTool.Handler)
 
-
 	r.tfeToolsRegistered = true
 }
 
 // createDynamicTFETool creates a TFE tool with dynamic availability checking
 func (r *DynamicToolRegistry) createDynamicTFETool(toolName string, toolFactory func(*log.Logger) server.ServerTool) server.ServerTool {
 	originalTool := toolFactory(r.logger)
+
+	// Wrap the handler with dynamic availability checking
+	wrappedHandler := func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		// Get session from context
+		session := server.ClientSessionFromContext(ctx)
+		if session == nil {
+			r.logger.WithField("tool", toolName).Warn("TFE tool called without session context")
+			return mcp.NewToolResultError("This tool requires an active session with valid Terraform Cloud/Enterprise configuration."), nil
+		}
+
+		// Check if this session has a valid TFE client
+		sessionID := session.SessionID()
+		if !r.HasSessionWithTFE(sessionID) {
+			// Double-check by looking at the actual client state
+			tfeClient := client.GetTfeClient(sessionID)
+			if tfeClient == nil {
+				r.logger.WithFields(log.Fields{
+					"tool": toolName,
+				}).Warn("TFE tool called but session has no valid TFE client")
+
+				return mcp.NewToolResultError("This tool is not available. This tool requires a valid Terraform Cloud/Enterprise token and configuration. Please ensure TFE_TOKEN and TFE_ADDRESS environment variables are properly set."), nil
+			}
+			// If we found a valid client that wasn't registered, register it now
+			r.RegisterSessionWithTFE(sessionID)
+		}
+
+		// Tool is available, proceed with original handler
+		return originalTool.Handler(ctx, req)
+	}
+
+	return server.ServerTool{
+		Tool:    originalTool.Tool,
+		Handler: wrappedHandler,
+	}
+}
+
+// createDynamicTFEToolWithMCPServer creates a TFE tool with dynamic availability checking that also needs MCPServer
+func (r *DynamicToolRegistry) createDynamicTFEToolWithMCPServer(toolName string, toolFactory func(*log.Logger, *server.MCPServer) server.ServerTool) server.ServerTool {
+	originalTool := toolFactory(r.logger, r.mcpServer)
 
 	// Wrap the handler with dynamic availability checking
 	wrappedHandler := func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {

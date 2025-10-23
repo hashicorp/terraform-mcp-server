@@ -55,6 +55,7 @@ func NewServer(version string, logger *log.Logger, opts ...server.ServerOption) 
 		server.WithResourceCapabilities(true, true),
 		server.WithInstructions(instructions),
 		server.WithToolHandlerMiddleware(rateLimitMiddleware.Middleware()),
+		server.WithElicitation(),
 	}
 	opts = append(defaultOpts, opts...)
 
