@@ -71,7 +71,7 @@ done
 
 if [ "$VERSION_MISMATCH" = true ]; then
     echo ""
-    echo "Please run scripts/update-server-json-version.sh before merging into release"
+    echo "Please run scripts/update-json-version.sh before merging into release"
     exit 1
 else
     echo ""

@@ -64,10 +64,17 @@ docker-run-http:
 	$(DOCKER) run -p 8080:8080 --rm $(BINARY_NAME):$(VERSION) http --transport-port 8080 --transport-host 0.0.0.0
 
 # Synchronise server.json version fields with version/VERSION
-update-server-json-version:
+update-json-version:
 	@VERSION_FILE="$(CURDIR)/version/VERSION"; \
 	SERVER_JSON="$(CURDIR)/server.json"; \
-	"$(CURDIR)/scripts/update-server-json-version.sh" "$$VERSION_FILE" "$$SERVER_JSON"
+	"$(CURDIR)/scripts/update-json-version.sh" "$$SERVER_JSON" "$$VERSION_FILE" 
+
+
+# Synchronise gemini-extension.json version fields with version/VERSION
+update-gemini-version:
+	@VERSION_FILE="$(CURDIR)/version/VERSION"; \
+	SERVER_JSON="$(CURDIR)/gemini-extension.json"; \
+	"$(CURDIR)/scripts/update-json-version.sh" "$$SERVER_JSON" "$$VERSION_FILE" 
 
 # Test HTTP endpoint
 test-http:

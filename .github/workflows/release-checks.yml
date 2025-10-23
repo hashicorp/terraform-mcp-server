@@ -1,6 +1,9 @@
 name: Version Consistency Check
 
 on:
+  push:
+    branches: 
+      - 'release/*'
   pull_request:
     branches: 
       - 'release/*'
@@ -14,10 +17,7 @@ jobs:
       uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       
     - name: Install jq
-      run: sudo apt-get update && sudo apt-get install -y jq
-      
-    - name: Make script executable
-      run: chmod +x scripts/compare-versions.sh
-      
-    - name: Run version comparison
-      run: ./scripts/compare-versions.sh
+      run: |
+        sudo apt-get update && sudo apt-get install -y jq
+        chmod +x scripts/compare-versions.sh
+        ./scripts/compare-versions.sh
