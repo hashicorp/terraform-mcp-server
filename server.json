@@ -1,6 +1,6 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-10-17/server.schema.json",
-  "name": "io.gitub.hashicorp/terraform-mcp-server",
+  "name": "io.github.hashicorp/terraform-mcp-server",
   "title": "Terraform MCP Server",
   "description": "Generate more accurate Terraform and automate workflows for HCP Terraform and Terraform Enterprise",
   "websiteUrl": "https://github.com/hashicorp/terraform-mcp-server",
