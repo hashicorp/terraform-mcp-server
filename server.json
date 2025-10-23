@@ -2,7 +2,7 @@
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-10-17/server.schema.json",
   "name": "io.gitub.hashicorp/terraform-mcp-server",
   "title": "Terraform MCP Server",
-  "description": "Terraform MCP Server. Provides tools to interact with TF Public Registry and HCPTF/TFE.",
+  "description": "Generate more accurate Terraform and automate workflows for HCP Terraform and Terraform Enterprise",
   "websiteUrl": "https://github.com/hashicorp/terraform-mcp-server",
   "repository": {
     "url": "https://github.com/hashicorp/terraform-mcp-server",
