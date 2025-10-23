@@ -11,7 +11,7 @@ TARGET_DIR ?= $(CURDIR)/dist
 # Build flags
 LDFLAGS=-ldflags="-s -w -X terraform-mcp-server/version.GitCommit=$(shell git rev-parse HEAD) -X terraform-mcp-server/version.BuildDate=$(shell git show --no-show-signature -s --format=%cd --date=format:"%Y-%m-%dT%H:%M:%SZ" HEAD)"
 
-.PHONY: all build crt-build test test-e2e test-security clean deps docker-build run-http run-http-secure docker-run-http test-http cleanup-test-containers help
+.PHONY: all build crt-build test test-e2e test-security clean deps docker-build run-http run-http-secure docker-run-http test-http cleanup-test-containers update-server-json-version help
 
 # Default target
 all: build
@@ -63,6 +63,12 @@ run-http-secure:
 docker-run-http:
 	$(DOCKER) run -p 8080:8080 --rm $(BINARY_NAME):$(VERSION) http --transport-port 8080 --transport-host 0.0.0.0
 
+# Synchronise server.json version fields with version/VERSION
+update-server-json-version:
+	@VERSION_FILE="$(CURDIR)/version/VERSION"; \
+	SERVER_JSON="$(CURDIR)/server.json"; \
+	"$(CURDIR)/scripts/update-server-json-version.sh" "$$VERSION_FILE" "$$SERVER_JSON"
+
 # Test HTTP endpoint
 test-http:
 	@echo "Testing StreamableHTTP server health endpoint..."
@@ -100,5 +106,5 @@ help:
 	@echo "  docker-run-http - Run StreamableHTTP server in Docker on port 8080"
 	@echo "  test-http      - Test StreamableHTTP health endpoint"
 	@echo "  cleanup-test-containers - Stop and remove all test containers"
+	@echo "  update-server-json-version - Update server.json to match version/VERSION"
 	@echo "  help           - Show this help message"
-
