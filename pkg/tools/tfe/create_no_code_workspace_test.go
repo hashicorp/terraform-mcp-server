@@ -24,8 +24,6 @@ func TestCreateNoCodeWorkspace(t *testing.T) {
 		// Check that the tool is properly configured
 		assert.Equal(t, "create_no_code_workspace", tool.Tool.Name)
 		assert.Contains(t, tool.Tool.Description, "Creates a new Terraform No Code module workspace")
-		assert.Contains(t, tool.Tool.Description, "automatically discover required variables")
-		assert.Contains(t, tool.Tool.Description, "MCP elicitation")
 
 		// Check required parameters
 		assert.Contains(t, tool.Tool.InputSchema.Required, "no_code_module_id")

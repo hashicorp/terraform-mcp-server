@@ -24,7 +24,7 @@ import (
 func CreateNoCodeWorkspace(logger *log.Logger, mcpServer *server.MCPServer) server.ServerTool {
 	return server.ServerTool{
 		Tool: mcp.NewTool("create_no_code_workspace",
-			mcp.WithDescription(`Creates a new Terraform No Code module workspace. The tool uses MCP elicitation to collect missing variables from the user.`),
+			mcp.WithDescription(`Creates a new Terraform No Code module workspace. The tool uses the MCP elicitation feature to automatically discover and collect required variables from the user.`),
 			mcp.WithTitleAnnotation("Create a No Code module workspace"),
 			mcp.WithOpenWorldHintAnnotation(true),
 			mcp.WithReadOnlyHintAnnotation(false),
