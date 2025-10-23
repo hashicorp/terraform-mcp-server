@@ -10,9 +10,19 @@ permissions:
 jobs:
   publish:
     runs-on: ubuntu-latest
-    environment: publish-registry
 
     steps:
+      - name: Validate triggering actor
+        env:
+          ALLOWED_ACTORS: |
+            gautambaghel
+        run: |
+          if ! grep -Fxq "${GITHUB_ACTOR}" <<< "${ALLOWED_ACTORS}"; then
+            echo "github.actor '${GITHUB_ACTOR}' is not authorized to run this workflow."
+            exit 1
+          fi
+          echo "Authorized actor: ${GITHUB_ACTOR}"
+
       - name: Checkout repository
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
 
