@@ -83,9 +83,9 @@ func createNoCodeWorkspaceHandler(ctx context.Context, request mcp.CallToolReque
 		return nil, utils.LogAndReturnError(logger, "reading No Code module", err)
 	}
 
-	registryModule, err := tfeClient.RegistryModules.Read(context.Background(), tfe.RegistryModuleID{ID: noCodeModule.RegistryModule.ID})
+	registryModule, err := tfeClient.RegistryModules.Read(ctx, tfe.RegistryModuleID{ID: noCodeModule.RegistryModule.ID})
 	if err != nil {
-		log.Fatalf("Error reading Registry module: %s", err)
+		return nil, utils.LogAndReturnError(logger, "error reading Registry module", err)
 	}
 
 	// Make a custom metadata call
