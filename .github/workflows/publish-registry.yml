@@ -1,9 +1,6 @@
 name: publish-registry
 
 on:
-  push:
-    tags:
-      - "v*"
   workflow_dispatch:
 
 permissions:
@@ -13,6 +10,7 @@ permissions:
 jobs:
   publish:
     runs-on: ubuntu-latest
+    environment: publish-registry
 
     steps:
       - name: Checkout repository
