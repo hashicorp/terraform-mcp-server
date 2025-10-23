@@ -42,6 +42,10 @@ func CreateRunSafe(logger *log.Logger) server.ServerTool {
 				mcp.Description("Optional message for the run"),
 				mcp.DefaultString("Triggered via Terraform MCP Server"),
 			),
+			mcp.WithArray("actions",
+				mcp.Description("Optional list of actions to invoke in the array of format actions.<action_type>.<action_name>"),
+				mcp.DefaultArray([]string{}),
+			),
 		),
 		Handler: func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			return createRunSafeHandler(ctx, req, logger)
@@ -65,6 +69,18 @@ func createRunSafeHandler(ctx context.Context, request mcp.CallToolRequest, logg
 	runType := request.GetString("run_type", "plan_and_apply")
 	message := request.GetString("message", "Triggered via Terraform MCP Server")
 
+	// Get actions array parameter
+	var actions []string
+	if actionsRaw, ok := request.GetArguments()["actions"]; ok {
+		if actionsArray, ok := actionsRaw.([]interface{}); ok {
+			for _, action := range actionsArray {
+				if actionStr, ok := action.(string); ok {
+					actions = append(actions, actionStr)
+				}
+			}
+		}
+	}
+
 	tfeClient, err := client.GetTfeClientFromContext(ctx, logger)
 	if err != nil {
 		return nil, utils.LogAndReturnError(logger, "getting Terraform client", err)
@@ -76,7 +92,8 @@ func createRunSafeHandler(ctx context.Context, request mcp.CallToolRequest, logg
 	}
 
 	options := &tfe.RunCreateOptions{
-		Workspace: workspace,
+		Workspace:         workspace,
+		InvokeActionAddrs: actions,
 	}
 	switch runType {
 	case "plan_and_apply":
@@ -134,6 +151,10 @@ func CreateRun(logger *log.Logger) server.ServerTool {
 			mcp.WithString("message",
 				mcp.Description("Optional message for the run"),
 			),
+			mcp.WithArray("actions",
+				mcp.Description("Optional list of actions to invoke"),
+				mcp.DefaultArray([]string{}),
+			),
 		),
 		Handler: func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			return createRunHandler(ctx, req, logger)
@@ -157,6 +178,18 @@ func createRunHandler(ctx context.Context, request mcp.CallToolRequest, logger *
 	runType := request.GetString("run_type", "plan_and_apply")
 	message := request.GetString("message", "Triggered via Terraform MCP Server")
 
+	// Get actions array parameter
+	var actions []string
+	if actionsRaw, ok := request.GetArguments()["actions"]; ok {
+		if actionsArray, ok := actionsRaw.([]interface{}); ok {
+			for _, action := range actionsArray {
+				if actionStr, ok := action.(string); ok {
+					actions = append(actions, actionStr)
+				}
+			}
+		}
+	}
+
 	tfeClient, err := client.GetTfeClientFromContext(ctx, logger)
 	if err != nil {
 		return nil, utils.LogAndReturnError(logger, "getting Terraform client", err)
@@ -168,7 +201,8 @@ func createRunHandler(ctx context.Context, request mcp.CallToolRequest, logger *
 	}
 
 	options := &tfe.RunCreateOptions{
-		Workspace: workspace,
+		Workspace:         workspace,
+		InvokeActionAddrs: actions,
 	}
 	switch runType {
 	case "plan_and_apply":

@@ -46,6 +46,10 @@ func (m *MockCallToolRequest) GetBoolean(key string, defaultValue bool) bool {
 	return defaultValue
 }
 
+func (m *MockCallToolRequest) GetArguments() map[string]interface{} {
+	return m.params
+}
+
 func TestSearchWorkspaces(t *testing.T) {
 	logger := log.New()
 	logger.SetLevel(log.ErrorLevel) // Reduce noise in tests
