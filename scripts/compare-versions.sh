@@ -5,7 +5,7 @@ echo "Checking version consistency using version/VERSION as source of truth..."
 
 # Read version from version/VERSION file (source of truth)
 if [ -f "version/VERSION" ]; then
-    SOURCE_VERSION=$(cat version/VERSION | tr -d '\n\r\t ')
+    SOURCE_VERSION=$(tr -d '\n\r\t ' < version/VERSION)
     echo ""
     echo "Source version (version/VERSION): '$SOURCE_VERSION'"
 else
