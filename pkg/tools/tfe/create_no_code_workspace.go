@@ -90,13 +90,13 @@ func createNoCodeWorkspaceHandler(ctx context.Context, request mcp.CallToolReque
 
 	// Make a custom metadata call
 	customMetadataPath := path.Join("/api/registry/private/v2/modules", registryModule.Namespace, registryModule.Name, registryModule.Provider, "metadata", noCodeModule.VersionPin)
-	inputVariablData, err := utils.MakeCustomRequestWithDoRaw(ctx, tfeClient, customMetadataPath, map[string][]string{"organization_name": {noCodeModule.Organization.Name}})
+	inputVariableData, err := utils.MakeCustomRequestWithDoRaw(ctx, tfeClient, customMetadataPath, map[string][]string{"organization_name": {noCodeModule.Organization.Name}})
 	if err != nil {
 		return nil, utils.LogAndReturnError(logger, "making module metadata API request", err)
 	}
 
 	var moduleMetadata client.ModuleMetadata
-	if err := json.Unmarshal(inputVariablData, &moduleMetadata); err != nil {
+	if err := json.Unmarshal(inputVariableData, &moduleMetadata); err != nil {
 		return nil, utils.LogAndReturnError(logger, "unmarshalling module metadata", err)
 	}
 
