@@ -4,12 +4,15 @@
 package utils
 
 import (
+	"context"
 	"fmt"
+	"io"
 	"os"
 	"regexp"
 	"slices"
 	"strings"
 
+	"github.com/hashicorp/go-tfe"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -110,4 +113,32 @@ func GetEnv(key, fallback string) string {
 		return value
 	}
 	return fallback
+}
+
+// This function is used for custom API requests using the TFE client.
+func MakeCustomRequestWithDoRaw(ctx context.Context, client *tfe.Client, path string, additionalQueryParams ...map[string][]string) ([]byte, error) {
+	var queryParams map[string][]string
+	if len(additionalQueryParams) > 0 {
+		queryParams = additionalQueryParams[0]
+	}
+	req, err := client.NewRequestWithAdditionalQueryParams("GET", path, nil, queryParams)
+	if err != nil {
+		log.Printf("Error creating request: %s", err)
+		return nil, err
+	}
+
+	respBody, err := req.DoRaw(ctx)
+	if err != nil {
+		log.Printf("Error executing request: %s", err)
+		return nil, err
+	}
+	defer respBody.Close()
+
+	body, err := io.ReadAll(respBody)
+	if err != nil {
+		log.Printf("Error reading response: %s", err)
+		return nil, err
+	}
+
+	return body, nil
 }

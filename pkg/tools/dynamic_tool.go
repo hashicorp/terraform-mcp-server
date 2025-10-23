@@ -168,8 +168,8 @@ func (r *DynamicToolRegistry) registerTFETools() {
 		r.mcpServer.AddTool(actionRunTool.Tool, actionRunTool.Handler)
 	}
 
-	createNoCodeModuleWorkspaceTool := r.createDynamicTFEToolWithMCPServer("create_nocode_module_workspace", tfeTools.CreateNoCodeModuleWorkspace)
-	r.mcpServer.AddTool(createNoCodeModuleWorkspaceTool.Tool, createNoCodeModuleWorkspaceTool.Handler)
+	createNoCodeWorkspace := r.createDynamicTFEToolWithMCPServer("create_no_code_workspace", tfeTools.CreateNoCodeWorkspace)
+	r.mcpServer.AddTool(createNoCodeWorkspace.Tool, createNoCodeWorkspace.Handler)
 
 	getRunDetailsTool := r.createDynamicTFETool("get_run_details", tfeTools.GetRunDetails)
 	r.mcpServer.AddTool(getRunDetailsTool.Tool, getRunDetailsTool.Handler)

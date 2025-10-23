@@ -6,7 +6,9 @@ package tools
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
+	"path"
 	"strings"
 
 	"github.com/hashicorp/go-tfe"
@@ -18,11 +20,11 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-// CreateNoCodeModuleWorkspace creates a tool to create a No Code module workspace.
-func CreateNoCodeModuleWorkspace(logger *log.Logger, mcpServer *server.MCPServer) server.ServerTool {
+// CreateNoCodeWorkspace creates a tool to create a No Code module workspace.
+func CreateNoCodeWorkspace(logger *log.Logger, mcpServer *server.MCPServer) server.ServerTool {
 	return server.ServerTool{
-		Tool: mcp.NewTool("create_nocode_module_workspace",
-			mcp.WithDescription(`Creates a new Terraform No Code module workspace. The tool will automatically discover required variables from the No Code module and use MCP elicitation to collect missing values from the user.`),
+		Tool: mcp.NewTool("create_no_code_workspace",
+			mcp.WithDescription(`Creates a new Terraform No Code module workspace. The tool uses MCP elicitation to collect missing variables from the user.`),
 			mcp.WithTitleAnnotation("Create a No Code module workspace"),
 			mcp.WithOpenWorldHintAnnotation(true),
 			mcp.WithReadOnlyHintAnnotation(false),
@@ -41,12 +43,12 @@ func CreateNoCodeModuleWorkspace(logger *log.Logger, mcpServer *server.MCPServer
 			),
 		),
 		Handler: func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-			return createNoCodeModuleWorkspaceHandler(ctx, req, logger, mcpServer)
+			return createNoCodeWorkspaceHandler(ctx, req, logger, mcpServer)
 		},
 	}
 }
 
-func createNoCodeModuleWorkspaceHandler(ctx context.Context, request mcp.CallToolRequest, logger *log.Logger, mcpServer *server.MCPServer) (*mcp.CallToolResult, error) {
+func createNoCodeWorkspaceHandler(ctx context.Context, request mcp.CallToolRequest, logger *log.Logger, mcpServer *server.MCPServer) (*mcp.CallToolResult, error) {
 	// Get a Terraform client from context
 	tfeClient, err := client.GetTfeClientFromContext(ctx, logger)
 	if err != nil {
@@ -81,19 +83,36 @@ func createNoCodeModuleWorkspaceHandler(ctx context.Context, request mcp.CallToo
 		return nil, utils.LogAndReturnError(logger, "reading No Code module", err)
 	}
 
+	registryModule, err := tfeClient.RegistryModules.Read(context.Background(), tfe.RegistryModuleID{ID: noCodeModule.RegistryModule.ID})
+	if err != nil {
+		log.Fatalf("Error reading Registry module: %s", err)
+	}
+
+	// Make a custom metadata call
+	customMetadataPath := path.Join("/api/registry/private/v2/modules", registryModule.Namespace, registryModule.Name, registryModule.Provider, "metadata", noCodeModule.VersionPin)
+	inputVariablData, err := utils.MakeCustomRequestWithDoRaw(ctx, tfeClient, customMetadataPath, map[string][]string{"organization_name": {noCodeModule.Organization.Name}})
+	if err != nil {
+		return nil, utils.LogAndReturnError(logger, "making the latest provider version API request", err)
+	}
+
+	var moduleMetadata client.ModuleMetadata
+	if err := json.Unmarshal(inputVariablData, &moduleMetadata); err != nil {
+		return nil, utils.LogAndReturnError(logger, "unmarshalling provider versions request", err)
+	}
+
 	// Build elicitation schema and collect variable information
 	var variables []*tfe.Variable
 	var elicitationProperties = make(map[string]any)
 	var requiredVars []string
 
 	// Process each variable option from the No Code module
-	for _, varOpt := range noCodeModule.VariableOptions {
+	for _, inputVar := range moduleMetadata.Data.Attributes.InputVariables {
 		property := make(map[string]any)
 
 		// Map Terraform variable types to JSON Schema types
 		// Could be any of the Terraform variable types
 		// string, number, bool, list, set, map or null
-		switch varOpt.VariableType {
+		switch inputVar.Type {
 		case "string":
 			property["type"] = "string"
 		case "number":
@@ -105,18 +124,26 @@ func createNoCodeModuleWorkspaceHandler(ctx context.Context, request mcp.CallToo
 			property["type"] = "string"
 		}
 
-		property["title"] = varOpt.VariableName
-		property["description"] = fmt.Sprintf("%s requires value of %s type", varOpt.VariableName, varOpt.VariableType)
+		property["title"] = inputVar.Name
+		property["description"] = inputVar.Description
 
-		// Add options as enum if available
-		if len(varOpt.Options) > 0 {
-			enumOptions := make([]string, len(varOpt.Options))
-			copy(enumOptions, varOpt.Options)
-			property["enum"] = enumOptions
+		for _, varOpt := range noCodeModule.VariableOptions {
+			if varOpt.VariableName == inputVar.Name {
+				if len(varOpt.Options) > 0 {
+					// Add options as enum if available
+					enumOptions := make([]string, len(varOpt.Options))
+					copy(enumOptions, varOpt.Options)
+					property["enum"] = enumOptions
+				}
+				break
+			}
 		}
 
-		elicitationProperties[varOpt.VariableName] = property
-		requiredVars = append(requiredVars, varOpt.VariableName)
+		elicitationProperties[inputVar.Name] = property
+
+		if inputVar.Required {
+			requiredVars = append(requiredVars, inputVar.Name)
+		}
 	}
 
 	elicitationRequest := mcp.ElicitationRequest{
@@ -152,13 +179,58 @@ func createNoCodeModuleWorkspaceHandler(ctx context.Context, request mcp.CallToo
 				return nil, utils.LogAndReturnError(logger, fmt.Sprintf("required variable '%s' is missing from elicitation response", varName), nil)
 			}
 
-			value, ok := valueRaw.(string)
+			// Get the property definition to determine the type
+			propertyDef, ok := elicitationProperties[varName].(map[string]any)
 			if !ok {
-				return nil, utils.LogAndReturnError(logger, fmt.Sprintf("variable '%s' must be a string", varName), fmt.Errorf("got %T", valueRaw))
+				return nil, utils.LogAndReturnError(logger, fmt.Sprintf("invalid property definition for variable '%s'", varName), nil)
 			}
 
-			if value == "" {
-				return nil, utils.LogAndReturnError(logger, fmt.Sprintf("variable '%s' cannot be empty", varName), nil)
+			varType, ok := propertyDef["type"].(string)
+			if !ok {
+				varType = "string" // Default to string if type is not specified
+			}
+
+			var value string
+			// Cast the value based on its type
+			switch varType {
+			case "string":
+				strValue, ok := valueRaw.(string)
+				if !ok {
+					return nil, utils.LogAndReturnError(logger, fmt.Sprintf("variable '%s' must be a string", varName), fmt.Errorf("got %T", valueRaw))
+				}
+				if strValue == "" {
+					return nil, utils.LogAndReturnError(logger, fmt.Sprintf("variable '%s' cannot be empty", varName), nil)
+				}
+				value = strValue
+
+			case "number":
+				// Handle both float64 (from JSON) and int
+				switch v := valueRaw.(type) {
+				case float64:
+					value = fmt.Sprintf("%v", v)
+				case int:
+					value = fmt.Sprintf("%d", v)
+				case string:
+					// Allow string representation of numbers
+					value = v
+				default:
+					return nil, utils.LogAndReturnError(logger, fmt.Sprintf("variable '%s' must be a number", varName), fmt.Errorf("got %T", valueRaw))
+				}
+
+			case "boolean":
+				boolValue, ok := valueRaw.(bool)
+				if !ok {
+					return nil, utils.LogAndReturnError(logger, fmt.Sprintf("variable '%s' must be a boolean", varName), fmt.Errorf("got %T", valueRaw))
+				}
+				value = fmt.Sprintf("%t", boolValue)
+
+			default:
+				// For complex types (list, map, etc.), convert to JSON string
+				jsonValue, err := json.Marshal(valueRaw)
+				if err != nil {
+					return nil, utils.LogAndReturnError(logger, fmt.Sprintf("failed to marshal variable '%s'", varName), err)
+				}
+				value = string(jsonValue)
 			}
 
 			// Add the variable to our array

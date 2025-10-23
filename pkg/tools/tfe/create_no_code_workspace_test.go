@@ -11,7 +11,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestCreateNoCodeModuleWorkspace(t *testing.T) {
+func TestCreateNoCodeWorkspace(t *testing.T) {
 	logger := logrus.New()
 	logger.SetLevel(logrus.ErrorLevel)
 
@@ -19,10 +19,10 @@ func TestCreateNoCodeModuleWorkspace(t *testing.T) {
 	mcpServer := &server.MCPServer{}
 
 	t.Run("tool creation", func(t *testing.T) {
-		tool := CreateNoCodeModuleWorkspace(logger, mcpServer)
+		tool := CreateNoCodeWorkspace(logger, mcpServer)
 
 		// Check that the tool is properly configured
-		assert.Equal(t, "create_nocode_module_workspace", tool.Tool.Name)
+		assert.Equal(t, "create_no_code_workspace", tool.Tool.Name)
 		assert.Contains(t, tool.Tool.Description, "Creates a new Terraform No Code module workspace")
 		assert.Contains(t, tool.Tool.Description, "automatically discover required variables")
 		assert.Contains(t, tool.Tool.Description, "MCP elicitation")
