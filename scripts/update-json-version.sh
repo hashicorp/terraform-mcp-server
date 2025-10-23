@@ -52,7 +52,7 @@ if [[ ! -f "$VERSION_FILE" ]]; then
 fi
 
 # Read the version from the VERSION file and trim whitespace
-NEW_VERSION=$(cat "$VERSION_FILE" | tr -d '[:space:]')
+NEW_VERSION=$(tr -d '[:space:]' < "$VERSION_FILE")
 
 if [[ -z "$NEW_VERSION" ]]; then
     echo "Error: VERSION file '$VERSION_FILE' is empty"
