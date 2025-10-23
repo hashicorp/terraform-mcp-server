@@ -92,12 +92,12 @@ func createNoCodeWorkspaceHandler(ctx context.Context, request mcp.CallToolReque
 	customMetadataPath := path.Join("/api/registry/private/v2/modules", registryModule.Namespace, registryModule.Name, registryModule.Provider, "metadata", noCodeModule.VersionPin)
 	inputVariablData, err := utils.MakeCustomRequestWithDoRaw(ctx, tfeClient, customMetadataPath, map[string][]string{"organization_name": {noCodeModule.Organization.Name}})
 	if err != nil {
-		return nil, utils.LogAndReturnError(logger, "making the latest provider version API request", err)
+		return nil, utils.LogAndReturnError(logger, "making module metadata API request", err)
 	}
 
 	var moduleMetadata client.ModuleMetadata
 	if err := json.Unmarshal(inputVariablData, &moduleMetadata); err != nil {
-		return nil, utils.LogAndReturnError(logger, "unmarshalling provider versions request", err)
+		return nil, utils.LogAndReturnError(logger, "unmarshalling module metadata", err)
 	}
 
 	// Build elicitation schema and collect variable information
@@ -148,7 +148,7 @@ func createNoCodeWorkspaceHandler(ctx context.Context, request mcp.CallToolReque
 
 	elicitationRequest := mcp.ElicitationRequest{
 		Params: mcp.ElicitationParams{
-			Message: fmt.Sprintf("The No Code module '%s' requires %d variable(s) to create the workspace. Please provide values for the required variables.", noCodeModuleID, len(noCodeModule.VariableOptions)),
+			Message: fmt.Sprintf("The No Code module '%s' requires %d variable(s) to create the workspace. Please provide values for the required variables.", noCodeModuleID, len(requiredVars)),
 			RequestedSchema: map[string]any{
 				"type":       "object",
 				"properties": elicitationProperties,
