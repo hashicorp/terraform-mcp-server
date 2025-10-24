@@ -446,3 +446,25 @@ type WorkspaceToolResponse struct {
 	Variables []*tfe.Variable `jsonapi:"polyrelation,variables,omitempty"`
 	Readme    string          `jsonapi:"attr,readme,omitempty"`
 }
+
+type ModuleMetadata struct {
+	Data struct {
+		Type       string `json:"type"`
+		ID         string `json:"id"`
+		Attributes struct {
+			GitRefTag      string `json:"git-ref-tag"`
+			GitRepoURL     string `json:"git-repo-url"`
+			InputVariables []struct {
+				Name        string `json:"name"`
+				Type        string `json:"type"`
+				Description string `json:"description"`
+				Required    bool   `json:"required"`
+				Sensitive   bool   `json:"sensitive"`
+			} `json:"input-variables"`
+			Name      string `json:"name"`
+			SourceURL string `json:"source-url"`
+			Version   string `json:"version"`
+			NoCode    bool   `json:"no-code"`
+		} `json:"attributes"`
+	} `json:"data"`
+}

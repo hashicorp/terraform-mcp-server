@@ -2,7 +2,9 @@
 
 FEATURES
 
-* Adding provider capability discovery tool to analyze available resources, data sources, functions, guides, and actions
+* [New Tool] `get_provider_capabilities` Adding provider capability discovery tool to analyze available resources, data sources, functions, guides, and actions
+
+* [New Tool] `create_no_code_workspace` Adding capability to trigger a workspace run using a no code module
 
 FIXES
 

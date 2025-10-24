@@ -139,6 +139,12 @@ func searchPrivateModulesHandler(ctx context.Context, request mcp.CallToolReques
 		builder.WriteString(fmt.Sprintf("   Provider: %s\n", module.Provider))
 		builder.WriteString(fmt.Sprintf("   No Code Module: %t\n", module.NoCode))
 
+		if module.NoCode {
+			for _, noCodeModule := range module.RegistryNoCodeModule {
+				builder.WriteString(fmt.Sprintf("     - no_code_module_id: %s\n", noCodeModule.ID))
+			}
+		}
+
 		builder.WriteString("\n")
 	}
 

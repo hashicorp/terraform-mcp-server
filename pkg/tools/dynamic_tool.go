@@ -168,6 +168,9 @@ func (r *DynamicToolRegistry) registerTFETools() {
 		r.mcpServer.AddTool(actionRunTool.Tool, actionRunTool.Handler)
 	}
 
+	createNoCodeWorkspace := r.createDynamicTFEToolWithElicitation("create_no_code_workspace", tfeTools.CreateNoCodeWorkspace)
+	r.mcpServer.AddTool(createNoCodeWorkspace.Tool, createNoCodeWorkspace.Handler)
+
 	getRunDetailsTool := r.createDynamicTFETool("get_run_details", tfeTools.GetRunDetails)
 	r.mcpServer.AddTool(getRunDetailsTool.Tool, getRunDetailsTool.Handler)
 
@@ -201,16 +204,30 @@ func (r *DynamicToolRegistry) registerTFETools() {
 	updateWorkspaceVariableTool := r.createDynamicTFETool("update_workspace_variable", tfeTools.UpdateWorkspaceVariable)
 	r.mcpServer.AddTool(updateWorkspaceVariableTool.Tool, updateWorkspaceVariableTool.Handler)
 
-
 	r.tfeToolsRegistered = true
 }
 
 // createDynamicTFETool creates a TFE tool with dynamic availability checking
 func (r *DynamicToolRegistry) createDynamicTFETool(toolName string, toolFactory func(*log.Logger) server.ServerTool) server.ServerTool {
 	originalTool := toolFactory(r.logger)
+	return server.ServerTool{
+		Tool:    originalTool.Tool,
+		Handler: r.wrapWithAvailabilityCheck(toolName, originalTool.Handler),
+	}
+}
 
-	// Wrap the handler with dynamic availability checking
-	wrappedHandler := func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+// createDynamicTFEToolWithElicitation creates a TFE tool with dynamic availability checking that also needs MCPServer for elicitation
+func (r *DynamicToolRegistry) createDynamicTFEToolWithElicitation(toolName string, toolFactory func(*log.Logger, *server.MCPServer) server.ServerTool) server.ServerTool {
+	originalTool := toolFactory(r.logger, r.mcpServer)
+	return server.ServerTool{
+		Tool:    originalTool.Tool,
+		Handler: r.wrapWithAvailabilityCheck(toolName, originalTool.Handler),
+	}
+}
+
+// wrapWithAvailabilityCheck wraps a tool handler with dynamic TFE availability checking
+func (r *DynamicToolRegistry) wrapWithAvailabilityCheck(toolName string, originalHandler server.ToolHandlerFunc) server.ToolHandlerFunc {
+	return func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		// Get session from context
 		session := server.ClientSessionFromContext(ctx)
 		if session == nil {
@@ -235,11 +252,6 @@ func (r *DynamicToolRegistry) createDynamicTFETool(toolName string, toolFactory 
 		}
 
 		// Tool is available, proceed with original handler
-		return originalTool.Handler(ctx, req)
-	}
-
-	return server.ServerTool{
-		Tool:    originalTool.Tool,
-		Handler: wrappedHandler,
+		return originalHandler(ctx, req)
 	}
 }
