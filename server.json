@@ -381,9 +381,7 @@
     },
     {
       "registryType": "oci",
-      "registryBaseUrl": "https://docker.io",
       "identifier": "docker.io/hashicorp/terraform-mcp-server:0.3.2",
-      "version": "0.3.2",
       "transport": {
         "type": "streamable-http",
         "url": "http://127.0.0.1:8080/mcp"
