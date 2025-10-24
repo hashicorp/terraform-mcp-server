@@ -115,13 +115,9 @@ func GetEnv(key, fallback string) string {
 	return fallback
 }
 
-// This function is used for custom API requests using the TFE client.
-func MakeCustomRequestWithDoRaw(ctx context.Context, client *tfe.Client, path string, additionalQueryParams ...map[string][]string) ([]byte, error) {
-	var queryParams map[string][]string
-	if len(additionalQueryParams) > 0 {
-		queryParams = additionalQueryParams[0]
-	}
-	req, err := client.NewRequestWithAdditionalQueryParams("GET", path, nil, queryParams)
+// This function is used for custom GET requests using the TFE client.
+func MakeCustomGetRequestRaw(ctx context.Context, client *tfe.Client, path string, additionalQueryParams map[string][]string) ([]byte, error) {
+	req, err := client.NewRequestWithAdditionalQueryParams("GET", path, nil, additionalQueryParams)
 	if err != nil {
 		return nil, err
 	}

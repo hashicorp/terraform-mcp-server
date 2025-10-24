@@ -155,7 +155,7 @@ func fetchModuleData(ctx context.Context, tfeClient *tfe.Client, projectID, noCo
 	}
 
 	metadataPath := path.Join("/api/registry/private/v2/modules", registryModule.Namespace, registryModule.Name, registryModule.Provider, "metadata", noCodeModule.VersionPin)
-	metadataData, err := utils.MakeCustomRequestWithDoRaw(ctx, tfeClient, metadataPath, map[string][]string{"organization_name": {noCodeModule.Organization.Name}})
+	metadataData, err := utils.MakeCustomGetRequestRaw(ctx, tfeClient, metadataPath, map[string][]string{"organization_name": {noCodeModule.Organization.Name}})
 	if err != nil {
 		return nil, nil, nil, utils.LogAndReturnError(logger, "making module metadata API request", err)
 	}
