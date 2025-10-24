@@ -123,20 +123,17 @@ func MakeCustomRequestWithDoRaw(ctx context.Context, client *tfe.Client, path st
 	}
 	req, err := client.NewRequestWithAdditionalQueryParams("GET", path, nil, queryParams)
 	if err != nil {
-		log.Printf("Error creating request: %s", err)
 		return nil, err
 	}
 
 	respBody, err := req.DoRaw(ctx)
 	if err != nil {
-		log.Printf("Error executing request: %s", err)
 		return nil, err
 	}
 	defer respBody.Close()
 
 	body, err := io.ReadAll(respBody)
 	if err != nil {
-		log.Printf("Error reading response: %s", err)
 		return nil, err
 	}
 
