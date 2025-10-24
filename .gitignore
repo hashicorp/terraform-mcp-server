@@ -5,3 +5,5 @@ cmd/mcpcurl/mcpcurl
 .vscode/
 dist/
 bin/*
+server.json.backup*
+gemini-extension.json.backup*
