@@ -110,8 +110,8 @@ func createNoCodeWorkspaceHandler(ctx context.Context, request mcp.CallToolReque
 		property := make(map[string]any)
 
 		// Map Terraform variable types to JSON Schema types
-		// Could be any of the Terraform variable types
-		// string, number, bool, list, set, map or null
+		// Only "string", "number", and "bool" types are explicitly handled below.
+		// All other types (including list, set, map, or null) default to "string".
 		switch inputVar.Type {
 		case "string":
 			property["type"] = "string"
