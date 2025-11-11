@@ -8,7 +8,7 @@ project "terraform-mcp-server" {
 
   # slack channel : feed-terraform-mcp-server-releases
   slack {
-    notification_channel = "C08TEJWRXDX"
+    notification_channel = "C09KWKM9HHB"
   }
 
   github {
