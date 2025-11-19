@@ -1,6 +1,6 @@
 module github.com/hashicorp/terraform-mcp-server
 
-go 1.25.1
+go 1.25.4
 
 require (
 	github.com/hashicorp/go-cleanhttp v0.5.2
