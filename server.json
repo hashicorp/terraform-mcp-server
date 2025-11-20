@@ -7,11 +7,11 @@
     "url": "https://github.com/hashicorp/terraform-mcp-server",
     "source": "github"
   },
-  "version": "0.3.2",
+  "version": "0.3.3",
   "packages": [
     {
       "registryType": "oci",
-      "identifier": "docker.io/hashicorp/terraform-mcp-server:0.3.2",
+      "identifier": "docker.io/hashicorp/terraform-mcp-server:0.3.3",
       "transport": {
         "type": "stdio"
       },
@@ -68,7 +68,7 @@
         {
           "type": "positional",
           "valueHint": "image_name",
-          "value": "hashicorp/terraform-mcp-server:0.3.2",
+          "value": "hashicorp/terraform-mcp-server:0.3.3",
           "description": "The container image to run"
         }
       ],

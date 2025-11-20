@@ -85,7 +85,7 @@ More about using MCP server tools in VS Code's [agent mode documentation](https:
           "--rm",
           "-e", "TFE_TOKEN=${input:tfe_token}",
           "-e", "TFE_ADDRESS=${input:tfe_address}",
-          "hashicorp/terraform-mcp-server:0.3.2"
+          "hashicorp/terraform-mcp-server:0.3.3"
         ]
       }
     },
@@ -149,7 +149,7 @@ Optionally, you can add a similar example (i.e. without the mcp key) to a file c
         "--rm",
         "-e", "TFE_TOKEN=${input:tfe_token}",
         "-e", "TFE_ADDRESS=${input:tfe_address}",
-        "hashicorp/terraform-mcp-server:0.3.2"
+        "hashicorp/terraform-mcp-server:0.3.3"
       ]
     }
   },
@@ -216,7 +216,7 @@ Add this to your Cursor config (`~/.cursor/mcp.json`) or via Settings → Cursor
         "--rm",
         "-e", "TFE_ADDRESS=<<PASTE_TFE_ADDRESS_HERE>>",
         "-e", "TFE_TOKEN=<<PASTE_TFE_TOKEN_HERE>>",
-        "hashicorp/terraform-mcp-server:0.3.2"
+        "hashicorp/terraform-mcp-server:0.3.3"
       ]
     }
   }
@@ -269,7 +269,7 @@ More about using MCP server tools in Claude Desktop [user documentation](https:/
         "--rm",
         "-e", "TFE_ADDRESS=<<PASTE_TFE_ADDRESS_HERE>>",
         "-e", "TFE_TOKEN=<<PASTE_TFE_TOKEN_HERE>>",
-        "hashicorp/terraform-mcp-server:0.3.2"
+        "hashicorp/terraform-mcp-server:0.3.3"
       ]
     }
   }
