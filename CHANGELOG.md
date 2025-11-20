@@ -1,5 +1,9 @@
 ## Unreleased
 
+IMPROVEMENTS
+
+* Adding support for searching Terraform List Resources documentation
+
 ## 0.3.2 (Oct 23, 2025)
 
 FEATURES
