@@ -5,7 +5,7 @@ go 1.25.4
 require (
 	github.com/hashicorp/go-cleanhttp v0.5.2
 	github.com/hashicorp/go-retryablehttp v0.7.8
-	github.com/hashicorp/go-tfe v1.95.0
+	github.com/hashicorp/go-tfe v1.96.0
 	github.com/hashicorp/jsonapi v1.5.0
 	github.com/mark3labs/mcp-go v0.43.0
 	github.com/sirupsen/logrus v1.9.3
