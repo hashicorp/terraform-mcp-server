@@ -126,6 +126,8 @@ func runTestSuite(t *testing.T, client mcpClient.MCPClient, transportName string
 					require.Contains(t, textContent.Text, "functions", "expected content to contain functions")
 				case CONST_TYPE_ACTIONS:
 					require.Contains(t, textContent.Text, "actions", "expected content to contain actions")
+				case CONST_TYPE_LIST_RESOURCES:
+					require.Contains(t, textContent.Text, "list-resources", "expected content to contain list-resources")
 				}
 			}
 		})

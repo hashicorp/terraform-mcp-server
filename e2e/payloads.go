@@ -6,12 +6,13 @@ package e2e
 type ContentType string
 
 const (
-	CONST_TYPE_RESOURCE    ContentType = "resources"
-	CONST_TYPE_DATA_SOURCE ContentType = "data-sources"
-	CONST_TYPE_GUIDES      ContentType = "guides"
-	CONST_TYPE_FUNCTIONS   ContentType = "functions"
-	CONST_TYPE_OVERVIEW    ContentType = "overview"
-	CONST_TYPE_ACTIONS     ContentType = "actions"
+	CONST_TYPE_RESOURCE       ContentType = "resources"
+	CONST_TYPE_DATA_SOURCE    ContentType = "data-sources"
+	CONST_TYPE_GUIDES         ContentType = "guides"
+	CONST_TYPE_FUNCTIONS      ContentType = "functions"
+	CONST_TYPE_OVERVIEW       ContentType = "overview"
+	CONST_TYPE_ACTIONS        ContentType = "actions"
+	CONST_TYPE_LIST_RESOURCES ContentType = "list-resources"
 )
 
 type RegistryTestCase struct {
@@ -183,6 +184,19 @@ var searchProviderTestCases = []RegistryTestCase{
 			"provider_version":       "latest",
 			"provider_document_type": "actions",
 			"service_slug":           "ec2",
+		},
+	},
+	{
+		TestName:        "list_resources_documentation",
+		TestShouldFail:  false,
+		TestDescription: "Testing search_providers list-resources documentation with v2 API",
+		TestContentType: CONST_TYPE_LIST_RESOURCES,
+		TestPayload: map[string]interface{}{
+			"provider_name":          "aws",
+			"provider_namespace":     "hashicorp",
+			"provider_version":       "latest",
+			"provider_document_type": "list-resources",
+			"service_slug":           "instance",
 		},
 	},
 }

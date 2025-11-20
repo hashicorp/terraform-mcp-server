@@ -79,7 +79,7 @@ func LogAndReturnError(logger *log.Logger, context string, err error) error {
 }
 
 func IsV2ProviderDocumentType(dataType string) bool {
-	v2Categories := []string{"guides", "functions", "overview", "actions"}
+	v2Categories := []string{"guides", "functions", "overview", "actions", "list-resources"}
 	return slices.Contains(v2Categories, dataType)
 }
 
