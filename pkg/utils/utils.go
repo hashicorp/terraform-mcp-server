@@ -65,7 +65,7 @@ func IsValidProviderVersionFormat(version string) bool {
 }
 
 func IsValidProviderDocumentType(providerDocumentType string) bool {
-	validTypes := []string{"resources", "data-sources", "functions", "guides", "overview"}
+	validTypes := []string{"resources", "data-sources", "functions", "guides", "overview", "actions", "list-resources"}
 	return slices.Contains(validTypes, providerDocumentType)
 }
 

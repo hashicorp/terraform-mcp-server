@@ -18,6 +18,7 @@ func TestAnalyzeAndFormatCapabilities(t *testing.T) {
 			{Category: "data-sources", Title: "aws_ami", Language: "hcl"},
 			{Category: "functions", Title: "base64encode", Language: "hcl"},
 			{Category: "guides", Title: "Getting Started", Language: "hcl"},
+			{Category: "list-resources", Title: "aws_instance", Language: "hcl"},
 		},
 	}
 

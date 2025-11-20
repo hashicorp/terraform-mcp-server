@@ -70,7 +70,7 @@ func TestIsValidProviderVersionFormat(t *testing.T) {
 }
 
 func TestIsValidProviderDataType(t *testing.T) {
-	valid := []string{"resources", "data-sources", "functions", "guides", "overview"}
+	valid := []string{"resources", "data-sources", "functions", "guides", "overview", "actions", "list-resources"}
 	invalid := []string{"foo", "bar", ""}
 	for _, v := range valid {
 		if !IsValidProviderDocumentType(v) {

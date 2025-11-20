@@ -32,7 +32,7 @@ This tool analyzes the provider documentation to determine what types of capabil
 - guides: Documentation guides and tutorials for using the provider
 - actions: Available provider actions (if any)
 - ephemeral resources: Temporary resources for credentials and tokens
-- list resources: Resources for listing multiple items of specific types
+- list-resources: List resources for querying existing cloud resources (Terraform Search)
 
 Returns a summary with counts and examples for each capability type.`),
 			mcp.WithTitleAnnotation("Get Terraform provider capabilities and supported features"),
