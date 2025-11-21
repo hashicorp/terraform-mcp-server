@@ -13,11 +13,14 @@
         "TFE_TOKEN",
         "-e",
         "TFE_ADDRESS",
+        "-e",
+        "ENABLE_TF_OPERATIONS",
         "hashicorp/terraform-mcp-server:0.3.3"
       ],
       "env": {
         "TFE_TOKEN": "$TFE_TOKEN",
-        "TFE_ADDRESS": "$TFE_ADDRESS"
+        "TFE_ADDRESS": "$TFE_ADDRESS",
+        "ENABLE_TF_OPERATIONS": "$ENABLE_TF_OPERATIONS"
       }
     }
   }
