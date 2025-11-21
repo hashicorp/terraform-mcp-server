@@ -16,6 +16,8 @@ jobs:
         env:
           ALLOWED_ACTORS: |
             gautambaghel
+            jrhouston
+            jaylonmcshan19-x
         run: |
           if ! grep -Fxq "${GITHUB_ACTOR}" <<< "${ALLOWED_ACTORS}"; then
             echo "github.actor '${GITHUB_ACTOR}' is not authorized to run this workflow."
