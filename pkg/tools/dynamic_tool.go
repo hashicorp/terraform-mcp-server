@@ -10,6 +10,7 @@ import (
 
 	"github.com/hashicorp/terraform-mcp-server/pkg/client"
 	tfeTools "github.com/hashicorp/terraform-mcp-server/pkg/tools/tfe"
+	"github.com/hashicorp/terraform-mcp-server/pkg/toolsets"
 	"github.com/hashicorp/terraform-mcp-server/pkg/utils"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
@@ -23,17 +24,19 @@ type DynamicToolRegistry struct {
 	tfeToolsRegistered bool
 	mcpServer          *server.MCPServer
 	logger             *log.Logger
+	enabledToolsets    []string
 }
 
 var globalToolRegistry *DynamicToolRegistry
 
 // registerDynamicTools registers the global tool registry
-func registerDynamicTools(mcpServer *server.MCPServer, logger *log.Logger) {
+func registerDynamicTools(mcpServer *server.MCPServer, logger *log.Logger, enabledToolsets []string) {
 	globalToolRegistry = &DynamicToolRegistry{
 		sessionsWithTFE:    make(map[string]bool),
 		tfeToolsRegistered: false,
 		mcpServer:          mcpServer,
 		logger:             logger,
+		enabledToolsets:    enabledToolsets,
 	}
 
 	// Set the callback in the client package to avoid circular imports
@@ -102,107 +105,157 @@ func (r *DynamicToolRegistry) registerTFETools() {
 
 	r.logger.Info("Registering TFE tools - first session with valid TFE client detected")
 
-	// Create TFE tools with dynamic availability checking
-	listTerraformOrgsTool := r.createDynamicTFETool("list_terraform_orgs", tfeTools.ListTerraformOrgs)
-	r.mcpServer.AddTool(listTerraformOrgsTool.Tool, listTerraformOrgsTool.Handler)
-
-	listTerraformProjectsTool := r.createDynamicTFETool("list_terraform_projects", tfeTools.ListTerraformProjects)
-	r.mcpServer.AddTool(listTerraformProjectsTool.Tool, listTerraformProjectsTool.Handler)
-
-	// Workspace management tools
-	ListWorkspacesTool := r.createDynamicTFETool("list_workspaces", tfeTools.ListWorkspaces)
-	r.mcpServer.AddTool(ListWorkspacesTool.Tool, ListWorkspacesTool.Handler)
-
-	getWorkspaceDetailsTool := r.createDynamicTFETool("get_workspace_details", tfeTools.GetWorkspaceDetails)
-	r.mcpServer.AddTool(getWorkspaceDetailsTool.Tool, getWorkspaceDetailsTool.Handler)
-
-	createWorkspaceTool := r.createDynamicTFETool("create_workspace", tfeTools.CreateWorkspace)
-	r.mcpServer.AddTool(createWorkspaceTool.Tool, createWorkspaceTool.Handler)
-
-	updateWorkspaceTool := r.createDynamicTFETool("update_workspace", tfeTools.UpdateWorkspace)
-	r.mcpServer.AddTool(updateWorkspaceTool.Tool, updateWorkspaceTool.Handler)
-
-	// Only register delete_workspace_safely if TF operations are enabled
-	if isTerraformOperationsEnabled() {
-		deleteWorkspaceSafelyTool := r.createDynamicTFETool("delete_workspace_safely", tfeTools.DeleteWorkspaceSafely)
-		r.mcpServer.AddTool(deleteWorkspaceSafelyTool.Tool, deleteWorkspaceSafelyTool.Handler)
+	// Terraform toolset - Organization and Project tools
+	if toolsets.IsToolEnabled("list_terraform_orgs", r.enabledToolsets) {
+		tool := r.createDynamicTFETool("list_terraform_orgs", tfeTools.ListTerraformOrgs)
+		r.mcpServer.AddTool(tool.Tool, tool.Handler)
 	}
 
-	// Private provider tools
-	searchPrivateProvidersTool := r.createDynamicTFETool("search_private_providers", tfeTools.SearchPrivateProviders)
-	r.mcpServer.AddTool(searchPrivateProvidersTool.Tool, searchPrivateProvidersTool.Handler)
+	if toolsets.IsToolEnabled("list_terraform_projects", r.enabledToolsets) {
+		tool := r.createDynamicTFETool("list_terraform_projects", tfeTools.ListTerraformProjects)
+		r.mcpServer.AddTool(tool.Tool, tool.Handler)
+	}
 
-	getPrivateProviderDetailsTool := r.createDynamicTFETool("get_private_provider_details", tfeTools.GetPrivateProviderDetails)
-	r.mcpServer.AddTool(getPrivateProviderDetailsTool.Tool, getPrivateProviderDetailsTool.Handler)
+	// Terraform toolset - Workspace management tools
+	if toolsets.IsToolEnabled("list_workspaces", r.enabledToolsets) {
+		tool := r.createDynamicTFETool("list_workspaces", tfeTools.ListWorkspaces)
+		r.mcpServer.AddTool(tool.Tool, tool.Handler)
+	}
 
-	// Private module tools
-	searchPrivateModulesTool := r.createDynamicTFETool("search_private_modules", tfeTools.SearchPrivateModules)
-	r.mcpServer.AddTool(searchPrivateModulesTool.Tool, searchPrivateModulesTool.Handler)
+	if toolsets.IsToolEnabled("get_workspace_details", r.enabledToolsets) {
+		tool := r.createDynamicTFETool("get_workspace_details", tfeTools.GetWorkspaceDetails)
+		r.mcpServer.AddTool(tool.Tool, tool.Handler)
+	}
 
-	getPrivateModuleDetailsTool := r.createDynamicTFETool("get_private_module_details", tfeTools.GetPrivateModuleDetails)
-	r.mcpServer.AddTool(getPrivateModuleDetailsTool.Tool, getPrivateModuleDetailsTool.Handler)
+	if toolsets.IsToolEnabled("create_workspace", r.enabledToolsets) {
+		tool := r.createDynamicTFETool("create_workspace", tfeTools.CreateWorkspace)
+		r.mcpServer.AddTool(tool.Tool, tool.Handler)
+	}
 
-	// Workspace tags tools
-	createWorkspaceTagsTool := r.createDynamicTFETool("create_workspace_tags", tfeTools.CreateWorkspaceTags)
-	r.mcpServer.AddTool(createWorkspaceTagsTool.Tool, createWorkspaceTagsTool.Handler)
+	if toolsets.IsToolEnabled("update_workspace", r.enabledToolsets) {
+		tool := r.createDynamicTFETool("update_workspace", tfeTools.UpdateWorkspace)
+		r.mcpServer.AddTool(tool.Tool, tool.Handler)
+	}
 
-	readWorkspaceTagsTool := r.createDynamicTFETool("read_workspace_tags", tfeTools.ReadWorkspaceTags)
-	r.mcpServer.AddTool(readWorkspaceTagsTool.Tool, readWorkspaceTagsTool.Handler)
+	// Only register delete_workspace_safely if TF operations are enabled AND toolset is enabled
+	if isTerraformOperationsEnabled() && toolsets.IsToolEnabled("delete_workspace_safely", r.enabledToolsets) {
+		tool := r.createDynamicTFETool("delete_workspace_safely", tfeTools.DeleteWorkspaceSafely)
+		r.mcpServer.AddTool(tool.Tool, tool.Handler)
+	}
 
-	// Terraform run tools
-	listRunsTool := r.createDynamicTFETool("list_runs", tfeTools.ListRuns)
-	r.mcpServer.AddTool(listRunsTool.Tool, listRunsTool.Handler)
+	// Registry-private toolset - Private provider tools
+	if toolsets.IsToolEnabled("search_private_providers", r.enabledToolsets) {
+		tool := r.createDynamicTFETool("search_private_providers", tfeTools.SearchPrivateProviders)
+		r.mcpServer.AddTool(tool.Tool, tool.Handler)
+	}
+
+	if toolsets.IsToolEnabled("get_private_provider_details", r.enabledToolsets) {
+		tool := r.createDynamicTFETool("get_private_provider_details", tfeTools.GetPrivateProviderDetails)
+		r.mcpServer.AddTool(tool.Tool, tool.Handler)
+	}
+
+	// Registry-private toolset - Private module tools
+	if toolsets.IsToolEnabled("search_private_modules", r.enabledToolsets) {
+		tool := r.createDynamicTFETool("search_private_modules", tfeTools.SearchPrivateModules)
+		r.mcpServer.AddTool(tool.Tool, tool.Handler)
+	}
+
+	if toolsets.IsToolEnabled("get_private_module_details", r.enabledToolsets) {
+		tool := r.createDynamicTFETool("get_private_module_details", tfeTools.GetPrivateModuleDetails)
+		r.mcpServer.AddTool(tool.Tool, tool.Handler)
+	}
+
+	// Terraform toolset - Workspace tags tools
+	if toolsets.IsToolEnabled("create_workspace_tags", r.enabledToolsets) {
+		tool := r.createDynamicTFETool("create_workspace_tags", tfeTools.CreateWorkspaceTags)
+		r.mcpServer.AddTool(tool.Tool, tool.Handler)
+	}
+
+	if toolsets.IsToolEnabled("read_workspace_tags", r.enabledToolsets) {
+		tool := r.createDynamicTFETool("read_workspace_tags", tfeTools.ReadWorkspaceTags)
+		r.mcpServer.AddTool(tool.Tool, tool.Handler)
+	}
+
+	// Terraform toolset - Run tools
+	if toolsets.IsToolEnabled("list_runs", r.enabledToolsets) {
+		tool := r.createDynamicTFETool("list_runs", tfeTools.ListRuns)
+		r.mcpServer.AddTool(tool.Tool, tool.Handler)
+	}
 
 	// Create run tool with conditional options based on TF operations setting
-	var createRunTool server.ServerTool
-	if isTerraformOperationsEnabled() {
-		createRunTool = r.createDynamicTFETool("create_run", tfeTools.CreateRun)
-	} else {
-		createRunTool = r.createDynamicTFETool("create_run", tfeTools.CreateRunSafe)
-	}
-	r.mcpServer.AddTool(createRunTool.Tool, createRunTool.Handler)
-
-	// Only register action_run if TF operations are enabled
-	if isTerraformOperationsEnabled() {
-		actionRunTool := r.createDynamicTFETool("action_run", tfeTools.ActionRun)
-		r.mcpServer.AddTool(actionRunTool.Tool, actionRunTool.Handler)
+	if toolsets.IsToolEnabled("create_run", r.enabledToolsets) {
+		var tool server.ServerTool
+		if isTerraformOperationsEnabled() {
+			tool = r.createDynamicTFETool("create_run", tfeTools.CreateRun)
+		} else {
+			tool = r.createDynamicTFETool("create_run", tfeTools.CreateRunSafe)
+		}
+		r.mcpServer.AddTool(tool.Tool, tool.Handler)
 	}
 
-	createNoCodeWorkspace := r.createDynamicTFEToolWithElicitation("create_no_code_workspace", tfeTools.CreateNoCodeWorkspace)
-	r.mcpServer.AddTool(createNoCodeWorkspace.Tool, createNoCodeWorkspace.Handler)
+	// Only register action_run if TF operations are enabled AND toolset is enabled
+	if isTerraformOperationsEnabled() && toolsets.IsToolEnabled("action_run", r.enabledToolsets) {
+		tool := r.createDynamicTFETool("action_run", tfeTools.ActionRun)
+		r.mcpServer.AddTool(tool.Tool, tool.Handler)
+	}
 
-	getRunDetailsTool := r.createDynamicTFETool("get_run_details", tfeTools.GetRunDetails)
-	r.mcpServer.AddTool(getRunDetailsTool.Tool, getRunDetailsTool.Handler)
+	if toolsets.IsToolEnabled("create_no_code_workspace", r.enabledToolsets) {
+		tool := r.createDynamicTFEToolWithElicitation("create_no_code_workspace", tfeTools.CreateNoCodeWorkspace)
+		r.mcpServer.AddTool(tool.Tool, tool.Handler)
+	}
 
-	// Variable set tools
-	listVariableSetsTool := r.createDynamicTFETool("list_variable_sets", tfeTools.ListVariableSets)
-	r.mcpServer.AddTool(listVariableSetsTool.Tool, listVariableSetsTool.Handler)
+	if toolsets.IsToolEnabled("get_run_details", r.enabledToolsets) {
+		tool := r.createDynamicTFETool("get_run_details", tfeTools.GetRunDetails)
+		r.mcpServer.AddTool(tool.Tool, tool.Handler)
+	}
 
-	createVariableSetTool := r.createDynamicTFETool("create_variable_set", tfeTools.CreateVariableSet)
-	r.mcpServer.AddTool(createVariableSetTool.Tool, createVariableSetTool.Handler)
+	// Terraform toolset - Variable set tools
+	if toolsets.IsToolEnabled("list_variable_sets", r.enabledToolsets) {
+		tool := r.createDynamicTFETool("list_variable_sets", tfeTools.ListVariableSets)
+		r.mcpServer.AddTool(tool.Tool, tool.Handler)
+	}
 
-	createVariableInVariableSetTool := r.createDynamicTFETool("create_variable_in_variable_set", tfeTools.CreateVariableInVariableSet)
-	r.mcpServer.AddTool(createVariableInVariableSetTool.Tool, createVariableInVariableSetTool.Handler)
+	if toolsets.IsToolEnabled("create_variable_set", r.enabledToolsets) {
+		tool := r.createDynamicTFETool("create_variable_set", tfeTools.CreateVariableSet)
+		r.mcpServer.AddTool(tool.Tool, tool.Handler)
+	}
 
-	deleteVariableInVariableSetTool := r.createDynamicTFETool("delete_variable_in_variable_set", tfeTools.DeleteVariableInVariableSet)
-	r.mcpServer.AddTool(deleteVariableInVariableSetTool.Tool, deleteVariableInVariableSetTool.Handler)
+	if toolsets.IsToolEnabled("create_variable_in_variable_set", r.enabledToolsets) {
+		tool := r.createDynamicTFETool("create_variable_in_variable_set", tfeTools.CreateVariableInVariableSet)
+		r.mcpServer.AddTool(tool.Tool, tool.Handler)
+	}
+
+	if toolsets.IsToolEnabled("delete_variable_in_variable_set", r.enabledToolsets) {
+		tool := r.createDynamicTFETool("delete_variable_in_variable_set", tfeTools.DeleteVariableInVariableSet)
+		r.mcpServer.AddTool(tool.Tool, tool.Handler)
+	}
 
 	// Attach/detach variable sets to/from workspaces
-	attachVariableSetTool := r.createDynamicTFETool("attach_variable_set_to_workspaces", tfeTools.AttachVariableSetToWorkspaces)
-	r.mcpServer.AddTool(attachVariableSetTool.Tool, attachVariableSetTool.Handler)
+	if toolsets.IsToolEnabled("attach_variable_set_to_workspaces", r.enabledToolsets) {
+		tool := r.createDynamicTFETool("attach_variable_set_to_workspaces", tfeTools.AttachVariableSetToWorkspaces)
+		r.mcpServer.AddTool(tool.Tool, tool.Handler)
+	}
 
-	detachVariableSetTool := r.createDynamicTFETool("detach_variable_set_from_workspaces", tfeTools.DetachVariableSetFromWorkspaces)
-	r.mcpServer.AddTool(detachVariableSetTool.Tool, detachVariableSetTool.Handler)
+	if toolsets.IsToolEnabled("detach_variable_set_from_workspaces", r.enabledToolsets) {
+		tool := r.createDynamicTFETool("detach_variable_set_from_workspaces", tfeTools.DetachVariableSetFromWorkspaces)
+		r.mcpServer.AddTool(tool.Tool, tool.Handler)
+	}
 
-	// Variable tools
-	listWorkspaceVariablesTool := r.createDynamicTFETool("list_workspace_variables", tfeTools.ListWorkspaceVariables)
-	r.mcpServer.AddTool(listWorkspaceVariablesTool.Tool, listWorkspaceVariablesTool.Handler)
+	// Terraform toolset - Variable tools
+	if toolsets.IsToolEnabled("list_workspace_variables", r.enabledToolsets) {
+		tool := r.createDynamicTFETool("list_workspace_variables", tfeTools.ListWorkspaceVariables)
+		r.mcpServer.AddTool(tool.Tool, tool.Handler)
+	}
 
-	createWorkspaceVariableTool := r.createDynamicTFETool("create_workspace_variable", tfeTools.CreateWorkspaceVariable)
-	r.mcpServer.AddTool(createWorkspaceVariableTool.Tool, createWorkspaceVariableTool.Handler)
+	if toolsets.IsToolEnabled("create_workspace_variable", r.enabledToolsets) {
+		tool := r.createDynamicTFETool("create_workspace_variable", tfeTools.CreateWorkspaceVariable)
+		r.mcpServer.AddTool(tool.Tool, tool.Handler)
+	}
 
-	updateWorkspaceVariableTool := r.createDynamicTFETool("update_workspace_variable", tfeTools.UpdateWorkspaceVariable)
-	r.mcpServer.AddTool(updateWorkspaceVariableTool.Tool, updateWorkspaceVariableTool.Handler)
+	if toolsets.IsToolEnabled("update_workspace_variable", r.enabledToolsets) {
+		tool := r.createDynamicTFETool("update_workspace_variable", tfeTools.UpdateWorkspaceVariable)
+		r.mcpServer.AddTool(tool.Tool, tool.Handler)
+	}
 
 	r.tfeToolsRegistered = true
 }
