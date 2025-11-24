@@ -17,6 +17,7 @@ import (
 	"github.com/hashicorp/terraform-mcp-server/pkg/client"
 	"github.com/hashicorp/terraform-mcp-server/pkg/resources"
 	"github.com/hashicorp/terraform-mcp-server/pkg/tools"
+	"github.com/hashicorp/terraform-mcp-server/pkg/toolsets"
 	"github.com/hashicorp/terraform-mcp-server/version"
 	"github.com/mark3labs/mcp-go/server"
 	log "github.com/sirupsen/logrus"
@@ -37,7 +38,7 @@ var (
 		Use:   "stdio",
 		Short: "Start stdio server",
 		Long:  `Start a server that communicates via standard input/output streams using JSON-RPC messages.`,
-		Run: func(_ *cobra.Command, _ []string) {
+		Run: func(cmd *cobra.Command, _ []string) {
 			logFile, err := rootCmd.PersistentFlags().GetString("log-file")
 			if err != nil {
 				stdlog.Fatal("Failed to get log file:", err)
@@ -47,7 +48,9 @@ var (
 				stdlog.Fatal("Failed to initialize logger:", err)
 			}
 
-			if err := runStdioServer(logger); err != nil {
+			enabledToolsets := getToolsetsFromCmd(cmd.Root(), logger)
+
+			if err := runStdioServer(logger, enabledToolsets); err != nil {
 				stdlog.Fatal("failed to run stdio server:", err)
 			}
 		},
@@ -81,7 +84,9 @@ var (
 				stdlog.Fatal("Failed to get endpoint path:", err)
 			}
 
-			if err := runHTTPServer(logger, host, port, endpointPath); err != nil {
+			enabledToolsets := getToolsetsFromCmd(cmd.Root(), logger)
+
+			if err := runHTTPServer(logger, host, port, endpointPath, enabledToolsets); err != nil {
 				stdlog.Fatal("failed to run streamableHTTP server:", err)
 			}
 		},
@@ -104,6 +109,7 @@ func init() {
 	cobra.OnInitialize(initConfig)
 	rootCmd.SetVersionTemplate("{{.Short}}\n{{.Version}}\n")
 	rootCmd.PersistentFlags().String("log-file", "", "Path to log file")
+	rootCmd.PersistentFlags().String("toolsets", "default", toolsets.GenerateToolsetsHelp())
 
 	// Add StreamableHTTP command flags (avoid 'h' shorthand conflict with help)
 	streamableHTTPCmd.Flags().String("transport-host", "127.0.0.1", "Host to bind to")
@@ -142,8 +148,8 @@ func initLogger(outPath string) (*log.Logger, error) {
 }
 
 // registerToolsAndResources registers tools and resources with the MCP server
-func registerToolsAndResources(hcServer *server.MCPServer, logger *log.Logger) {
-	tools.RegisterTools(hcServer, logger)
+func registerToolsAndResources(hcServer *server.MCPServer, logger *log.Logger, enabledToolsets []string) {
+	tools.RegisterTools(hcServer, logger, enabledToolsets)
 	resources.RegisterResources(hcServer, logger)
 	resources.RegisterResourceTemplates(hcServer, logger)
 }

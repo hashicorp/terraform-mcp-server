@@ -5,80 +5,67 @@ package toolsets
 
 // ToolToToolset maps tool names to their toolsets
 var ToolToToolset = map[string]Toolset{
-	// Provider tools
-	"search_providers":            ToolsetProviders,
-	"get_provider_details":        ToolsetProviders,
-	"get_latest_provider_version": ToolsetProviders,
-	"get_provider_capabilities":   ToolsetProviders,
+	// Public Registry tools (providers, modules, policies)
+	"search_providers":            ToolsetRegistry,
+	"get_provider_details":        ToolsetRegistry,
+	"get_latest_provider_version": ToolsetRegistry,
+	"get_provider_capabilities":   ToolsetRegistry,
+	"search_modules":              ToolsetRegistry,
+	"get_module_details":          ToolsetRegistry,
+	"get_latest_module_version":   ToolsetRegistry,
+	"search_policies":             ToolsetRegistry,
+	"get_policy_details":          ToolsetRegistry,
 
-	// Module tools
-	"search_modules":            ToolsetModules,
-	"get_module_details":        ToolsetModules,
-	"get_latest_module_version": ToolsetModules,
+	// Private Registry tools (TFE/TFC private registry)
+	"search_private_modules":       ToolsetRegistryPrivate,
+	"get_private_module_details":   ToolsetRegistryPrivate,
+	"search_private_providers":     ToolsetRegistryPrivate,
+	"get_private_provider_details": ToolsetRegistryPrivate,
 
-	// Policy tools
-	"search_policies":    ToolsetPolicies,
-	"get_policy_details": ToolsetPolicies,
-
-	// Workspace tools
-	"list_workspaces":          ToolsetWorkspaces,
-	"get_workspace_details":    ToolsetWorkspaces,
-	"create_workspace":         ToolsetWorkspaces,
-	"create_no_code_workspace": ToolsetWorkspaces,
-	"update_workspace":         ToolsetWorkspaces,
-	"delete_workspace_safely":  ToolsetWorkspaces,
-
-	// Run tools
-	"list_runs":       ToolsetRuns,
-	"get_run_details": ToolsetRuns,
-	"create_run":      ToolsetRuns,
-	"action_run":      ToolsetRuns,
-
-	// Organization tools
-	"list_terraform_orgs": ToolsetOrganizations,
-
-	// Project tools
-	"list_terraform_projects": ToolsetProjects,
-
-	// Variable tools
-	"list_workspace_variables":  ToolsetVariables,
-	"create_workspace_variable": ToolsetVariables,
-	"update_workspace_variable": ToolsetVariables,
-
-	// Variable set tools
-	"list_variable_sets":                  ToolsetVariableSets,
-	"create_variable_set":                 ToolsetVariableSets,
-	"create_variable_in_variable_set":     ToolsetVariableSets,
-	"delete_variable_in_variable_set":     ToolsetVariableSets,
-	"attach_variable_set_to_workspaces":   ToolsetVariableSets,
-	"detach_variable_set_from_workspaces": ToolsetVariableSets,
-
-	// Tag tools
-	"create_workspace_tags": ToolsetTags,
-	"read_workspace_tags":   ToolsetTags,
-
-	// Private registry tools
-	"search_private_modules":       ToolsetPrivateRegistry,
-	"get_private_module_details":   ToolsetPrivateRegistry,
-	"search_private_providers":     ToolsetPrivateRegistry,
-	"get_private_provider_details": ToolsetPrivateRegistry,
+	// Terraform tools (TFE/TFC workspaces, runs, variables, etc.)
+	"list_terraform_orgs":                 ToolsetTerraform,
+	"list_terraform_projects":             ToolsetTerraform,
+	"list_workspaces":                     ToolsetTerraform,
+	"get_workspace_details":               ToolsetTerraform,
+	"create_workspace":                    ToolsetTerraform,
+	"create_no_code_workspace":            ToolsetTerraform,
+	"update_workspace":                    ToolsetTerraform,
+	"delete_workspace_safely":             ToolsetTerraform,
+	"list_runs":                           ToolsetTerraform,
+	"get_run_details":                     ToolsetTerraform,
+	"create_run":                          ToolsetTerraform,
+	"action_run":                          ToolsetTerraform,
+	"list_workspace_variables":            ToolsetTerraform,
+	"create_workspace_variable":           ToolsetTerraform,
+	"update_workspace_variable":           ToolsetTerraform,
+	"list_variable_sets":                  ToolsetTerraform,
+	"create_variable_set":                 ToolsetTerraform,
+	"create_variable_in_variable_set":     ToolsetTerraform,
+	"delete_variable_in_variable_set":     ToolsetTerraform,
+	"attach_variable_set_to_workspaces":   ToolsetTerraform,
+	"detach_variable_set_from_workspaces": ToolsetTerraform,
+	"create_workspace_tags":               ToolsetTerraform,
+	"read_workspace_tags":                 ToolsetTerraform,
 }
 
+// GetToolsetForTool returns the toolset for a given tool name
 func GetToolsetForTool(toolName string) (Toolset, bool) {
 	toolset, exists := ToolToToolset[toolName]
 	return toolset, exists
 }
 
-// checks if a tool is enabled based on the enabled toolsets
+// IsToolEnabled checks if a tool is enabled based on the enabled toolsets
 func IsToolEnabled(toolName string, enabledToolsets []string) bool {
 	if ContainsToolset(enabledToolsets, string(ToolsetAll)) {
 		return true
 	}
 
+	// Look up which toolset this tool belongs to
 	toolset, exists := GetToolsetForTool(toolName)
 	if !exists {
 		return false
 	}
 
+	// Check if the tool's toolset is enabled
 	return ContainsToolset(enabledToolsets, string(toolset))
 }

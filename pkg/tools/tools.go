@@ -5,41 +5,60 @@ package tools
 
 import (
 	registryTools "github.com/hashicorp/terraform-mcp-server/pkg/tools/registry"
+	"github.com/hashicorp/terraform-mcp-server/pkg/toolsets"
 	"github.com/mark3labs/mcp-go/server"
 	log "github.com/sirupsen/logrus"
 )
 
-func RegisterTools(hcServer *server.MCPServer, logger *log.Logger) {
-	// Register the dynamic tool
-	registerDynamicTools(hcServer, logger)
+func RegisterTools(hcServer *server.MCPServer, logger *log.Logger, enabledToolsets []string) {
+	// Register the dynamic tools (TFE tools that require authentication)
+	registerDynamicTools(hcServer, logger, enabledToolsets)
 
-	// Provider tools (always available)
-	getResolveProviderDocIDTool := registryTools.ResolveProviderDocID(logger)
-	hcServer.AddTool(getResolveProviderDocIDTool.Tool, getResolveProviderDocIDTool.Handler)
+	// Registry toolset - Provider tools
+	if toolsets.IsToolEnabled("search_providers", enabledToolsets) {
+		tool := registryTools.ResolveProviderDocID(logger)
+		hcServer.AddTool(tool.Tool, tool.Handler)
+	}
 
-	getProviderDocsTool := registryTools.GetProviderDocs(logger)
-	hcServer.AddTool(getProviderDocsTool.Tool, getProviderDocsTool.Handler)
+	if toolsets.IsToolEnabled("get_provider_details", enabledToolsets) {
+		tool := registryTools.GetProviderDocs(logger)
+		hcServer.AddTool(tool.Tool, tool.Handler)
+	}
 
-	getLatestProviderVersionTool := registryTools.GetLatestProviderVersion(logger)
-	hcServer.AddTool(getLatestProviderVersionTool.Tool, getLatestProviderVersionTool.Handler)
+	if toolsets.IsToolEnabled("get_latest_provider_version", enabledToolsets) {
+		tool := registryTools.GetLatestProviderVersion(logger)
+		hcServer.AddTool(tool.Tool, tool.Handler)
+	}
 
-	getProviderCapabilitiesTool := registryTools.GetProviderCapabilities(logger)
-	hcServer.AddTool(getProviderCapabilitiesTool.Tool, getProviderCapabilitiesTool.Handler)
+	if toolsets.IsToolEnabled("get_provider_capabilities", enabledToolsets) {
+		tool := registryTools.GetProviderCapabilities(logger)
+		hcServer.AddTool(tool.Tool, tool.Handler)
+	}
 
-	// Module tools
-	getSearchModulesTool := registryTools.SearchModules(logger)
-	hcServer.AddTool(getSearchModulesTool.Tool, getSearchModulesTool.Handler)
+	// Registry toolset - Module tools
+	if toolsets.IsToolEnabled("search_modules", enabledToolsets) {
+		tool := registryTools.SearchModules(logger)
+		hcServer.AddTool(tool.Tool, tool.Handler)
+	}
 
-	getModuleDetailsTool := registryTools.ModuleDetails(logger)
-	hcServer.AddTool(getModuleDetailsTool.Tool, getModuleDetailsTool.Handler)
+	if toolsets.IsToolEnabled("get_module_details", enabledToolsets) {
+		tool := registryTools.ModuleDetails(logger)
+		hcServer.AddTool(tool.Tool, tool.Handler)
+	}
 
-	getLatestModuleVersionTool := registryTools.GetLatestModuleVersion(logger)
-	hcServer.AddTool(getLatestModuleVersionTool.Tool, getLatestModuleVersionTool.Handler)
+	if toolsets.IsToolEnabled("get_latest_module_version", enabledToolsets) {
+		tool := registryTools.GetLatestModuleVersion(logger)
+		hcServer.AddTool(tool.Tool, tool.Handler)
+	}
 
-	// Policy tools
-	getSearchPoliciesTool := registryTools.SearchPolicies(logger)
-	hcServer.AddTool(getSearchPoliciesTool.Tool, getSearchPoliciesTool.Handler)
+	// Registry toolset - Policy tools
+	if toolsets.IsToolEnabled("search_policies", enabledToolsets) {
+		tool := registryTools.SearchPolicies(logger)
+		hcServer.AddTool(tool.Tool, tool.Handler)
+	}
 
-	getPolicyDetailsTool := registryTools.PolicyDetails(logger)
-	hcServer.AddTool(getPolicyDetailsTool.Tool, getPolicyDetailsTool.Handler)
+	if toolsets.IsToolEnabled("get_policy_details", enabledToolsets) {
+		tool := registryTools.PolicyDetails(logger)
+		hcServer.AddTool(tool.Tool, tool.Handler)
+	}
 }

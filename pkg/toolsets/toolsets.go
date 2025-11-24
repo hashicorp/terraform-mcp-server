@@ -5,24 +5,16 @@ package toolsets
 
 import "strings"
 
-// Toolset will represent the group of related tools
+// Toolset represents a group of related tools
 type Toolset string
 
 const (
-	// The Core toolsets
-	ToolsetProviders       Toolset = "providers"
-	ToolsetModules         Toolset = "modules"
-	ToolsetPolicies        Toolset = "policies"
-	ToolsetWorkspaces      Toolset = "workspaces"
-	ToolsetRuns            Toolset = "runs"
-	ToolsetVariables       Toolset = "variables"
-	ToolsetVariableSets    Toolset = "variable_sets"
-	ToolsetTags            Toolset = "tags"
-	ToolsetOrganizations   Toolset = "organizations"
-	ToolsetProjects        Toolset = "projects"
-	ToolsetPrivateRegistry Toolset = "private_registry"
+	// Core toolsets
+	ToolsetRegistry        Toolset = "registry"         // Public Terraform Registry
+	ToolsetRegistryPrivate Toolset = "registry-private" // Private registry (TFE/TFC)
+	ToolsetTerraform       Toolset = "terraform"        // TFE/TFC operations
 
-	// The Special toolsets
+	// Special toolsets
 	ToolsetAll     Toolset = "all"
 	ToolsetDefault Toolset = "default"
 )
@@ -41,80 +33,37 @@ var (
 		ID:          string(ToolsetDefault),
 		Description: "Special toolset that enables the default toolset configuration",
 	}
-	MetadataProviders = ToolsetMetadata{
-		ID:          string(ToolsetProviders),
-		Description: "Terraform Registry provider documentation tools",
+	MetadataRegistry = ToolsetMetadata{
+		ID:          string(ToolsetRegistry),
+		Description: "Public Terraform Registry (providers, modules, policies)",
 	}
-	MetadataModules = ToolsetMetadata{
-		ID:          string(ToolsetModules),
-		Description: "Terraform Registry module discovery and documentation",
+	MetadataRegistryPrivate = ToolsetMetadata{
+		ID:          string(ToolsetRegistryPrivate),
+		Description: "Private registry access (TFE/TFC private modules and providers)",
 	}
-	MetadataPolicies = ToolsetMetadata{
-		ID:          string(ToolsetPolicies),
-		Description: "Sentinel policy tools",
-	}
-	MetadataWorkspaces = ToolsetMetadata{
-		ID:          string(ToolsetWorkspaces),
-		Description: "HCP Terraform/TFE workspace management",
-	}
-	MetadataRuns = ToolsetMetadata{
-		ID:          string(ToolsetRuns),
-		Description: "Terraform run operations",
-	}
-	MetadataVariables = ToolsetMetadata{
-		ID:          string(ToolsetVariables),
-		Description: "Workspace variable management",
-	}
-	MetadataVariableSets = ToolsetMetadata{
-		ID:          string(ToolsetVariableSets),
-		Description: "Variable set management",
-	}
-	MetadataTags = ToolsetMetadata{
-		ID:          string(ToolsetTags),
-		Description: "Workspace tagging",
-	}
-	MetadataOrganizations = ToolsetMetadata{
-		ID:          string(ToolsetOrganizations),
-		Description: "Organization listing and management",
-	}
-	MetadataProjects = ToolsetMetadata{
-		ID:          string(ToolsetProjects),
-		Description: "Project listing and management",
-	}
-	MetadataPrivateRegistry = ToolsetMetadata{
-		ID:          string(ToolsetPrivateRegistry),
-		Description: "Private registry (modules and providers)",
+	MetadataTerraform = ToolsetMetadata{
+		ID:          string(ToolsetTerraform),
+		Description: "HCP Terraform/TFE operations (workspaces, runs, variables, etc.)",
 	}
 )
 
-// returns all available toolsets
+// AvailableToolsets returns all available toolsets
 func AvailableToolsets() []ToolsetMetadata {
 	return []ToolsetMetadata{
-		MetadataProviders,
-		MetadataModules,
-		MetadataPolicies,
-		MetadataWorkspaces,
-		MetadataRuns,
-		MetadataVariables,
-		MetadataVariableSets,
-		MetadataTags,
-		MetadataOrganizations,
-		MetadataProjects,
-		MetadataPrivateRegistry,
+		MetadataRegistry,
+		MetadataRegistryPrivate,
+		MetadataTerraform,
 	}
 }
 
-// returns the default set of enabled toolsets
+// DefaultToolsets returns the default set of enabled toolsets
 func DefaultToolsets() []string {
 	return []string{
-		string(ToolsetProviders),
-		string(ToolsetModules),
-		string(ToolsetPolicies),
-		string(ToolsetWorkspaces),
+		string(ToolsetRegistry),
 	}
 }
 
-// will help Determine if user input is valid
+// GetValidToolsetIDs returns a map of all valid toolset IDs
 func GetValidToolsetIDs() map[string]bool {
 	validIDs := make(map[string]bool)
 	for _, ts := range AvailableToolsets() {
@@ -125,7 +74,7 @@ func GetValidToolsetIDs() map[string]bool {
 	return validIDs
 }
 
-// Sanitizes the user input
+// CleanToolsets sanitizes the user input
 func CleanToolsets(enabledToolsets []string) ([]string, []string) {
 	seen := make(map[string]bool)
 	result := make([]string, 0, len(enabledToolsets))
@@ -171,7 +120,6 @@ func ExpandDefaultToolset(toolsets []string) []string {
 		}
 	}
 
-	// Add default toolsets if its not already present
 	for _, defaultTS := range DefaultToolsets() {
 		if !seen[defaultTS] {
 			result = append(result, defaultTS)
@@ -181,7 +129,7 @@ func ExpandDefaultToolset(toolsets []string) []string {
 	return result
 }
 
-// Checks if a Toolset is in the list
+// ContainsToolset checks if a toolset is in the list
 func ContainsToolset(toolsets []string, toCheck string) bool {
 	for _, ts := range toolsets {
 		if ts == toCheck {
@@ -191,39 +139,24 @@ func ContainsToolset(toolsets []string, toCheck string) bool {
 	return false
 }
 
-// Will generate the help text for the toolset flag
+// GenerateToolsetsHelp generates help text for the toolsets flag
 func GenerateToolsetsHelp() string {
 	defaultTools := strings.Join(DefaultToolsets(), ", ")
 
 	allToolsets := AvailableToolsets()
-	var availableToolsLines []string
-	const maxLineLength = 70
-	currentLine := ""
-
-	for i, ts := range allToolsets {
-		switch {
-		case i == 0:
-			currentLine = ts.ID
-		case len(currentLine)+len(ts.ID)+2 <= maxLineLength:
-			currentLine += ", " + ts.ID
-		default:
-			availableToolsLines = append(availableToolsLines, currentLine)
-			currentLine = ts.ID
-		}
+	var toolsetNames []string
+	for _, ts := range allToolsets {
+		toolsetNames = append(toolsetNames, ts.ID)
 	}
-	if currentLine != "" {
-		availableToolsLines = append(availableToolsLines, currentLine)
-	}
-
-	availableTools := strings.Join(availableToolsLines, ",\n\t     ")
+	availableTools := strings.Join(toolsetNames, ", ")
 
 	return "Comma-separated list of tool groups to enable.\n" +
 		"Available: " + availableTools + "\n" +
 		"Special toolset keywords:\n" +
 		"  - all: Enables all available toolsets\n" +
-		"  - default: Enables the default toolset configuration of:\n\t     " + defaultTools + "\n" +
+		"  - default: Enables the default toolset configuration (" + defaultTools + ")\n" +
 		"Examples:\n" +
-		"  - --toolsets=providers,workspaces,runs\n" +
-		"  - Default + additional: --toolsets=default,runs,variables\n" +
-		"  - All tools: --toolsets=all"
+		"  - --toolsets=registry,terraform\n" +
+		"  - --toolsets=default,registry-private\n" +
+		"  - --toolsets=all"
 }
