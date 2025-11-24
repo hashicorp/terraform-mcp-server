@@ -38,6 +38,10 @@ test:
 test-e2e:
 	@trap '$(MAKE) cleanup-test-containers' EXIT; $(GO) test -v --tags e2e ./e2e
 
+# Run acceptance tests
+test-acc:
+	$(GO) test -v ./test/acceptance/...
+
 # Clean build artifacts
 clean:
 	rm -f $(BINARY_NAME)
