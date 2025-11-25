@@ -12,6 +12,16 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func CheckTextContentContains(expr string) ToolTestCheck {
+	return func(t *testing.T, res *mcp.CallToolResult) {
+		content, ok := res.Content[0].(mcp.TextContent)
+		if !ok {
+			t.Fatal("response is not text content")
+		}
+		require.Contains(t, content.Text, expr)
+	}
+}
+
 func CheckJSONContentExists(jsonPath string) ToolTestCheck {
 	return func(t *testing.T, res *mcp.CallToolResult) {
 		content, ok := res.Content[0].(mcp.TextContent)

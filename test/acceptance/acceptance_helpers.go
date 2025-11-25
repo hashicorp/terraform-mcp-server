@@ -39,10 +39,12 @@ type ToolAcceptanceTest struct {
 	Skip bool
 }
 
+type ToolAcceptanceTestSuite []ToolAcceptanceTest
+
 type ToolTestCheck func(t *testing.T, res *mcp.CallToolResult)
 
 func runAcceptanceTest(t *testing.T, ctx context.Context, at ToolAcceptanceTest, c *client.Client) {
-	t.Run(at.Description, func(t *testing.T) {
+	t.Run(at.Name, func(t *testing.T) {
 		if at.Skip {
 			t.Skip("Skip set to true")
 			return

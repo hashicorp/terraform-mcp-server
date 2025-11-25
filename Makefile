@@ -40,7 +40,7 @@ test-e2e:
 
 # Run acceptance tests
 test-acc:
-	$(GO) test -tags 'acceptance' -v ./test/acceptance/...
+	$(GO) test -tags 'acceptance' -v ./test/acceptance/... -run '$(RUN_TESTS)'
 
 # Clean build artifacts
 clean:
