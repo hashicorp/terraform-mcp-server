@@ -14,6 +14,7 @@ const TFCTestOrg = "jhouston-test-org" // FIXME change this
 
 var TerraformToolTests = []ToolAcceptanceTest{
 	{
+		Name:        "list_workspaces_bad_org",
 		Description: "List workspaces in an organization that does not exist",
 		ToolName:    "list_workspaces",
 		Arguments: map[string]interface{}{
@@ -22,12 +23,13 @@ var TerraformToolTests = []ToolAcceptanceTest{
 		ExpectError: regexp.MustCompile(`resource not found`),
 	},
 	{
+		Name:        "list_workspaces",
 		Description: "List workspaces in an organization",
 		ToolName:    "list_workspaces",
 		Arguments: map[string]interface{}{
 			"terraform_org_name": TFCTestOrg,
 		},
-		Checks: []AcceptanceTestCheck{
+		Checks: []ToolTestCheck{
 			func(t *testing.T, res *mcp.CallToolResult) {
 				content, ok := res.Content[0].(mcp.TextContent)
 				if !ok {

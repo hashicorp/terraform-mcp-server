@@ -32,7 +32,7 @@ crt-build:
 
 # Run tests
 test:
-	$(GO) test -v ./...
+	$(GO) test -tags '!acceptance' -v ./...
 
 # Run e2e tests
 test-e2e:
@@ -40,7 +40,7 @@ test-e2e:
 
 # Run acceptance tests
 test-acc:
-	$(GO) test -v ./test/acceptance/...
+	$(GO) test -tags 'acceptance' -v ./test/acceptance/...
 
 # Clean build artifacts
 clean:

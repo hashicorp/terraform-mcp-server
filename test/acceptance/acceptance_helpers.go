@@ -12,7 +12,10 @@ import (
 
 // ToolAcceptanceTest encapsulates one test we want to run against an MCP server tool
 type ToolAcceptanceTest struct {
-	// Description of what we're testing
+	// Name of what we're testing
+	Name string
+
+	// Description of the test
 	Description string
 
 	// ToolName is the name of the the tool we want to test
@@ -28,13 +31,13 @@ type ToolAcceptanceTest struct {
 	ExpectTextContent *regexp.Regexp
 
 	// Checks are arbitrary functions we can add to check behaviour
-	Checks []AcceptanceTestCheck
+	Checks []ToolTestCheck
 
 	// Skip the test
 	Skip bool
 }
 
-type AcceptanceTestCheck func(t *testing.T, res *mcp.CallToolResult)
+type ToolTestCheck func(t *testing.T, res *mcp.CallToolResult)
 
 func runAcceptanceTest(t *testing.T, ctx context.Context, at ToolAcceptanceTest, c *client.Client) {
 	t.Run(at.Description, func(t *testing.T) {
