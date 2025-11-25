@@ -5,6 +5,7 @@ package acceptance
 import (
 	"context"
 	"os"
+	"strconv"
 	"testing"
 
 	"github.com/mark3labs/mcp-go/client"
@@ -23,8 +24,10 @@ func TestAcceptance(t *testing.T) {
 		t.Fatal("You must set the TFE_TOKEN` environment variable to run the acceptance tests")
 	}
 
+	enableServerLogs, _ := strconv.ParseBool(os.Getenv("ENABLE_SERVER_LOGS"))
+
 	logger := logrus.New()
-	logger.SetOutput(&logInterceptor{t: t, suppress: true})
+	logger.SetOutput(&logInterceptor{t: t, suppress: !enableServerLogs})
 	srv := tfmcpserver.NewServer("acc-test", logger)
 
 	sess := &TestSession{

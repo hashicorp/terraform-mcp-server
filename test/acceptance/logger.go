@@ -9,7 +9,7 @@ type logInterceptor struct {
 
 func (l logInterceptor) Write(p []byte) (n int, err error) {
 	if !l.suppress {
-		l.t.Log((string)(p))
+		l.t.Logf("%s", (string)(p))
 	}
 	return len(p), nil
 }
