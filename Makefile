@@ -32,11 +32,15 @@ crt-build:
 
 # Run tests
 test:
-	$(GO) test -v ./...
+	$(GO) test -tags '!acceptance' -v ./...
 
 # Run e2e tests
 test-e2e:
 	@trap '$(MAKE) cleanup-test-containers' EXIT; $(GO) test -v --tags e2e ./e2e
+
+# Run acceptance tests
+test-acc:
+	$(GO) test -tags 'acceptance' -v ./test/acceptance/... -run '$(RUN_TESTS)'
 
 # Clean build artifacts
 clean:

@@ -13,24 +13,18 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/hashicorp/terraform-mcp-server/pkg/client"
+	tfmcpserver "github.com/hashicorp/terraform-mcp-server/pkg/server"
 	"github.com/hashicorp/terraform-mcp-server/version"
 
-	"github.com/mark3labs/mcp-go/server"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 )
-
-//go:embed instructions.md
-var instructions string
 
 func runHTTPServer(logger *log.Logger, host string, port string, endpointPath string) error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	hcServer := NewServer(version.Version, logger)
-	registerToolsAndResources(hcServer, logger)
-
+	hcServer := tfmcpserver.NewServer(version.Version, logger)
 	return streamableHTTPServerInit(ctx, hcServer, logger, host, port, endpointPath)
 }
 
@@ -38,46 +32,8 @@ func runStdioServer(logger *log.Logger) error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	hcServer := NewServer(version.Version, logger)
-	registerToolsAndResources(hcServer, logger)
-
+	hcServer := tfmcpserver.NewServer(version.Version, logger)
 	return serverInit(ctx, hcServer, logger)
-}
-
-func NewServer(version string, logger *log.Logger, opts ...server.ServerOption) *server.MCPServer {
-	// Create rate limiting middleware with environment-based configuration
-	rateLimitConfig := client.LoadRateLimitConfigFromEnv()
-	rateLimitMiddleware := client.NewRateLimitMiddleware(rateLimitConfig, logger)
-
-	// Add default options
-	defaultOpts := []server.ServerOption{
-		server.WithToolCapabilities(true),
-		server.WithResourceCapabilities(true, true),
-		server.WithInstructions(instructions),
-		server.WithToolHandlerMiddleware(rateLimitMiddleware.Middleware()),
-		server.WithElicitation(),
-	}
-	opts = append(defaultOpts, opts...)
-
-	// Create hooks for session management
-	hooks := &server.Hooks{}
-	hooks.AddOnRegisterSession(func(ctx context.Context, session server.ClientSession) {
-		client.NewSessionHandler(ctx, session, logger)
-	})
-	hooks.AddOnUnregisterSession(func(ctx context.Context, session server.ClientSession) {
-		client.EndSessionHandler(ctx, session, logger)
-	})
-
-	// Add hooks to options
-	opts = append(opts, server.WithHooks(hooks))
-
-	// Create a new MCP server
-	s := server.NewMCPServer(
-		"terraform-mcp-server",
-		version,
-		opts...,
-	)
-	return s
 }
 
 // runDefaultCommand handles the default behavior when no subcommand is provided
@@ -135,14 +91,7 @@ func shouldUseStreamableHTTPMode() bool {
 // shouldUseStatelessMode returns true if the MCP_SESSION_MODE environment variable is set to "stateless"
 func shouldUseStatelessMode() bool {
 	mode := strings.ToLower(os.Getenv("MCP_SESSION_MODE"))
-
-	// Explicitly check for "stateless" value
-	if mode == "stateless" {
-		return true
-	}
-
-	// All other values (including empty string, "stateful", or any other value) default to stateful mode
-	return false
+	return mode == "stateless"
 }
 
 // getHTTPPort returns the port from environment variables or default

@@ -15,8 +15,6 @@ import (
 	"time"
 
 	"github.com/hashicorp/terraform-mcp-server/pkg/client"
-	"github.com/hashicorp/terraform-mcp-server/pkg/resources"
-	"github.com/hashicorp/terraform-mcp-server/pkg/tools"
 	"github.com/hashicorp/terraform-mcp-server/version"
 	"github.com/mark3labs/mcp-go/server"
 	log "github.com/sirupsen/logrus"
@@ -129,7 +127,7 @@ func initLogger(outPath string) (*log.Logger, error) {
 		return log.New(), nil
 	}
 
-	file, err := os.OpenFile(outPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
+	file, err := os.OpenFile(outPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o666)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open log file: %w", err)
 	}
@@ -139,13 +137,6 @@ func initLogger(outPath string) (*log.Logger, error) {
 	logger.SetOutput(file)
 
 	return logger, nil
-}
-
-// registerToolsAndResources registers tools and resources with the MCP server
-func registerToolsAndResources(hcServer *server.MCPServer, logger *log.Logger) {
-	tools.RegisterTools(hcServer, logger)
-	resources.RegisterResources(hcServer, logger)
-	resources.RegisterResourceTemplates(hcServer, logger)
 }
 
 func serverInit(ctx context.Context, hcServer *server.MCPServer, logger *log.Logger) error {
