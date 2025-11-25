@@ -24,7 +24,7 @@ type ToolAcceptanceTest struct {
 	ToolName string
 
 	// Arguments we want to pass into the tool call
-	Arguments map[string]interface{}
+	Arguments map[string]any
 
 	// ExpectError is a regexp to match expected error message
 	ExpectError *regexp.Regexp

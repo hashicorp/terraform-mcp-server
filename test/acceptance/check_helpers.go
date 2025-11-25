@@ -19,7 +19,7 @@ func CheckJSONContentExists(jsonPath string) ToolTestCheck {
 			t.Fatal("response is not text content")
 		}
 
-		jsonData := map[string]interface{}{}
+		jsonData := map[string]any{}
 		json.Unmarshal([]byte(content.Text), &jsonData)
 
 		_, err := getByPath(jsonData, jsonPath)
@@ -36,7 +36,7 @@ func CheckJSONContent(jsonPath string, expected string) ToolTestCheck {
 			t.Fatal("response is not text content")
 		}
 
-		jsonData := map[string]interface{}{}
+		jsonData := map[string]any{}
 		json.Unmarshal([]byte(content.Text), &jsonData)
 
 		val, err := getByPath(jsonData, jsonPath)
@@ -68,8 +68,8 @@ func parsePart(part string) (key string, index int, hasIndex bool, err error) {
 	return key, -1, false, nil
 }
 
-func getByPath(data map[string]interface{}, path string) (interface{}, error) {
-	current := interface{}(data)
+func getByPath(data map[string]any, path string) (any, error) {
+	current := any(data)
 	parts := strings.Split(path, ".")
 
 	for _, raw := range parts {
@@ -79,7 +79,7 @@ func getByPath(data map[string]interface{}, path string) (interface{}, error) {
 		}
 
 		if key != "" {
-			obj, ok := current.(map[string]interface{})
+			obj, ok := current.(map[string]any)
 			if !ok {
 				return nil, fmt.Errorf("expected object for '%s'", key)
 			}
@@ -91,7 +91,7 @@ func getByPath(data map[string]interface{}, path string) (interface{}, error) {
 		}
 
 		if hasIndex {
-			list, ok := current.([]interface{})
+			list, ok := current.([]any)
 			if !ok {
 				return nil, fmt.Errorf("expected list for index [%d]", idx)
 			}
