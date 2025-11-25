@@ -2,7 +2,9 @@ package acceptance
 
 import (
 	"context"
+	"math/rand"
 	"regexp"
+	"strconv"
 	"testing"
 
 	"github.com/mark3labs/mcp-go/client"
@@ -75,5 +77,13 @@ func runAcceptanceTest(t *testing.T, ctx context.Context, at ToolAcceptanceTest,
 				t.Fatalf("Expected text from tool %q to match %q, got: %q", at.ToolName, at.ExpectTextContent, content.Text)
 			}
 		}
+
+		for _, check := range at.Checks {
+			check(t, res)
+		}
 	})
+}
+
+func randomName(name string) string {
+	return name + "-" + strconv.FormatInt(rand.Int63(), 36)[:5]
 }
