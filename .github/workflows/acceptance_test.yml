@@ -27,4 +27,6 @@ jobs:
         run: make deps
 
       - name: Run unit tests
+        env:
+          TFE_TOKEN: ${{ secrets.TFE_TOKEN }}          
         run: make test-acc
