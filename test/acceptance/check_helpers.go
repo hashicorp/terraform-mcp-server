@@ -18,6 +18,7 @@ func CheckTextContentContains(expr string) ToolTestCheck {
 		if !ok {
 			t.Fatal("response is not text content")
 		}
+
 		require.Contains(t, content.Text, expr)
 	}
 }

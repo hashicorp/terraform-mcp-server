@@ -41,24 +41,25 @@ func TestAcceptance(t *testing.T) {
 	}
 
 	for _, at := range tests {
-		sess := &TestSession{
-			id:           srv.GenerateInProcessSessionID(),
-			notifChannel: make(chan mcp.JSONRPCNotification, 10),
-		}
-		if err := srv.RegisterSession(ctx, sess); err != nil {
-			t.Fatalf("failed to register session: %v", err)
-		}
-		sessionCtx := srv.WithContext(ctx, sess)
-		mcpclient, err := client.NewInProcessClient(srv)
-		if err != nil {
-			t.Fatalf("Failed to start MCP client + server: %v", err)
-		}
-		defer mcpclient.Close()
-
-		if _, err = mcpclient.Initialize(ctx, mcp.InitializeRequest{}); err != nil {
-			t.Fatalf("Failed to initialize the MCP client: %v", err)
-		}
 		t.Run(at.ToolName, func(t *testing.T) {
+			sess := &TestSession{
+				id:           srv.GenerateInProcessSessionID(),
+				notifChannel: make(chan mcp.JSONRPCNotification, 10),
+			}
+			if err := srv.RegisterSession(ctx, sess); err != nil {
+				t.Fatalf("failed to register session: %v", err)
+			}
+			sessionCtx := srv.WithContext(ctx, sess)
+			mcpclient, err := client.NewInProcessClient(srv)
+			if err != nil {
+				t.Fatalf("Failed to start MCP client + server: %v", err)
+			}
+			defer mcpclient.Close()
+
+			if _, err = mcpclient.Initialize(ctx, mcp.InitializeRequest{}); err != nil {
+				t.Fatalf("Failed to initialize the MCP client: %v", err)
+			}
+
 			runAcceptanceTest(t, sessionCtx, at, mcpclient)
 		})
 	}

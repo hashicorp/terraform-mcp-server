@@ -62,4 +62,53 @@ var TerraformToolTests = []ToolAcceptanceTest{
 			CheckJSONContentExists("data"),
 		},
 	},
+	{
+		Name:        "list_terraform_orgs",
+		Description: "List terraform organizations",
+		ToolName:    "list_terraform_orgs",
+		Arguments:   map[string]any{},
+		Checks: []ToolTestCheck{
+			CheckJSONContentExists(""),
+		},
+	},
+	{
+		Name:        "list_terraform_projects",
+		Description: "List terraform projects",
+		ToolName:    "list_terraform_projects",
+		Arguments: map[string]any{
+			"terraform_org_name": TFCTestOrg,
+		},
+		Checks: []ToolTestCheck{
+			CheckJSONContentExists(""),
+		},
+	},
+	{
+		Name:        "list_terraform_projects_bad_org",
+		Description: "List terraform projects with an organization that does not exist",
+		ToolName:    "list_terraform_projects",
+		Arguments: map[string]any{
+			"terraform_org_name": "initech-123preq",
+		},
+		ExpectError: regexp.MustCompile(`resource not found`),
+	},
+	{
+		Name:        "list_runs",
+		Description: "List terraform runs with an organization",
+		ToolName:    "list_runs",
+		Arguments: map[string]any{
+			"terraform_org_name": TFCTestOrg,
+		},
+		Checks: []ToolTestCheck{
+			CheckJSONContentExists("data"),
+		},
+	},
+	{
+		Name:        "list_runs_bad_org",
+		Description: "List terraform runs with an organization that does not exist",
+		ToolName:    "list_runs",
+		Arguments: map[string]any{
+			"terraform_org_name": "initech-123preq",
+		},
+		ExpectError: regexp.MustCompile(`resource not found`),
+	},
 }
