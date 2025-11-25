@@ -11,7 +11,7 @@ permissions:
   contents: read
 
 jobs:
-  e2e-test:
+  acceptance-test:
     runs-on: ubuntu-latest
 
     steps:
