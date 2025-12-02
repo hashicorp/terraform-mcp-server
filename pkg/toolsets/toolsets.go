@@ -5,81 +5,74 @@ package toolsets
 
 import "strings"
 
-// Toolset represents a group of related tools
-type Toolset string
-
 const (
 	// Core toolsets
-	ToolsetRegistry        Toolset = "registry"         // Public Terraform Registry
-	ToolsetRegistryPrivate Toolset = "registry-private" // Private registry (TFE/TFC)
-	ToolsetTerraform       Toolset = "terraform"        // TFE/TFC operations
+	Registry        = "registry"
+	RegistryPrivate = "registry-private" // Private registry (TFE/TFC)
+	Terraform       = "terraform"        // TFE/TFC operations
 
 	// Special toolsets
-	ToolsetAll     Toolset = "all"
-	ToolsetDefault Toolset = "default"
+	All     = "all"
+	Default = "default"
 )
 
-type ToolsetMetadata struct {
-	ID          string
+// Toolset represents metadata about a toolset
+type Toolset struct {
+	Name        string
 	Description string
 }
 
 var (
-	MetadataAll = ToolsetMetadata{
-		ID:          string(ToolsetAll),
+	All_Toolset = Toolset{
+		Name:        All,
 		Description: "Special toolset that enables all available toolsets",
 	}
-	MetadataDefault = ToolsetMetadata{
-		ID:          string(ToolsetDefault),
+	Default_Toolset = Toolset{
+		Name:        Default,
 		Description: "Special toolset that enables the default toolset configuration",
 	}
-	MetadataRegistry = ToolsetMetadata{
-		ID:          string(ToolsetRegistry),
+	Registry_Toolset = Toolset{
+		Name:        Registry,
 		Description: "Public Terraform Registry (providers, modules, policies)",
 	}
-	MetadataRegistryPrivate = ToolsetMetadata{
-		ID:          string(ToolsetRegistryPrivate),
+	RegistryPrivate_Toolset = Toolset{
+		Name:        RegistryPrivate,
 		Description: "Private registry access (TFE/TFC private modules and providers)",
 	}
-	MetadataTerraform = ToolsetMetadata{
-		ID:          string(ToolsetTerraform),
+	Terraform_Toolset = Toolset{
+		Name:        Terraform,
 		Description: "HCP Terraform/TFE operations (workspaces, runs, variables, etc.)",
 	}
 )
 
-// AvailableToolsets returns all available toolsets
-func AvailableToolsets() []ToolsetMetadata {
-	return []ToolsetMetadata{
-		MetadataRegistry,
-		MetadataRegistryPrivate,
-		MetadataTerraform,
+func AvailableToolsets() []Toolset {
+	return []Toolset{
+		Registry_Toolset,
+		RegistryPrivate_Toolset,
+		Terraform_Toolset,
 	}
 }
 
 // DefaultToolsets returns the default set of enabled toolsets
 func DefaultToolsets() []string {
-	return []string{
-		string(ToolsetRegistry),
-	}
+	return []string{Registry}
 }
 
-// GetValidToolsetIDs returns a map of all valid toolset IDs
-func GetValidToolsetIDs() map[string]bool {
-	validIDs := make(map[string]bool)
+func GetValidToolsetNames() map[string]bool {
+	validNames := make(map[string]bool)
 	for _, ts := range AvailableToolsets() {
-		validIDs[ts.ID] = true
+		validNames[ts.Name] = true
 	}
-	validIDs[MetadataAll.ID] = true
-	validIDs[MetadataDefault.ID] = true
-	return validIDs
+	validNames[All_Toolset.Name] = true
+	validNames[Default_Toolset.Name] = true
+	return validNames
 }
 
-// CleanToolsets sanitizes the user input
 func CleanToolsets(enabledToolsets []string) ([]string, []string) {
 	seen := make(map[string]bool)
 	result := make([]string, 0, len(enabledToolsets))
 	invalid := make([]string, 0)
-	validIDs := GetValidToolsetIDs()
+	validNames := GetValidToolsetNames()
 
 	for _, toolset := range enabledToolsets {
 		trimmed := strings.TrimSpace(toolset)
@@ -89,7 +82,7 @@ func CleanToolsets(enabledToolsets []string) ([]string, []string) {
 		if !seen[trimmed] {
 			seen[trimmed] = true
 			result = append(result, trimmed)
-			if !validIDs[trimmed] {
+			if !validNames[trimmed] {
 				invalid = append(invalid, trimmed)
 			}
 		}
@@ -104,7 +97,7 @@ func ExpandDefaultToolset(toolsets []string) []string {
 
 	for _, ts := range toolsets {
 		seen[ts] = true
-		if ts == string(ToolsetDefault) {
+		if ts == Default {
 			hasDefault = true
 		}
 	}
@@ -115,7 +108,7 @@ func ExpandDefaultToolset(toolsets []string) []string {
 
 	result := make([]string, 0, len(toolsets))
 	for _, ts := range toolsets {
-		if ts != string(ToolsetDefault) {
+		if ts != Default {
 			result = append(result, ts)
 		}
 	}
@@ -146,7 +139,7 @@ func GenerateToolsetsHelp() string {
 	allToolsets := AvailableToolsets()
 	var toolsetNames []string
 	for _, ts := range allToolsets {
-		toolsetNames = append(toolsetNames, ts.ID)
+		toolsetNames = append(toolsetNames, ts.Name)
 	}
 	availableTools := strings.Join(toolsetNames, ", ")
 
