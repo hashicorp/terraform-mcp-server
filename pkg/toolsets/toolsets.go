@@ -23,23 +23,23 @@ type Toolset struct {
 }
 
 var (
-	All_Toolset = Toolset{
+	AllToolset = Toolset{
 		Name:        All,
 		Description: "Special toolset that enables all available toolsets",
 	}
-	Default_Toolset = Toolset{
+	DefaultToolset = Toolset{
 		Name:        Default,
 		Description: "Special toolset that enables the default toolset configuration",
 	}
-	Registry_Toolset = Toolset{
+	RegistryToolset = Toolset{
 		Name:        Registry,
 		Description: "Public Terraform Registry (providers, modules, policies)",
 	}
-	RegistryPrivate_Toolset = Toolset{
+	RegistryPrivateToolset = Toolset{
 		Name:        RegistryPrivate,
 		Description: "Private registry access (TFE/TFC private modules and providers)",
 	}
-	Terraform_Toolset = Toolset{
+	TerraformToolset = Toolset{
 		Name:        Terraform,
 		Description: "HCP Terraform/TFE operations (workspaces, runs, variables, etc.)",
 	}
@@ -47,9 +47,9 @@ var (
 
 func AvailableToolsets() []Toolset {
 	return []Toolset{
-		Registry_Toolset,
-		RegistryPrivate_Toolset,
-		Terraform_Toolset,
+		RegistryToolset,
+		RegistryPrivateToolset,
+		TerraformToolset,
 	}
 }
 
@@ -63,8 +63,8 @@ func GetValidToolsetNames() map[string]bool {
 	for _, ts := range AvailableToolsets() {
 		validNames[ts.Name] = true
 	}
-	validNames[All_Toolset.Name] = true
-	validNames[Default_Toolset.Name] = true
+	validNames[AllToolset.Name] = true
+	validNames[DefaultToolset.Name] = true
 	return validNames
 }
 
