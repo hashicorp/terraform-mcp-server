@@ -27,6 +27,7 @@ It retrieves a list of private modules that match the search criteria. This tool
 			mcp.WithOpenWorldHintAnnotation(true),
 			mcp.WithReadOnlyHintAnnotation(true),
 			mcp.WithDestructiveHintAnnotation(false),
+			mcp.WithDeferLoading(true),
 			mcp.WithString("terraform_org_name",
 				mcp.Required(),
 				mcp.Description("The Terraform Cloud/Enterprise organization name to search within"),

@@ -25,6 +25,7 @@ func DeleteWorkspaceSafely(logger *log.Logger) server.ServerTool {
 			mcp.WithReadOnlyHintAnnotation(false),
 			mcp.WithOpenWorldHintAnnotation(true),
 			mcp.WithDestructiveHintAnnotation(true),
+			mcp.WithDeferLoading(true),
 			mcp.WithString("workspace_id",
 				mcp.Required(),
 				mcp.Description("The ID of the workspace to delete (e.g., 'ws-abc123def456')"),

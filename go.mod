@@ -15,6 +15,8 @@ require (
 	golang.org/x/time v0.14.0
 )
 
+replace github.com/mark3labs/mcp-go => /tmp/mcp-go-fork
+
 require (
 	github.com/bahlo/generic-list-go v0.2.0 // indirect
 	github.com/buger/jsonparser v1.1.1 // indirect

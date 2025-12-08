@@ -27,6 +27,7 @@ func ListWorkspaces(logger *log.Logger) server.ServerTool {
 			mcp.WithOpenWorldHintAnnotation(true),
 			mcp.WithReadOnlyHintAnnotation(true),
 			mcp.WithDestructiveHintAnnotation(false),
+			mcp.WithDeferLoading(true),
 			utils.WithPagination(),
 			mcp.WithString("terraform_org_name",
 				mcp.Required(),

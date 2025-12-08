@@ -28,6 +28,7 @@ func CreateNoCodeWorkspace(logger *log.Logger, mcpServer *server.MCPServer) serv
 			mcp.WithOpenWorldHintAnnotation(true),
 			mcp.WithReadOnlyHintAnnotation(false),
 			mcp.WithDestructiveHintAnnotation(true),
+			mcp.WithDeferLoading(true),
 			mcp.WithString("no_code_module_id",
 				mcp.Required(),
 				mcp.Description("The ID of the No Code module to create a workspace for"),

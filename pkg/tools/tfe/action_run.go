@@ -24,6 +24,7 @@ func ActionRun(logger *log.Logger) server.ServerTool {
 			mcp.WithTitleAnnotation("Apply, Discard or Cancel a Terraform run"),
 			mcp.WithReadOnlyHintAnnotation(false),
 			mcp.WithDestructiveHintAnnotation(true),
+			mcp.WithDeferLoading(true),
 			mcp.WithString("run_action",
 				mcp.Required(),
 				mcp.Description("The action to perform on the run (e.g., 'apply', 'discard', 'cancel')"),

@@ -30,6 +30,7 @@ This can be obtained by calling 'search_private_modules' first to obtain the exa
 			mcp.WithOpenWorldHintAnnotation(true),
 			mcp.WithReadOnlyHintAnnotation(true),
 			mcp.WithDestructiveHintAnnotation(false),
+			mcp.WithDeferLoading(true),
 			mcp.WithString("terraform_org_name",
 				mcp.Required(),
 				mcp.Description("The Terraform Cloud/Enterprise organization name"),

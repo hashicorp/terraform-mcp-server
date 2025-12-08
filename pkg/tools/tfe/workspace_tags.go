@@ -102,6 +102,7 @@ func ReadWorkspaceTags(logger *log.Logger) server.ServerTool {
 			mcp.WithDescription("Read all tags from a Terraform workspace."),
 			mcp.WithReadOnlyHintAnnotation(true),
 			mcp.WithDestructiveHintAnnotation(false),
+			mcp.WithDeferLoading(true),
 			mcp.WithString("terraform_org_name",
 				mcp.Required(),
 				mcp.Description("Organization name"),

@@ -23,6 +23,7 @@ func GetRunDetails(logger *log.Logger) server.ServerTool {
 			mcp.WithTitleAnnotation("Get detailed information about a Terraform run"),
 			mcp.WithReadOnlyHintAnnotation(true),
 			mcp.WithDestructiveHintAnnotation(false),
+			mcp.WithDeferLoading(true),
 			mcp.WithString("run_id",
 				mcp.Required(),
 				mcp.Description("The ID of the run to get details for"),
