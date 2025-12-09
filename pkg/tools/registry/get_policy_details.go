@@ -41,26 +41,25 @@ func PolicyDetails(logger *log.Logger) server.ServerTool {
 func getPolicyDetailsHandler(ctx context.Context, request mcp.CallToolRequest, logger *log.Logger) (*mcp.CallToolResult, error) {
 	terraformPolicyID, err := request.RequireString("terraform_policy_id")
 	if err != nil {
-		return nil, utils.LogAndReturnError(logger, "required input: terraform_policy_id is required and must be a string, it is fetched by running the search_policies tool", err)
+		return utils.ToolError(logger, "missing required input: terraform_policy_id - use search_policies first to find valid policy IDs", err)
 	}
 	if terraformPolicyID == "" {
-		return nil, utils.LogAndReturnError(logger, "required input: terraform_policy_id cannot be empty, it is fetched by running the search_policies tool", nil)
+		return utils.ToolError(logger, "terraform_policy_id cannot be empty - use search_policies first to find valid policy IDs", nil)
 	}
 
-	// Get a simple http client to access the public Terraform registry from context
 	httpClient, err := client.GetHttpClientFromContext(ctx, logger)
 	if err != nil {
-		logger.WithError(err).Error("failed to get http client for public Terraform registry")
-		return mcp.NewToolResultError(fmt.Sprintf("failed to get http client for public Terraform registry: %v", err)), nil
+		return utils.ToolError(logger, "failed to get http client for public Terraform registry", err)
 	}
+
 	policyResp, err := client.SendRegistryCall(httpClient, "GET", (&url.URL{Path: terraformPolicyID, RawQuery: url.Values{"include": {"policies,policy-modules,policy-library"}}.Encode()}).String(), logger, "v2")
 	if err != nil {
-		return nil, utils.LogAndReturnError(logger, "fetching policy details: registry API did not return a successful response", err)
+		return utils.ToolErrorf(logger, "policy not found: %s - verify the terraform_policy_id is correct or use search_policies to find valid IDs", terraformPolicyID)
 	}
 
 	var policyDetails client.TerraformPolicyDetails
 	if err := json.Unmarshal(policyResp, &policyDetails); err != nil {
-		return nil, utils.LogAndReturnError(logger, fmt.Sprintf("unmarshalling policy details for %s", terraformPolicyID), err)
+		return utils.ToolErrorf(logger, "failed to parse policy details for %s", terraformPolicyID)
 	}
 
 	readme := utils.ExtractReadme(policyDetails.Data.Attributes.Readme)
@@ -70,7 +69,6 @@ func getPolicyDetailsHandler(ctx context.Context, request mcp.CallToolRequest, l
 	moduleList := ""
 	for _, policy := range policyDetails.Included {
 		if policy.Type == "policy-modules" {
-			// Use text/template to safely build the module block
 			var moduleBuilder strings.Builder
 			tmpl := `
 module "{{.Name}}" {
@@ -103,7 +101,6 @@ module "{{.Name}}" {
 	builder.WriteString("## Usage\n\n")
 	builder.WriteString("Generate the content for a HashiCorp Configuration Language (HCL) file named policies.hcl. This file should define a set of policies. For each policy provided, create a distinct policy block using the following template.\n")
 	builder.WriteString("\n```hcl\n")
-	// Use text/template to safely build the HCL template for policies
 	hclTmpl := `
 {{- if .ModuleList }}
 {{ .ModuleList }}

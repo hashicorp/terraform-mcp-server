@@ -5,7 +5,6 @@ package tools
 
 import (
 	"context"
-	"fmt"
 	"strings"
 
 	"github.com/hashicorp/terraform-mcp-server/pkg/client"
@@ -40,26 +39,24 @@ func GetLatestProviderVersion(logger *log.Logger) server.ServerTool {
 func getLatestProviderVersionHandler(ctx context.Context, request mcp.CallToolRequest, logger *log.Logger) (*mcp.CallToolResult, error) {
 	namespace, err := request.RequireString("namespace")
 	if err != nil {
-		return nil, utils.LogAndReturnError(logger, "required input: namespace of the Terraform provider is required", err)
+		return utils.ToolError(logger, "missing required input: namespace", err)
 	}
 	namespace = strings.ToLower(namespace)
 
 	name, err := request.RequireString("name")
 	if err != nil {
-		return nil, utils.LogAndReturnError(logger, "required input: name of the Terraform provider is required", err)
+		return utils.ToolError(logger, "missing required input: name", err)
 	}
 	name = strings.ToLower(name)
 
-	// Get a simple http client to access the public Terraform registry from context
 	httpClient, err := client.GetHttpClientFromContext(ctx, logger)
 	if err != nil {
-		logger.WithError(err).Error("failed to get http client for public Terraform registry")
-		return mcp.NewToolResultError(fmt.Sprintf("failed to get http client for public Terraform registry: %v", err)), nil
+		return utils.ToolError(logger, "failed to get http client for public Terraform registry", err)
 	}
 
 	version, err := client.GetLatestProviderVersion(httpClient, namespace, name, logger)
 	if err != nil {
-		return nil, utils.LogAndReturnError(logger, "fetching latest provider version", err)
+		return utils.ToolErrorf(logger, "provider not found: %s/%s - verify the namespace and provider name are correct", namespace, name)
 	}
 
 	return mcp.NewToolResultText(version), nil
