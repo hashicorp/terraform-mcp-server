@@ -3,6 +3,7 @@
 FEATURES
 
 * **Toolsets Flag**: Added `--toolsets` flag to selectively enable tool groups. Three toolset groups are available: `registry` (public Terraform Registry), `registry-private` (private TFE/TFC registry), and `terraform` (TFE/TFC operations). Default is `registry` only.
+* [New Tool] `get_run_logs` Added capability to retrieve plan and apply logs from Terraform runs. Users can fetch plan logs, apply logs, or both, with optional metadata about the run status.
 
 ## 0.3.3 (Nov 21, 2025)
 
