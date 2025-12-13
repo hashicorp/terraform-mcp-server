@@ -96,7 +96,47 @@ func parseToolsets(toolsetsFlag string, logger *log.Logger) []string {
 	return expanded
 }
 
+// parseIndividualTools parses and validates the tools flag value
+func parseIndividualTools(toolsFlag string, logger *log.Logger) []string {
+	rawTools := strings.Split(toolsFlag, ",")
+
+	validTools, invalidTools := toolsets.ParseIndividualTools(rawTools)
+	if len(invalidTools) > 0 {
+		logger.Warnf("Invalid tool names ignored: %v", invalidTools)
+	}
+
+	if len(validTools) == 0 {
+		logger.Warn("No valid tools specified, falling back to default toolsets")
+		return parseToolsets("default", logger)
+	}
+
+	// Add the individual tools marker to enable individual tool mode
+	result := append([]string{toolsets.IndividualToolsMarker()}, validTools...)
+	logger.Infof("Enabled individual tools: %v", validTools)
+	return result
+}
+
 func getToolsetsFromCmd(cmd *cobra.Command, logger *log.Logger) []string {
+	// Check if --tools flag is set (individual tool mode)
+	toolsFlag, err := cmd.Flags().GetString("tools")
+	if err != nil {
+		// Try root persistent flags
+		toolsFlag, err = cmd.Root().PersistentFlags().GetString("tools")
+	}
+	
+	if err == nil && toolsFlag != "" {
+		// Ensure --toolsets is not also set
+		toolsetsFlag, _ := cmd.Flags().GetString("toolsets")
+		if toolsetsFlag == "" {
+			toolsetsFlag, _ = cmd.Root().PersistentFlags().GetString("toolsets")
+		}
+		if toolsetsFlag != "" && toolsetsFlag != "default" {
+			logger.Fatal("Cannot use both --tools and --toolsets flags together")
+		}
+		return parseIndividualTools(toolsFlag, logger)
+	}
+
+	// Fall back to toolsets mode
 	toolsetsFlag, err := cmd.Flags().GetString("toolsets")
 	if err != nil {
 		toolsetsFlag, err = cmd.Root().PersistentFlags().GetString("toolsets")
