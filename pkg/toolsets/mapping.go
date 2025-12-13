@@ -90,6 +90,15 @@ func ParseIndividualTools(toolNames []string) ([]string, []string) {
 	return valid, invalid
 }
 
+// EnableIndividualTools creates a toolset list for individual tool filtering mode
+// The returned list includes an internal marker plus the specified tool names
+func EnableIndividualTools(toolNames []string) []string {
+	result := make([]string, 0, len(toolNames)+1)
+	result = append(result, individualToolsMarker)
+	result = append(result, toolNames...)
+	return result
+}
+
 // IsToolEnabled checks if a tool is enabled based on the enabled toolsets
 func IsToolEnabled(toolName string, enabledToolsets []string) bool {
 	if ContainsToolset(enabledToolsets, All) {

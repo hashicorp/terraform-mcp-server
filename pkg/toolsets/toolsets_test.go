@@ -298,31 +298,31 @@ func TestIsToolEnabledIndividualMode(t *testing.T) {
 		{
 			name:            "tool enabled in individual mode",
 			toolName:        "search_providers",
-			enabledToolsets: []string{IndividualToolsMarker(), "search_providers", "list_workspaces"},
+			enabledToolsets: EnableIndividualTools([]string{"search_providers", "list_workspaces"}),
 			expected:        true,
 		},
 		{
 			name:            "tool disabled in individual mode",
 			toolName:        "get_provider_details",
-			enabledToolsets: []string{IndividualToolsMarker(), "search_providers", "list_workspaces"},
+			enabledToolsets: EnableIndividualTools([]string{"search_providers", "list_workspaces"}),
 			expected:        false,
 		},
 		{
 			name:            "all toolset overrides individual mode",
 			toolName:        "get_provider_details",
-			enabledToolsets: []string{"all", IndividualToolsMarker(), "search_providers"},
+			enabledToolsets: append([]string{"all"}, EnableIndividualTools([]string{"search_providers"})...),
 			expected:        true,
 		},
 		{
 			name:            "terraform tool in individual mode",
 			toolName:        "list_workspaces",
-			enabledToolsets: []string{IndividualToolsMarker(), "list_workspaces"},
+			enabledToolsets: EnableIndividualTools([]string{"list_workspaces"}),
 			expected:        true,
 		},
 		{
 			name:            "private registry tool in individual mode",
 			toolName:        "search_private_modules",
-			enabledToolsets: []string{IndividualToolsMarker(), "search_private_modules"},
+			enabledToolsets: EnableIndividualTools([]string{"search_private_modules"}),
 			expected:        true,
 		},
 	}

@@ -165,8 +165,3 @@ func GenerateToolsHelp() string {
 		"Example:\n" +
 		"  - --tools=search_providers,get_provider_details,search_modules"
 }
-
-// IndividualToolsMarker returns the internal marker for individual tool filtering
-func IndividualToolsMarker() string {
-	return individualToolsMarker
-}
