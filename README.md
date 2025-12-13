@@ -48,10 +48,10 @@ automation and interaction capabilities for Infrastructure as Code (IaC) develop
 
 ```bash
 # Stdio mode
-terraform-mcp-server stdio [--log-file /path/to/log]
+terraform-mcp-server stdio [--log-file /path/to/log] [--toolsets <toolsets>] [--tools <tools>]
 
 # StreamableHTTP mode
-terraform-mcp-server streamable-http [--transport-port 8080] [--transport-host 127.0.0.1] [--mcp-endpoint /mcp] [--log-file /path/to/log]
+terraform-mcp-server streamable-http [--transport-port 8080] [--transport-host 127.0.0.1] [--mcp-endpoint /mcp] [--log-file /path/to/log] [--toolsets <toolsets>] [--tools <tools>]
 ```
 
 ## Instructions
@@ -412,6 +412,10 @@ docker run -i --rm terraform-mcp-server:dev
 
 # Run in streamable-http mode
 docker run -p 8080:8080 --rm -e TRANSPORT_MODE=streamable-http -e TRANSPORT_HOST=0.0.0.0 terraform-mcp-server:dev
+
+# Filter tools (optional)
+docker run -i --rm terraform-mcp-server:dev --toolsets=registry,terraform
+docker run -i --rm terraform-mcp-server:dev --tools=search_providers,get_provider_details
 ```
 
 > **Note:** When running in Docker, you should set `TRANSPORT_HOST=0.0.0.0` to allow connections from outside the container.
@@ -448,6 +452,20 @@ curl http://localhost:8080/health
 ## Available Resources
 
 [Check out available resources here :link:](https://developer.hashicorp.com/terraform/docs/tools/mcp-server/reference#available-tools)
+
+### Tool Filtering
+
+Control which tools are available using `--toolsets` (groups) or `--tools` (individual):
+
+```bash
+# Enable tool groups (default: registry)
+terraform-mcp-server --toolsets=registry,terraform
+
+# Enable specific tools only
+terraform-mcp-server --tools=search_providers,get_provider_details,list_workspaces
+```
+
+Available toolsets: `registry`, `registry-private`, `terraform`, `all`, `default`. See `pkg/toolsets/mapping.go` for individual tool names. Cannot use both flags together.
 
 ## Transport Support
 

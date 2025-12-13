@@ -227,3 +227,142 @@ func TestIsToolEnabled(t *testing.T) {
 		})
 	}
 }
+
+func TestParseIndividualTools(t *testing.T) {
+	tests := []struct {
+		name            string
+		input           []string
+		expectedValid   []string
+		expectedInvalid []string
+	}{
+		{
+			name:            "valid tools",
+			input:           []string{"search_providers", "get_provider_details"},
+			expectedValid:   []string{"search_providers", "get_provider_details"},
+			expectedInvalid: []string{},
+		},
+		{
+			name:            "invalid tools",
+			input:           []string{"invalid_tool", "fake_tool"},
+			expectedValid:   []string{},
+			expectedInvalid: []string{"invalid_tool", "fake_tool"},
+		},
+		{
+			name:            "mixed valid and invalid",
+			input:           []string{"search_providers", "invalid_tool", "list_workspaces"},
+			expectedValid:   []string{"search_providers", "list_workspaces"},
+			expectedInvalid: []string{"invalid_tool"},
+		},
+		{
+			name:            "empty strings",
+			input:           []string{"search_providers", "", "list_workspaces", "  "},
+			expectedValid:   []string{"search_providers", "list_workspaces"},
+			expectedInvalid: []string{},
+		},
+		{
+			name:            "duplicates",
+			input:           []string{"search_providers", "search_providers", "list_workspaces"},
+			expectedValid:   []string{"search_providers", "list_workspaces"},
+			expectedInvalid: []string{},
+		},
+		{
+			name:            "whitespace trimming",
+			input:           []string{" search_providers ", "  list_workspaces  "},
+			expectedValid:   []string{"search_providers", "list_workspaces"},
+			expectedInvalid: []string{},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			valid, invalid := ParseIndividualTools(tt.input)
+
+			if !reflect.DeepEqual(valid, tt.expectedValid) {
+				t.Errorf("ParseIndividualTools() valid = %v, want %v", valid, tt.expectedValid)
+			}
+
+			if !reflect.DeepEqual(invalid, tt.expectedInvalid) {
+				t.Errorf("ParseIndividualTools() invalid = %v, want %v", invalid, tt.expectedInvalid)
+			}
+		})
+	}
+}
+
+func TestIsToolEnabledIndividualMode(t *testing.T) {
+	tests := []struct {
+		name            string
+		toolName        string
+		enabledToolsets []string
+		expected        bool
+	}{
+		{
+			name:            "tool enabled in individual mode",
+			toolName:        "search_providers",
+			enabledToolsets: []string{IndividualToolsMarker(), "search_providers", "list_workspaces"},
+			expected:        true,
+		},
+		{
+			name:            "tool disabled in individual mode",
+			toolName:        "get_provider_details",
+			enabledToolsets: []string{IndividualToolsMarker(), "search_providers", "list_workspaces"},
+			expected:        false,
+		},
+		{
+			name:            "all toolset overrides individual mode",
+			toolName:        "get_provider_details",
+			enabledToolsets: []string{"all", IndividualToolsMarker(), "search_providers"},
+			expected:        true,
+		},
+		{
+			name:            "terraform tool in individual mode",
+			toolName:        "list_workspaces",
+			enabledToolsets: []string{IndividualToolsMarker(), "list_workspaces"},
+			expected:        true,
+		},
+		{
+			name:            "private registry tool in individual mode",
+			toolName:        "search_private_modules",
+			enabledToolsets: []string{IndividualToolsMarker(), "search_private_modules"},
+			expected:        true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := IsToolEnabled(tt.toolName, tt.enabledToolsets)
+
+			if result != tt.expected {
+				t.Errorf("IsToolEnabled(%s, %v) = %v, want %v", tt.toolName, tt.enabledToolsets, result, tt.expected)
+			}
+		})
+	}
+}
+
+func TestGetAllValidToolNames(t *testing.T) {
+	validTools := GetAllValidToolNames()
+
+	// Verify we have a reasonable number of tools (at least the ones we know about)
+	expectedTools := []string{
+		"search_providers",
+		"get_provider_details",
+		"search_modules",
+		"get_module_details",
+		"search_policies",
+		"get_policy_details",
+		"list_workspaces",
+		"create_workspace",
+		"search_private_modules",
+		"search_private_providers",
+	}
+
+	for _, tool := range expectedTools {
+		if !validTools[tool] {
+			t.Errorf("GetAllValidToolNames() missing expected tool: %s", tool)
+		}
+	}
+
+	// Verify count matches ToolToToolset map
+	if len(validTools) != len(ToolToToolset) {
+		t.Errorf("GetAllValidToolNames() returned %d tools, want %d", len(validTools), len(ToolToToolset))
+	}
+}

@@ -110,6 +110,7 @@ func init() {
 	rootCmd.SetVersionTemplate("{{.Short}}\n{{.Version}}\n")
 	rootCmd.PersistentFlags().String("log-file", "", "Path to log file")
 	rootCmd.PersistentFlags().String("toolsets", "default", toolsets.GenerateToolsetsHelp())
+	rootCmd.PersistentFlags().String("tools", "", toolsets.GenerateToolsHelp())
 
 	// Add StreamableHTTP command flags (avoid 'h' shorthand conflict with help)
 	streamableHTTPCmd.Flags().String("transport-host", "127.0.0.1", "Host to bind to")
