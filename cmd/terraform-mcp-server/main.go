@@ -123,7 +123,7 @@ func getToolsetsFromCmd(cmd *cobra.Command, logger *log.Logger) []string {
 		// Try root persistent flags
 		toolsFlag, err = cmd.Root().PersistentFlags().GetString("tools")
 	}
-	
+
 	if err == nil && toolsFlag != "" {
 		// Ensure --toolsets is not also set
 		toolsetsFlag, _ := cmd.Flags().GetString("toolsets")
