@@ -90,7 +90,10 @@ func GetProviderResourceDocs(httpClient *http.Client, providerDocsID string, log
 
 func parseTerraformSkipTLSVerify(ctx context.Context) bool {
 	terraformSkipTLSVerifyStr, ok := ctx.Value(contextKey(TerraformSkipTLSVerify)).(string)
-	if ok && terraformSkipTLSVerifyStr != "" {
+	if !ok || terraformSkipTLSVerifyStr == "" {
+		terraformSkipTLSVerifyStr = utils.GetEnv(TerraformSkipTLSVerify, "")
+	}
+	if terraformSkipTLSVerifyStr != "" {
 		terraformSkipTLSVerify, err := strconv.ParseBool(terraformSkipTLSVerifyStr)
 		if err == nil {
 			return terraformSkipTLSVerify

@@ -4,6 +4,10 @@ FEATURES
 
 * **Toolsets Flag**: Added `--toolsets` flag to selectively enable tool groups. Three toolset groups are available: `registry` (public Terraform Registry), `registry-private` (private TFE/TFC registry), and `terraform` (TFE/TFC operations). Default is `registry` only.
 
+FIXES
+
+* Skip TLS flag was not propogated properly [243](https://github.com/hashicorp/terraform-mcp-server/issues/243)
+
 ## 0.3.3 (Nov 21, 2025)
 
 IMPROVEMENTS
