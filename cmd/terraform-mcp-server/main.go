@@ -110,8 +110,8 @@ func parseIndividualTools(toolsFlag string, logger *log.Logger) []string {
 		return parseToolsets("default", logger)
 	}
 
-	// Add the individual tools marker to enable individual tool mode
-	result := append([]string{toolsets.IndividualToolsMarker()}, validTools...)
+	// Use the public API to enable individual tools mode
+	result := toolsets.EnableIndividualTools(validTools)
 	logger.Infof("Enabled individual tools: %v", validTools)
 	return result
 }
