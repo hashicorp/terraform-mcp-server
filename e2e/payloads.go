@@ -423,7 +423,7 @@ var searchPoliciesTestCases = []RegistryTestCase{
 		TestShouldFail:  false,
 		TestDescription: "Testing search_policies with policy name containing spaces",
 		TestPayload: map[string]interface{}{
-			"policy_query": "FSBP Foundations benchmark",
+			"policy_query": "Foundational Security Best Practices(FSBP)",
 		},
 	},
 }
