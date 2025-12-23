@@ -42,40 +42,37 @@ func ModuleDetails(logger *log.Logger) server.ServerTool {
 func getModuleDetailsHandler(ctx context.Context, request mcp.CallToolRequest, logger *log.Logger) (*mcp.CallToolResult, error) {
 	moduleID, err := request.RequireString("module_id")
 	if err != nil {
-		return nil, utils.LogAndReturnError(logger, "required input: module_id is required", err)
+		return utils.ToolError(logger, "missing required input: module_id", err)
 	}
 	if moduleID == "" {
-		return nil, utils.LogAndReturnError(logger, "required input: module_id cannot be empty", nil)
+		return utils.ToolError(logger, "module_id cannot be empty", nil)
 	}
-	
+
 	// Validate module ID format
 	if err := validateModuleID(moduleID); err != nil {
-		return nil, utils.LogAndReturnError(logger, err.Error(), nil)
+		return utils.ToolError(logger, err.Error(), nil)
 	}
-	
+
 	moduleID = strings.ToLower(moduleID)
 
-	// Get a simple http client to access the public Terraform registry from context
 	httpClient, err := client.GetHttpClientFromContext(ctx, logger)
 	if err != nil {
-		logger.WithError(err).Error("failed to get http client for public Terraform registry")
-		return mcp.NewToolResultError(fmt.Sprintf("failed to get http client for public Terraform registry: %v", err)), nil
+		return utils.ToolError(logger, "failed to get http client for public Terraform registry", err)
 	}
 
-	var errMsg string
 	response, err := getModuleDetails(httpClient, moduleID, 0, logger)
 	if err != nil {
-		errMsg = fmt.Sprintf("getting module(s), none found! module_id: %v,", moduleID)
-		return nil, utils.LogAndReturnError(logger, errMsg, nil)
+		return utils.ToolErrorf(logger, "module not found: %s - use search_modules first to find valid module IDs", moduleID)
 	}
+
 	moduleData, err := unmarshalTerraformModule(response)
 	if err != nil {
-		return nil, utils.LogAndReturnError(logger, "unmarshalling module details", err)
+		return utils.ToolError(logger, "failed to parse module details", err)
 	}
 	if moduleData == "" {
-		errMsg = fmt.Sprintf("getting module(s), none found! %s please provider a different moduleProvider", errMsg)
-		return nil, utils.LogAndReturnError(logger, errMsg, nil)
+		return utils.ToolErrorf(logger, "no module data returned for %s - try a different module_id", moduleID)
 	}
+
 	return mcp.NewToolResultText(moduleData), nil
 }
 
@@ -88,20 +85,17 @@ func getModuleDetails(httpClient *http.Client, moduleID string, currentOffset in
 	uri = fmt.Sprintf("%s?offset=%v", uri, currentOffset)
 	response, err := client.SendRegistryCall(httpClient, "GET", uri, logger)
 	if err != nil {
-		// We shouldn't log the error here because we might hit a namespace that doesn't exist, it's better to let the caller handle it.
 		return nil, fmt.Errorf("getting module(s) for: %v, please provide a different provider name like aws, azurerm or google etc", moduleID)
 	}
 
-	// Return the filtered JSON as a string
 	return response, nil
 }
 
 func unmarshalTerraformModule(response []byte) (string, error) {
-	// Handles one module
 	var terraformModules client.TerraformModuleVersionDetails
 	err := json.Unmarshal(response, &terraformModules)
 	if err != nil {
-		return "", utils.LogAndReturnError(nil, "unmarshalling module details", err)
+		return "", fmt.Errorf("unmarshalling module details: %w", err)
 	}
 
 	var builder strings.Builder
@@ -120,7 +114,7 @@ func unmarshalTerraformModule(response []byte) (string, error) {
 			builder.WriteString(fmt.Sprintf("| %s | %s | %s | `%v` | %t |\n",
 				input.Name,
 				input.Type,
-				input.Description, // Consider cleaning potential newlines/markdown
+				input.Description,
 				input.Default,
 				input.Required,
 			))
@@ -136,7 +130,7 @@ func unmarshalTerraformModule(response []byte) (string, error) {
 		for _, output := range terraformModules.Root.Outputs {
 			builder.WriteString(fmt.Sprintf("| %s | %s |\n",
 				output.Name,
-				output.Description, // Consider cleaning potential newlines/markdown
+				output.Description,
 			))
 		}
 		builder.WriteString("\n")
@@ -163,11 +157,8 @@ func unmarshalTerraformModule(response []byte) (string, error) {
 		builder.WriteString("### Examples\n\n")
 		for _, example := range terraformModules.Examples {
 			builder.WriteString(fmt.Sprintf("#### %s\n\n", example.Name))
-			// Optionally, include more details from example if needed, like inputs/outputs
-			// For now, just listing the name.
 			if example.Readme != "" {
 				builder.WriteString("**Readme:**\n\n")
-				// Append readme content, potentially needs markdown escaping/sanitization depending on source
 				builder.WriteString(example.Readme)
 				builder.WriteString("\n\n")
 			}
