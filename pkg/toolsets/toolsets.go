@@ -14,6 +14,9 @@ const (
 	// Special toolsets
 	All     = "all"
 	Default = "default"
+
+	// Internal marker for individual tool filtering
+	individualToolsMarker = "__individual_tools__"
 )
 
 // Toolset represents metadata about a toolset
@@ -152,4 +155,13 @@ func GenerateToolsetsHelp() string {
 		"  - --toolsets=registry,terraform\n" +
 		"  - --toolsets=default,registry-private\n" +
 		"  - --toolsets=all"
+}
+
+// GenerateToolsHelp generates help text for the tools flag
+func GenerateToolsHelp() string {
+	return "Comma-separated list of individual tool names to enable.\n" +
+		"When specified, only these tools will be available.\n" +
+		"Cannot be used together with --toolsets flag.\n" +
+		"Example:\n" +
+		"  - --tools=search_providers,get_provider_details,search_modules"
 }
