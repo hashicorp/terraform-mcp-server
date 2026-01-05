@@ -10,7 +10,6 @@ import (
 	"strconv"
 
 	"github.com/hashicorp/terraform-mcp-server/pkg/client"
-	"github.com/hashicorp/terraform-mcp-server/pkg/utils"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 	log "github.com/sirupsen/logrus"
@@ -39,28 +38,28 @@ You must call 'search_providers' tool first to obtain the exact tfprovider-compa
 func getProviderDocsHandler(ctx context.Context, request mcp.CallToolRequest, logger *log.Logger) (*mcp.CallToolResult, error) {
 	providerDocID, err := request.RequireString("provider_doc_id")
 	if err != nil {
-		return utils.ToolError(logger, "missing required input: provider_doc_id", err)
+		return ToolError(logger, "missing required input: provider_doc_id", err)
 	}
 	if providerDocID == "" {
-		return utils.ToolError(logger, "provider_doc_id cannot be empty", nil)
+		return ToolError(logger, "provider_doc_id cannot be empty", nil)
 	}
 	if _, err := strconv.Atoi(providerDocID); err != nil {
-		return utils.ToolError(logger, "provider_doc_id must be a valid number - use search_providers first to find valid IDs", err)
+		return ToolError(logger, "provider_doc_id must be a valid number - use search_providers first to find valid IDs", err)
 	}
 
 	httpClient, err := client.GetHttpClientFromContext(ctx, logger)
 	if err != nil {
-		return utils.ToolError(logger, "failed to get http client for public Terraform registry", err)
+		return ToolError(logger, "failed to get http client for public Terraform registry", err)
 	}
 
 	detailResp, err := client.SendRegistryCall(httpClient, "GET", path.Join("provider-docs", providerDocID), logger, "v2")
 	if err != nil {
-		return utils.ToolErrorf(logger, "provider doc not found: %s - use search_providers first to find valid provider_doc_id values", providerDocID)
+		return ToolErrorf(logger, "provider doc not found: %s - use search_providers first to find valid provider_doc_id values", providerDocID)
 	}
 
 	var details client.ProviderResourceDetails
 	if err := json.Unmarshal(detailResp, &details); err != nil {
-		return utils.ToolErrorf(logger, "failed to parse provider docs for %s", providerDocID)
+		return ToolErrorf(logger, "failed to parse provider docs for %s", providerDocID)
 	}
 
 	return mcp.NewToolResultText(details.Data.Attributes.Content), nil

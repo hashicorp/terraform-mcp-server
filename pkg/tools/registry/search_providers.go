@@ -72,20 +72,20 @@ func resolveProviderDocIDHandler(ctx context.Context, request mcp.CallToolReques
 
 	httpClient, err := client.GetHttpClientFromContext(ctx, logger)
 	if err != nil {
-		return utils.ToolError(logger, "failed to get http client for public Terraform registry", err)
+		return ToolError(logger, "failed to get http client for public Terraform registry", err)
 	}
 
 	providerDetail, err := resolveProviderDetails(request, httpClient, logger)
 	if err != nil {
-		return utils.ToolErrorf(logger, "failed to resolve provider: %v - %s", err, defaultErrorGuide)
+		return ToolErrorf(logger, "failed to resolve provider: %v - %s", err, defaultErrorGuide)
 	}
 
 	serviceSlug, err := request.RequireString("service_slug")
 	if err != nil {
-		return utils.ToolError(logger, "missing required input: service_slug", err)
+		return ToolError(logger, "missing required input: service_slug", err)
 	}
 	if serviceSlug == "" {
-		return utils.ToolError(logger, "service_slug cannot be empty", nil)
+		return ToolError(logger, "service_slug cannot be empty", nil)
 	}
 	serviceSlug = strings.ToLower(serviceSlug)
 
@@ -96,7 +96,7 @@ func resolveProviderDocIDHandler(ctx context.Context, request mcp.CallToolReques
 	if utils.IsV2ProviderDocumentType(providerDetail.ProviderDocumentType) {
 		content, err := providerDetailsV2(httpClient, providerDetail, logger)
 		if err != nil {
-			return utils.ToolErrorf(logger, "failed to find %s documentation for provider '%s' in the '%s' namespace - %s",
+			return ToolErrorf(logger, "failed to find %s documentation for provider '%s' in the '%s' namespace - %s",
 				providerDetail.ProviderDocumentType, providerDetail.ProviderName, providerDetail.ProviderNamespace, defaultErrorGuide)
 		}
 
@@ -110,13 +110,13 @@ func resolveProviderDocIDHandler(ctx context.Context, request mcp.CallToolReques
 	uri := path.Join("providers", providerDetail.ProviderNamespace, providerDetail.ProviderName, providerDetail.ProviderVersion)
 	response, err := client.SendRegistryCall(httpClient, "GET", uri, logger)
 	if err != nil {
-		return utils.ToolErrorf(logger, "failed to get provider '%s' version '%s' in namespace '%s' - %s",
+		return ToolErrorf(logger, "failed to get provider '%s' version '%s' in namespace '%s' - %s",
 			providerDetail.ProviderName, providerDetail.ProviderVersion, providerDetail.ProviderNamespace, defaultErrorGuide)
 	}
 
 	var providerDocs client.ProviderDocs
 	if err := json.Unmarshal(response, &providerDocs); err != nil {
-		return utils.ToolError(logger, "failed to parse provider docs", err)
+		return ToolError(logger, "failed to parse provider docs", err)
 	}
 
 	var builder strings.Builder
@@ -141,7 +141,7 @@ func resolveProviderDocIDHandler(ctx context.Context, request mcp.CallToolReques
 	}
 
 	if !contentAvailable {
-		return utils.ToolErrorf(logger, "no documentation found for service_slug '%s' - try a more relevant service_slug, or use the provider_name as the value", serviceSlug)
+		return ToolErrorf(logger, "no documentation found for service_slug '%s' - try a more relevant service_slug, or use the provider_name as the value", serviceSlug)
 	}
 
 	return mcp.NewToolResultText(builder.String()), nil

@@ -13,7 +13,6 @@ import (
 	"strings"
 
 	"github.com/hashicorp/terraform-mcp-server/pkg/client"
-	"github.com/hashicorp/terraform-mcp-server/pkg/utils"
 	log "github.com/sirupsen/logrus"
 
 	"github.com/mark3labs/mcp-go/mcp"
@@ -55,28 +54,28 @@ If no modules were found, reattempt the search with a new moduleName query.`),
 func getSearchModulesHandler(ctx context.Context, request mcp.CallToolRequest, logger *log.Logger) (*mcp.CallToolResult, error) {
 	moduleQuery, err := request.RequireString("module_query")
 	if err != nil {
-		return utils.ToolError(logger, "missing required input: module_query", err)
+		return ToolError(logger, "missing required input: module_query", err)
 	}
 	moduleQuery = strings.ToLower(moduleQuery)
 	currentOffsetValue := request.GetInt("current_offset", 0)
 
 	httpClient, err := client.GetHttpClientFromContext(ctx, logger)
 	if err != nil {
-		return utils.ToolError(logger, "failed to get http client for public Terraform registry", err)
+		return ToolError(logger, "failed to get http client for public Terraform registry", err)
 	}
 
 	response, err := sendSearchModulesCall(httpClient, moduleQuery, currentOffsetValue, logger)
 	if err != nil {
-		return utils.ToolErrorf(logger, "no modules found for query: %s - try a different search term", moduleQuery)
+		return ToolErrorf(logger, "no modules found for query: %s - try a different search term", moduleQuery)
 	}
 
 	modulesData, err := unmarshalTerraformModules(response, moduleQuery, logger)
 	if err != nil {
-		return utils.ToolErrorf(logger, "failed to parse module results for query: %s", moduleQuery)
+		return ToolErrorf(logger, "failed to parse module results for query: %s", moduleQuery)
 	}
 
 	if modulesData == "" {
-		return utils.ToolErrorf(logger, "no modules found for query: %s - try a different search term", moduleQuery)
+		return ToolErrorf(logger, "no modules found for query: %s - try a different search term", moduleQuery)
 	}
 
 	return mcp.NewToolResultText(modulesData), nil

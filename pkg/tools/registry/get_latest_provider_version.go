@@ -8,7 +8,6 @@ import (
 	"strings"
 
 	"github.com/hashicorp/terraform-mcp-server/pkg/client"
-	"github.com/hashicorp/terraform-mcp-server/pkg/utils"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 	log "github.com/sirupsen/logrus"
@@ -39,24 +38,24 @@ func GetLatestProviderVersion(logger *log.Logger) server.ServerTool {
 func getLatestProviderVersionHandler(ctx context.Context, request mcp.CallToolRequest, logger *log.Logger) (*mcp.CallToolResult, error) {
 	namespace, err := request.RequireString("namespace")
 	if err != nil {
-		return utils.ToolError(logger, "missing required input: namespace", err)
+		return ToolError(logger, "missing required input: namespace", err)
 	}
 	namespace = strings.ToLower(namespace)
 
 	name, err := request.RequireString("name")
 	if err != nil {
-		return utils.ToolError(logger, "missing required input: name", err)
+		return ToolError(logger, "missing required input: name", err)
 	}
 	name = strings.ToLower(name)
 
 	httpClient, err := client.GetHttpClientFromContext(ctx, logger)
 	if err != nil {
-		return utils.ToolError(logger, "failed to get http client for public Terraform registry", err)
+		return ToolError(logger, "failed to get http client for public Terraform registry", err)
 	}
 
 	version, err := client.GetLatestProviderVersion(httpClient, namespace, name, logger)
 	if err != nil {
-		return utils.ToolErrorf(logger, "provider not found: %s/%s - verify the namespace and provider name are correct", namespace, name)
+		return ToolErrorf(logger, "provider not found: %s/%s - verify the namespace and provider name are correct", namespace, name)
 	}
 
 	return mcp.NewToolResultText(version), nil

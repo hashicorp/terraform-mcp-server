@@ -41,25 +41,25 @@ func PolicyDetails(logger *log.Logger) server.ServerTool {
 func getPolicyDetailsHandler(ctx context.Context, request mcp.CallToolRequest, logger *log.Logger) (*mcp.CallToolResult, error) {
 	terraformPolicyID, err := request.RequireString("terraform_policy_id")
 	if err != nil {
-		return utils.ToolError(logger, "missing required input: terraform_policy_id - use search_policies first to find valid policy IDs", err)
+		return ToolError(logger, "missing required input: terraform_policy_id - use search_policies first to find valid policy IDs", err)
 	}
 	if terraformPolicyID == "" {
-		return utils.ToolError(logger, "terraform_policy_id cannot be empty - use search_policies first to find valid policy IDs", nil)
+		return ToolError(logger, "terraform_policy_id cannot be empty - use search_policies first to find valid policy IDs", nil)
 	}
 
 	httpClient, err := client.GetHttpClientFromContext(ctx, logger)
 	if err != nil {
-		return utils.ToolError(logger, "failed to get http client for public Terraform registry", err)
+		return ToolError(logger, "failed to get http client for public Terraform registry", err)
 	}
 
 	policyResp, err := client.SendRegistryCall(httpClient, "GET", (&url.URL{Path: terraformPolicyID, RawQuery: url.Values{"include": {"policies,policy-modules,policy-library"}}.Encode()}).String(), logger, "v2")
 	if err != nil {
-		return utils.ToolErrorf(logger, "policy not found: %s - verify the terraform_policy_id is correct or use search_policies to find valid IDs", terraformPolicyID)
+		return ToolErrorf(logger, "policy not found: %s - verify the terraform_policy_id is correct or use search_policies to find valid IDs", terraformPolicyID)
 	}
 
 	var policyDetails client.TerraformPolicyDetails
 	if err := json.Unmarshal(policyResp, &policyDetails); err != nil {
-		return utils.ToolErrorf(logger, "failed to parse policy details for %s", terraformPolicyID)
+		return ToolErrorf(logger, "failed to parse policy details for %s", terraformPolicyID)
 	}
 
 	readme := utils.ExtractReadme(policyDetails.Data.Attributes.Readme)

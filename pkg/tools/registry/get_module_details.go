@@ -11,7 +11,6 @@ import (
 	"strings"
 
 	"github.com/hashicorp/terraform-mcp-server/pkg/client"
-	"github.com/hashicorp/terraform-mcp-server/pkg/utils"
 	log "github.com/sirupsen/logrus"
 
 	"github.com/mark3labs/mcp-go/mcp"
@@ -42,35 +41,35 @@ func ModuleDetails(logger *log.Logger) server.ServerTool {
 func getModuleDetailsHandler(ctx context.Context, request mcp.CallToolRequest, logger *log.Logger) (*mcp.CallToolResult, error) {
 	moduleID, err := request.RequireString("module_id")
 	if err != nil {
-		return utils.ToolError(logger, "missing required input: module_id", err)
+		return ToolError(logger, "missing required input: module_id", err)
 	}
 	if moduleID == "" {
-		return utils.ToolError(logger, "module_id cannot be empty", nil)
+		return ToolError(logger, "module_id cannot be empty", nil)
 	}
 
 	// Validate module ID format
 	if err := validateModuleID(moduleID); err != nil {
-		return utils.ToolError(logger, err.Error(), nil)
+		return ToolError(logger, err.Error(), nil)
 	}
 
 	moduleID = strings.ToLower(moduleID)
 
 	httpClient, err := client.GetHttpClientFromContext(ctx, logger)
 	if err != nil {
-		return utils.ToolError(logger, "failed to get http client for public Terraform registry", err)
+		return ToolError(logger, "failed to get http client for public Terraform registry", err)
 	}
 
 	response, err := getModuleDetails(httpClient, moduleID, 0, logger)
 	if err != nil {
-		return utils.ToolErrorf(logger, "module not found: %s - use search_modules first to find valid module IDs", moduleID)
+		return ToolErrorf(logger, "module not found: %s - use search_modules first to find valid module IDs", moduleID)
 	}
 
 	moduleData, err := unmarshalTerraformModule(response)
 	if err != nil {
-		return utils.ToolError(logger, "failed to parse module details", err)
+		return ToolError(logger, "failed to parse module details", err)
 	}
 	if moduleData == "" {
-		return utils.ToolErrorf(logger, "no module data returned for %s - try a different module_id", moduleID)
+		return ToolErrorf(logger, "no module data returned for %s - try a different module_id", moduleID)
 	}
 
 	return mcp.NewToolResultText(moduleData), nil

@@ -57,13 +57,13 @@ Returns a summary with counts and examples for each capability type.`),
 func getProviderCapabilitiesHandler(ctx context.Context, request mcp.CallToolRequest, logger *log.Logger) (*mcp.CallToolResult, error) {
 	namespace, err := request.RequireString("namespace")
 	if err != nil {
-		return utils.ToolError(logger, "missing required input: namespace", err)
+		return ToolError(logger, "missing required input: namespace", err)
 	}
 	namespace = strings.ToLower(namespace)
 
 	name, err := request.RequireString("name")
 	if err != nil {
-		return utils.ToolError(logger, "missing required input: name", err)
+		return ToolError(logger, "missing required input: name", err)
 	}
 	name = strings.ToLower(name)
 
@@ -71,30 +71,30 @@ func getProviderCapabilitiesHandler(ctx context.Context, request mcp.CallToolReq
 	if version == "latest" || !utils.IsValidProviderVersionFormat(version) {
 		httpClient, err := client.GetHttpClientFromContext(ctx, logger)
 		if err != nil {
-			return utils.ToolError(logger, "failed to get http client for public Terraform registry", err)
+			return ToolError(logger, "failed to get http client for public Terraform registry", err)
 		}
 
 		latestVersion, err := client.GetLatestProviderVersion(httpClient, namespace, name, logger)
 		if err != nil {
-			return utils.ToolErrorf(logger, "provider not found: %s/%s - verify the namespace and provider name are correct", namespace, name)
+			return ToolErrorf(logger, "provider not found: %s/%s - verify the namespace and provider name are correct", namespace, name)
 		}
 		version = latestVersion
 	}
 
 	httpClient, err := client.GetHttpClientFromContext(ctx, logger)
 	if err != nil {
-		return utils.ToolError(logger, "failed to get http client for public Terraform registry", err)
+		return ToolError(logger, "failed to get http client for public Terraform registry", err)
 	}
 
 	uri := fmt.Sprintf("providers/%s/%s/%s", namespace, name, version)
 	response, err := client.SendRegistryCall(httpClient, "GET", uri, logger)
 	if err != nil {
-		return utils.ToolErrorf(logger, "failed to fetch provider docs for %s/%s:%s - verify the provider exists", namespace, name, version)
+		return ToolErrorf(logger, "failed to fetch provider docs for %s/%s:%s - verify the provider exists", namespace, name, version)
 	}
 
 	var providerDocs client.ProviderDocs
 	if err := json.Unmarshal(response, &providerDocs); err != nil {
-		return utils.ToolErrorf(logger, "failed to parse provider docs for %s/%s:%s", namespace, name, version)
+		return ToolErrorf(logger, "failed to parse provider docs for %s/%s:%s", namespace, name, version)
 	}
 
 	output := analyzeAndFormatCapabilities(providerDocs, namespace, name, version)
