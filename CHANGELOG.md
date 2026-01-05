@@ -7,6 +7,7 @@ FEATURES
 FIXES
 
 * Skip TLS flag was not propogated properly [243](https://github.com/hashicorp/terraform-mcp-server/issues/243)
+* Change Dockerfile CMD to ENTRYPOINT [246](https://github.com/hashicorp/terraform-mcp-server/issues/246)
 
 ## 0.3.3 (Nov 21, 2025)
 
