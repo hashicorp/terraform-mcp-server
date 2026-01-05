@@ -9,7 +9,6 @@ import (
 
 	"github.com/hashicorp/jsonapi"
 	"github.com/hashicorp/terraform-mcp-server/pkg/client"
-	"github.com/hashicorp/terraform-mcp-server/pkg/utils"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 	log "github.com/sirupsen/logrus"
@@ -37,23 +36,23 @@ func GetRunDetails(logger *log.Logger) server.ServerTool {
 func getRunDetailsHandler(ctx context.Context, request mcp.CallToolRequest, logger *log.Logger) (*mcp.CallToolResult, error) {
 	runID, err := request.RequireString("run_id")
 	if err != nil {
-		return nil, utils.LogAndReturnError(logger, "The 'run_id' parameter is required", err)
+		return ToolError(logger, "missing required input: run_id", err)
 	}
 
 	tfeClient, err := client.GetTfeClientFromContext(ctx, logger)
 	if err != nil {
-		return nil, utils.LogAndReturnError(logger, "getting Terraform client", err)
+		return ToolError(logger, "failed to get Terraform client", err)
 	}
 
 	run, err := tfeClient.Runs.Read(ctx, runID)
 	if err != nil {
-		return nil, utils.LogAndReturnError(logger, "reading run details", err)
+		return ToolErrorf(logger, "run not found: %s", runID)
 	}
 
 	buf := bytes.NewBuffer(nil)
 	err = jsonapi.MarshalPayloadWithoutIncluded(buf, run)
 	if err != nil {
-		return nil, utils.LogAndReturnError(logger, "marshalling run details", err)
+		return ToolError(logger, "failed to marshal run details", err)
 	}
 
 	return mcp.NewToolResultText(buf.String()), nil

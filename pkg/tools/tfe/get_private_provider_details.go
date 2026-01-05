@@ -10,7 +10,6 @@ import (
 
 	"github.com/hashicorp/go-tfe"
 	"github.com/hashicorp/terraform-mcp-server/pkg/client"
-	"github.com/hashicorp/terraform-mcp-server/pkg/utils"
 	log "github.com/sirupsen/logrus"
 
 	"github.com/mark3labs/mcp-go/mcp"
@@ -57,39 +56,32 @@ It provides details on how to use the provider, permissions, available versions,
 }
 
 func getPrivateProviderDetailsHandler(ctx context.Context, request mcp.CallToolRequest, logger *log.Logger) (*mcp.CallToolResult, error) {
-	// Get Terraform organization name
 	terraformOrgName, err := request.RequireString("terraform_org_name")
 	if err != nil {
-		return nil, utils.LogAndReturnError(logger, "The 'terraform_org_name' parameter is required for the Terraform Cloud/Enterprise organization.", err)
+		return ToolError(logger, "missing required input: terraform_org_name", err)
 	}
 	terraformOrgName = strings.TrimSpace(terraformOrgName)
 
-	// Get Terraform provider namespace
 	privateProviderNamespace, err := request.RequireString("private_provider_namespace")
 	if err != nil {
-		return nil, utils.LogAndReturnError(logger, "private_provider_namespace is required", err)
+		return ToolError(logger, "missing required input: private_provider_namespace", err)
 	}
 	privateProviderNamespace = strings.TrimSpace(privateProviderNamespace)
 
-	// Get Terraform provider name
 	privateProviderName, err := request.RequireString("private_provider_name")
 	if err != nil {
-		return nil, utils.LogAndReturnError(logger, "private_provider_name is required", err)
+		return ToolError(logger, "missing required input: private_provider_name", err)
 	}
 	privateProviderName = strings.TrimSpace(privateProviderName)
 
-	// Get optional parameters
 	registryName := strings.TrimSpace(request.GetString("registry_name", "private"))
 	includeVersions := request.GetBool("include_versions", true)
 
-	// Get the terraform client from context
 	tfeClient, err := client.GetTfeClientFromContext(ctx, logger)
 	if err != nil {
-		err = utils.LogAndReturnError(logger, "failed to get terraform client for TFE, ensure TFE_TOKEN and TFE_ADDRESS are properly set.", err)
-		return mcp.NewToolResultError(fmt.Sprintf("failed to get terraform client for TFE: %v", err)), nil
+		return ToolError(logger, "failed to get Terraform client - ensure TFE_TOKEN and TFE_ADDRESS are configured", err)
 	}
 
-	// Create provider ID
 	providerID := tfe.RegistryProviderID{
 		OrganizationName: terraformOrgName,
 		Namespace:        privateProviderNamespace,
@@ -97,7 +89,6 @@ func getPrivateProviderDetailsHandler(ctx context.Context, request mcp.CallToolR
 		RegistryName:     tfe.RegistryName(registryName),
 	}
 
-	// Prepare read options
 	readOptions := &tfe.RegistryProviderReadOptions{}
 	if includeVersions {
 		includeOpts := []tfe.RegistryProviderIncludeOps{tfe.RegistryProviderVersionsInclude}
@@ -112,19 +103,15 @@ func getPrivateProviderDetailsHandler(ctx context.Context, request mcp.CallToolR
 		"include_versions":           includeVersions,
 	}).Info("Getting private provider details")
 
-	// Call the TFE API to get provider details
 	provider, err := tfeClient.RegistryProviders.Read(ctx, providerID, readOptions)
 	if err != nil {
-		logger.WithError(err).Error("failed to get private provider details")
-		return mcp.NewToolResultError(fmt.Sprintf("failed to get private provider details: %v", err)), nil
+		return ToolErrorf(logger, "provider not found: %s/%s - use search_private_providers to find valid providers", privateProviderNamespace, privateProviderName)
 	}
 
-	// Build response
 	var builder strings.Builder
 	builder.WriteString(fmt.Sprintf("Private Provider Details: %s/%s\n", provider.Namespace, provider.Name))
 	builder.WriteString(strings.Repeat("=", 50) + "\n\n")
 
-	// Usage information
 	builder.WriteString("Usage:\n")
 	builder.WriteString("To use this private provider in your Terraform configuration:\n\n")
 	builder.WriteString("```hcl\n")
@@ -133,7 +120,6 @@ func getPrivateProviderDetailsHandler(ctx context.Context, request mcp.CallToolR
 	builder.WriteString(fmt.Sprintf("    %s = {\n", provider.Name))
 	builder.WriteString(fmt.Sprintf("      source = \"%s/%s\"\n", provider.Namespace, provider.Name))
 	if len(provider.RegistryProviderVersions) > 0 {
-		// Use the first (presumably latest) version
 		builder.WriteString(fmt.Sprintf("      version = \"%s\"\n", provider.RegistryProviderVersions[0].Version))
 	}
 	builder.WriteString("    }\n")
@@ -141,7 +127,6 @@ func getPrivateProviderDetailsHandler(ctx context.Context, request mcp.CallToolR
 	builder.WriteString("}\n")
 	builder.WriteString("```\n")
 
-	// Basic information
 	builder.WriteString("Basic Information:\n")
 	builder.WriteString(fmt.Sprintf("- ID: %s\n", provider.ID))
 	builder.WriteString(fmt.Sprintf("- Name: %s\n", provider.Name))
@@ -151,7 +136,6 @@ func getPrivateProviderDetailsHandler(ctx context.Context, request mcp.CallToolR
 	builder.WriteString(fmt.Sprintf("- Updated: %s\n", provider.UpdatedAt))
 	builder.WriteString("\n")
 
-	// Organization information
 	if provider.Organization != nil {
 		builder.WriteString("Organization:\n")
 		builder.WriteString(fmt.Sprintf("- Name: %s\n", provider.Organization.Name))
@@ -161,12 +145,10 @@ func getPrivateProviderDetailsHandler(ctx context.Context, request mcp.CallToolR
 		builder.WriteString("\n")
 	}
 
-	// Permissions
 	builder.WriteString("Permissions:\n")
 	builder.WriteString(fmt.Sprintf("- Can Delete: %t\n", provider.Permissions.CanDelete))
 	builder.WriteString("\n")
 
-	// Versions information
 	if includeVersions && len(provider.RegistryProviderVersions) > 0 {
 		builder.WriteString(fmt.Sprintf("Available Versions (%d):\n", len(provider.RegistryProviderVersions)))
 
@@ -180,7 +162,6 @@ func getPrivateProviderDetailsHandler(ctx context.Context, request mcp.CallToolR
 				builder.WriteString(fmt.Sprintf("   Key ID: %s\n", version.KeyID))
 			}
 
-			// Show permissions for this version
 			builder.WriteString("   Permissions: ")
 			var perms []string
 			if version.Permissions.CanUploadAsset {
@@ -192,7 +173,6 @@ func getPrivateProviderDetailsHandler(ctx context.Context, request mcp.CallToolR
 			builder.WriteString(strings.Join(perms, ", "))
 			builder.WriteString("\n")
 
-			// Show platforms if available
 			if len(version.RegistryProviderPlatforms) > 0 {
 				builder.WriteString("   Platforms: ")
 				var platforms []string
@@ -209,7 +189,6 @@ func getPrivateProviderDetailsHandler(ctx context.Context, request mcp.CallToolR
 		builder.WriteString("No version information is available for this provider.\n\n")
 	}
 
-	// Links information
 	if len(provider.Links) > 0 {
 		builder.WriteString("Links:\n")
 		for key, value := range provider.Links {

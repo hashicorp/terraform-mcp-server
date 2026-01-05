@@ -10,7 +10,6 @@ import (
 
 	"github.com/hashicorp/go-tfe"
 	"github.com/hashicorp/terraform-mcp-server/pkg/client"
-	"github.com/hashicorp/terraform-mcp-server/pkg/utils"
 	log "github.com/sirupsen/logrus"
 
 	"github.com/mark3labs/mcp-go/mcp"
@@ -51,31 +50,26 @@ It retrieves a list of private modules that match the search criteria. This tool
 }
 
 func searchPrivateModulesHandler(ctx context.Context, request mcp.CallToolRequest, logger *log.Logger) (*mcp.CallToolResult, error) {
-	// Get required parameters
 	terraformOrgName, err := request.RequireString("terraform_org_name")
 	if err != nil {
-		return nil, utils.LogAndReturnError(logger, "terraform_org_name is required", err)
+		return ToolError(logger, "missing required input: terraform_org_name", err)
 	}
 	searchQuery := request.GetString("search_query", "")
 	pageSize := request.GetInt("page_size", 100)
 	pageNumber := request.GetInt("page_number", 1)
 
-	// Validate page size and number
 	if pageSize < 1 || pageSize > 100 {
-		return mcp.NewToolResultError("page_size must be between 1 and 100"), nil
+		return ToolError(logger, "page_size must be between 1 and 100", nil)
 	}
 	if pageNumber < 1 {
-		return mcp.NewToolResultError("page_number must be at least 1"), nil
+		return ToolError(logger, "page_number must be at least 1", nil)
 	}
 
-	// Get a Terraform client from context
 	tfeClient, err := client.GetTfeClientFromContext(ctx, logger)
 	if err != nil {
-		err = utils.LogAndReturnError(logger, "failed to get terraform client for TFE, ensure TFE_TOKEN and TFE_ADDRESS are properly set.", err)
-		return mcp.NewToolResultError(fmt.Sprintf("failed to get terraform client for TFE: %v", err)), nil
+		return ToolError(logger, "failed to get Terraform client - ensure TFE_TOKEN and TFE_ADDRESS are configured", err)
 	}
 
-	// Prepare list options
 	listOptions := &tfe.RegistryModuleListOptions{
 		ListOptions: tfe.ListOptions{
 			PageNumber: pageNumber,
@@ -83,12 +77,10 @@ func searchPrivateModulesHandler(ctx context.Context, request mcp.CallToolReques
 		},
 	}
 
-	// Set search query if provided
 	if searchQuery != "" {
 		listOptions.Search = searchQuery
 	}
 
-	// Include No Code modules in the response
 	includeOpts := []tfe.RegistryModuleListIncludeOpt{tfe.IncludeNoCodeModules}
 	listOptions.Include = includeOpts
 
@@ -99,14 +91,11 @@ func searchPrivateModulesHandler(ctx context.Context, request mcp.CallToolReques
 		"page_number":  pageNumber,
 	}).Info("Searching for private modules")
 
-	// Call the TFE API to list modules
 	moduleList, err := tfeClient.RegistryModules.List(ctx, terraformOrgName, listOptions)
 	if err != nil {
-		logger.WithError(err).Error("failed to list private modules")
-		return mcp.NewToolResultError(fmt.Sprintf("failed to list private modules: %v", err)), nil
+		return ToolErrorf(logger, "failed to list private modules in org '%s'", terraformOrgName)
 	}
 
-	// Build response
 	var builder strings.Builder
 	builder.WriteString(fmt.Sprintf("Private Modules in Organization: %s\n", terraformOrgName))
 	if searchQuery != "" {
@@ -148,7 +137,6 @@ func searchPrivateModulesHandler(ctx context.Context, request mcp.CallToolReques
 		builder.WriteString("\n")
 	}
 
-	// Add pagination information
 	if moduleList.Pagination != nil {
 		builder.WriteString("Pagination:\n")
 		builder.WriteString(fmt.Sprintf("- Current Page: %d\n", moduleList.Pagination.CurrentPage))

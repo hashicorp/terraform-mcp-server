@@ -30,26 +30,26 @@ func ListWorkspaceVariables(logger *log.Logger) server.ServerTool {
 		Handler: func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			orgName, err := request.RequireString("terraform_org_name")
 			if err != nil {
-				return nil, utils.LogAndReturnError(logger, "terraform_org_name is required", err)
+				return ToolError(logger, "missing required input: terraform_org_name", err)
 			}
 			workspaceName, err := request.RequireString("workspace_name")
 			if err != nil {
-				return nil, utils.LogAndReturnError(logger, "workspace_name is required", err)
+				return ToolError(logger, "missing required input: workspace_name", err)
 			}
 
 			tfeClient, err := client.GetTfeClientFromContext(ctx, logger)
 			if err != nil {
-				return nil, utils.LogAndReturnError(logger, "getting Terraform client", err)
+				return ToolError(logger, "failed to get Terraform client", err)
 			}
 
 			pagination, err := utils.OptionalPaginationParams(request)
 			if err != nil {
-				return mcp.NewToolResultError(err.Error()), nil
+				return ToolError(logger, "invalid pagination parameters", err)
 			}
 
 			workspace, err := tfeClient.Workspaces.Read(ctx, orgName, workspaceName)
 			if err != nil {
-				return nil, utils.LogAndReturnError(logger, "reading workspace", err)
+				return ToolErrorf(logger, "workspace '%s' not found in org '%s'", workspaceName, orgName)
 			}
 
 			vars, err := tfeClient.Variables.List(ctx, workspace.ID, &tfe.VariableListOptions{
@@ -59,13 +59,13 @@ func ListWorkspaceVariables(logger *log.Logger) server.ServerTool {
 				},
 			})
 			if err != nil {
-				return nil, utils.LogAndReturnError(logger, "listing variables", err)
+				return ToolError(logger, "failed to list variables", err)
 			}
 
 			buf := bytes.NewBuffer(nil)
 			err = jsonapi.MarshalPayload(buf, vars.Items)
 			if err != nil {
-				return nil, utils.LogAndReturnError(logger, "marshalling variables to JSON", err)
+				return ToolError(logger, "failed to marshal variables", err)
 			}
 
 			return &mcp.CallToolResult{
@@ -98,19 +98,19 @@ func CreateWorkspaceVariable(logger *log.Logger) server.ServerTool {
 		Handler: func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			orgName, err := request.RequireString("terraform_org_name")
 			if err != nil {
-				return nil, utils.LogAndReturnError(logger, "terraform_org_name is required", err)
+				return ToolError(logger, "missing required input: terraform_org_name", err)
 			}
 			workspaceName, err := request.RequireString("workspace_name")
 			if err != nil {
-				return nil, utils.LogAndReturnError(logger, "workspace_name is required", err)
+				return ToolError(logger, "missing required input: workspace_name", err)
 			}
 			key, err := request.RequireString("key")
 			if err != nil {
-				return nil, utils.LogAndReturnError(logger, "key is required", err)
+				return ToolError(logger, "missing required input: key", err)
 			}
 			value, err := request.RequireString("value")
 			if err != nil {
-				return nil, utils.LogAndReturnError(logger, "value is required", err)
+				return ToolError(logger, "missing required input: value", err)
 			}
 
 			category := tfe.CategoryEnv
@@ -124,12 +124,12 @@ func CreateWorkspaceVariable(logger *log.Logger) server.ServerTool {
 
 			tfeClient, err := client.GetTfeClientFromContext(ctx, logger)
 			if err != nil {
-				return nil, utils.LogAndReturnError(logger, "getting Terraform client", err)
+				return ToolError(logger, "failed to get Terraform client", err)
 			}
 
 			workspace, err := tfeClient.Workspaces.Read(ctx, orgName, workspaceName)
 			if err != nil {
-				return nil, utils.LogAndReturnError(logger, "reading workspace", err)
+				return ToolErrorf(logger, "workspace '%s' not found in org '%s'", workspaceName, orgName)
 			}
 
 			variable, err := tfeClient.Variables.Create(ctx, workspace.ID, tfe.VariableCreateOptions{
@@ -141,7 +141,7 @@ func CreateWorkspaceVariable(logger *log.Logger) server.ServerTool {
 				Description: &description,
 			})
 			if err != nil {
-				return nil, utils.LogAndReturnError(logger, "creating variable", err)
+				return ToolErrorf(logger, "failed to create variable '%s': %v", key, err)
 			}
 
 			return &mcp.CallToolResult{
@@ -170,23 +170,23 @@ func UpdateWorkspaceVariable(logger *log.Logger) server.ServerTool {
 		Handler: func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			orgName, err := request.RequireString("terraform_org_name")
 			if err != nil {
-				return nil, utils.LogAndReturnError(logger, "terraform_org_name is required", err)
+				return ToolError(logger, "missing required input: terraform_org_name", err)
 			}
 			workspaceName, err := request.RequireString("workspace_name")
 			if err != nil {
-				return nil, utils.LogAndReturnError(logger, "workspace_name is required", err)
+				return ToolError(logger, "missing required input: workspace_name", err)
 			}
 			variableID, err := request.RequireString("variable_id")
 			if err != nil {
-				return nil, utils.LogAndReturnError(logger, "variable_id is required", err)
+				return ToolError(logger, "missing required input: variable_id", err)
 			}
 			key, err := request.RequireString("key")
 			if err != nil {
-				return nil, utils.LogAndReturnError(logger, "key is required", err)
+				return ToolError(logger, "missing required input: key", err)
 			}
 			value, err := request.RequireString("value")
 			if err != nil {
-				return nil, utils.LogAndReturnError(logger, "value is required", err)
+				return ToolError(logger, "missing required input: value", err)
 			}
 
 			options := tfe.VariableUpdateOptions{
@@ -207,17 +207,17 @@ func UpdateWorkspaceVariable(logger *log.Logger) server.ServerTool {
 
 			tfeClient, err := client.GetTfeClientFromContext(ctx, logger)
 			if err != nil {
-				return nil, utils.LogAndReturnError(logger, "getting Terraform client", err)
+				return ToolError(logger, "failed to get Terraform client", err)
 			}
 
 			workspace, err := tfeClient.Workspaces.Read(ctx, orgName, workspaceName)
 			if err != nil {
-				return nil, utils.LogAndReturnError(logger, "reading workspace", err)
+				return ToolErrorf(logger, "workspace '%s' not found in org '%s'", workspaceName, orgName)
 			}
 
 			variable, err := tfeClient.Variables.Update(ctx, workspace.ID, variableID, options)
 			if err != nil {
-				return nil, utils.LogAndReturnError(logger, "updating variable", err)
+				return ToolErrorf(logger, "failed to update variable '%s': %v", variableID, err)
 			}
 
 			return &mcp.CallToolResult{

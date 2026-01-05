@@ -54,36 +54,36 @@ func CreateNoCodeWorkspace(logger *log.Logger, mcpServer *server.MCPServer) serv
 func createNoCodeWorkspaceHandler(ctx context.Context, request mcp.CallToolRequest, logger *log.Logger, mcpServer *server.MCPServer) (*mcp.CallToolResult, error) {
 	tfeClient, err := client.GetTfeClientFromContext(ctx, logger)
 	if err != nil {
-		return nil, utils.LogAndReturnError(logger, "getting Terraform client", err)
+		return ToolError(logger, "failed to get Terraform client", err)
 	}
 	if tfeClient == nil {
-		return nil, utils.LogAndReturnError(logger, "getting Terraform client - please ensure TFE_TOKEN and TFE_ADDRESS are properly configured", nil)
+		return ToolError(logger, "failed to get Terraform client - ensure TFE_TOKEN and TFE_ADDRESS are configured", nil)
 	}
 
-	params, err := extractRequestParams(request, logger)
+	params, err := extractRequestParams(request)
 	if err != nil {
-		return nil, err
+		return ToolError(logger, err.Error(), nil)
 	}
 
 	if !strings.HasPrefix(params.noCodeModuleID, "nocode-") {
-		return nil, utils.LogAndReturnError(logger, "no_code_module_id must start with 'nocode-'", nil)
+		return ToolError(logger, "no_code_module_id must start with 'nocode-'", nil)
 	}
 
-	project, noCodeModule, moduleMetadata, err := fetchModuleData(ctx, tfeClient, params.projectID, params.noCodeModuleID, logger)
+	project, noCodeModule, moduleMetadata, err := fetchModuleData(ctx, tfeClient, params.projectID, params.noCodeModuleID)
 	if err != nil {
-		return nil, err
+		return ToolError(logger, err.Error(), nil)
 	}
 
 	elicitationProperties, requestedVars := buildElicitationSchema(moduleMetadata, noCodeModule)
 
-	result, err := requestVariableValues(ctx, mcpServer, params.noCodeModuleID, elicitationProperties, requestedVars, logger)
+	result, err := requestVariableValues(ctx, mcpServer, params.noCodeModuleID, elicitationProperties, requestedVars)
 	if err != nil {
-		return nil, err
+		return ToolError(logger, err.Error(), nil)
 	}
 
-	variables, err := processElicitationResponse(result, requestedVars, elicitationProperties, logger)
+	variables, err := processElicitationResponse(result, requestedVars, elicitationProperties)
 	if err != nil {
-		return nil, err
+		return ToolError(logger, err.Error(), nil)
 	}
 
 	workspace, err := tfeClient.RegistryNoCodeModules.CreateWorkspace(ctx, params.noCodeModuleID, &tfe.RegistryNoCodeModuleCreateWorkspaceOptions{
@@ -93,13 +93,13 @@ func createNoCodeWorkspaceHandler(ctx context.Context, request mcp.CallToolReque
 		AutoApply: &params.autoApply,
 	})
 	if err != nil {
-		return nil, utils.LogAndReturnError(logger, "creating No Code module workspace", err)
+		return ToolError(logger, "failed to create No Code module workspace", err)
 	}
 
 	logger.Infof("Created No Code module workspace: %s", workspace.ID)
 	buf, err := getWorkspaceDetailsForTools(ctx, "create_no_code_workspace", tfeClient, workspace, logger)
 	if err != nil {
-		return nil, utils.LogAndReturnError(logger, "getting workspace details for tools", err)
+		return ToolError(logger, "failed to get workspace details", err)
 	}
 
 	return mcp.NewToolResultText(buf.String()), nil
@@ -112,20 +112,20 @@ type workspaceParams struct {
 	autoApply      bool
 }
 
-func extractRequestParams(request mcp.CallToolRequest, logger *log.Logger) (*workspaceParams, error) {
+func extractRequestParams(request mcp.CallToolRequest) (*workspaceParams, error) {
 	noCodeModuleID, err := request.RequireString("no_code_module_id")
 	if err != nil {
-		return nil, utils.LogAndReturnError(logger, "the 'no_code_module_id' parameter is required", err)
+		return nil, fmt.Errorf("missing required input: no_code_module_id")
 	}
 
 	workspaceName, err := request.RequireString("workspace_name")
 	if err != nil {
-		return nil, utils.LogAndReturnError(logger, "the 'workspace_name' parameter is required", err)
+		return nil, fmt.Errorf("missing required input: workspace_name")
 	}
 
 	projectID, err := request.RequireString("project_id")
 	if err != nil {
-		return nil, utils.LogAndReturnError(logger, "the 'project_id' parameter is required", err)
+		return nil, fmt.Errorf("missing required input: project_id")
 	}
 
 	return &workspaceParams{
@@ -136,33 +136,33 @@ func extractRequestParams(request mcp.CallToolRequest, logger *log.Logger) (*wor
 	}, nil
 }
 
-func fetchModuleData(ctx context.Context, tfeClient *tfe.Client, projectID, noCodeModuleID string, logger *log.Logger) (*tfe.Project, *tfe.RegistryNoCodeModule, *client.ModuleMetadata, error) {
+func fetchModuleData(ctx context.Context, tfeClient *tfe.Client, projectID, noCodeModuleID string) (*tfe.Project, *tfe.RegistryNoCodeModule, *client.ModuleMetadata, error) {
 	project, err := tfeClient.Projects.Read(ctx, projectID)
 	if err != nil {
-		return nil, nil, nil, utils.LogAndReturnError(logger, "reading project", err)
+		return nil, nil, nil, fmt.Errorf("failed to read project: %w", err)
 	}
 
 	noCodeModule, err := tfeClient.RegistryNoCodeModules.Read(ctx, noCodeModuleID, &tfe.RegistryNoCodeModuleReadOptions{
 		Include: []tfe.RegistryNoCodeModuleIncludeOpt{tfe.RegistryNoCodeIncludeVariableOptions},
 	})
 	if err != nil {
-		return nil, nil, nil, utils.LogAndReturnError(logger, "reading No Code module", err)
+		return nil, nil, nil, fmt.Errorf("failed to read No Code module: %w", err)
 	}
 
 	registryModule, err := tfeClient.RegistryModules.Read(ctx, tfe.RegistryModuleID{ID: noCodeModule.RegistryModule.ID})
 	if err != nil {
-		return nil, nil, nil, utils.LogAndReturnError(logger, "reading Registry module", err)
+		return nil, nil, nil, fmt.Errorf("failed to read Registry module: %w", err)
 	}
 
 	metadataPath := path.Join("/api/registry/private/v2/modules", registryModule.Namespace, registryModule.Name, registryModule.Provider, "metadata", noCodeModule.VersionPin)
 	metadataData, err := utils.MakeCustomGetRequestRaw(ctx, tfeClient, metadataPath, map[string][]string{"organization_name": {noCodeModule.Organization.Name}})
 	if err != nil {
-		return nil, nil, nil, utils.LogAndReturnError(logger, "making module metadata API request", err)
+		return nil, nil, nil, fmt.Errorf("failed to fetch module metadata: %w", err)
 	}
 
 	var moduleMetadata client.ModuleMetadata
 	if err := json.Unmarshal(metadataData, &moduleMetadata); err != nil {
-		return nil, nil, nil, utils.LogAndReturnError(logger, "unmarshalling module metadata", err)
+		return nil, nil, nil, fmt.Errorf("failed to parse module metadata: %w", err)
 	}
 
 	return project, noCodeModule, &moduleMetadata, nil
@@ -258,7 +258,7 @@ func convertToBoolEnum(options []string) []bool {
 	return nil
 }
 
-func requestVariableValues(ctx context.Context, mcpServer *server.MCPServer, moduleID string, properties map[string]any, required []string, logger *log.Logger) (*mcp.ElicitationResult, error) {
+func requestVariableValues(ctx context.Context, mcpServer *server.MCPServer, moduleID string, properties map[string]any, required []string) (*mcp.ElicitationResult, error) {
 	request := mcp.ElicitationRequest{
 		Params: mcp.ElicitationParams{
 			Message: fmt.Sprintf("The No Code module '%s' requires %d variable(s) to create the workspace. Please provide values for the required variables.", moduleID, len(required)),
@@ -272,34 +272,34 @@ func requestVariableValues(ctx context.Context, mcpServer *server.MCPServer, mod
 
 	result, err := mcpServer.RequestElicitation(ctx, request)
 	if err != nil {
-		return nil, utils.LogAndReturnError(logger, "failed to request elicitation", err)
+		return nil, fmt.Errorf("failed to request elicitation: %w", err)
 	}
 
 	return result, nil
 }
 
-func processElicitationResponse(result *mcp.ElicitationResult, requestedVars []string, elicitationProperties map[string]any, logger *log.Logger) ([]*tfe.Variable, error) {
+func processElicitationResponse(result *mcp.ElicitationResult, requestedVars []string, elicitationProperties map[string]any) ([]*tfe.Variable, error) {
 	switch result.Action {
 	case mcp.ElicitationResponseActionDecline:
-		return nil, utils.LogAndReturnError(logger, "No Code module workspace creation declined by user", nil)
+		return nil, fmt.Errorf("workspace creation declined by user")
 	case mcp.ElicitationResponseActionCancel:
-		return nil, utils.LogAndReturnError(logger, "No Code module workspace creation cancelled by user", nil)
+		return nil, fmt.Errorf("workspace creation cancelled by user")
 	case mcp.ElicitationResponseActionAccept:
-		return extractVariablesFromResponse(result.Content, requestedVars, elicitationProperties, logger)
+		return extractVariablesFromResponse(result.Content, requestedVars, elicitationProperties)
 	default:
-		return nil, utils.LogAndReturnError(logger, fmt.Sprintf("unexpected elicitation response action: %s", result.Action), nil)
+		return nil, fmt.Errorf("unexpected elicitation response action: %s", result.Action)
 	}
 }
 
-func extractVariablesFromResponse(content any, requestedVars []string, elicitationProperties map[string]any, logger *log.Logger) ([]*tfe.Variable, error) {
+func extractVariablesFromResponse(content any, requestedVars []string, elicitationProperties map[string]any) ([]*tfe.Variable, error) {
 	data, ok := content.(map[string]any)
 	if !ok {
-		return nil, utils.LogAndReturnError(logger, "elicitation response content is not a map", fmt.Errorf("expected map[string]any, got %T", content))
+		return nil, fmt.Errorf("elicitation response content is not a map, got %T", content)
 	}
 
 	variables := make([]*tfe.Variable, 0, len(requestedVars))
 	for _, varName := range requestedVars {
-		variable, err := createVariable(varName, data, elicitationProperties, logger)
+		variable, err := createVariable(varName, data, elicitationProperties)
 		if err != nil {
 			return nil, err
 		}
@@ -309,15 +309,15 @@ func extractVariablesFromResponse(content any, requestedVars []string, elicitati
 	return variables, nil
 }
 
-func createVariable(varName string, data map[string]any, elicitationProperties map[string]any, logger *log.Logger) (*tfe.Variable, error) {
+func createVariable(varName string, data map[string]any, elicitationProperties map[string]any) (*tfe.Variable, error) {
 	valueRaw, exists := data[varName]
 	if !exists {
-		return nil, utils.LogAndReturnError(logger, fmt.Sprintf("required variable '%s' is missing from elicitation response", varName), nil)
+		return nil, fmt.Errorf("required variable '%s' is missing from response", varName)
 	}
 
 	propertyDef, ok := elicitationProperties[varName].(map[string]any)
 	if !ok {
-		return nil, utils.LogAndReturnError(logger, fmt.Sprintf("invalid property definition for variable '%s'", varName), nil)
+		return nil, fmt.Errorf("invalid property definition for variable '%s'", varName)
 	}
 
 	varType, _ := propertyDef["type"].(string)
@@ -325,7 +325,7 @@ func createVariable(varName string, data map[string]any, elicitationProperties m
 		varType = "string"
 	}
 
-	value, err := convertVariableValue(varName, varType, valueRaw, logger)
+	value, err := convertVariableValue(varName, varType, valueRaw)
 	if err != nil {
 		return nil, err
 	}
@@ -337,38 +337,38 @@ func createVariable(varName string, data map[string]any, elicitationProperties m
 	}, nil
 }
 
-func convertVariableValue(varName, varType string, valueRaw any, logger *log.Logger) (string, error) {
+func convertVariableValue(varName, varType string, valueRaw any) (string, error) {
 	switch varType {
 	case "string":
 		strValue, ok := valueRaw.(string)
 		if !ok {
-			return "", utils.LogAndReturnError(logger, fmt.Sprintf("variable '%s' must be a string", varName), fmt.Errorf("got %T", valueRaw))
+			return "", fmt.Errorf("variable '%s' must be a string, got %T", varName, valueRaw)
 		}
 		if strValue == "" {
-			return "", utils.LogAndReturnError(logger, fmt.Sprintf("variable '%s' cannot be empty", varName), nil)
+			return "", fmt.Errorf("variable '%s' cannot be empty", varName)
 		}
 		return strValue, nil
 
 	case "number":
-		return convertNumberValue(varName, valueRaw, logger)
+		return convertNumberValue(varName, valueRaw)
 
 	case "boolean":
 		boolValue, ok := valueRaw.(bool)
 		if !ok {
-			return "", utils.LogAndReturnError(logger, fmt.Sprintf("variable '%s' must be a boolean", varName), fmt.Errorf("got %T", valueRaw))
+			return "", fmt.Errorf("variable '%s' must be a boolean, got %T", varName, valueRaw)
 		}
 		return fmt.Sprintf("%t", boolValue), nil
 
 	default:
 		jsonValue, err := json.Marshal(valueRaw)
 		if err != nil {
-			return "", utils.LogAndReturnError(logger, fmt.Sprintf("failed to marshal variable '%s'", varName), err)
+			return "", fmt.Errorf("failed to marshal variable '%s': %w", varName, err)
 		}
 		return string(jsonValue), nil
 	}
 }
 
-func convertNumberValue(varName string, valueRaw any, logger *log.Logger) (string, error) {
+func convertNumberValue(varName string, valueRaw any) (string, error) {
 	switch v := valueRaw.(type) {
 	case float64:
 		return fmt.Sprintf("%v", v), nil
@@ -377,6 +377,6 @@ func convertNumberValue(varName string, valueRaw any, logger *log.Logger) (strin
 	case string:
 		return v, nil
 	default:
-		return "", utils.LogAndReturnError(logger, fmt.Sprintf("variable '%s' must be a number", varName), fmt.Errorf("got %T", valueRaw))
+		return "", fmt.Errorf("variable '%s' must be a number, got %T", varName, valueRaw)
 	}
 }

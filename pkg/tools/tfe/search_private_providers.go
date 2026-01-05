@@ -10,7 +10,6 @@ import (
 
 	"github.com/hashicorp/go-tfe"
 	"github.com/hashicorp/terraform-mcp-server/pkg/client"
-	"github.com/hashicorp/terraform-mcp-server/pkg/utils"
 	log "github.com/sirupsen/logrus"
 
 	"github.com/mark3labs/mcp-go/mcp"
@@ -56,37 +55,30 @@ It retrieves a list of private providers that match the search criteria. This to
 }
 
 func searchPrivateProvidersHandler(ctx context.Context, request mcp.CallToolRequest, logger *log.Logger) (*mcp.CallToolResult, error) {
-	// Get required parameters
 	terraformOrgName, err := request.RequireString("terraform_org_name")
 	if err != nil {
-		return nil, utils.LogAndReturnError(logger, "The 'terraform_org_name' parameter is required for the Terraform Cloud/Enterprise organization.", err)
+		return ToolError(logger, "missing required input: terraform_org_name", err)
 	}
 	terraformOrgName = strings.TrimSpace(terraformOrgName)
 
-	// Get optional parameters
 	searchQuery := strings.TrimSpace(request.GetString("search_query", ""))
 	registryName := strings.TrimSpace(request.GetString("registry_name", "private"))
 	pageSize := request.GetInt("page_size", 20)
 	pageNumber := request.GetInt("page_number", 1)
 
-	// Validate page size
 	if pageSize < 1 || pageSize > 100 {
-		return nil, utils.LogAndReturnError(logger, "page_size must be between 1 and 100", nil)
+		return ToolError(logger, "page_size must be between 1 and 100", nil)
 	}
 
-	// Validate page number
 	if pageNumber < 1 {
-		return nil, utils.LogAndReturnError(logger, "page_number must be greater than 0", nil)
+		return ToolError(logger, "page_number must be at least 1", nil)
 	}
 
-	// Get the terraform client from context
 	tfeClient, err := client.GetTfeClientFromContext(ctx, logger)
 	if err != nil {
-		err = utils.LogAndReturnError(logger, "failed to get terraform client for TFE, ensure TFE_TOKEN and TFE_ADDRESS are properly set.", err)
-		return mcp.NewToolResultError(fmt.Sprintf("failed to get terraform client for TFE: %v", err)), nil
+		return ToolError(logger, "failed to get Terraform client - ensure TFE_TOKEN and TFE_ADDRESS are configured", err)
 	}
 
-	// Prepare list options
 	listOptions := &tfe.RegistryProviderListOptions{
 		ListOptions: tfe.ListOptions{
 			PageNumber: pageNumber,
@@ -94,17 +86,14 @@ func searchPrivateProvidersHandler(ctx context.Context, request mcp.CallToolRequ
 		},
 	}
 
-	// Set registry name filter
 	if registryName != "" {
 		listOptions.RegistryName = tfe.RegistryName(registryName)
 	}
 
-	// Set search query if provided
 	if searchQuery != "" {
 		listOptions.Search = searchQuery
 	}
 
-	// Include provider versions in the response
 	includeOpts := []tfe.RegistryProviderIncludeOps{tfe.RegistryProviderVersionsInclude}
 	listOptions.Include = &includeOpts
 
@@ -116,14 +105,11 @@ func searchPrivateProvidersHandler(ctx context.Context, request mcp.CallToolRequ
 		"page_number":   pageNumber,
 	}).Info("Searching for private providers")
 
-	// Call the TFE API to list providers
 	providerList, err := tfeClient.RegistryProviders.List(ctx, terraformOrgName, listOptions)
 	if err != nil {
-		logger.WithError(err).Error("failed to list private providers")
-		return mcp.NewToolResultError(fmt.Sprintf("failed to list private providers: %v", err)), nil
+		return ToolErrorf(logger, "failed to list private providers in org '%s'", terraformOrgName)
 	}
 
-	// Build response
 	var builder strings.Builder
 	builder.WriteString(fmt.Sprintf("Private Providers in Organization: %s\n", terraformOrgName))
 	if searchQuery != "" {
@@ -152,7 +138,6 @@ func searchPrivateProvidersHandler(ctx context.Context, request mcp.CallToolRequ
 		builder.WriteString(fmt.Sprintf("   Created: %s\n", provider.CreatedAt))
 		builder.WriteString(fmt.Sprintf("   Updated: %s\n", provider.UpdatedAt))
 
-		// Show available versions if included
 		if len(provider.RegistryProviderVersions) > 0 {
 			builder.WriteString("   Versions: ")
 			versions := make([]string, len(provider.RegistryProviderVersions))
@@ -166,7 +151,6 @@ func searchPrivateProvidersHandler(ctx context.Context, request mcp.CallToolRequ
 		builder.WriteString("\n")
 	}
 
-	// Add pagination information
 	if providerList.Pagination != nil {
 		builder.WriteString("Pagination:\n")
 		builder.WriteString(fmt.Sprintf("- Current Page: %d\n", providerList.Pagination.CurrentPage))

@@ -55,21 +55,18 @@ func ListWorkspaces(logger *log.Logger) server.ServerTool {
 }
 
 func searchTerraformWorkspacesHandler(ctx context.Context, request mcp.CallToolRequest, logger *log.Logger) (*mcp.CallToolResult, error) {
-	// Get Terraform org name
 	terraformOrgName, err := request.RequireString("terraform_org_name")
 	if err != nil {
-		return nil, utils.LogAndReturnError(logger, "The 'terraform_org_name' parameter is required for the Terraform Cloud/Enterprise organization.", err)
+		return ToolError(logger, "missing required input: terraform_org_name", err)
 	}
 	terraformOrgName = strings.TrimSpace(terraformOrgName)
 
-	// Get optional parameters
 	projectID := request.GetString("project_id", "")
 	searchQuery := request.GetString("search_query", "")
 	tagsStr := request.GetString("tags", "")
 	excludeTagsStr := request.GetString("exclude_tags", "")
 	wildcardName := request.GetString("wildcard_name", "")
 
-	// Parse tags
 	var tags []string
 	if tagsStr != "" {
 		tags = strings.Split(strings.TrimSpace(tagsStr), ",")
@@ -86,15 +83,14 @@ func searchTerraformWorkspacesHandler(ctx context.Context, request mcp.CallToolR
 		}
 	}
 
-	// Get a Terraform client from context
 	tfeClient, err := client.GetTfeClientFromContext(ctx, logger)
 	if err != nil {
-		return nil, utils.LogAndReturnError(logger, "getting Terraform client - please ensure TFE_TOKEN and TFE_ADDRESS are properly configured", err)
+		return ToolError(logger, "failed to get Terraform client - ensure TFE_TOKEN and TFE_ADDRESS are configured", err)
 	}
 
 	pagination, err := utils.OptionalPaginationParams(request)
 	if err != nil {
-		return mcp.NewToolResultError(err.Error()), nil
+		return ToolError(logger, "invalid pagination parameters", err)
 	}
 
 	workspaces, err := tfeClient.Workspaces.List(ctx, terraformOrgName, &tfe.WorkspaceListOptions{
@@ -108,15 +104,14 @@ func searchTerraformWorkspacesHandler(ctx context.Context, request mcp.CallToolR
 			PageSize:   pagination.PageSize,
 		},
 	})
-
 	if err != nil {
-		return nil, utils.LogAndReturnError(logger, "listing Terraform workspaces", err)
+		return ToolErrorf(logger, "failed to list workspaces in org '%s'", terraformOrgName)
 	}
 
 	buf := bytes.NewBuffer(nil)
 	err = jsonapi.MarshalPayloadWithoutIncluded(buf, workspaces.Items)
 	if err != nil {
-		return nil, utils.LogAndReturnError(logger, "marshalling workspace creation result", err)
+		return ToolError(logger, "failed to marshal workspaces", err)
 	}
 
 	return mcp.NewToolResultText(buf.String()), nil
