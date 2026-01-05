@@ -3,6 +3,8 @@
 
 package toolsets
 
+import "strings"
+
 var ToolToToolset = map[string]string{
 	// Public Registry tools (providers, modules, policies)
 	"search_providers":            Registry,
@@ -53,10 +55,60 @@ func GetToolsetForTool(toolName string) (string, bool) {
 	return toolset, exists
 }
 
+// GetAllValidToolNames returns a set of all valid tool names
+func GetAllValidToolNames() map[string]bool {
+	validTools := make(map[string]bool)
+	for toolName := range ToolToToolset {
+		validTools[toolName] = true
+	}
+	return validTools
+}
+
+// ParseIndividualTools parses and validates individual tool names
+// Returns the validated tool names and any invalid ones
+func ParseIndividualTools(toolNames []string) ([]string, []string) {
+	validToolNames := GetAllValidToolNames()
+	seen := make(map[string]bool)
+	valid := make([]string, 0, len(toolNames))
+	invalid := make([]string, 0)
+
+	for _, name := range toolNames {
+		trimmed := strings.TrimSpace(name)
+		if trimmed == "" {
+			continue
+		}
+		if !seen[trimmed] {
+			seen[trimmed] = true
+			if validToolNames[trimmed] {
+				valid = append(valid, trimmed)
+			} else {
+				invalid = append(invalid, trimmed)
+			}
+		}
+	}
+
+	return valid, invalid
+}
+
+// EnableIndividualTools creates a toolset list for individual tool filtering mode
+// The returned list includes an internal marker plus the specified tool names
+func EnableIndividualTools(toolNames []string) []string {
+	result := make([]string, 0, len(toolNames)+1)
+	result = append(result, individualToolsMarker)
+	result = append(result, toolNames...)
+	return result
+}
+
 // IsToolEnabled checks if a tool is enabled based on the enabled toolsets
 func IsToolEnabled(toolName string, enabledToolsets []string) bool {
 	if ContainsToolset(enabledToolsets, All) {
 		return true
+	}
+
+	// Check if we're in individual tool mode
+	if ContainsToolset(enabledToolsets, individualToolsMarker) {
+		// In individual tool mode, check if this specific tool is in the list
+		return ContainsToolset(enabledToolsets, toolName)
 	}
 
 	// Look up which toolset this tool belongs to
