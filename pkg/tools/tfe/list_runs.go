@@ -79,7 +79,7 @@ func ListRuns(logger *log.Logger) server.ServerTool {
 func listRunsHandler(ctx context.Context, request mcp.CallToolRequest, logger *log.Logger) (*mcp.CallToolResult, error) {
 	terraformOrgName, err := request.RequireString("terraform_org_name")
 	if err != nil {
-		return nil, utils.LogAndReturnError(logger, "The 'terraform_org_name' parameter is required", err)
+		return ToolError(logger, "missing required input: terraform_org_name", err)
 	}
 	terraformOrgName = strings.TrimSpace(terraformOrgName)
 
@@ -89,18 +89,16 @@ func listRunsHandler(ctx context.Context, request mcp.CallToolRequest, logger *l
 
 	pagination, err := utils.OptionalPaginationParams(request)
 	if err != nil {
-		return mcp.NewToolResultError(err.Error()), nil
+		return ToolError(logger, "invalid pagination parameters", err)
 	}
 
 	tfeClient, err := client.GetTfeClientFromContext(ctx, logger)
 	if err != nil {
-		return nil, utils.LogAndReturnError(logger, "getting Terraform client", err)
+		return ToolError(logger, "failed to get Terraform client", err)
 	}
 
 	buf := bytes.NewBuffer(nil)
 	if workspaceName != "" {
-
-		// Set up pagination options
 		options := &tfe.RunListOptions{
 			ListOptions: tfe.ListOptions{
 				PageNumber: pagination.Page,
@@ -108,7 +106,6 @@ func listRunsHandler(ctx context.Context, request mcp.CallToolRequest, logger *l
 			},
 		}
 
-		// Set up filtering options
 		if status != "" {
 			options.Status = status
 		}
@@ -117,25 +114,22 @@ func listRunsHandler(ctx context.Context, request mcp.CallToolRequest, logger *l
 			options.User = vcsUsername
 		}
 
-		// Get runs for the specified workspace with options
 		workspace, err := tfeClient.Workspaces.Read(ctx, terraformOrgName, workspaceName)
 		if err != nil {
-			return nil, utils.LogAndReturnError(logger, "reading workspace", err)
+			return ToolErrorf(logger, "workspace '%s' not found in org '%s'", workspaceName, terraformOrgName)
 		}
 
 		runs, err := tfeClient.Runs.List(ctx, workspace.ID, options)
 		if err != nil {
-			return nil, utils.LogAndReturnError(logger, "listing runs in workspace", err)
+			return ToolError(logger, "failed to list runs in workspace", err)
 		}
 
 		err = jsonapi.MarshalPayloadWithoutIncluded(buf, runs)
 		if err != nil {
-			return nil, utils.LogAndReturnError(logger, "marshalling search runs", err)
+			return ToolError(logger, "failed to marshal runs", err)
 		}
 
 	} else {
-
-		// Set up pagination options
 		options := &tfe.RunListForOrganizationOptions{
 			ListOptions: tfe.ListOptions{
 				PageNumber: pagination.Page,
@@ -143,7 +137,6 @@ func listRunsHandler(ctx context.Context, request mcp.CallToolRequest, logger *l
 			},
 		}
 
-		// Set up filtering options
 		if status != "" {
 			options.Status = status
 		}
@@ -152,15 +145,14 @@ func listRunsHandler(ctx context.Context, request mcp.CallToolRequest, logger *l
 			options.User = vcsUsername
 		}
 
-		// Get runs for the specified organization with options
 		runs, err := tfeClient.Runs.ListForOrganization(ctx, terraformOrgName, options)
 		if err != nil {
-			return nil, utils.LogAndReturnError(logger, "listing runs in organization", err)
+			return ToolErrorf(logger, "failed to list runs in org '%s'", terraformOrgName)
 		}
 
 		err = jsonapi.MarshalPayloadWithoutIncluded(buf, runs)
 		if err != nil {
-			return nil, utils.LogAndReturnError(logger, "marshalling search organization runs", err)
+			return ToolError(logger, "failed to marshal runs", err)
 		}
 	}
 

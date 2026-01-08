@@ -8,7 +8,6 @@ import (
 	"strings"
 
 	"github.com/hashicorp/terraform-mcp-server/pkg/client"
-	"github.com/hashicorp/terraform-mcp-server/pkg/utils"
 	log "github.com/sirupsen/logrus"
 
 	"github.com/mark3labs/mcp-go/mcp"
@@ -37,34 +36,30 @@ func DeleteWorkspaceSafely(logger *log.Logger) server.ServerTool {
 }
 
 func deleteWorkspaceSafelyHandler(ctx context.Context, request mcp.CallToolRequest, logger *log.Logger) (*mcp.CallToolResult, error) {
-	// Get required parameters
 	workspaceID, err := request.RequireString("workspace_id")
 	if err != nil {
-		return nil, utils.LogAndReturnError(logger, "The 'workspace_id' parameter is required", err)
+		return ToolError(logger, "missing required input: workspace_id", err)
 	}
 	workspaceID = strings.TrimSpace(workspaceID)
 
-	// Get a Terraform client from context
 	tfeClient, err := client.GetTfeClientFromContext(ctx, logger)
 	if err != nil {
-		return nil, utils.LogAndReturnError(logger, "getting Terraform client - please ensure TFE_TOKEN and TFE_ADDRESS are properly configured", err)
+		return ToolError(logger, "failed to get Terraform client - ensure TFE_TOKEN and TFE_ADDRESS are configured", err)
 	}
 
-	// First, get the workspace details to check its current state
 	workspace, err := tfeClient.Workspaces.ReadByID(ctx, workspaceID)
 	if err != nil {
-		return nil, utils.LogAndReturnError(logger, "reading workspace details", err)
+		return ToolErrorf(logger, "workspace not found: %s", workspaceID)
 	}
 
-	// Perform the deletion using workspace ID
 	err = tfeClient.Workspaces.SafeDeleteByID(ctx, workspaceID)
 	if err != nil {
-		return nil, utils.LogAndReturnError(logger, "deleting workspace", err)
+		return ToolErrorf(logger, "failed to delete workspace '%s' - it may still have managed resources: %v", workspaceID, err)
 	}
 
 	buf, err := getWorkspaceDetailsForTools(ctx, "delete_workspace_safely", tfeClient, workspace, logger)
 	if err != nil {
-		return nil, utils.LogAndReturnError(logger, "getting workspace details for tools", err)
+		return ToolError(logger, "failed to get workspace details", err)
 	}
 
 	return mcp.NewToolResultText(buf.String()), nil

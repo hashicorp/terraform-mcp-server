@@ -31,18 +31,18 @@ func ListVariableSets(logger *log.Logger) server.ServerTool {
 		Handler: func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			orgName, err := request.RequireString("terraform_org_name")
 			if err != nil {
-				return nil, utils.LogAndReturnError(logger, "terraform_org_name is required", err)
+				return ToolError(logger, "missing required input: terraform_org_name", err)
 			}
 			query := request.GetString("query", "")
 
 			tfeClient, err := client.GetTfeClientFromContext(ctx, logger)
 			if err != nil {
-				return nil, utils.LogAndReturnError(logger, "getting Terraform client", err)
+				return ToolError(logger, "failed to get Terraform client", err)
 			}
 
 			pagination, err := utils.OptionalPaginationParams(request)
 			if err != nil {
-				return mcp.NewToolResultError(err.Error()), nil
+				return ToolError(logger, "invalid pagination parameters", err)
 			}
 
 			varSets, err := tfeClient.VariableSets.List(ctx, orgName, &tfe.VariableSetListOptions{
@@ -53,13 +53,13 @@ func ListVariableSets(logger *log.Logger) server.ServerTool {
 				},
 			})
 			if err != nil {
-				return nil, utils.LogAndReturnError(logger, "listing variable sets", err)
+				return ToolErrorf(logger, "failed to list variable sets in org '%s'", orgName)
 			}
 
 			buf := bytes.NewBuffer(nil)
 			err = jsonapi.MarshalPayloadWithoutIncluded(buf, varSets.Items)
 			if err != nil {
-				return nil, utils.LogAndReturnError(logger, "marshalling variable set list result", err)
+				return ToolError(logger, "failed to marshal variable sets", err)
 			}
 
 			return &mcp.CallToolResult{
@@ -84,18 +84,18 @@ func CreateVariableSet(logger *log.Logger) server.ServerTool {
 		Handler: func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			orgName, err := request.RequireString("terraform_org_name")
 			if err != nil {
-				return nil, utils.LogAndReturnError(logger, "terraform_org_name is required", err)
+				return ToolError(logger, "missing required input: terraform_org_name", err)
 			}
 			name, err := request.RequireString("name")
 			if err != nil {
-				return nil, utils.LogAndReturnError(logger, "name is required", err)
+				return ToolError(logger, "missing required input: name", err)
 			}
 			description := request.GetString("description", "")
 			global := request.GetBool("global", false)
 
 			tfeClient, err := client.GetTfeClientFromContext(ctx, logger)
 			if err != nil {
-				return nil, utils.LogAndReturnError(logger, "getting Terraform client", err)
+				return ToolError(logger, "failed to get Terraform client", err)
 			}
 
 			varSet, err := tfeClient.VariableSets.Create(ctx, orgName, &tfe.VariableSetCreateOptions{
@@ -104,7 +104,7 @@ func CreateVariableSet(logger *log.Logger) server.ServerTool {
 				Global:      &global,
 			})
 			if err != nil {
-				return nil, utils.LogAndReturnError(logger, "creating variable set", err)
+				return ToolErrorf(logger, "failed to create variable set '%s' in org '%s': %v", name, orgName, err)
 			}
 
 			return &mcp.CallToolResult{
@@ -132,15 +132,15 @@ func CreateVariableInVariableSet(logger *log.Logger) server.ServerTool {
 		Handler: func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			varSetID, err := request.RequireString("variable_set_id")
 			if err != nil {
-				return nil, utils.LogAndReturnError(logger, "variable_set_id is required", err)
+				return ToolError(logger, "missing required input: variable_set_id", err)
 			}
 			key, err := request.RequireString("key")
 			if err != nil {
-				return nil, utils.LogAndReturnError(logger, "key is required", err)
+				return ToolError(logger, "missing required input: key", err)
 			}
 			value, err := request.RequireString("value")
 			if err != nil {
-				return nil, utils.LogAndReturnError(logger, "value is required", err)
+				return ToolError(logger, "missing required input: value", err)
 			}
 
 			category := tfe.CategoryTerraform
@@ -154,7 +154,7 @@ func CreateVariableInVariableSet(logger *log.Logger) server.ServerTool {
 
 			tfeClient, err := client.GetTfeClientFromContext(ctx, logger)
 			if err != nil {
-				return nil, utils.LogAndReturnError(logger, "getting Terraform client", err)
+				return ToolError(logger, "failed to get Terraform client", err)
 			}
 
 			variable, err := tfeClient.VariableSetVariables.Create(ctx, varSetID, &tfe.VariableSetVariableCreateOptions{
@@ -166,7 +166,7 @@ func CreateVariableInVariableSet(logger *log.Logger) server.ServerTool {
 				Description: &description,
 			})
 			if err != nil {
-				return nil, utils.LogAndReturnError(logger, "creating variable in variable set", err)
+				return ToolErrorf(logger, "failed to create variable '%s' in variable set '%s': %v", key, varSetID, err)
 			}
 
 			return &mcp.CallToolResult{
@@ -189,21 +189,21 @@ func DeleteVariableInVariableSet(logger *log.Logger) server.ServerTool {
 		Handler: func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			varSetID, err := request.RequireString("variable_set_id")
 			if err != nil {
-				return nil, utils.LogAndReturnError(logger, "variable_set_id is required", err)
+				return ToolError(logger, "missing required input: variable_set_id", err)
 			}
 			variableID, err := request.RequireString("variable_id")
 			if err != nil {
-				return nil, utils.LogAndReturnError(logger, "variable_id is required", err)
+				return ToolError(logger, "missing required input: variable_id", err)
 			}
 
 			tfeClient, err := client.GetTfeClientFromContext(ctx, logger)
 			if err != nil {
-				return nil, utils.LogAndReturnError(logger, "getting Terraform client", err)
+				return ToolError(logger, "failed to get Terraform client", err)
 			}
 
 			err = tfeClient.VariableSetVariables.Delete(ctx, varSetID, variableID)
 			if err != nil {
-				return nil, utils.LogAndReturnError(logger, "deleting variable from variable set", err)
+				return ToolErrorf(logger, "failed to delete variable '%s' from variable set '%s': %v", variableID, varSetID, err)
 			}
 
 			return &mcp.CallToolResult{
@@ -226,11 +226,11 @@ func AttachVariableSetToWorkspaces(logger *log.Logger) server.ServerTool {
 		Handler: func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			varSetID, err := request.RequireString("variable_set_id")
 			if err != nil {
-				return nil, utils.LogAndReturnError(logger, "variable_set_id is required", err)
+				return ToolError(logger, "missing required input: variable_set_id", err)
 			}
 			workspaceIDsStr, err := request.RequireString("workspace_ids")
 			if err != nil {
-				return nil, utils.LogAndReturnError(logger, "workspace_ids is required", err)
+				return ToolError(logger, "missing required input: workspace_ids", err)
 			}
 			workspaceIDsList := strings.Split(workspaceIDsStr, ",")
 
@@ -241,14 +241,14 @@ func AttachVariableSetToWorkspaces(logger *log.Logger) server.ServerTool {
 
 			tfeClient, err := client.GetTfeClientFromContext(ctx, logger)
 			if err != nil {
-				return nil, utils.LogAndReturnError(logger, "getting Terraform client", err)
+				return ToolError(logger, "failed to get Terraform client", err)
 			}
 
 			err = tfeClient.VariableSets.ApplyToWorkspaces(ctx, varSetID, &tfe.VariableSetApplyToWorkspacesOptions{
 				Workspaces: workspaces,
 			})
 			if err != nil {
-				return nil, utils.LogAndReturnError(logger, "attaching variable set to workspaces", err)
+				return ToolErrorf(logger, "failed to attach variable set '%s' to workspaces: %v", varSetID, err)
 			}
 
 			return &mcp.CallToolResult{
@@ -271,11 +271,11 @@ func DetachVariableSetFromWorkspaces(logger *log.Logger) server.ServerTool {
 		Handler: func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			varSetID, err := request.RequireString("variable_set_id")
 			if err != nil {
-				return nil, utils.LogAndReturnError(logger, "variable_set_id is required", err)
+				return ToolError(logger, "missing required input: variable_set_id", err)
 			}
 			workspaceIDsStr, err := request.RequireString("workspace_ids")
 			if err != nil {
-				return nil, utils.LogAndReturnError(logger, "workspace_ids is required", err)
+				return ToolError(logger, "missing required input: workspace_ids", err)
 			}
 			workspaceIDsList := strings.Split(workspaceIDsStr, ",")
 
@@ -286,14 +286,14 @@ func DetachVariableSetFromWorkspaces(logger *log.Logger) server.ServerTool {
 
 			tfeClient, err := client.GetTfeClientFromContext(ctx, logger)
 			if err != nil {
-				return nil, utils.LogAndReturnError(logger, "getting Terraform client", err)
+				return ToolError(logger, "failed to get Terraform client", err)
 			}
 
 			err = tfeClient.VariableSets.RemoveFromWorkspaces(ctx, varSetID, &tfe.VariableSetRemoveFromWorkspacesOptions{
 				Workspaces: workspaces,
 			})
 			if err != nil {
-				return nil, utils.LogAndReturnError(logger, "detaching variable set from workspaces", err)
+				return ToolErrorf(logger, "failed to detach variable set '%s' from workspaces: %v", varSetID, err)
 			}
 
 			return &mcp.CallToolResult{

@@ -10,7 +10,6 @@ import (
 
 	"github.com/hashicorp/go-tfe"
 	"github.com/hashicorp/terraform-mcp-server/pkg/client"
-	"github.com/hashicorp/terraform-mcp-server/pkg/utils"
 	log "github.com/sirupsen/logrus"
 
 	"github.com/mark3labs/mcp-go/mcp"
@@ -38,22 +37,21 @@ func CreateWorkspaceTags(logger *log.Logger) server.ServerTool {
 		Handler: func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			orgName, err := request.RequireString("terraform_org_name")
 			if err != nil {
-				return nil, utils.LogAndReturnError(logger, "terraform_org_name is required", err)
+				return ToolError(logger, "missing required input: terraform_org_name", err)
 			}
 			workspaceName, err := request.RequireString("workspace_name")
 			if err != nil {
-				return nil, utils.LogAndReturnError(logger, "workspace_name is required", err)
+				return ToolError(logger, "missing required input: workspace_name", err)
 			}
 			tagsStr, err := request.RequireString("tags")
 			if err != nil {
-				return nil, utils.LogAndReturnError(logger, "tags is required", err)
+				return ToolError(logger, "missing required input: tags", err)
 			}
 
 			tagNames := strings.Split(strings.TrimSpace(tagsStr), ",")
 			var tags []*tfe.TagBinding
 			for _, tagName := range tagNames {
 				tagName = strings.TrimSpace(tagName)
-				// Support key:value format for key-value tags
 				if strings.Contains(tagName, ":") {
 					parts := strings.SplitN(tagName, ":", 2)
 					key := strings.TrimSpace(parts[0])
@@ -63,7 +61,6 @@ func CreateWorkspaceTags(logger *log.Logger) server.ServerTool {
 					}
 					continue
 				}
-				// Otherwise treat as a tag with only a key
 				if tagName != "" {
 					tags = append(tags, &tfe.TagBinding{Key: tagName})
 				}
@@ -71,19 +68,19 @@ func CreateWorkspaceTags(logger *log.Logger) server.ServerTool {
 
 			tfeClient, err := client.GetTfeClientFromContext(ctx, logger)
 			if err != nil {
-				return nil, utils.LogAndReturnError(logger, "getting Terraform client", err)
+				return ToolError(logger, "failed to get Terraform client", err)
 			}
 
 			workspace, err := tfeClient.Workspaces.Read(ctx, orgName, workspaceName)
 			if err != nil {
-				return nil, utils.LogAndReturnError(logger, "reading workspace", err)
+				return ToolErrorf(logger, "workspace '%s' not found in org '%s'", workspaceName, orgName)
 			}
 
 			_, err = tfeClient.Workspaces.AddTagBindings(ctx, workspace.ID, tfe.WorkspaceAddTagBindingsOptions{
 				TagBindings: tags,
 			})
 			if err != nil {
-				return nil, utils.LogAndReturnError(logger, "adding tags to workspace", err)
+				return ToolErrorf(logger, "failed to add tags to workspace '%s': %v", workspaceName, err)
 			}
 
 			return &mcp.CallToolResult{
@@ -114,27 +111,27 @@ func ReadWorkspaceTags(logger *log.Logger) server.ServerTool {
 		Handler: func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			orgName, err := request.RequireString("terraform_org_name")
 			if err != nil {
-				return nil, utils.LogAndReturnError(logger, "terraform_org_name is required", err)
+				return ToolError(logger, "missing required input: terraform_org_name", err)
 			}
 			workspaceName, err := request.RequireString("workspace_name")
 			if err != nil {
-				return nil, utils.LogAndReturnError(logger, "workspace_name is required", err)
+				return ToolError(logger, "missing required input: workspace_name", err)
 			}
 
 			tfeClient, err := client.GetTfeClientFromContext(ctx, logger)
 			if err != nil {
-				return nil, utils.LogAndReturnError(logger, "getting Terraform client", err)
+				return ToolError(logger, "failed to get Terraform client", err)
 			}
 
 			workspace, err := tfeClient.Workspaces.Read(ctx, orgName, workspaceName)
 			if err != nil {
-				return nil, utils.LogAndReturnError(logger, "reading workspace", err)
+				return ToolErrorf(logger, "workspace '%s' not found in org '%s'", workspaceName, orgName)
 			}
 
 			var tagNames []string
 			tags, err := tfeClient.Workspaces.ListTags(ctx, workspace.ID, nil)
 			if err != nil {
-				return nil, utils.LogAndReturnError(logger, "listing tags", err)
+				return ToolError(logger, "failed to list tags", err)
 			}
 			for _, tag := range tags.Items {
 				tagNames = append(tagNames, tag.Name)
@@ -143,7 +140,7 @@ func ReadWorkspaceTags(logger *log.Logger) server.ServerTool {
 			var tagBindings []string
 			bindings, err := tfeClient.Workspaces.ListTagBindings(ctx, workspace.ID)
 			if err != nil {
-				return nil, utils.LogAndReturnError(logger, "listing tag bindings", err)
+				return ToolError(logger, "failed to list tag bindings", err)
 			}
 			for _, binding := range bindings {
 				if binding.Value != "" {

@@ -6,11 +6,9 @@ package tools
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 
 	"github.com/hashicorp/go-tfe"
 	"github.com/hashicorp/terraform-mcp-server/pkg/client"
-	"github.com/hashicorp/terraform-mcp-server/pkg/utils"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 	log "github.com/sirupsen/logrus"
@@ -47,19 +45,19 @@ func ActionRun(logger *log.Logger) server.ServerTool {
 func actionRunHandler(ctx context.Context, request mcp.CallToolRequest, logger *log.Logger) (*mcp.CallToolResult, error) {
 	runAction, err := request.RequireString("run_action")
 	if err != nil {
-		return nil, utils.LogAndReturnError(logger, "The 'run_action' parameter is required", err)
+		return ToolError(logger, "missing required input: run_action", err)
 	}
 
 	runID, err := request.RequireString("run_id")
 	if err != nil {
-		return nil, utils.LogAndReturnError(logger, "The 'run_id' parameter is required", err)
+		return ToolError(logger, "missing required input: run_id", err)
 	}
 
 	comment := request.GetString("comment", "Triggered via Terraform MCP Server")
 
 	tfeClient, err := client.GetTfeClientFromContext(ctx, logger)
 	if err != nil {
-		return nil, utils.LogAndReturnError(logger, "getting Terraform client", err)
+		return ToolError(logger, "failed to get Terraform client", err)
 	}
 
 	var msg string
@@ -74,11 +72,11 @@ func actionRunHandler(ctx context.Context, request mcp.CallToolRequest, logger *
 		err = tfeClient.Runs.Cancel(ctx, runID, tfe.RunCancelOptions{Comment: &comment})
 		msg = "Run canceled successfully"
 	default:
-		return nil, utils.LogAndReturnError(logger, "invalid run action", err)
+		return ToolErrorf(logger, "invalid run_action: %s - must be 'apply', 'discard', or 'cancel'", runAction)
 	}
 
 	if err != nil {
-		return nil, utils.LogAndReturnError(logger, fmt.Sprintf("executing %s action on run %s", runAction, runID), err)
+		return ToolErrorf(logger, "failed to %s run %s: %v", runAction, runID, err)
 	}
 
 	result := map[string]interface{}{
@@ -89,7 +87,7 @@ func actionRunHandler(ctx context.Context, request mcp.CallToolRequest, logger *
 
 	resultJSON, err := json.Marshal(result)
 	if err != nil {
-		return nil, utils.LogAndReturnError(logger, "marshalling action run result", err)
+		return ToolError(logger, "failed to marshal result", err)
 	}
 	return mcp.NewToolResultText(string(resultJSON)), nil
 }

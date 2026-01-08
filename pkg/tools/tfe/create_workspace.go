@@ -9,7 +9,6 @@ import (
 
 	"github.com/hashicorp/go-tfe"
 	"github.com/hashicorp/terraform-mcp-server/pkg/client"
-	"github.com/hashicorp/terraform-mcp-server/pkg/utils"
 	log "github.com/sirupsen/logrus"
 
 	"github.com/mark3labs/mcp-go/mcp"
@@ -73,20 +72,18 @@ func CreateWorkspace(logger *log.Logger) server.ServerTool {
 }
 
 func createWorkspaceHandler(ctx context.Context, request mcp.CallToolRequest, logger *log.Logger) (*mcp.CallToolResult, error) {
-	// Get required parameters
 	terraformOrgName, err := request.RequireString("terraform_org_name")
 	if err != nil {
-		return nil, utils.LogAndReturnError(logger, "The 'terraform_org_name' parameter is required", err)
+		return ToolError(logger, "missing required input: terraform_org_name", err)
 	}
 	terraformOrgName = strings.TrimSpace(terraformOrgName)
 
 	workspaceName, err := request.RequireString("workspace_name")
 	if err != nil {
-		return nil, utils.LogAndReturnError(logger, "The 'workspace_name' parameter is required", err)
+		return ToolError(logger, "missing required input: workspace_name", err)
 	}
 	workspaceName = strings.TrimSpace(workspaceName)
 
-	// Get optional parameters
 	description := request.GetString("description", "")
 	terraformVersion := request.GetString("terraform_version", "")
 	workingDirectory := request.GetString("working_directory", "")
@@ -98,11 +95,9 @@ func createWorkspaceHandler(ctx context.Context, request mcp.CallToolRequest, lo
 	vcsRepoOAuthTokenID := request.GetString("vcs_repo_oauth_token_id", "")
 	tagsStr := request.GetString("tags", "")
 
-	// Parse boolean values
 	autoApply := strings.ToLower(autoApplyStr) == "true"
 
-	// Parse execution mode
-	executionMode := "remote" // default
+	executionMode := "remote"
 	switch strings.ToLower(executionModeStr) {
 	case "local":
 		executionMode = "local"
@@ -111,10 +106,9 @@ func createWorkspaceHandler(ctx context.Context, request mcp.CallToolRequest, lo
 	case "remote", "":
 		executionMode = "remote"
 	default:
-		return nil, utils.LogAndReturnError(logger, "invalid execution_mode: must be 'remote', 'local', or 'agent'", nil)
+		return ToolErrorf(logger, "invalid execution_mode '%s' - must be 'remote', 'local', or 'agent'", executionModeStr)
 	}
 
-	// Parse tags
 	var tags []*tfe.Tag
 	if tagsStr != "" {
 		tagNames := strings.Split(strings.TrimSpace(tagsStr), ",")
@@ -127,13 +121,11 @@ func createWorkspaceHandler(ctx context.Context, request mcp.CallToolRequest, lo
 		}
 	}
 
-	// Get a Terraform client from context
 	tfeClient, err := client.GetTfeClientFromContext(ctx, logger)
 	if err != nil {
-		return nil, utils.LogAndReturnError(logger, "getting Terraform client - please ensure TFE_TOKEN and TFE_ADDRESS are properly configured", err)
+		return ToolError(logger, "failed to get Terraform client - ensure TFE_TOKEN and TFE_ADDRESS are configured", err)
 	}
 
-	// Build workspace creation options
 	options := &tfe.WorkspaceCreateOptions{
 		Name:       &workspaceName,
 		AutoApply:  &autoApply,
@@ -154,7 +146,6 @@ func createWorkspaceHandler(ctx context.Context, request mcp.CallToolRequest, lo
 		options.Project = &tfe.Project{ID: projectID}
 	}
 
-	// Set execution mode using string constants
 	if executionModeStr != "" {
 		switch executionMode {
 		case "local":
@@ -166,10 +157,9 @@ func createWorkspaceHandler(ctx context.Context, request mcp.CallToolRequest, lo
 		}
 	}
 
-	// Configure VCS repository if provided
 	if vcsRepoIdentifier != "" {
 		if vcsRepoOAuthTokenID == "" {
-			return nil, utils.LogAndReturnError(logger, "vcs_repo_oauth_token_id is required when vcs_repo_identifier is provided", nil)
+			return ToolError(logger, "vcs_repo_oauth_token_id is required when vcs_repo_identifier is provided", nil)
 		}
 
 		vcsRepo := &tfe.VCSRepoOptions{
@@ -184,15 +174,14 @@ func createWorkspaceHandler(ctx context.Context, request mcp.CallToolRequest, lo
 		options.VCSRepo = vcsRepo
 	}
 
-	// Create the workspace
 	workspace, err := tfeClient.Workspaces.Create(ctx, terraformOrgName, *options)
 	if err != nil {
-		return nil, utils.LogAndReturnError(logger, "creating workspace", err)
+		return ToolErrorf(logger, "failed to create workspace '%s' in org '%s': %v", workspaceName, terraformOrgName, err)
 	}
 
 	buf, err := getWorkspaceDetailsForTools(ctx, "create_workspace", tfeClient, workspace, logger)
 	if err != nil {
-		return nil, utils.LogAndReturnError(logger, "getting workspace details for tools", err)
+		return ToolError(logger, "failed to get workspace details", err)
 	}
 
 	return mcp.NewToolResultText(buf.String()), nil
