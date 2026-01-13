@@ -262,6 +262,11 @@ func (r *DynamicToolRegistry) registerTFETools() {
 		r.mcpServer.AddTool(tool.Tool, tool.Handler)
 	}
 
+	if toolsets.IsToolEnabled("get_token_permissions", r.enabledToolsets) {
+		tool := r.createDynamicTFETool("get_token_permissions", tfeTools.GetTokenPermissions)
+		r.mcpServer.AddTool(tool.Tool, tool.Handler)
+	}
+
 	r.tfeToolsRegistered = true
 }
 

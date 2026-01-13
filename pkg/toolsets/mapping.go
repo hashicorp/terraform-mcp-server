@@ -48,6 +48,7 @@ var ToolToToolset = map[string]string{
 	"create_workspace_tags":               Terraform,
 	"read_workspace_tags":                 Terraform,
 	"attach_policy_set_to_workspaces":     Terraform,
+	"get_token_permissions":               Terraform,
 }
 
 // GetToolsetForTool returns the toolset name for a given tool name
