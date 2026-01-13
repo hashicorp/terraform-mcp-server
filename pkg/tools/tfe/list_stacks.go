@@ -78,19 +78,22 @@ func listTerraformStacksHandler(ctx context.Context, request mcp.CallToolRequest
 	}
 
 	// create list of summaries
-	itemSummaries := make([]StackSummary, 0, len(stacks.Items))
-
+	itemSummaries := make([]*StackSummary, 0, len(stacks.Items))
 	for i, item := range stacks.Items {
-		itemSummaries[i] = StackSummary{
+		itemSummaries[i] = &StackSummary{
 			ID:          item.ID,
 			Name:        item.Name,
 			Description: item.Description,
 			ProjectName: item.Project.Name,
 		}
 	}
+	list := &StackSummaryList{
+		Items:      itemSummaries,
+		Pagination: stacks.Pagination,
+	}
 
 	buf := bytes.NewBuffer(nil)
-	err = jsonapi.MarshalPayloadWithoutIncluded(buf, itemSummaries)
+	err = jsonapi.MarshalPayloadWithoutIncluded(buf, list)
 	if err != nil {
 		return ToolError(logger, "failed to marshal stacks", err)
 	}
@@ -103,5 +106,11 @@ type StackSummary struct {
 	ID          string `json:"ID"`
 	Name        string `json:"name"`
 	Description string `json:"description"`
-	ProjectName string `json:"project"`
+	ProjectName string `json:"project_name"`
+}
+
+// StackSummaryList is a list of Stack summaries with pagination parameters
+type StackSummaryList struct {
+	Items           []*StackSummary `json:"items"`
+	*tfe.Pagination `json:"pagination"`
 }
