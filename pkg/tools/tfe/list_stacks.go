@@ -77,6 +77,10 @@ func listTerraformStacksHandler(ctx context.Context, request mcp.CallToolRequest
 		return ToolErrorf(logger, "failed to list stacks in org %q", terraformOrgName)
 	}
 
+	if stacks.TotalCount == 0 {
+		return ToolErrorf(logger, "organization %q has no stacks", terraformOrgName)
+	}
+
 	// create list of summaries
 	itemSummaries := make([]*StackSummary, 0, len(stacks.Items))
 	for i, item := range stacks.Items {
@@ -111,6 +115,6 @@ type StackSummary struct {
 
 // StackSummaryList is a list of Stack summaries with pagination parameters
 type StackSummaryList struct {
-	Items           []*StackSummary `json:"items"`
-	*tfe.Pagination `json:"pagination"`
+	Items []*StackSummary `json:"items"`
+	*tfe.Pagination
 }
