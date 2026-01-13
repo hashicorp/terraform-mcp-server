@@ -15,7 +15,7 @@ func TestGetTokenPermissions(t *testing.T) {
 	logger.SetLevel(log.ErrorLevel) // Reduce noise in tests
 
 	t.Run("tool creation", func(t *testing.T) {
-		tool := GetWorkspaceDetails(logger)
+		tool := GetTokenPermissions(logger)
 
 		assert.Equal(t, "get_token_permissions", tool.Tool.Name)
 		assert.NotNil(t, tool.Handler)
