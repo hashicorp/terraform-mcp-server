@@ -26,3 +26,23 @@ func TestAttachPolicySetToWorkspaces(t *testing.T) {
 		assert.Contains(t, tool.Tool.InputSchema.Required, "workspace_ids")
 	})
 }
+
+func TestReadWorkspacePolicySets(t *testing.T) {
+	logger := log.New()
+	logger.SetLevel(log.ErrorLevel)
+
+	t.Run("tool creation", func(t *testing.T) {
+		tool := ReadWorkspacePolicySets(logger)
+
+		assert.Equal(t, "read_workspace_policy_sets", tool.Tool.Name)
+		assert.Contains(t, tool.Tool.Description, "Read all policy sets")
+		assert.NotNil(t, tool.Handler)
+
+		assert.NotNil(t, tool.Tool.Annotations.ReadOnlyHint)
+		assert.True(t, *tool.Tool.Annotations.ReadOnlyHint)
+
+		// Check required parameters
+		assert.Contains(t, tool.Tool.InputSchema.Required, "terraform_org_name")
+		assert.Contains(t, tool.Tool.InputSchema.Required, "workspace_id")
+	})
+}

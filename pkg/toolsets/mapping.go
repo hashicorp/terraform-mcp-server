@@ -51,6 +51,7 @@ var ToolToToolset = map[string]string{
 	"get_token_permissions":               Terraform,
 	"list_stacks":                         Terraform,
 	"get_stack_details":                   Terraform,
+	"list_workspace_policy_sets":          Terraform,
 }
 
 // GetToolsetForTool returns the toolset name for a given tool name

@@ -67,3 +67,108 @@ func AttachPolicySetToWorkspaces(logger *log.Logger) server.ServerTool {
 		},
 	}
 }
+
+// ReadWorkspacePolicySets creates a tool to read all policy sets attached to a workspace.
+func ReadWorkspacePolicySets(logger *log.Logger) server.ServerTool {
+	return server.ServerTool{
+		Tool: mcp.NewTool("read_workspace_policy_sets",
+			mcp.WithDescription("Read all policy sets attached to a workspace. Returns both directly attached policy sets and global policy sets that apply to all workspaces."),
+			mcp.WithReadOnlyHintAnnotation(true),
+			mcp.WithString("terraform_org_name", mcp.Required(), mcp.Description("Organization name")),
+			mcp.WithString("workspace_id", mcp.Required(), mcp.Description("The workspace ID to get policy sets for (e.g., ws-2HRvNs49EWPjDqT1)")),
+		),
+		Handler: func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			orgName, err := request.RequireString("terraform_org_name")
+			if err != nil {
+				return ToolError(logger, "missing required input: terraform_org_name", err)
+			}
+			workspaceID, err := request.RequireString("workspace_id")
+			if err != nil {
+				return ToolError(logger, "missing required input: workspace_id", err)
+			}
+
+			tfeClient, err := client.GetTfeClientFromContext(ctx, logger)
+			if err != nil {
+				return ToolError(logger, "failed to get Terraform client", err)
+			}
+
+			// Paginate through all policy sets with the workspaces included
+			var matchingPolicySets []map[string]interface{}
+			pageNumber := 1
+
+			for {
+				policySets, err := tfeClient.PolicySets.List(ctx, orgName, &tfe.PolicySetListOptions{
+					Include: []tfe.PolicySetIncludeOpt{tfe.PolicySetWorkspaces},
+					ListOptions: tfe.ListOptions{
+						PageNumber: pageNumber,
+						PageSize:   100,
+					},
+				})
+				if err != nil {
+					return ToolErrorf(logger, "failed to list policy sets for org '%s': %v", orgName, err)
+				}
+
+				// Filter policy sets that apply to this workspace
+				for _, ps := range policySets.Items {
+					applies := false
+					reason := ""
+
+					// Global policy sets apply to all workspaces
+					if ps.Global {
+						applies = true
+						reason = "global"
+					} else {
+						for _, ws := range ps.Workspaces {
+							if ws.ID == workspaceID {
+								applies = true
+								reason = "directly attached"
+								break
+							}
+						}
+					}
+
+					if applies {
+						matchingPolicySets = append(matchingPolicySets, map[string]interface{}{
+							"id":          ps.ID,
+							"name":        ps.Name,
+							"description": ps.Description,
+							"kind":        string(ps.Kind),
+							"global":      ps.Global,
+							"reason":      reason,
+						})
+					}
+				}
+
+				// Check if there are more pages
+				if policySets.NextPage == 0 {
+					break
+				}
+				pageNumber++
+			}
+
+			if len(matchingPolicySets) == 0 {
+				return &mcp.CallToolResult{
+					Content: []mcp.Content{
+						mcp.NewTextContent(fmt.Sprintf("No policy sets are attached to workspace %s", workspaceID)),
+					},
+				}, nil
+			}
+
+			result := fmt.Sprintf("Found %d policy set(s) for workspace %s:\n\n", len(matchingPolicySets), workspaceID)
+			for _, ps := range matchingPolicySets {
+				result += fmt.Sprintf("- %s (ID: %s)\n  Kind: %s | Reason: %s\n",
+					ps["name"], ps["id"], ps["kind"], ps["reason"])
+				if ps["description"] != "" {
+					result += fmt.Sprintf("  Description: %s\n", ps["description"])
+				}
+				result += "\n"
+			}
+
+			return &mcp.CallToolResult{
+				Content: []mcp.Content{
+					mcp.NewTextContent(result),
+				},
+			}, nil
+		},
+	}
+}
