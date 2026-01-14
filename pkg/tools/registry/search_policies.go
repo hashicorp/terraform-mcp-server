@@ -47,37 +47,36 @@ If no policies were found, reattempt the search with a new policy_query.`),
 }
 
 func getSearchPoliciesHandler(ctx context.Context, request mcp.CallToolRequest, logger *log.Logger) (*mcp.CallToolResult, error) {
-	var terraformPolicies client.TerraformPolicyList
 	pq, err := request.RequireString("policy_query")
 	if err != nil {
-		return nil, utils.LogAndReturnError(logger, "required input: policy_query is required", err)
+		return ToolError(logger, "missing required input: policy_query", err)
 	}
 	if pq == "" {
-		return nil, utils.LogAndReturnError(logger, "required input: policy_query cannot be empty", nil)
+		return ToolError(logger, "policy_query cannot be empty", nil)
 	}
 	pq = strings.ToLower(pq)
 
-	// Get a simple http client to access the public Terraform registry from context
 	httpClient, err := client.GetHttpClientFromContext(ctx, logger)
 	if err != nil {
-		logger.WithError(err).Error("failed to get http client for public Terraform registry")
-		return mcp.NewToolResultError(fmt.Sprintf("failed to get http client for public Terraform registry: %v", err)), nil
+		return ToolError(logger, "failed to get http client for public Terraform registry", err)
 	}
+
 	uri := (&url.URL{
 		Path: "policies",
 		RawQuery: url.Values{
-			"page[size]": {"100"}, // static list of 100 is fine for now
+			"page[size]": {"100"},
 			"include":    {"latest-version"},
 		}.Encode(),
 	}).String()
+
 	policyResp, err := client.SendRegistryCall(httpClient, "GET", uri, logger, "v2")
 	if err != nil {
-		return nil, utils.LogAndReturnError(logger, "fetching policies: registry API did not return a successful response", err)
+		return ToolError(logger, "failed to fetch policies from registry", err)
 	}
 
-	err = json.Unmarshal(policyResp, &terraformPolicies)
-	if err != nil {
-		return nil, utils.LogAndReturnError(logger, "unmarshalling policy list", err)
+	var terraformPolicies client.TerraformPolicyList
+	if err := json.Unmarshal(policyResp, &terraformPolicies); err != nil {
+		return ToolError(logger, "failed to parse policy list", err)
 	}
 
 	var builder strings.Builder
@@ -101,11 +100,9 @@ func getSearchPoliciesHandler(ctx context.Context, request mcp.CallToolRequest, 
 		}
 	}
 
-	policyData := builder.String()
 	if !contentAvailable {
-		errMessage := fmt.Sprintf("finding policies, none found matching the query: %s. Try a different policy_query.", pq)
-		return nil, utils.LogAndReturnError(logger, errMessage, nil)
+		return ToolErrorf(logger, "no policies found matching query: %s - try a different search term", pq)
 	}
 
-	return mcp.NewToolResultText(policyData), nil
+	return mcp.NewToolResultText(builder.String()), nil
 }

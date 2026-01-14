@@ -7,13 +7,13 @@ import (
 	"bytes"
 	"context"
 	_ "embed"
+	"fmt"
 	"io"
 	"strings"
 
 	"github.com/hashicorp/go-tfe"
 	"github.com/hashicorp/jsonapi"
 	"github.com/hashicorp/terraform-mcp-server/pkg/client"
-	"github.com/hashicorp/terraform-mcp-server/pkg/utils"
 	log "github.com/sirupsen/logrus"
 
 	"github.com/mark3labs/mcp-go/mcp"
@@ -48,33 +48,31 @@ func GetWorkspaceDetails(logger *log.Logger) server.ServerTool {
 }
 
 func getWorkspaceDetailsHandler(ctx context.Context, request mcp.CallToolRequest, logger *log.Logger) (*mcp.CallToolResult, error) {
-	// Get required parameters
 	terraformOrgName, err := request.RequireString("terraform_org_name")
 	if err != nil {
-		return nil, utils.LogAndReturnError(logger, "The 'terraform_org_name' parameter is required", err)
+		return ToolError(logger, "missing required input: terraform_org_name", err)
 	}
 	terraformOrgName = strings.TrimSpace(terraformOrgName)
 
 	workspaceName, err := request.RequireString("workspace_name")
 	if err != nil {
-		return nil, utils.LogAndReturnError(logger, "The 'workspace_name' parameter is required", err)
+		return ToolError(logger, "missing required input: workspace_name", err)
 	}
 	workspaceName = strings.TrimSpace(workspaceName)
 
-	// Get a Terraform client from context
 	tfeClient, err := client.GetTfeClientFromContext(ctx, logger)
 	if err != nil {
-		return nil, utils.LogAndReturnError(logger, "getting Terraform client - please ensure TFE_TOKEN and TFE_ADDRESS are properly configured", err)
+		return ToolError(logger, "failed to get Terraform client - ensure TFE_TOKEN and TFE_ADDRESS are configured", err)
 	}
 
 	workspace, err := tfeClient.Workspaces.Read(ctx, terraformOrgName, workspaceName)
 	if err != nil {
-		return nil, utils.LogAndReturnError(logger, "reading workspace details", err)
+		return ToolErrorf(logger, "workspace '%s' not found in org '%s'", workspaceName, terraformOrgName)
 	}
 
 	buf, err := getWorkspaceDetailsForTools(ctx, "get_workspace_details", tfeClient, workspace, logger, true)
 	if err != nil {
-		return nil, utils.LogAndReturnError(logger, "getting workspace details for tools", err)
+		return ToolError(logger, "failed to get workspace details", err)
 	}
 
 	return mcp.NewToolResultText(buf.String()), nil
@@ -82,7 +80,6 @@ func getWorkspaceDetailsHandler(ctx context.Context, request mcp.CallToolRequest
 
 func getWorkspaceDetailsForTools(ctx context.Context, toolType string, tfeClient *tfe.Client, workspace *tfe.Workspace, logger *log.Logger, opts ...interface{}) (*bytes.Buffer, error) {
 	includeDetails := false
-	// Check if detailed information is requested
 	for _, opt := range opts {
 		if includeOpt, ok := opt.(bool); ok && includeOpt {
 			includeDetails = true
@@ -97,11 +94,10 @@ func getWorkspaceDetailsForTools(ctx context.Context, toolType string, tfeClient
 	}
 
 	if includeDetails {
-		// Fetch variables separately since they're not included in the workspace read options
 		variables, err := tfeClient.Variables.List(ctx, workspace.ID, &tfe.VariableListOptions{})
 		if err != nil {
 			logger.WithError(err).Warn("failed to fetch workspace variables")
-			variables = &tfe.VariableList{} // Initialize empty list if fetch fails
+			variables = &tfe.VariableList{}
 		}
 
 		readme := defaultReadme
@@ -128,7 +124,7 @@ func getWorkspaceDetailsForTools(ctx context.Context, toolType string, tfeClient
 	buf := bytes.NewBuffer(nil)
 	err := jsonapi.MarshalPayload(buf, result)
 	if err != nil {
-		return nil, utils.LogAndReturnError(logger, "marshalling workspace creation result", err)
+		return nil, fmt.Errorf("failed to marshal workspace result: %w", err)
 	}
 
 	return buf, nil

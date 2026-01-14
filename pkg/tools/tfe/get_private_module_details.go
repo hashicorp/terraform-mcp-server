@@ -12,7 +12,6 @@ import (
 
 	"github.com/hashicorp/go-tfe"
 	"github.com/hashicorp/terraform-mcp-server/pkg/client"
-	"github.com/hashicorp/terraform-mcp-server/pkg/utils"
 	log "github.com/sirupsen/logrus"
 
 	"github.com/mark3labs/mcp-go/mcp"
@@ -55,37 +54,31 @@ The module-namespace is usually the name of the Terraform organization. Obtain t
 }
 
 func getPrivateModuleDetailsHandler(ctx context.Context, request mcp.CallToolRequest, logger *log.Logger) (*mcp.CallToolResult, error) {
-	// Get Terraform org name
 	terraformOrgName, err := request.RequireString("terraform_org_name")
 	if err != nil {
-		return nil, utils.LogAndReturnError(logger, "The 'terraform_org_name' parameter is required for the Terraform Cloud/Enterprise organization.", err)
+		return ToolError(logger, "missing required input: terraform_org_name", err)
 	}
 	terraformOrgName = strings.TrimSpace(terraformOrgName)
 
-	// Get Terraform module id
 	moduleID, err := request.RequireString("private_module_id")
 	if err != nil {
-		return nil, utils.LogAndReturnError(logger, "private_module_id is required", err)
+		return ToolError(logger, "missing required input: private_module_id", err)
 	}
 	moduleID = strings.TrimSpace(moduleID)
 
-	// Get optional parameters
 	registryName := strings.TrimSpace(request.GetString("registry_name", "private"))
 	moduleVersion := strings.TrimSpace(request.GetString("private_module_version", ""))
 
-	// Get the terraform client from context
 	tfeClient, err := client.GetTfeClientFromContext(ctx, logger)
 	if err != nil {
-		err = utils.LogAndReturnError(logger, "failed to get terraform client for TFE, ensure TFE_TOKEN and TFE_ADDRESS are properly set.", err)
-		return mcp.NewToolResultError(fmt.Sprintf("failed to get terraform client for TFE: %v", err)), nil
+		return ToolError(logger, "failed to get Terraform client - ensure TFE_TOKEN and TFE_ADDRESS are configured", err)
 	}
 
-	// Split moduleID into org name, module name, and provider
 	parts := strings.Split(moduleID, "/")
 	if len(parts) != 3 {
-		return mcp.NewToolResultError("private_module_id must be in the format 'module-namespace/module-name/module-provider-name'"), nil
+		return ToolError(logger, "private_module_id must be in format 'module-namespace/module-name/module-provider-name'", nil)
 	}
-	// Create module ID for TFE API
+
 	tfeModuleID := tfe.RegistryModuleID{
 		Organization: terraformOrgName,
 		Namespace:    parts[0],
@@ -100,18 +93,14 @@ func getPrivateModuleDetailsHandler(ctx context.Context, request mcp.CallToolReq
 		"private_module_version": moduleVersion,
 	}).Info("Getting private module details")
 
-	// Call the TFE API to get module details
 	var module *tfe.RegistryModule
 	var terraformRegistryModule *tfe.TerraformRegistryModule
 
-	// Get the parent module for additional details
 	module, err = tfeClient.RegistryModules.Read(ctx, tfeModuleID)
 	if err != nil {
-		logger.WithError(err).Error("failed to read private module details")
-		return mcp.NewToolResultError(fmt.Sprintf("failed to read private module details: %v", err)), nil
+		return ToolErrorf(logger, "module not found: %s - use search_private_modules to find valid module IDs", moduleID)
 	}
 
-	// Get detailed module information from Terraform Registry (specific version or latest), it'll automatically use the latest version with empty string
 	terraformRegistryModule, err = tfeClient.RegistryModules.ReadTerraformRegistryModule(ctx, tfeModuleID, moduleVersion)
 	if err != nil {
 		logger.WithError(err).Warn("failed to get detailed module information from Terraform Registry, continuing with basic info")
@@ -125,10 +114,8 @@ func buildPrivateModuleDetailsResponse(registryModule *tfe.RegistryModule,
 	tfeHostAddress string,
 	logger *log.Logger) *mcp.CallToolResult {
 
-	// Set the registry path for the module
 	registryPath := path.Join(tfeHostAddress, registryModule.Namespace, registryModule.Name, registryModule.Provider)
 
-	// Usage information
 	var builder strings.Builder
 	builder.WriteString("Usage:\n")
 	builder.WriteString("To use this private module in your Terraform configuration:\n\n")
@@ -136,12 +123,10 @@ func buildPrivateModuleDetailsResponse(registryModule *tfe.RegistryModule,
 	builder.WriteString(fmt.Sprintf("module \"%s\" {\n", registryModule.Name))
 	builder.WriteString(fmt.Sprintf("  source = \"%s\"\n", registryPath))
 
-	// Use specific version if provided, otherwise use latest available
 	if len(registryModule.VersionStatuses) > 0 {
-		// Find the latest version from version statuses
 		for _, versionStatus := range registryModule.VersionStatuses {
 			builder.WriteString(fmt.Sprintf("  version = \"%s\"\n", versionStatus.Version))
-			break // Use the first one as it's typically the latest
+			break
 		}
 	}
 
@@ -150,7 +135,6 @@ func buildPrivateModuleDetailsResponse(registryModule *tfe.RegistryModule,
 	builder.WriteString("}\n")
 	builder.WriteString("```\n\n")
 
-	// Basic information
 	builder.WriteString("Basic Information:\n")
 	builder.WriteString(fmt.Sprintf("- Name: %s\n", registryModule.Name))
 	builder.WriteString(fmt.Sprintf("- Namespace: %s\n", registryModule.Namespace))
@@ -160,13 +144,11 @@ func buildPrivateModuleDetailsResponse(registryModule *tfe.RegistryModule,
 	builder.WriteString(fmt.Sprintf("- Updated: %s\n", registryModule.UpdatedAt))
 	builder.WriteString(fmt.Sprintf("- No Code Module: %t\n", registryModule.NoCode))
 
-	// Add description if available from TerraformRegistryModule
 	if terraformRegistryModule != nil && terraformRegistryModule.Description != "" {
 		builder.WriteString(fmt.Sprintf("- Description: %s\n", terraformRegistryModule.Description))
 	}
 	builder.WriteString("\n")
 
-	// Inputs section
 	if terraformRegistryModule != nil && len(terraformRegistryModule.Root.Inputs) > 0 {
 		builder.WriteString("Inputs:\n")
 		builder.WriteString(strings.Repeat("-", 20) + "\n")
@@ -184,7 +166,6 @@ func buildPrivateModuleDetailsResponse(registryModule *tfe.RegistryModule,
 		builder.WriteString("\n")
 	}
 
-	// Outputs section
 	if terraformRegistryModule != nil && len(terraformRegistryModule.Root.Outputs) > 0 {
 		builder.WriteString("Outputs:\n")
 		builder.WriteString(strings.Repeat("-", 20) + "\n")
@@ -199,7 +180,6 @@ func buildPrivateModuleDetailsResponse(registryModule *tfe.RegistryModule,
 		builder.WriteString("\n")
 	}
 
-	// Provider Dependencies section
 	if terraformRegistryModule != nil && len(terraformRegistryModule.Root.ProviderDependencies) > 0 {
 		builder.WriteString("Provider Dependencies:\n")
 		builder.WriteString(strings.Repeat("-", 20) + "\n")
@@ -216,7 +196,6 @@ func buildPrivateModuleDetailsResponse(registryModule *tfe.RegistryModule,
 		builder.WriteString("\n")
 	}
 
-	// Resources section
 	if terraformRegistryModule != nil && len(terraformRegistryModule.Root.Resources) > 0 {
 		builder.WriteString("Resources:\n")
 		builder.WriteString(strings.Repeat("-", 20) + "\n")
@@ -231,14 +210,12 @@ func buildPrivateModuleDetailsResponse(registryModule *tfe.RegistryModule,
 		builder.WriteString("\n")
 	}
 
-	// Organization information
 	if registryModule.Organization != nil {
 		builder.WriteString("Organization:\n")
 		builder.WriteString(fmt.Sprintf("- Name: %s\n", registryModule.Organization.Name))
 		builder.WriteString("\n")
 	}
 
-	// Permissions
 	if registryModule.Permissions != nil {
 		builder.WriteString("Permissions:\n")
 		builder.WriteString(fmt.Sprintf("- Can Delete: %t\n", registryModule.Permissions.CanDelete))
@@ -247,7 +224,6 @@ func buildPrivateModuleDetailsResponse(registryModule *tfe.RegistryModule,
 		builder.WriteString("\n")
 	}
 
-	// VCS Repository information
 	if registryModule.VCSRepo != nil {
 		builder.WriteString("VCS Repository:\n")
 		builder.WriteString(fmt.Sprintf("- Identifier: %s\n", registryModule.VCSRepo.Identifier))
@@ -265,7 +241,6 @@ func buildPrivateModuleDetailsResponse(registryModule *tfe.RegistryModule,
 		builder.WriteString("\n")
 	}
 
-	// README section
 	if terraformRegistryModule != nil && terraformRegistryModule.Root.Readme != "" {
 		cleanedReadme := removeReadmeSections(terraformRegistryModule.Root.Readme)
 		builder.WriteString("README:\n")
@@ -285,18 +260,14 @@ func buildPrivateModuleDetailsResponse(registryModule *tfe.RegistryModule,
 	return mcp.NewToolResultText(builder.String())
 }
 
-// Manually remove README sections because it's already included in the response
 func removeReadmeSections(readme string) string {
-	// Split by lines and reconstruct, skipping sections we want to remove
 	lines := strings.Split(readme, "\n")
 	var result []string
 	skipSection := false
 
 	for _, line := range lines {
-		// Check if this line is a section header we want to remove
 		lowerLine := strings.ToLower(strings.TrimSpace(line))
 		if strings.HasPrefix(lowerLine, "##") || strings.HasPrefix(lowerLine, "###") || strings.HasPrefix(lowerLine, "####") {
-			// Check if it's one of the sections we want to remove
 			if strings.Contains(lowerLine, "inputs") ||
 				strings.Contains(lowerLine, "outputs") ||
 				strings.Contains(lowerLine, "dependencies") ||
@@ -305,20 +276,16 @@ func removeReadmeSections(readme string) string {
 				skipSection = true
 				continue
 			} else {
-				// It's a different section header, stop skipping
 				skipSection = false
 			}
 		}
 
-		// If we're not skipping this section, add the line
 		if !skipSection {
 			result = append(result, line)
 		}
 	}
 
 	cleaned := strings.Join(result, "\n")
-
-	// Clean up multiple consecutive newlines that might result from section removal
 	cleaned = regexp.MustCompile(`\n{3,}`).ReplaceAllString(cleaned, "\n\n")
 
 	return strings.TrimSpace(cleaned)

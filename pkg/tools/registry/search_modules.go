@@ -13,7 +13,6 @@ import (
 	"strings"
 
 	"github.com/hashicorp/terraform-mcp-server/pkg/client"
-	"github.com/hashicorp/terraform-mcp-server/pkg/utils"
 	log "github.com/sirupsen/logrus"
 
 	"github.com/mark3labs/mcp-go/mcp"
@@ -55,33 +54,30 @@ If no modules were found, reattempt the search with a new moduleName query.`),
 func getSearchModulesHandler(ctx context.Context, request mcp.CallToolRequest, logger *log.Logger) (*mcp.CallToolResult, error) {
 	moduleQuery, err := request.RequireString("module_query")
 	if err != nil {
-		return nil, utils.LogAndReturnError(logger, "required input: module_query is required", err)
+		return ToolError(logger, "missing required input: module_query", err)
 	}
 	moduleQuery = strings.ToLower(moduleQuery)
 	currentOffsetValue := request.GetInt("current_offset", 0)
 
-	// Get a simple http client to access the public Terraform registry from context
 	httpClient, err := client.GetHttpClientFromContext(ctx, logger)
 	if err != nil {
-		logger.WithError(err).Error("failed to get http client for public Terraform registry")
-		return mcp.NewToolResultError(fmt.Sprintf("failed to get http client for public Terraform registry: %v", err)), nil
+		return ToolError(logger, "failed to get http client for public Terraform registry", err)
 	}
 
-	var modulesData, errMsg string
 	response, err := sendSearchModulesCall(httpClient, moduleQuery, currentOffsetValue, logger)
 	if err != nil {
-		return nil, utils.LogAndReturnError(logger, fmt.Sprintf("finding module(s): none found for moduleName: %s", moduleQuery), err)
-	} else {
-		modulesData, err = unmarshalTerraformModules(response, moduleQuery, logger)
-		if err != nil {
-			return nil, utils.LogAndReturnError(logger, fmt.Sprintf("unmarshalling modules for moduleName: %s", moduleQuery), err)
-		}
+		return ToolErrorf(logger, "no modules found for query: %s - try a different search term", moduleQuery)
+	}
+
+	modulesData, err := unmarshalTerraformModules(response, moduleQuery, logger)
+	if err != nil {
+		return ToolErrorf(logger, "failed to parse module results for query: %s", moduleQuery)
 	}
 
 	if modulesData == "" {
-		errMsg = fmt.Sprintf("getting module(s), none found! query used: %s; error: %s", moduleQuery, errMsg)
-		return nil, utils.LogAndReturnError(logger, errMsg, nil)
+		return ToolErrorf(logger, "no modules found for query: %s - try a different search term", moduleQuery)
 	}
+
 	return mcp.NewToolResultText(modulesData), nil
 }
 
@@ -95,27 +91,23 @@ func sendSearchModulesCall(providerClient *http.Client, moduleQuery string, curr
 
 	response, err := client.SendRegistryCall(providerClient, "GET", uri, logger)
 	if err != nil {
-		// We shouldn't log the error here because we might hit a namespace that doesn't exist, it's better to let the caller handle it.
 		return nil, fmt.Errorf("getting module(s) for: %v, call error: %v", moduleQuery, err)
 	}
 
-	// Return the filtered JSON as a string
 	return response, nil
 }
 
 func unmarshalTerraformModules(response []byte, moduleQuery string, logger *log.Logger) (string, error) {
-	// Get the list of modules
 	var terraformModules client.TerraformModules
 	err := json.Unmarshal(response, &terraformModules)
 	if err != nil {
-		return "", utils.LogAndReturnError(logger, "unmarshalling modules", err)
+		return "", fmt.Errorf("unmarshalling modules: %w", err)
 	}
 
 	if len(terraformModules.Data) == 0 {
-		return "", utils.LogAndReturnError(logger, fmt.Sprintf("no modules found for query: %s", moduleQuery), nil)
+		return "", fmt.Errorf("no modules found for query: %s", moduleQuery)
 	}
 
-	// Sort by most downloaded
 	sort.Slice(terraformModules.Data, func(i, j int) bool {
 		return terraformModules.Data[i].Downloads > terraformModules.Data[j].Downloads
 	})

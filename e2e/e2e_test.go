@@ -104,8 +104,8 @@ func runTestSuite(t *testing.T, client mcpClient.MCPClient, transportName string
 
 			response, err := client.CallTool(ctx, request)
 			if testCase.TestShouldFail {
-				require.Error(t, err, "expected to call 'search_providers' tool with error")
-				t.Logf("Error: %v", err)
+				require.NoError(t, err)
+				require.True(t, response.IsError, "expected to call 'search_providers' tool with error")
 			} else {
 				require.NoError(t, err, "expected to call 'search_providers' tool successfully")
 				require.False(t, response.IsError, "expected result not to be an error")
@@ -148,8 +148,8 @@ func runTestSuite(t *testing.T, client mcpClient.MCPClient, transportName string
 
 			response, err := client.CallTool(ctx, request)
 			if testCase.TestShouldFail {
-				require.Error(t, err, "expected to call 'get_provider_details' tool with error")
-				t.Logf("Error: %v", err)
+				require.NoError(t, err)
+				require.True(t, response.IsError, "expected to call 'get_provider_details' tool with error")
 			} else {
 				require.NoError(t, err, "expected to call 'get_provider_details' tool successfully")
 				require.False(t, response.IsError, "expected result not to be an error")
@@ -179,8 +179,8 @@ func runTestSuite(t *testing.T, client mcpClient.MCPClient, transportName string
 
 			response, err := client.CallTool(ctx, request)
 			if testCase.TestShouldFail {
-				require.Error(t, err, "expected to call 'search_modules' tool with error")
-				t.Logf("Error: %v", err)
+				require.NoError(t, err)
+				require.True(t, response.IsError, "expected to call 'search_modules' tool with error")
 			} else {
 				require.NoError(t, err, "expected to call 'search_modules' tool successfully")
 				require.False(t, response.IsError, "expected result not to be an error")
@@ -210,8 +210,8 @@ func runTestSuite(t *testing.T, client mcpClient.MCPClient, transportName string
 
 			response, err := client.CallTool(ctx, request)
 			if testCase.TestShouldFail {
-				require.Error(t, err, "expected to call 'get_module_details' tool with error")
-				t.Logf("Error: %v", err)
+				require.NoError(t, err)
+				require.True(t, response.IsError, "expected to call 'get_module_details' tool with error")
 			} else {
 				require.NoError(t, err, "expected to call 'get_module_details' tool successfully")
 				require.False(t, response.IsError, "expected result not to be an error")
@@ -246,8 +246,8 @@ func runTestSuite(t *testing.T, client mcpClient.MCPClient, transportName string
 
 			response, err := client.CallTool(ctx, request)
 			if testCase.TestShouldFail {
-				require.Error(t, err, "expected to call 'search_policies' tool with error")
-				t.Logf("Error: %v", err)
+				require.NoError(t, err)
+				require.True(t, response.IsError, "expected to call 'search_policies' tool with error")
 			} else {
 				require.NoError(t, err, "expected to call 'search_policies' tool successfully")
 				require.False(t, response.IsError, "expected result not to be an error")
@@ -283,8 +283,8 @@ func runTestSuite(t *testing.T, client mcpClient.MCPClient, transportName string
 
 			response, err := client.CallTool(ctx, request)
 			if testCase.TestShouldFail {
-				require.Error(t, err, "expected to call 'get_policy_details' tool with error")
-				t.Logf("Error: %v", err)
+				require.NoError(t, err)
+				require.True(t, response.IsError, "expected to call 'get_policy_details' tool with error")
 			} else {
 				require.NoError(t, err, "expected to call 'get_policy_details' tool successfully")
 				require.False(t, response.IsError, "expected result not to be an error")
@@ -316,8 +316,8 @@ func runTestSuite(t *testing.T, client mcpClient.MCPClient, transportName string
 
 			response, err := client.CallTool(ctx, request)
 			if testCase.TestShouldFail {
-				require.Error(t, err, "expected to call 'get_latest_module_version' tool with error")
-				t.Logf("Error: %v", err)
+				require.NoError(t, err)
+				require.True(t, response.IsError, "expected to call 'get_latest_module_version' tool with error")
 			} else {
 				require.NoError(t, err, "expected to call 'get_latest_module_version' tool successfully")
 				require.False(t, response.IsError, "expected result not to be an error")
@@ -350,8 +350,8 @@ func runTestSuite(t *testing.T, client mcpClient.MCPClient, transportName string
 
 			response, err := client.CallTool(ctx, request)
 			if testCase.TestShouldFail {
-				require.Error(t, err, "expected to call 'get_latest_provider_version' tool with error")
-				t.Logf("Error: %v", err)
+				require.NoError(t, err)
+				require.True(t, response.IsError, "expected to call 'get_latest_provider_version' tool with error")
 			} else {
 				require.NoError(t, err, "expected to call 'get_latest_provider_version' tool successfully")
 				require.False(t, response.IsError, "expected result not to be an error")

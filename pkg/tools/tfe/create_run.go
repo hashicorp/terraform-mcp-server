@@ -11,7 +11,6 @@ import (
 	"github.com/hashicorp/go-tfe"
 	"github.com/hashicorp/jsonapi"
 	"github.com/hashicorp/terraform-mcp-server/pkg/client"
-	"github.com/hashicorp/terraform-mcp-server/pkg/utils"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 	log "github.com/sirupsen/logrus"
@@ -52,13 +51,13 @@ func CreateRunSafe(logger *log.Logger) server.ServerTool {
 func createRunSafeHandler(ctx context.Context, request mcp.CallToolRequest, logger *log.Logger) (*mcp.CallToolResult, error) {
 	terraformOrgName, err := request.RequireString("terraform_org_name")
 	if err != nil {
-		return nil, utils.LogAndReturnError(logger, "The 'terraform_org_name' parameter is required", err)
+		return ToolError(logger, "missing required input: terraform_org_name", err)
 	}
 	terraformOrgName = strings.TrimSpace(terraformOrgName)
 
 	workspaceName, err := request.RequireString("workspace_name")
 	if err != nil {
-		return nil, utils.LogAndReturnError(logger, "The 'workspace_name' parameter is required", err)
+		return ToolError(logger, "missing required input: workspace_name", err)
 	}
 	workspaceName = strings.TrimSpace(workspaceName)
 
@@ -67,12 +66,12 @@ func createRunSafeHandler(ctx context.Context, request mcp.CallToolRequest, logg
 
 	tfeClient, err := client.GetTfeClientFromContext(ctx, logger)
 	if err != nil {
-		return nil, utils.LogAndReturnError(logger, "getting Terraform client", err)
+		return ToolError(logger, "failed to get Terraform client", err)
 	}
 
 	workspace, err := tfeClient.Workspaces.Read(ctx, terraformOrgName, workspaceName)
 	if err != nil {
-		return nil, utils.LogAndReturnError(logger, "reading workspace", err)
+		return ToolErrorf(logger, "workspace '%s' not found in org '%s': %v", workspaceName, terraformOrgName, err)
 	}
 
 	options := &tfe.RunCreateOptions{
@@ -95,12 +94,12 @@ func createRunSafeHandler(ctx context.Context, request mcp.CallToolRequest, logg
 
 	run, err := tfeClient.Runs.Create(ctx, *options)
 	if err != nil {
-		return nil, utils.LogAndReturnError(logger, "creating run", err)
+		return ToolError(logger, "failed to create run", err)
 	}
 
 	var buf bytes.Buffer
 	if err := jsonapi.MarshalPayload(&buf, run); err != nil {
-		return nil, utils.LogAndReturnError(logger, "marshaling run response", err)
+		return ToolError(logger, "failed to marshal run response", err)
 	}
 
 	return &mcp.CallToolResult{
@@ -144,13 +143,13 @@ func CreateRun(logger *log.Logger) server.ServerTool {
 func createRunHandler(ctx context.Context, request mcp.CallToolRequest, logger *log.Logger) (*mcp.CallToolResult, error) {
 	terraformOrgName, err := request.RequireString("terraform_org_name")
 	if err != nil {
-		return nil, utils.LogAndReturnError(logger, "The 'terraform_org_name' parameter is required", err)
+		return ToolError(logger, "missing required input: terraform_org_name", err)
 	}
 	terraformOrgName = strings.TrimSpace(terraformOrgName)
 
 	workspaceName, err := request.RequireString("workspace_name")
 	if err != nil {
-		return nil, utils.LogAndReturnError(logger, "The 'workspace_name' parameter is required", err)
+		return ToolError(logger, "missing required input: workspace_name", err)
 	}
 	workspaceName = strings.TrimSpace(workspaceName)
 
@@ -159,12 +158,12 @@ func createRunHandler(ctx context.Context, request mcp.CallToolRequest, logger *
 
 	tfeClient, err := client.GetTfeClientFromContext(ctx, logger)
 	if err != nil {
-		return nil, utils.LogAndReturnError(logger, "getting Terraform client", err)
+		return ToolError(logger, "failed to get Terraform client", err)
 	}
 
 	workspace, err := tfeClient.Workspaces.Read(ctx, terraformOrgName, workspaceName)
 	if err != nil {
-		return nil, utils.LogAndReturnError(logger, "reading workspace", err)
+		return ToolErrorf(logger, "workspace '%s' not found in org '%s': %v", workspaceName, terraformOrgName, err)
 	}
 
 	options := &tfe.RunCreateOptions{
@@ -191,13 +190,13 @@ func createRunHandler(ctx context.Context, request mcp.CallToolRequest, logger *
 
 	run, err := tfeClient.Runs.Create(ctx, *options)
 	if err != nil {
-		return nil, utils.LogAndReturnError(logger, "creating run", err)
+		return ToolError(logger, "failed to create run", err)
 	}
 
 	buf := bytes.NewBuffer(nil)
 	err = jsonapi.MarshalPayloadWithoutIncluded(buf, run)
 	if err != nil {
-		return nil, utils.LogAndReturnError(logger, "marshalling run creation", err)
+		return ToolError(logger, "failed to marshal run response", err)
 	}
 
 	return mcp.NewToolResultText(buf.String()), nil

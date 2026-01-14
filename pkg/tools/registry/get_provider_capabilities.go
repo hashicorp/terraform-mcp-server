@@ -57,52 +57,46 @@ Returns a summary with counts and examples for each capability type.`),
 func getProviderCapabilitiesHandler(ctx context.Context, request mcp.CallToolRequest, logger *log.Logger) (*mcp.CallToolResult, error) {
 	namespace, err := request.RequireString("namespace")
 	if err != nil {
-		return nil, utils.LogAndReturnError(logger, "required input: namespace of the Terraform provider is required", err)
+		return ToolError(logger, "missing required input: namespace", err)
 	}
 	namespace = strings.ToLower(namespace)
 
 	name, err := request.RequireString("name")
 	if err != nil {
-		return nil, utils.LogAndReturnError(logger, "required input: name of the Terraform provider is required", err)
+		return ToolError(logger, "missing required input: name", err)
 	}
 	name = strings.ToLower(name)
 
 	version := request.GetString("version", "latest")
 	if version == "latest" || !utils.IsValidProviderVersionFormat(version) {
-		// Get a simple http client to access the public Terraform registry from context
 		httpClient, err := client.GetHttpClientFromContext(ctx, logger)
 		if err != nil {
-			logger.WithError(err).Error("failed to get http client for public Terraform registry")
-			return mcp.NewToolResultError(fmt.Sprintf("failed to get http client for public Terraform registry: %v", err)), nil
+			return ToolError(logger, "failed to get http client for public Terraform registry", err)
 		}
 
 		latestVersion, err := client.GetLatestProviderVersion(httpClient, namespace, name, logger)
 		if err != nil {
-			return nil, utils.LogAndReturnError(logger, "fetching latest provider version", err)
+			return ToolErrorf(logger, "provider not found: %s/%s - verify the namespace and provider name are correct", namespace, name)
 		}
 		version = latestVersion
 	}
 
-	// Get a simple http client to access the public Terraform registry from context
 	httpClient, err := client.GetHttpClientFromContext(ctx, logger)
 	if err != nil {
-		logger.WithError(err).Error("failed to get http client for public Terraform registry")
-		return mcp.NewToolResultError(fmt.Sprintf("failed to get http client for public Terraform registry: %v", err)), nil
+		return ToolError(logger, "failed to get http client for public Terraform registry", err)
 	}
 
-	// Get provider documentation
 	uri := fmt.Sprintf("providers/%s/%s/%s", namespace, name, version)
 	response, err := client.SendRegistryCall(httpClient, "GET", uri, logger)
 	if err != nil {
-		return nil, utils.LogAndReturnError(logger, fmt.Sprintf("fetching provider docs for %s/%s:%s", namespace, name, version), err)
+		return ToolErrorf(logger, "failed to fetch provider docs for %s/%s:%s - verify the provider exists", namespace, name, version)
 	}
 
 	var providerDocs client.ProviderDocs
 	if err := json.Unmarshal(response, &providerDocs); err != nil {
-		return nil, utils.LogAndReturnError(logger, "unmarshalling provider docs", err)
+		return ToolErrorf(logger, "failed to parse provider docs for %s/%s:%s", namespace, name, version)
 	}
 
-	// Analyze and format capabilities
 	output := analyzeAndFormatCapabilities(providerDocs, namespace, name, version)
 	return mcp.NewToolResultText(output), nil
 }
@@ -110,7 +104,6 @@ func getProviderCapabilitiesHandler(ctx context.Context, request mcp.CallToolReq
 func analyzeAndFormatCapabilities(docs client.ProviderDocs, namespace, name, version string) string {
 	capabilities := make(map[string][]client.ProviderDoc)
 
-	// Analyze documentation
 	for _, doc := range docs.Docs {
 		if doc.Language != "hcl" {
 			continue
@@ -128,13 +121,11 @@ func analyzeAndFormatCapabilities(docs client.ProviderDocs, namespace, name, ver
 		return builder.String()
 	}
 
-	// Show all capabilities as discovered
 	for capType, items := range capabilities {
 		title := strings.ReplaceAll(capType, "-", " ")
 		title = cases.Title(language.English).String(title)
 		builder.WriteString(fmt.Sprintf("%s: %d available\n", title, len(items)))
 
-		// Dynamic listing: show all if ≤10, otherwise show 3 with "more" message
 		limit := 3
 		if len(items) <= 10 {
 			limit = len(items)

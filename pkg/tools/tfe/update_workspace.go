@@ -10,7 +10,6 @@ import (
 
 	"github.com/hashicorp/go-tfe"
 	"github.com/hashicorp/terraform-mcp-server/pkg/client"
-	"github.com/hashicorp/terraform-mcp-server/pkg/utils"
 	log "github.com/sirupsen/logrus"
 
 	"github.com/mark3labs/mcp-go/mcp"
@@ -75,20 +74,18 @@ func UpdateWorkspace(logger *log.Logger) server.ServerTool {
 }
 
 func updateWorkspaceHandler(ctx context.Context, request mcp.CallToolRequest, logger *log.Logger) (*mcp.CallToolResult, error) {
-	// Get required parameters
 	terraformOrgName, err := request.RequireString("terraform_org_name")
 	if err != nil {
-		return nil, utils.LogAndReturnError(logger, "The 'terraform_org_name' parameter is required", err)
+		return ToolError(logger, "missing required input: terraform_org_name", err)
 	}
 	terraformOrgName = strings.TrimSpace(terraformOrgName)
 
 	workspaceName, err := request.RequireString("workspace_name")
 	if err != nil {
-		return nil, utils.LogAndReturnError(logger, "The 'workspace_name' parameter is required", err)
+		return ToolError(logger, "missing required input: workspace_name", err)
 	}
 	workspaceName = strings.TrimSpace(workspaceName)
 
-	// Get optional parameters - we'll check if they're provided by comparing to empty/default values
 	newName := request.GetString("new_name", "")
 	description := request.GetString("description", "")
 	terraformVersion := request.GetString("terraform_version", "")
@@ -101,13 +98,11 @@ func updateWorkspaceHandler(ctx context.Context, request mcp.CallToolRequest, lo
 	fileTriggersEnabledStr := request.GetString("file_triggers_enabled", "")
 	tagsStr := request.GetString("tags", "")
 
-	// Get a Terraform client from context
 	tfeClient, err := client.GetTfeClientFromContext(ctx, logger)
 	if err != nil {
-		return nil, utils.LogAndReturnError(logger, "getting Terraform client - please ensure TFE_TOKEN and TFE_ADDRESS are properly configured", err)
+		return ToolError(logger, "failed to get Terraform client - ensure TFE_TOKEN and TFE_ADDRESS are configured", err)
 	}
 
-	// Build workspace update options
 	options := &tfe.WorkspaceUpdateOptions{}
 
 	if newName != "" {
@@ -139,7 +134,6 @@ func updateWorkspaceHandler(ctx context.Context, request mcp.CallToolRequest, lo
 		options.FileTriggersEnabled = &fileTriggersEnabled
 	}
 
-	// Parse execution mode
 	if executionModeStr != "" {
 		switch strings.ToLower(executionModeStr) {
 		case "local":
@@ -149,11 +143,10 @@ func updateWorkspaceHandler(ctx context.Context, request mcp.CallToolRequest, lo
 		case "remote":
 			options.ExecutionMode = tfe.String("remote")
 		default:
-			return nil, utils.LogAndReturnError(logger, "invalid execution_mode: must be 'remote', 'local', or 'agent'", nil)
+			return ToolErrorf(logger, "invalid execution_mode '%s' - must be 'remote', 'local', or 'agent'", executionModeStr)
 		}
 	}
 
-	// Parse trigger prefixes
 	if triggerPrefixesStr != "" {
 		if triggerPrefixesStr == "" {
 			options.TriggerPrefixes = []string{}
@@ -166,21 +159,18 @@ func updateWorkspaceHandler(ctx context.Context, request mcp.CallToolRequest, lo
 		}
 	}
 
-	// Parse tags - Note: Tags might not be updatable via WorkspaceUpdateOptions
-	// This would require a separate API call to manage tags
 	if tagsStr != "" {
 		logger.Warnf("Tag updates are not supported via workspace update - tags parameter ignored")
 	}
 
-	// Update the workspace
 	workspace, err := tfeClient.Workspaces.Update(ctx, terraformOrgName, workspaceName, *options)
 	if err != nil {
-		return nil, utils.LogAndReturnError(logger, "updating workspace", err)
+		return ToolErrorf(logger, "failed to update workspace '%s' in org '%s': %v", workspaceName, terraformOrgName, err)
 	}
 
 	resultJSON, err := json.Marshal(workspace)
 	if err != nil {
-		return nil, utils.LogAndReturnError(logger, "marshalling workspace update result", err)
+		return ToolError(logger, "failed to marshal workspace update result", err)
 	}
 
 	return mcp.NewToolResultText(string(resultJSON)), nil
