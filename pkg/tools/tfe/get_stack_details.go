@@ -23,7 +23,6 @@ func GetStackDetails(logger *log.Logger) server.ServerTool {
 		Tool: mcp.NewTool("get_stack_details",
 			mcp.WithDescription(`Fetches detailed information about a specific Terraform Stack.`),
 			mcp.WithTitleAnnotation("Get detailed information about a Terraform Stack"),
-			mcp.WithOpenWorldHintAnnotation(true),
 			mcp.WithReadOnlyHintAnnotation(true),
 			mcp.WithDestructiveHintAnnotation(false),
 			mcp.WithString("terraform_org_name",
