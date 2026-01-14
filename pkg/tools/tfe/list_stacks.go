@@ -24,7 +24,6 @@ func ListStacks(logger *log.Logger) server.ServerTool {
 		Tool: mcp.NewTool("list_stacks",
 			mcp.WithDescription(`List Stacks within a specified organization. Returns all stacks when no project or search query is supplied. Supports pagination for large result sets.`),
 			mcp.WithTitleAnnotation("List Terraform workspaces with queries"),
-			mcp.WithOpenWorldHintAnnotation(true),
 			mcp.WithReadOnlyHintAnnotation(true),
 			mcp.WithDestructiveHintAnnotation(false),
 			utils.WithPagination(),
