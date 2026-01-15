@@ -12,6 +12,8 @@ FIXES
 
 * Skip TLS flag was not propogated properly [243](https://github.com/hashicorp/terraform-mcp-server/issues/243)
 * Change Dockerfile CMD to ENTRYPOINT [246](https://github.com/hashicorp/terraform-mcp-server/issues/246)
+* Truncate large responses in `list_` tools to top level summaries
+* Embedd pagination information in `list_` responses
 
 IMPROVEMENTS
 
