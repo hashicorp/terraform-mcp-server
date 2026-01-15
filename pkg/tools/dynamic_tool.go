@@ -267,6 +267,16 @@ func (r *DynamicToolRegistry) registerTFETools() {
 		r.mcpServer.AddTool(tool.Tool, tool.Handler)
 	}
 
+	// Terraform toolset - Stacks
+	if toolsets.IsToolEnabled("list_stacks", r.enabledToolsets) {
+		tool := r.createDynamicTFETool("list_stacks", tfeTools.ListStacks)
+		r.mcpServer.AddTool(tool.Tool, tool.Handler)
+	}
+	if toolsets.IsToolEnabled("get_stack_details", r.enabledToolsets) {
+		tool := r.createDynamicTFETool("get_stack_details", tfeTools.GetStackDetails)
+		r.mcpServer.AddTool(tool.Tool, tool.Handler)
+	}
+
 	r.tfeToolsRegistered = true
 }
 
