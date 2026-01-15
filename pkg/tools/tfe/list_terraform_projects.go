@@ -19,7 +19,7 @@ import (
 func ListTerraformProjects(logger *log.Logger) server.ServerTool {
 	return server.ServerTool{
 		Tool: mcp.NewTool("list_terraform_projects",
-			mcp.WithDescription(`Fetches a list of all Terraform projects.`),
+			mcp.WithDescription(`Fetches a list of all Terraform projects. Supports pagination for large result sets.`),
 			mcp.WithTitleAnnotation("List all Terraform projects"),
 			mcp.WithReadOnlyHintAnnotation(true),
 			mcp.WithDestructiveHintAnnotation(false),
@@ -67,18 +67,33 @@ func listTerraformProjectsHandler(ctx context.Context, request mcp.CallToolReque
 		return ToolErrorf(logger, "failed to list projects in org '%s' - check if the organization exists and you have access", terraformOrgName)
 	}
 
-	projectInfos := make([]map[string]string, 0, len(projects.Items))
-	for _, project := range projects.Items {
-		projectInfos = append(projectInfos, map[string]string{
-			"project_name": project.Name,
-			"project_id":   project.ID,
-		})
+	projectSummaries := make([]*ProjectSummary, len(projects.Items))
+	for i, p := range projects.Items {
+		projectSummaries[i] = &ProjectSummary{
+			ID:   p.ID,
+			Name: p.Name,
+		}
 	}
 
-	projectJSON, err := json.Marshal(projectInfos)
+	projectJSON, err := json.Marshal(&ProjectSummaryList{
+		Items:      projectSummaries,
+		Pagination: projects.Pagination,
+	})
 	if err != nil {
 		return ToolError(logger, "failed to marshal project infos", err)
 	}
 
 	return mcp.NewToolResultText(string(projectJSON)), nil
+}
+
+// ProjectSummary is a truncated set of information about a project for listing
+type ProjectSummary struct {
+	ID   string `json:"project_id"`
+	Name string `json:"project_name"`
+}
+
+// ProjectSummaryList is a list of project summaries
+type ProjectSummaryList struct {
+	Items []*ProjectSummary `json:"items"`
+	*tfe.Pagination
 }
