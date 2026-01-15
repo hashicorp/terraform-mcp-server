@@ -4,12 +4,12 @@
 package tools
 
 import (
-	"bytes"
 	"context"
+	"encoding/json"
 	"strings"
+	"time"
 
 	"github.com/hashicorp/go-tfe"
-	"github.com/hashicorp/jsonapi"
 	"github.com/hashicorp/terraform-mcp-server/pkg/client"
 	"github.com/hashicorp/terraform-mcp-server/pkg/utils"
 	log "github.com/sirupsen/logrus"
@@ -22,7 +22,7 @@ import (
 func ListWorkspaces(logger *log.Logger) server.ServerTool {
 	return server.ServerTool{
 		Tool: mcp.NewTool("list_workspaces",
-			mcp.WithDescription(`Search and list Terraform workspaces within a specified organization. Returns all workspaces when no filters are applied, or filters results based on name patterns, tags, or search queries. Supports pagination for large result sets.`),
+			mcp.WithDescription(`Search and list Terraform workspaces within a specified organization. Returns all workspaces when no filters are applied, or filters results based on name patterns, tags, or search queries. Supports pagination for large result sets. Returns a truncated summary of the workspace, use get_workspace_details to get the full details for a specific workspace.`),
 			mcp.WithTitleAnnotation("List Terraform workspaces with queries"),
 			mcp.WithOpenWorldHintAnnotation(true),
 			mcp.WithReadOnlyHintAnnotation(true),
@@ -107,12 +107,45 @@ func searchTerraformWorkspacesHandler(ctx context.Context, request mcp.CallToolR
 	if err != nil {
 		return ToolErrorf(logger, "failed to list workspaces in org '%s'", terraformOrgName)
 	}
+	if len(workspaces.Items) == 0 {
+		return ToolErrorf(logger, "no workspaces to list in organization %q", terraformOrgName)
+	}
 
-	buf := bytes.NewBuffer(nil)
-	err = jsonapi.MarshalPayloadWithoutIncluded(buf, workspaces.Items)
+	summaries := make([]*WorkspaceSummary, len(workspaces.Items))
+	for i, w := range workspaces.Items {
+		summaries[i] = &WorkspaceSummary{
+			ID:            w.ID,
+			Name:          w.Name,
+			Description:   w.Description,
+			Environment:   w.Environment,
+			CreatedAt:     w.CreatedAt,
+			ExecutionMode: w.ExecutionMode,
+		}
+	}
+
+	buf, err := json.Marshal(&WorkspaceSummaryList{
+		Items:      summaries,
+		Pagination: workspaces.Pagination,
+	})
 	if err != nil {
 		return ToolError(logger, "failed to marshal workspaces", err)
 	}
 
-	return mcp.NewToolResultText(buf.String()), nil
+	return mcp.NewToolResultText(string(buf)), nil
+}
+
+// WorkspaceSummary is a truncated summary of a Workspace for top level listing
+type WorkspaceSummary struct {
+	ID            string    `json:"id"`
+	Name          string    `json:"workspace_name"`
+	Description   string    `json:"description"`
+	Environment   string    `json:"environment"`
+	CreatedAt     time.Time `json:"created_at"`
+	ExecutionMode string    `json:"execution_mode"`
+}
+
+// WorkspaceSummaryList contains the list of workspace summaries and pagination details
+type WorkspaceSummaryList struct {
+	Items []*WorkspaceSummary `json:"items"`
+	*tfe.Pagination
 }

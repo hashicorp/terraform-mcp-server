@@ -6,6 +6,7 @@ package tools
 import (
 	"context"
 	"encoding/json"
+	"time"
 
 	"github.com/hashicorp/go-tfe"
 	"github.com/hashicorp/terraform-mcp-server/pkg/client"
@@ -19,7 +20,7 @@ import (
 func ListTerraformOrgs(logger *log.Logger) server.ServerTool {
 	return server.ServerTool{
 		Tool: mcp.NewTool("list_terraform_orgs",
-			mcp.WithDescription(`Fetches a list of all Terraform organizations.`),
+			mcp.WithDescription(`Fetches a list of all Terraform organizations. Supports Pagination for large result sets.`),
 			mcp.WithTitleAnnotation("List all Terraform organizations"),
 			mcp.WithReadOnlyHintAnnotation(true),
 			mcp.WithDestructiveHintAnnotation(false),
@@ -54,16 +55,39 @@ func listTerraformOrgsHandler(ctx context.Context, request mcp.CallToolRequest, 
 	if err != nil {
 		return ToolError(logger, "failed to list Terraform organizations", err)
 	}
-
-	orgNames := make([]string, 0, len(orgs.Items))
-	for _, org := range orgs.Items {
-		orgNames = append(orgNames, org.Name)
+	if len(orgs.Items) == 0 {
+		return ToolError(logger, "no organizations to list", err)
 	}
 
-	orgsJSON, err := json.Marshal(orgNames)
+	orgSummaries := make([]*OrganizationSummary, len(orgs.Items))
+	for i, o := range orgs.Items {
+		orgSummaries[i] = &OrganizationSummary{
+			Name:      o.Name,
+			Email:     o.Email,
+			CreatedAt: o.CreatedAt,
+		}
+	}
+
+	orgsJSON, err := json.Marshal(&OrganizationSummaryList{
+		Items:      orgSummaries,
+		Pagination: orgs.Pagination,
+	})
 	if err != nil {
 		return ToolError(logger, "failed to marshal organization names", err)
 	}
 
 	return mcp.NewToolResultText(string(orgsJSON)), nil
+}
+
+// OrganizationSummary is a truncated summary of organization details for listing
+type OrganizationSummary struct {
+	Name      string    `json:"organization_name"`
+	Email     string    `json:"organization_email"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+// OrganizationSummaryList is a list of organization summaries with pagination
+type OrganizationSummaryList struct {
+	Items []*OrganizationSummary `json:"items"`
+	*tfe.Pagination
 }
