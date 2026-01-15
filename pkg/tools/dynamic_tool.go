@@ -246,8 +246,8 @@ func (r *DynamicToolRegistry) registerTFETools() {
 		r.mcpServer.AddTool(tool.Tool, tool.Handler)
 	}
 
-	if toolsets.IsToolEnabled("read_workspace_policy_sets", r.enabledToolsets) {
-		tool := r.createDynamicTFETool("read_workspace_policy_sets", tfeTools.ReadWorkspacePolicySets)
+	if toolsets.IsToolEnabled("list_workspace_policy_sets", r.enabledToolsets) {
+		tool := r.createDynamicTFETool("list_workspace_policy_sets", tfeTools.ListWorkspacePolicySets)
 		r.mcpServer.AddTool(tool.Tool, tool.Handler)
 	}
 

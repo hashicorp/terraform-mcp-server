@@ -27,14 +27,14 @@ func TestAttachPolicySetToWorkspaces(t *testing.T) {
 	})
 }
 
-func TestReadWorkspacePolicySets(t *testing.T) {
+func TestListWorkspacePolicySets(t *testing.T) {
 	logger := log.New()
 	logger.SetLevel(log.ErrorLevel)
 
 	t.Run("tool creation", func(t *testing.T) {
-		tool := ReadWorkspacePolicySets(logger)
+		tool := ListWorkspacePolicySets(logger)
 
-		assert.Equal(t, "read_workspace_policy_sets", tool.Tool.Name)
+		assert.Equal(t, "list_workspace_policy_sets", tool.Tool.Name)
 		assert.Contains(t, tool.Tool.Description, "Read all policy sets")
 		assert.NotNil(t, tool.Handler)
 

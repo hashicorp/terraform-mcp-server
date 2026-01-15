@@ -79,22 +79,22 @@ func AttachPolicySetToWorkspaces(logger *log.Logger) server.ServerTool {
 	}
 }
 
-// ReadWorkspacePolicySets creates a tool to read all policy sets attached to a workspace.
-func ReadWorkspacePolicySets(logger *log.Logger) server.ServerTool {
+// ListWorkspacePolicySets creates a tool to read all policy sets attached to a workspace.
+func ListWorkspacePolicySets(logger *log.Logger) server.ServerTool {
 	return server.ServerTool{
-		Tool: mcp.NewTool("read_workspace_policy_sets",
+		Tool: mcp.NewTool("list_workspace_policy_sets",
 			mcp.WithDescription("Read all policy sets attached to a workspace. Returns both directly attached policy sets and global policy sets that apply to all workspaces."),
 			mcp.WithReadOnlyHintAnnotation(true),
 			mcp.WithString("terraform_org_name", mcp.Required(), mcp.Description("Organization name")),
 			mcp.WithString("workspace_id", mcp.Required(), mcp.Description("The workspace ID to get policy sets for (e.g., ws-2HRvNs49EWPjDqT1)")),
 		),
 		Handler: func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-			return readWorkspacePolicySetsHandler(ctx, request, logger)
+			return listWorkspacePolicySetsHandler(ctx, request, logger)
 		},
 	}
 }
 
-func readWorkspacePolicySetsHandler(ctx context.Context, request mcp.CallToolRequest, logger *log.Logger) (*mcp.CallToolResult, error) {
+func listWorkspacePolicySetsHandler(ctx context.Context, request mcp.CallToolRequest, logger *log.Logger) (*mcp.CallToolResult, error) {
 	orgName, err := request.RequireString("terraform_org_name")
 	if err != nil {
 		return ToolError(logger, "missing required input: terraform_org_name", err)

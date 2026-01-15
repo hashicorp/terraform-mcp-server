@@ -2,7 +2,7 @@
 
 FEATURES
 
-* [New Tool] `read_workspace_policy_sets` Read all policy sets attached to a workspace
+* [New Tool] `list_workspace_policy_sets` Read all policy sets attached to a workspace
 
 * [New Tool] `attach_policy_set_to_workspaces` Attach a policy set to one or more workspaces
 * **Toolsets Flag**: Added `--toolsets` flag to selectively enable tool groups. Three toolset groups are available: `registry` (public Terraform Registry), `registry-private` (private TFE/TFC registry), and `terraform` (TFE/TFC operations). Default is `registry` only.
