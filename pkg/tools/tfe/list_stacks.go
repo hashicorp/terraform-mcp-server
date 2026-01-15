@@ -4,12 +4,11 @@
 package tools
 
 import (
-	"bytes"
 	"context"
+	"encoding/json"
 	"strings"
 
 	"github.com/hashicorp/go-tfe"
-	"github.com/hashicorp/jsonapi"
 	"github.com/hashicorp/terraform-mcp-server/pkg/client"
 	"github.com/hashicorp/terraform-mcp-server/pkg/utils"
 	log "github.com/sirupsen/logrus"
@@ -81,7 +80,7 @@ func listTerraformStacksHandler(ctx context.Context, request mcp.CallToolRequest
 	}
 
 	// create list of summaries
-	itemSummaries := make([]*StackSummary, 0, len(stacks.Items))
+	itemSummaries := make([]*StackSummary, len(stacks.Items))
 	for i, item := range stacks.Items {
 		itemSummaries[i] = &StackSummary{
 			ID:          item.ID,
@@ -95,13 +94,12 @@ func listTerraformStacksHandler(ctx context.Context, request mcp.CallToolRequest
 		Pagination: stacks.Pagination,
 	}
 
-	buf := bytes.NewBuffer(nil)
-	err = jsonapi.MarshalPayloadWithoutIncluded(buf, list)
+	buf, err := json.Marshal(list)
 	if err != nil {
 		return ToolError(logger, "failed to marshal stacks", err)
 	}
 
-	return mcp.NewToolResultText(buf.String()), nil
+	return mcp.NewToolResultText(string(buf)), nil
 }
 
 // StackSummary is a restricted set of details for listing stacks
