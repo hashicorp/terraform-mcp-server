@@ -1,6 +1,6 @@
 {
   "name": "terraform",
-  "version": "0.3.3",
+  "version": "0.4.0",
   "contextFileName": "${extensionPath}${/}instructions${/}example-AGENTS.md",
   "mcpServers": {
     "terraform": {
@@ -15,7 +15,7 @@
         "TFE_ADDRESS",
         "-e",
         "ENABLE_TF_OPERATIONS",
-        "hashicorp/terraform-mcp-server:0.3.3"
+        "hashicorp/terraform-mcp-server:0.4.0"
       ],
       "env": {
         "TFE_TOKEN": "$TFE_TOKEN",
