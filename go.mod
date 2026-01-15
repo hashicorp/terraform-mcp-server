@@ -5,7 +5,7 @@ go 1.25.5
 require (
 	github.com/hashicorp/go-cleanhttp v0.5.2
 	github.com/hashicorp/go-retryablehttp v0.7.8
-	github.com/hashicorp/go-tfe v1.98.0
+	github.com/hashicorp/go-tfe v1.99.0
 	github.com/hashicorp/jsonapi v1.5.0
 	github.com/mark3labs/mcp-go v0.43.2
 	github.com/sirupsen/logrus v1.9.4
@@ -21,7 +21,7 @@ require (
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
 	github.com/fsnotify/fsnotify v1.9.0 // indirect
 	github.com/go-viper/mapstructure/v2 v2.4.0 // indirect
-	github.com/google/go-querystring v1.1.0 // indirect
+	github.com/google/go-querystring v1.2.0 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/hashicorp/go-slug v0.16.8 // indirect
 	github.com/hashicorp/go-version v1.8.0 // indirect
