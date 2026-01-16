@@ -109,7 +109,7 @@ func init() {
 	cobra.OnInitialize(initConfig)
 	rootCmd.SetVersionTemplate("{{.Short}}\n{{.Version}}\n")
 	rootCmd.PersistentFlags().String("log-file", "", "Path to log file")
-	rootCmd.PersistentFlags().String("toolsets", "default", toolsets.GenerateToolsetsHelp())
+	rootCmd.PersistentFlags().String("toolsets", "all", toolsets.GenerateToolsetsHelp())
 	rootCmd.PersistentFlags().String("tools", "", toolsets.GenerateToolsHelp())
 
 	// Add StreamableHTTP command flags (avoid 'h' shorthand conflict with help)
@@ -136,7 +136,7 @@ func initLogger(outPath string) (*log.Logger, error) {
 		return log.New(), nil
 	}
 
-	file, err := os.OpenFile(outPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
+	file, err := os.OpenFile(outPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o666)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open log file: %w", err)
 	}
