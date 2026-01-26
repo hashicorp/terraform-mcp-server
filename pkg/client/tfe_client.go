@@ -90,6 +90,9 @@ func CreateTfeClientForSession(ctx context.Context, session server.ClientSession
 	if !ok || terraformToken == "" {
 		terraformToken = utils.GetEnv(TerraformToken, "")
 	}
+	if terraformToken == "" {
+		terraformToken = ReadCredentialsFile(extractHostname(terraformAddress))
+	}
 
 	client, err := NewTfeClient(session.SessionID(), terraformAddress, parseTerraformSkipTLSVerify(ctx), terraformToken, logger)
 	return client, err
