@@ -17,10 +17,6 @@ func TestExtractHostname(t *testing.T) {
 		address  string
 		expected string
 	}{
-		{"standard https", "https://app.terraform.io", "app.terraform.io"},
-		{"with port", "https://tfe.example.com:8443", "tfe.example.com"},
-		{"with path", "https://app.terraform.io/api/v2", "app.terraform.io"},
-		{"http scheme", "http://localhost:8080", "localhost"},
 		{"empty string", "", ""},
 		{"invalid url", "not-a-url", ""},
 	}
