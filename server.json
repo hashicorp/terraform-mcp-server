@@ -56,6 +56,190 @@
         {
           "type": "named",
           "name": "-e",
+          "value": "TFE_SKIP_TLS_VERIFY={tfe_skip_tls_verify}",
+          "description": "Set to true to disable TLS verification when connecting to HCP Terraform or Terraform Enterprise.",
+          "variables": {
+            "tfe_skip_tls_verify": {
+              "description": "Set to true to disable TLS verification when connecting to HCP Terraform or Terraform Enterprise.",
+              "default": "false",
+              "choices": [
+                "true",
+                "false"
+              ],
+              "format": "boolean",
+              "isRequired": false
+            }
+          },
+          "isRepeated": true
+        },
+        {
+          "type": "named",
+          "name": "-e",
+          "value": "TRANSPORT_MODE={transport_mode}",
+          "description": "Selects the active transport; use streamable-http to serve HTTP clients.",
+          "variables": {
+            "transport_mode": {
+              "description": "Selects the active transport; use streamable-http to serve HTTP clients.",
+              "default": "streamable-http",
+              "choices": [
+                "streamable-http"
+              ],
+              "isRequired": true
+            }
+          },
+          "isRepeated": true
+        },
+        {
+          "type": "named",
+          "name": "-e",
+          "value": "TRANSPORT_HOST={transport_host}",
+          "description": "Interface to bind when running in streamable-http mode.",
+          "variables": {
+            "transport_host": {
+              "description": "Interface to bind when running in streamable-http mode.",
+              "default": "0.0.0.0",
+              "isRequired": false
+            }
+          },
+          "isRepeated": true
+        },
+        {
+          "type": "named",
+          "name": "-e",
+          "value": "TRANSPORT_PORT={transport_port}",
+          "description": "Port to bind when running in streamable-http mode.",
+          "variables": {
+            "transport_port": {
+              "description": "Port to bind when running in streamable-http mode.",
+              "default": "8080",
+              "isRequired": false
+            }
+          },
+          "isRepeated": true
+        },
+        {
+          "type": "named",
+          "name": "-e",
+          "value": "MCP_ENDPOINT={mcp_endpoint}",
+          "description": "HTTP endpoint path exposed when streamable-http transport is enabled.",
+          "variables": {
+            "mcp_endpoint": {
+              "description": "HTTP endpoint path exposed when streamable-http transport is enabled.",
+              "default": "/mcp",
+              "isRequired": false
+            }
+          },
+          "isRepeated": true
+        },
+        {
+          "type": "named",
+          "name": "-e",
+          "value": "MCP_SESSION_MODE={mcp_session_mode}",
+          "description": "Session management mode for the MCP server.",
+          "variables": {
+            "mcp_session_mode": {
+              "description": "Session management mode for the MCP server.",
+              "default": "stateful",
+              "choices": [
+                "stateful",
+                "stateless"
+              ],
+              "isRequired": false
+            }
+          },
+          "isRepeated": true
+        },
+        {
+          "type": "named",
+          "name": "-e",
+          "value": "MCP_ALLOWED_ORIGINS={mcp_allowed_origins}",
+          "description": "Comma-separated list of allowed origins for CORS when using streamable-http transport.",
+          "variables": {
+            "mcp_allowed_origins": {
+              "description": "Comma-separated list of allowed origins for CORS when using streamable-http transport.",
+              "isRequired": false
+            }
+          },
+          "isRepeated": true
+        },
+        {
+          "type": "named",
+          "name": "-e",
+          "value": "MCP_CORS_MODE={mcp_cors_mode}",
+          "description": "CORS enforcement mode; strict enforces allowed origins while development trusts localhost.",
+          "variables": {
+            "mcp_cors_mode": {
+              "description": "CORS enforcement mode; strict enforces allowed origins while development trusts localhost.",
+              "default": "strict",
+              "choices": [
+                "strict",
+                "development",
+                "disabled"
+              ],
+              "isRequired": false
+            }
+          },
+          "isRepeated": true
+        },
+        {
+          "type": "named",
+          "name": "-e",
+          "value": "MCP_TLS_CERT_FILE={mcp_tls_cert_file}",
+          "description": "Path to the TLS certificate file to enable HTTPS for streamable-http transport.",
+          "variables": {
+            "mcp_tls_cert_file": {
+              "description": "Path to the TLS certificate file to enable HTTPS for streamable-http transport.",
+              "format": "filepath",
+              "isRequired": false
+            }
+          },
+          "isRepeated": true
+        },
+        {
+          "type": "named",
+          "name": "-e",
+          "value": "MCP_TLS_KEY_FILE={mcp_tls_key_file}",
+          "description": "Path to the TLS key file to enable HTTPS for streamable-http transport.",
+          "variables": {
+            "mcp_tls_key_file": {
+              "description": "Path to the TLS key file to enable HTTPS for streamable-http transport.",
+              "format": "filepath",
+              "isRequired": false
+            }
+          },
+          "isRepeated": true
+        },
+        {
+          "type": "named",
+          "name": "-e",
+          "value": "MCP_RATE_LIMIT_GLOBAL={mcp_rate_limit_global}",
+          "description": "Global rate limit in requests-per-second:burst format applied across all sessions.",
+          "variables": {
+            "mcp_rate_limit_global": {
+              "description": "Global rate limit in requests-per-second:burst format applied across all sessions.",
+              "default": "10:20",
+              "isRequired": false
+            }
+          },
+          "isRepeated": true
+        },
+        {
+          "type": "named",
+          "name": "-e",
+          "value": "MCP_RATE_LIMIT_SESSION={mcp_rate_limit_session}",
+          "description": "Per-session rate limit in requests-per-second:burst format.",
+          "variables": {
+            "mcp_rate_limit_session": {
+              "description": "Per-session rate limit in requests-per-second:burst format.",
+              "default": "5:10",
+              "isRequired": false
+            }
+          },
+          "isRepeated": true
+        },
+        {
+          "type": "named",
+          "name": "-e",
           "description": "Set an environment variable in the runtime",
           "isRepeated": true
         },
@@ -95,7 +279,95 @@
             "false"
           ],
           "isRequired": false
-        }
+        },
+        {
+          "name": "TFE_SKIP_TLS_VERIFY",
+          "description": "Set to true to disable TLS verification when connecting to HCP Terraform or Terraform Enterprise.",
+          "default": "false",
+          "format": "boolean",
+          "choices": [
+            "true",
+            "false"
+          ],
+          "isRequired": false
+        },
+        {
+          "name": "TRANSPORT_MODE",
+          "description": "Selects the active transport; use streamable-http to serve HTTP clients.",
+          "default": "streamable-http",
+          "choices": [
+            "streamable-http"
+          ],
+          "isRequired": true
+        },
+        {
+          "name": "TRANSPORT_HOST",
+          "description": "Interface to bind when running in streamable-http mode.",
+          "default": "0.0.0.0",
+          "isRequired": false
+        },
+        {
+          "name": "TRANSPORT_PORT",
+          "description": "Port to bind when running in streamable-http mode.",
+          "default": "8080",
+          "isRequired": false
+        },
+        {
+          "name": "MCP_ENDPOINT",
+          "description": "HTTP endpoint path exposed when streamable-http transport is enabled.",
+          "default": "/mcp",
+          "isRequired": false
+        },
+        {
+          "name": "MCP_SESSION_MODE",
+          "description": "Session management mode for the MCP server.",
+          "default": "stateful",
+          "choices": [
+            "stateful",
+            "stateless"
+          ],
+          "isRequired": false
+        },
+        {
+          "name": "MCP_ALLOWED_ORIGINS",
+          "description": "Comma-separated list of allowed origins for CORS when using streamable-http transport.",
+          "isRequired": false
+        },
+        {
+          "name": "MCP_CORS_MODE",
+          "description": "CORS enforcement mode; strict enforces allowed origins while development trusts localhost.",
+          "default": "strict",
+          "choices": [
+            "strict",
+            "development",
+            "disabled"
+          ],
+          "isRequired": false
+        },
+        {
+          "name": "MCP_TLS_CERT_FILE",
+          "description": "Path to the TLS certificate file to enable HTTPS for streamable-http transport.",
+          "format": "filepath",
+          "isRequired": false
+        },
+        {
+          "name": "MCP_TLS_KEY_FILE",
+          "description": "Path to the TLS key file to enable HTTPS for streamable-http transport.",
+          "format": "filepath",
+          "isRequired": false
+        },
+        {
+          "name": "MCP_RATE_LIMIT_GLOBAL",
+          "description": "Global rate limit in requests-per-second:burst format applied across all sessions.",
+          "default": "10:20",
+          "isRequired": false
+        },
+        {
+          "name": "MCP_RATE_LIMIT_SESSION",
+          "description": "Per-session rate limit in requests-per-second:burst format.",
+          "default": "5:10",
+          "isRequired": false
+        },
       ]
     }
   ]
