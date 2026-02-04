@@ -206,7 +206,10 @@ func streamableHTTPServerInit(ctx context.Context, hcServer *server.MCPServer, l
 
 	// Check if stateless mode is enabled
 	isStateless := shouldUseStatelessMode()
-	opts = append(opts, server.WithStateLess(isStateless))
+	if !isStateless {
+		opts = append(opts, server.WithStateLess(isStateless))
+	}
+
 	logger.Infof("Running with stateless mode: %v", isStateless)
 
 	baseStreamableServer := server.NewStreamableHTTPServer(hcServer, opts...)
