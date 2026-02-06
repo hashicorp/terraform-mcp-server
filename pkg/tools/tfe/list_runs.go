@@ -6,6 +6,7 @@ package tools
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"strings"
 
 	"github.com/hashicorp/go-tfe"
@@ -124,10 +125,25 @@ func listRunsHandler(ctx context.Context, request mcp.CallToolRequest, logger *l
 			return ToolError(logger, "failed to list runs in workspace", err)
 		}
 
-		err = jsonapi.MarshalPayloadWithoutIncluded(buf, runs)
+		// Marshal runs.Items (not runs) since only Items have JSONAPI annotations
+		err = jsonapi.MarshalPayloadWithoutIncluded(buf, runs.Items)
 		if err != nil {
 			return ToolError(logger, "failed to marshal runs", err)
 		}
+
+		// Add pagination to the result
+		var result map[string]any
+		if err := json.Unmarshal(buf.Bytes(), &result); err != nil {
+			return ToolError(logger, "failed to parse result", err)
+		}
+		result["pagination"] = runs.Pagination
+
+		output, err := json.Marshal(result)
+		if err != nil {
+			return ToolError(logger, "failed to marshal final result", err)
+		}
+
+		return mcp.NewToolResultText(string(output)), nil
 
 	} else {
 		options := &tfe.RunListForOrganizationOptions{
@@ -150,11 +166,24 @@ func listRunsHandler(ctx context.Context, request mcp.CallToolRequest, logger *l
 			return ToolErrorf(logger, "failed to list runs in org '%s'", terraformOrgName)
 		}
 
-		err = jsonapi.MarshalPayloadWithoutIncluded(buf, runs)
+		// Marshal runs.Items (not runs) since only Items have JSONAPI annotations
+		err = jsonapi.MarshalPayloadWithoutIncluded(buf, runs.Items)
 		if err != nil {
 			return ToolError(logger, "failed to marshal runs", err)
 		}
-	}
 
-	return mcp.NewToolResultText(buf.String()), nil
+		// Add pagination to the result
+		var result map[string]any
+		if err := json.Unmarshal(buf.Bytes(), &result); err != nil {
+			return ToolError(logger, "failed to parse result", err)
+		}
+		result["pagination"] = runs.PaginationNextPrev
+
+		output, err := json.Marshal(result)
+		if err != nil {
+			return ToolError(logger, "failed to marshal final result", err)
+		}
+
+		return mcp.NewToolResultText(string(output)), nil
+	}
 }
