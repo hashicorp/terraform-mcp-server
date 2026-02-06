@@ -1,5 +1,13 @@
 ## UNRELEASED
 
+FEATURES
+
+* [New Tool] `get_plan_json_output` Retrieves the structured JSON output of a Terraform plan, providing detailed resource changes in a machine-readable format that is easier to parse than plain logs
+* [New Tool] `get_plan_details` Fetches detailed metadata about a specific Terraform plan
+* [New Tool] `get_plan_logs` Retrieves the execution logs of a specific Terraform plan
+* [New Tool] `get_apply_details` Fetches detailed metadata about a specific Terraform apply
+* [New Tool] `get_apply_logs` Retrieves the execution logs of a specific Terraform apply
+
 IMPROVEMENTS
 
 * Set custom User-Agent header for TFE API requests to enable tracking MCP server usage separately from other go-tfe clients [268](https://github.com/hashicorp/terraform-mcp-server/pull/268)
