@@ -1,5 +1,9 @@
 ## UNRELEASED
 
+FIXES
+
+* Fix sessions handling in stateless and load balanced environments
+
 IMPROVEMENTS
 
 * Set custom User-Agent header for TFE API requests to enable tracking MCP server usage separately from other go-tfe clients [268](https://github.com/hashicorp/terraform-mcp-server/pull/268)
