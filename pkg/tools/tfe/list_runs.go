@@ -187,8 +187,12 @@ func listRunsHandler(ctx context.Context, request mcp.CallToolRequest, logger *l
 		}
 
 		buf, err := json.Marshal(&RunSummaryList{
-			Items:      summaries,
-			Pagination: runs.PaginationNextPrev,
+			Items: summaries,
+			Pagination: &tfe.Pagination{
+				CurrentPage:  runs.PaginationNextPrev.CurrentPage,
+				PreviousPage: runs.PaginationNextPrev.PreviousPage,
+				NextPage:     runs.PaginationNextPrev.NextPage,
+			},
 		})
 		if err != nil {
 			return ToolError(logger, "failed to marshal runs", err)
@@ -214,6 +218,6 @@ type RunSummary struct {
 
 // RunSummaryList contains the list of run summaries and pagination details
 type RunSummaryList struct {
-	Items      []*RunSummary `json:"items"`
-	Pagination any           `json:"pagination"`
+	Items []*RunSummary `json:"items"`
+	*tfe.Pagination
 }
