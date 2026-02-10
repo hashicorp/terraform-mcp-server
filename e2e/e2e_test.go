@@ -433,7 +433,6 @@ func startHTTPContainer(t *testing.T, port string) string {
 		"docker", "run", "-d", "--rm",
 		"-e", "TRANSPORT_MODE=streamable-http",
 		"-e", "TRANSPORT_HOST=0.0.0.0",
-		"-e", "MCP_SESSION_MODE=stateful",
 		"-e", "MCP_RATE_LIMIT_GLOBAL=50:100",
 		"-e", "MCP_RATE_LIMIT_SESSION=50:100",
 		"-p", portMapping,
