@@ -37,7 +37,6 @@ automation and interaction capabilities for Infrastructure as Code (IaC) develop
 | `TRANSPORT_HOST` | Host to bind the HTTP server | `127.0.0.1` |
 | `TRANSPORT_PORT` | HTTP server port | `8080` |
 | `MCP_ENDPOINT` | HTTP server endpoint path | `/mcp` |
-| `MCP_SESSION_MODE` | Session mode: `stateful` or `stateless` | `stateful` |
 | `MCP_ALLOWED_ORIGINS` | Comma-separated list of allowed origins for CORS | `""` (empty) |
 | `MCP_CORS_MODE` | CORS mode: `strict`, `development`, or `disabled` | `strict` |
 | `MCP_TLS_CERT_FILE` | Path to TLS cert file, required for non-localhost deployment (e.g. `/path/to/cert.pem`) | `""` (empty) |
@@ -481,18 +480,6 @@ Modern HTTP-based transport supporting both direct HTTP requests and Server-Sent
 - **Endpoint**: `http://{hostname}:8080/mcp`
 - **Health Check**: `http://{hostname}:8080/health`
 - **Environment Configuration**: Set `TRANSPORT_MODE=http` or `TRANSPORT_PORT=8080` to enable
-
-## Session Modes
-
-The Terraform MCP Server supports two session modes when using the StreamableHTTP transport:
-
-- **Stateful Mode (Default)**: Maintains session state between requests, enabling context-aware operations.
-- **Stateless Mode**: Each request is processed independently without maintaining session state, which can be useful for high-availability deployments or when using load balancers.
-
-To enable stateless mode, set the environment variable:
-```bash
-export MCP_SESSION_MODE=stateless
-```
 
 ## Development
 

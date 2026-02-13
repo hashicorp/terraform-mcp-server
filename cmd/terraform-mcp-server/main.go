@@ -17,6 +17,7 @@ import (
 	"github.com/hashicorp/terraform-mcp-server/pkg/toolsets"
 	"github.com/hashicorp/terraform-mcp-server/version"
 
+	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
@@ -67,6 +68,23 @@ func NewServer(version string, logger *log.Logger, enabledToolsets []string, opt
 	})
 	hooks.AddOnUnregisterSession(func(ctx context.Context, session server.ClientSession) {
 		client.EndSessionHandler(ctx, session, logger)
+	})
+	// When running multiple sessions of the MCP server (load balancing), calling client.NewSessionHandler
+	// in both BeforeListTools and BeforeCallTool ensures that a session that was not initialized during
+	// registration (e.g., due to being routed to a different instance) will still have its clients created
+	// before any tool calls are made. This provides a safety net to ensure that all sessions have
+	// the necessary clients initialized regardless of how they are routed.
+	hooks.AddBeforeListTools(func(ctx context.Context, id any, message *mcp.ListToolsRequest) {
+		session := server.ClientSessionFromContext(ctx)
+		if session != nil {
+			client.NewSessionHandler(ctx, session, logger)
+		}
+	})
+	hooks.AddBeforeCallTool(func(ctx context.Context, id any, message *mcp.CallToolRequest) {
+		session := server.ClientSessionFromContext(ctx)
+		if session != nil {
+			client.NewSessionHandler(ctx, session, logger)
+		}
 	})
 
 	// Add hooks to options
@@ -203,19 +221,6 @@ func shouldUseStreamableHTTPMode() bool {
 		os.Getenv("TRANSPORT_PORT") != "" ||
 		os.Getenv("TRANSPORT_HOST") != "" ||
 		os.Getenv("MCP_ENDPOINT") != ""
-}
-
-// shouldUseStatelessMode returns true if the MCP_SESSION_MODE environment variable is set to "stateless"
-func shouldUseStatelessMode() bool {
-	mode := strings.ToLower(os.Getenv("MCP_SESSION_MODE"))
-
-	// Explicitly check for "stateless" value
-	if mode == "stateless" {
-		return true
-	}
-
-	// All other values (including empty string, "stateful", or any other value) default to stateful mode
-	return false
 }
 
 // getHTTPPort returns the port from environment variables or default
