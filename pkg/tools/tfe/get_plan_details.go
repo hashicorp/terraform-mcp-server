@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"strings"
 
 	"github.com/hashicorp/go-tfe"
@@ -101,28 +102,30 @@ func getPlanDetailsHandler(ctx context.Context, request mcp.CallToolRequest, log
 	jsonOutput, err := tfeClient.Plans.ReadJSONOutput(ctx, plan.ID)
 	if err != nil {
 		// JSON output may be unavailable (plan not finished, old TF version, etc.)
-		// Fall back to returning basic plan metadata
+		// Fall back to returning basic plan metadata + logs
 		logger.WithError(err).Warn("Could not fetch JSON plan output, falling back to plan metadata")
-		return buildPlanMetadataResponse(run, plan), nil
+		return buildPlanMetadataResponse(ctx, run, plan, tfeClient, logger), nil
 	}
 
 	if len(jsonOutput) == 0 {
 		// 204 No Content — plan hasn't completed yet
-		return buildPlanMetadataResponse(run, plan), nil
+		return buildPlanMetadataResponse(ctx, run, plan, tfeClient, logger), nil
 	}
 
 	// Parse the JSON execution plan
 	var parsed jsonPlan
 	if err := json.Unmarshal(jsonOutput, &parsed); err != nil {
 		logger.WithError(err).Warn("Could not parse JSON plan output, falling back to plan metadata")
-		return buildPlanMetadataResponse(run, plan), nil
+		return buildPlanMetadataResponse(ctx, run, plan, tfeClient, logger), nil
 	}
 
 	return buildFormattedPlanResponse(run, plan, &parsed), nil
 }
 
 // buildPlanMetadataResponse returns a summary when the full JSON plan is unavailable.
-func buildPlanMetadataResponse(run *tfe.Run, plan *tfe.Plan) *mcp.CallToolResult {
+// It also fetches plan logs when the plan has errored or completed, providing
+// visibility into errors and other diagnostic output.
+func buildPlanMetadataResponse(ctx context.Context, run *tfe.Run, plan *tfe.Plan, tfeClient *tfe.Client, logger *log.Logger) *mcp.CallToolResult {
 	var sb strings.Builder
 
 	sb.WriteString(fmt.Sprintf("# Plan Details for Run %s\n\n", run.ID))
@@ -135,9 +138,53 @@ func buildPlanMetadataResponse(run *tfe.Run, plan *tfe.Plan) *mcp.CallToolResult
 	sb.WriteString(fmt.Sprintf("**Resource Destructions:** %d\n", plan.ResourceDestructions))
 	sb.WriteString(fmt.Sprintf("**Resource Imports:** %d\n", plan.ResourceImports))
 
-	if plan.Status != "finished" {
+	// For plans that haven't started or are still queued, logs won't be available yet
+	switch plan.Status {
+	case "pending", "queued", "unreachable":
 		sb.WriteString(fmt.Sprintf("\n> **Note:** Detailed resource changes are not yet available because the plan status is `%s`. ", plan.Status))
 		sb.WriteString("Re-run this tool after the plan has finished to see the full execution plan.\n")
+		return mcp.NewToolResultText(sb.String())
+	}
+
+	// For errored, canceled, running, or finished plans, fetch the logs
+	logReader, err := tfeClient.Plans.Logs(ctx, plan.ID)
+	if err != nil {
+		logger.WithError(err).Warn("Could not fetch plan logs")
+		if plan.Status == "errored" {
+			sb.WriteString("\n> **Note:** The plan errored but logs could not be retrieved.\n")
+		}
+		return mcp.NewToolResultText(sb.String())
+	}
+
+	logBytes, err := io.ReadAll(logReader)
+	if err != nil {
+		logger.WithError(err).Warn("Could not read plan logs")
+		return mcp.NewToolResultText(sb.String())
+	}
+
+	logContent := string(logBytes)
+
+	if logContent != "" {
+		// Truncate very large logs, keeping the tail (errors are usually at the end)
+		const maxLogSize = 50000
+		truncated := false
+		if len(logContent) > maxLogSize {
+			logContent = logContent[len(logContent)-maxLogSize:]
+			truncated = true
+		}
+
+		sb.WriteString("\n## Plan Logs\n\n")
+		if truncated {
+			sb.WriteString("*(Log output truncated -- showing last portion which typically contains errors)*\n\n")
+		}
+		sb.WriteString("```\n")
+		sb.WriteString(logContent)
+		if !strings.HasSuffix(logContent, "\n") {
+			sb.WriteString("\n")
+		}
+		sb.WriteString("```\n")
+	} else if plan.Status == "errored" {
+		sb.WriteString("\n> **Note:** The plan errored but no log output is available.\n")
 	}
 
 	return mcp.NewToolResultText(sb.String())

@@ -214,6 +214,11 @@ func (r *DynamicToolRegistry) registerTFETools() {
 		r.mcpServer.AddTool(tool.Tool, tool.Handler)
 	}
 
+	if toolsets.IsToolEnabled("get_apply_details", r.enabledToolsets) {
+		tool := r.createDynamicTFETool("get_apply_details", tfeTools.GetApplyDetails)
+		r.mcpServer.AddTool(tool.Tool, tool.Handler)
+	}
+
 	// Terraform toolset - Variable set tools
 	if toolsets.IsToolEnabled("list_variable_sets", r.enabledToolsets) {
 		tool := r.createDynamicTFETool("list_variable_sets", tfeTools.ListVariableSets)
