@@ -44,6 +44,20 @@ If no modules were found, reattempt the search with a new moduleName query.`),
 				mcp.Min(0),
 				mcp.DefaultNumber(0),
 			),
+			mcp.WithNumber("limit",
+				mcp.Description("Maximum number of results to return (default: 10, max: 100)"),
+				mcp.Min(1),
+				mcp.DefaultNumber(10),
+			),
+			mcp.WithString("provider",
+				mcp.Description("Filter results to a specific provider (e.g., 'aws', 'google', 'azurerm')"),
+			),
+			mcp.WithString("namespace",
+				mcp.Description("Filter results to a specific namespace"),
+			),
+			mcp.WithBoolean("verified",
+				mcp.Description("If true, only return verified partner modules"),
+			),
 		),
 		Handler: func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			return getSearchModulesHandler(ctx, request, logger)
@@ -58,13 +72,20 @@ func getSearchModulesHandler(ctx context.Context, request mcp.CallToolRequest, l
 	}
 	moduleQuery = strings.ToLower(moduleQuery)
 	currentOffsetValue := request.GetInt("current_offset", 0)
+	limitValue := request.GetInt("limit", 10)
+	if limitValue > 100 {
+		limitValue = 100 // Cap at 100 to prevent excessive API usage
+	}
+	providerFilter := request.GetString("provider", "")
+	namespaceFilter := request.GetString("namespace", "")
+	verifiedOnly := request.GetBool("verified", false)
 
 	httpClient, err := client.GetHttpClientFromContext(ctx, logger)
 	if err != nil {
 		return ToolError(logger, "failed to get http client for public Terraform registry", err)
 	}
 
-	response, err := sendSearchModulesCall(httpClient, moduleQuery, currentOffsetValue, logger)
+	response, err := sendSearchModulesCall(httpClient, moduleQuery, currentOffsetValue, limitValue, providerFilter, namespaceFilter, verifiedOnly, logger)
 	if err != nil {
 		return ToolErrorf(logger, "no modules found for query: %s - try a different search term", moduleQuery)
 	}
@@ -81,12 +102,22 @@ func getSearchModulesHandler(ctx context.Context, request mcp.CallToolRequest, l
 	return mcp.NewToolResultText(modulesData), nil
 }
 
-func sendSearchModulesCall(providerClient *http.Client, moduleQuery string, currentOffset int, logger *log.Logger) ([]byte, error) {
+func sendSearchModulesCall(providerClient *http.Client, moduleQuery string, currentOffset, limit int, provider, namespace string, verified bool, logger *log.Logger) ([]byte, error) {
 	uri := "modules"
 	if moduleQuery != "" {
-		uri = fmt.Sprintf("%s/search?q='%s'&offset=%v", uri, url.PathEscape(moduleQuery), currentOffset)
+		uri = fmt.Sprintf("%s/search?q='%s'&offset=%v&limit=%v", uri, url.PathEscape(moduleQuery), currentOffset, limit)
 	} else {
-		uri = fmt.Sprintf("%s?offset=%v", uri, currentOffset)
+		uri = fmt.Sprintf("%s?offset=%v&limit=%v", uri, currentOffset, limit)
+	}
+	// Add optional filters
+	if provider != "" {
+		uri = fmt.Sprintf("%s&provider=%s", uri, url.PathEscape(provider))
+	}
+	if namespace != "" {
+		uri = fmt.Sprintf("%s&namespace=%s", uri, url.PathEscape(namespace))
+	}
+	if verified {
+		uri = fmt.Sprintf("%s&verified=true", uri)
 	}
 
 	response, err := client.SendRegistryCall(providerClient, "GET", uri, logger)
