@@ -12,6 +12,7 @@ import (
 	"os/signal"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/hashicorp/terraform-mcp-server/pkg/client"
 	"github.com/hashicorp/terraform-mcp-server/pkg/toolsets"
@@ -25,14 +26,14 @@ import (
 //go:embed instructions.md
 var instructions string
 
-func runHTTPServer(logger *log.Logger, host string, port string, endpointPath string, enabledToolsets []string) error {
+func runHTTPServer(logger *log.Logger, host string, port string, endpointPath string, keepAlive time.Duration, enabledToolsets []string) error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
 	hcServer := NewServer(version.Version, logger, enabledToolsets)
 	registerToolsAndResources(hcServer, logger, enabledToolsets)
 
-	return streamableHTTPServerInit(ctx, hcServer, logger, host, port, endpointPath)
+	return streamableHTTPServerInit(ctx, hcServer, logger, host, port, endpointPath, keepAlive)
 }
 
 func runStdioServer(logger *log.Logger, enabledToolsets []string) error {
@@ -183,7 +184,8 @@ func main() {
 
 		enabledToolsets := getToolsetsFromCmd(rootCmd, logger)
 
-		if err := runHTTPServer(logger, host, port, endpointPath, enabledToolsets); err != nil {
+		keepAlive := getKeepAlive()
+		if err := runHTTPServer(logger, host, port, endpointPath, keepAlive, enabledToolsets); err != nil {
 			stdlog.Fatal("failed to run StreamableHTTP server:", err)
 		}
 		return
@@ -249,4 +251,15 @@ func getEndpointPath(cmd *cobra.Command) string {
 	}
 
 	return "/mcp"
+}
+
+// getKeepAlive returns the keep-alive duration from the env var or default
+func getKeepAlive() time.Duration {
+	if val := os.Getenv("MCP_KEEP_ALIVE"); val != "" {
+		duration, err := time.ParseDuration(val)
+		if err == nil {
+			return duration
+		}
+	}
+	return 0
 }

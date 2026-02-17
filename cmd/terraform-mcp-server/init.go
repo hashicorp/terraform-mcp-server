@@ -84,9 +84,14 @@ var (
 				stdlog.Fatal("Failed to get endpoint path:", err)
 			}
 
+			keepAlive, err := cmd.Flags().GetDuration("keep-alive")
+			if err != nil {
+				stdlog.Fatal("Failed to get keep-alive:", err)
+			}
+
 			enabledToolsets := getToolsetsFromCmd(cmd.Root(), logger)
 
-			if err := runHTTPServer(logger, host, port, endpointPath, enabledToolsets); err != nil {
+			if err := runHTTPServer(logger, host, port, endpointPath, keepAlive, enabledToolsets); err != nil {
 				stdlog.Fatal("failed to run streamableHTTP server:", err)
 			}
 		},
@@ -115,12 +120,14 @@ func init() {
 	// Add StreamableHTTP command flags (avoid 'h' shorthand conflict with help)
 	streamableHTTPCmd.Flags().String("transport-host", "127.0.0.1", "Host to bind to")
 	streamableHTTPCmd.Flags().StringP("transport-port", "p", "8080", "Port to listen on")
+	streamableHTTPCmd.Flags().Duration("keep-alive", 0, "Keep-alive interval for SSE connections (e.g., 30s). 0 to disable")
 	streamableHTTPCmd.Flags().String("mcp-endpoint", "/mcp", "Path for streamable HTTP endpoint")
 
 	// Add the same flags to the alias command for backward compatibility
 	httpCmdAlias.Flags().String("transport-host", "127.0.0.1", "Host to bind to")
 	httpCmdAlias.Flags().StringP("transport-port", "p", "8080", "Port to listen on")
 	httpCmdAlias.Flags().String("mcp-endpoint", "/mcp", "Path for streamable HTTP endpoint")
+	httpCmdAlias.Flags().Duration("keep-alive", 0, "Keep-alive interval for SSE connections (e.g., 30s). 0 to disable")
 
 	rootCmd.AddCommand(stdioCmd)
 	rootCmd.AddCommand(streamableHTTPCmd)
@@ -182,7 +189,7 @@ func serverInit(ctx context.Context, hcServer *server.MCPServer, logger *log.Log
 	return nil
 }
 
-func streamableHTTPServerInit(ctx context.Context, hcServer *server.MCPServer, logger *log.Logger, host string, port string, endpointPath string) error {
+func streamableHTTPServerInit(ctx context.Context, hcServer *server.MCPServer, logger *log.Logger, host string, port string, endpointPath string, keepAlive time.Duration) error {
 	// Ensure endpoint path starts with /
 	endpointPath = path.Join("/", endpointPath)
 	// Create StreamableHTTP server which implements the new streamable-http transport
@@ -208,6 +215,12 @@ func streamableHTTPServerInit(ctx context.Context, hcServer *server.MCPServer, l
 	isStateless := shouldUseStatelessMode()
 	opts = append(opts, server.WithStateLess(isStateless))
 	logger.Infof("Running with stateless mode: %v", isStateless)
+
+	// Configure keep-alive if enabled
+	if keepAlive > 0 {
+		opts = append(opts, server.WithHeartbeatInterval(keepAlive))
+		logger.Infof("Keep-alive enabled with interval: %v", keepAlive)
+	}
 
 	baseStreamableServer := server.NewStreamableHTTPServer(hcServer, opts...)
 
