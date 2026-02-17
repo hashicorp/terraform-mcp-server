@@ -6,6 +6,7 @@ package main
 import (
 	"os"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -150,4 +151,32 @@ func TestShouldUseStatelessMode(t *testing.T) {
 	// Test case: Invalid value should default to stateful mode
 	os.Setenv("MCP_SESSION_MODE", "invalid-value")
 	assert.False(t, shouldUseStatelessMode(), "Stateful mode should be used when MCP_SESSION_MODE is set to an invalid value")
+}
+
+func TestGetKeepAlive(t *testing.T) {
+	// Save original env var to restore later
+	origKeepAlive := os.Getenv("MCP_KEEP_ALIVE")
+	defer func() {
+		os.Setenv("MCP_KEEP_ALIVE", origKeepAlive)
+	}()
+
+	// Test case: When MCP_KEEP_ALIVE is not set, default value should be 0
+	os.Unsetenv("MCP_KEEP_ALIVE")
+	keepAlive := getKeepAlive()
+	assert.Equal(t, time.Duration(0), keepAlive, "Default keep-alive should be 0 when MCP_KEEP_ALIVE is not set")
+
+	// Test case: When MCP_KEEP_ALIVE is set to a valid duration
+	os.Setenv("MCP_KEEP_ALIVE", "30s")
+	keepAlive = getKeepAlive()
+	assert.Equal(t, 30*time.Second, keepAlive, "Keep-alive should be 30s when MCP_KEEP_ALIVE is set to '30s'")
+
+	// Test case: When MCP_KEEP_ALIVE is set to minutes
+	os.Setenv("MCP_KEEP_ALIVE", "1m")
+	keepAlive = getKeepAlive()
+	assert.Equal(t, 1*time.Minute, keepAlive, "Keep-alive should be 1m when MCP_KEEP_ALIVE is set to '1m'")
+
+	// Test case: Invalid value should return 0
+	os.Setenv("MCP_KEEP_ALIVE", "invalid")
+	keepAlive = getKeepAlive()
+	assert.Equal(t, time.Duration(0), keepAlive, "Keep-alive should be 0 when MCP_KEEP_ALIVE is set to an invalid value")
 }
