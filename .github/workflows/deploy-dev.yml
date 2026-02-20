@@ -33,19 +33,19 @@ jobs:
       # TODO: Requires secret REMOTE_REPO_TOKEN
       # A GitHub PAT with access to the private hashicorp/terraform-mcp-server-remote repo
       - name: Checkout remote infra repo
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
         with:
           repository: hashicorp/terraform-mcp-server-remote
           token: ${{ secrets.REMOTE_REPO_TOKEN }}
           path: infra
 
-      # TODO: Requires secret AWS_ROLE_ARN (Open to a diff approach then below)
+      # TODO: Requires secret AWS_ROLE_ARN (Open to a diff approach than below)
       # IAM role ARN that GitHub Actions can assume via OIDC for terraform_ai_ecosystem_dev account
       # Setup needed: 
       #   1. Create OIDC identity provider in AWS for GitHub Actions
       #   2. Create IAM role with EKS permissions that trusts the OIDC provider
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@ff717079ee2060e4bcee96c4779b553acc87447c
         with:
           role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
