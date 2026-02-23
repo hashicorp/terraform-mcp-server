@@ -8,6 +8,10 @@ IMPROVEMENTS
 
 * Set custom User-Agent header for TFE API requests to enable tracking MCP server usage separately from other go-tfe clients [268](https://github.com/hashicorp/terraform-mcp-server/pull/268)
 
+FIXES
+
+* `list_runs` was returning empty response
+
 ## 0.4.0
 
 FEATURES

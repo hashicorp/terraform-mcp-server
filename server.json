@@ -18,83 +18,48 @@
       "runtimeHint": "docker",
       "runtimeArguments": [
         {
-          "type": "positional",
-          "value": "run"
-        },
-        {
-          "type": "named",
-          "name": "--rm"
-        },
-        {
-          "type": "named",
-          "name": "-i"
-        },
-        {
           "type": "named",
           "name": "-e",
-          "description": "Set an environment variable in the runtime",
-          "isRepeated": true
-        },
-        {
-          "type": "positional",
-          "valueHint": "env_var_name",
-          "value": "TFE_ADDRESS",
-          "description": "Environment variable name"
-        },
-        {
-          "type": "named",
-          "name": "-e",
-          "description": "Set an environment variable in the runtime",
-          "isRepeated": true
-        },
-        {
-          "type": "positional",
-          "valueHint": "env_var_name",
-          "value": "TFE_TOKEN",
-          "description": "Environment variable name"
-        },
-        {
-          "type": "named",
-          "name": "-e",
-          "description": "Set an environment variable in the runtime",
-          "isRepeated": true
-        },
-        {
-          "type": "positional",
-          "valueHint": "env_var_name",
-          "value": "ENABLE_TF_OPERATIONS",
-          "description": "Environment variable name"
-        },
-        {
-          "type": "positional",
-          "valueHint": "image_name",
-          "value": "hashicorp/terraform-mcp-server:0.4.0",
-          "description": "The container image to run"
-        }
-      ],
-      "environmentVariables": [
-        {
-          "name": "TFE_ADDRESS",
           "description": "HCP Terraform or Terraform Enterprise base URL.",
-          "default": "https://app.terraform.io",
-          "isRequired": false
-        },
-        {
-          "name": "TFE_TOKEN",
-          "description": "HCP Terraform or Terraform Enterprise API token used to authenticate requests.",
+          "value": "TFE_ADDRESS={address}",
           "isRequired": false,
-          "isSecret": true
+          "variables": {
+            "address": {
+              "isRequired": false,
+              "isSecret": false,
+              "format": "string",
+              "default": "https://app.terraform.io"
+            }
+          }
         },
         {
-          "name": "ENABLE_TF_OPERATIONS",
+          "type": "named",
+          "name": "-e",
+          "description": "HCP Terraform or Terraform Enterprise API token used to authenticate requests.",
+          "value": "TFE_TOKEN={token}",
+          "isRequired": false,
+          "variables": {
+            "token": {
+              "isRequired": false,
+              "isSecret": true,
+              "format": "string"
+            }
+          }
+        },
+        {
+          "type": "named",
+          "name": "-e",
           "description": "Set to true to enable tools that execute Terraform operations requiring explicit approval.",
-          "default": "false",
-          "format": "boolean",
-          "choices": [
-            "true",
-            "false"
-          ],
-          "isRequired": false
+          "value": "ENABLE_TF_OPERATIONS={enabled}",
+          "isRequired": false,
+          "variables": {
+            "enabled": {
+              "isRequired": false,
+              "isSecret": false,
+              "format": "boolean",
+              "default": "false"
+            }
+          }
         }
       ]
     }
