@@ -239,6 +239,19 @@ func getHTTPHost() string {
 	return "127.0.0.1"
 }
 
+// shouldUseStatelessMode returns true if the MCP_SESSION_MODE environment variable is set to "stateless"
+func shouldUseStatelessMode() bool {
+	mode := strings.ToLower(os.Getenv("MCP_SESSION_MODE"))
+
+	// Explicitly check for "stateless" value
+	if mode == "stateless" {
+		return true
+	}
+
+	// All other values (including empty string, "stateful", or any other value) default to stateful mode
+	return false
+}
+
 // Add function to get endpoint path from environment or flag
 func getEndpointPath(cmd *cobra.Command) string {
 	// First check environment variable
