@@ -120,6 +120,7 @@ func TestShouldUseStreamableHTTPMode(t *testing.T) {
 	assert.True(t, shouldUseStreamableHTTPMode(), "HTTP mode should be used when MCP_ENDPOINT is set")
 
 }
+
 func TestShouldUseStatelessMode(t *testing.T) {
 	// Save original env var to restore later
 	origMode := os.Getenv("MCP_SESSION_MODE")
