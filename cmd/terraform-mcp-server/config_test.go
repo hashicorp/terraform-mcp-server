@@ -7,6 +7,8 @@ import (
 	"os"
 	"testing"
 
+	log "github.com/sirupsen/logrus"
+	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -150,4 +152,194 @@ func TestShouldUseStatelessMode(t *testing.T) {
 	// Test case: Invalid value should default to stateful mode
 	os.Setenv("MCP_SESSION_MODE", "invalid-value")
 	assert.False(t, shouldUseStatelessMode(), "Stateful mode should be used when MCP_SESSION_MODE is set to an invalid value")
+}
+
+func TestParseLogLevel(t *testing.T) {
+	tests := []struct {
+		name      string
+		input     string
+		expected  log.Level
+		expectErr bool
+	}{
+		// Valid levels
+		{"trace lowercase", "trace", log.TraceLevel, false},
+		{"debug lowercase", "debug", log.DebugLevel, false},
+		{"info lowercase", "info", log.InfoLevel, false},
+		{"warn lowercase", "warn", log.WarnLevel, false},
+		{"warning lowercase", "warning", log.WarnLevel, false},
+		{"error lowercase", "error", log.ErrorLevel, false},
+		{"fatal lowercase", "fatal", log.FatalLevel, false},
+		{"panic lowercase", "panic", log.PanicLevel, false},
+
+		// Case insensitive
+		{"TRACE uppercase", "TRACE", log.TraceLevel, false},
+		{"Debug mixed case", "Debug", log.DebugLevel, false},
+		{"INFO uppercase", "INFO", log.InfoLevel, false},
+		{"WaRn mixed case", "WaRn", log.WarnLevel, false},
+
+		// With whitespace
+		{"info with spaces", "  info  ", log.InfoLevel, false},
+		{"debug with tab", "\tdebug\t", log.DebugLevel, false},
+
+		// Invalid levels
+		{"invalid level", "invalid", log.InfoLevel, true},
+		{"empty string", "", log.InfoLevel, true},
+		{"numeric", "123", log.InfoLevel, true},
+		{"special chars", "info!", log.InfoLevel, true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			level, err := parseLogLevel(tt.input)
+			if tt.expectErr {
+				if err == nil {
+					t.Errorf("expected error for input %q, got none", tt.input)
+				}
+			} else {
+				if err != nil {
+					t.Errorf("unexpected error for input %q: %v", tt.input, err)
+				}
+				if level != tt.expected {
+					t.Errorf("expected level %v for input %q, got %v", tt.expected, tt.input, level)
+				}
+			}
+		})
+	}
+}
+
+func TestGetLogLevel(t *testing.T) {
+	tests := []struct {
+		name        string
+		envValue    string
+		flagValue   string
+		expected    log.Level
+		description string
+	}{
+		{
+			name:        "env var takes precedence",
+			envValue:    "debug",
+			flagValue:   "error",
+			expected:    log.DebugLevel,
+			description: "LOG_LEVEL env var should override --log-level flag",
+		},
+		{
+			name:        "flag used when env not set",
+			envValue:    "",
+			flagValue:   "warn",
+			expected:    log.WarnLevel,
+			description: "--log-level flag should be used when LOG_LEVEL is not set",
+		},
+		{
+			name:        "default when neither set",
+			envValue:    "",
+			flagValue:   "",
+			expected:    log.InfoLevel,
+			description: "should default to info level when neither env nor flag is set",
+		},
+		{
+			name:        "invalid env falls back to default",
+			envValue:    "invalid",
+			flagValue:   "",
+			expected:    log.InfoLevel,
+			description: "invalid LOG_LEVEL should fall back to default info level",
+		},
+		{
+			name:        "invalid flag falls back to default",
+			envValue:    "",
+			flagValue:   "invalid",
+			expected:    log.InfoLevel,
+			description: "invalid --log-level should fall back to default info level",
+		},
+		{
+			name:        "env overrides even with invalid flag",
+			envValue:    "error",
+			flagValue:   "invalid",
+			expected:    log.ErrorLevel,
+			description: "valid LOG_LEVEL should be used even if flag is invalid",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Save and restore original env var
+			originalEnv := os.Getenv("LOG_LEVEL")
+			defer func() {
+				if originalEnv != "" {
+					os.Setenv("LOG_LEVEL", originalEnv)
+				} else {
+					os.Unsetenv("LOG_LEVEL")
+				}
+			}()
+
+			// Set up test environment
+			if tt.envValue != "" {
+				os.Setenv("LOG_LEVEL", tt.envValue)
+			} else {
+				os.Unsetenv("LOG_LEVEL")
+			}
+
+			// Create a test command with the flag
+			cmd := &cobra.Command{}
+			cmd.Flags().String("log-level", tt.flagValue, "test flag")
+
+			// Test the function
+			level := getLogLevel(cmd)
+			if level != tt.expected {
+				t.Errorf("%s: expected level %v, got %v", tt.description, tt.expected, level)
+			}
+		})
+	}
+}
+
+func TestGetLogLevelWithNilCommand(t *testing.T) {
+	// Save and restore original env var
+	originalEnv := os.Getenv("LOG_LEVEL")
+	defer func() {
+		if originalEnv != "" {
+			os.Setenv("LOG_LEVEL", originalEnv)
+		} else {
+			os.Unsetenv("LOG_LEVEL")
+		}
+	}()
+
+	// Test with nil command and no env var
+	os.Unsetenv("LOG_LEVEL")
+	level := getLogLevel(nil)
+	if level != log.InfoLevel {
+		t.Errorf("expected default info level with nil command, got %v", level)
+	}
+
+	// Test with nil command but env var set
+	os.Setenv("LOG_LEVEL", "debug")
+	level = getLogLevel(nil)
+	if level != log.DebugLevel {
+		t.Errorf("expected debug level from env var with nil command, got %v", level)
+	}
+}
+
+func TestInitLoggerWithLevel(t *testing.T) {
+	tests := []struct {
+		name     string
+		level    log.Level
+		expected log.Level
+	}{
+		{"trace level", log.TraceLevel, log.TraceLevel},
+		{"debug level", log.DebugLevel, log.DebugLevel},
+		{"info level", log.InfoLevel, log.InfoLevel},
+		{"warn level", log.WarnLevel, log.WarnLevel},
+		{"error level", log.ErrorLevel, log.ErrorLevel},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Test with no log file (stdout)
+			logger, err := initLogger("", tt.level)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if logger.GetLevel() != tt.expected {
+				t.Errorf("expected level %v, got %v", tt.expected, logger.GetLevel())
+			}
+		})
+	}
 }

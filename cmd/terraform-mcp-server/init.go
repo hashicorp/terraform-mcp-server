@@ -43,7 +43,8 @@ var (
 			if err != nil {
 				stdlog.Fatal("Failed to get log file:", err)
 			}
-			logger, err := initLogger(logFile)
+			logLevel := getLogLevel(cmd.Root())
+			logger, err := initLogger(logFile, logLevel)
 			if err != nil {
 				stdlog.Fatal("Failed to initialize logger:", err)
 			}
@@ -65,7 +66,8 @@ var (
 			if err != nil {
 				stdlog.Fatal("Failed to get log file:", err)
 			}
-			logger, err := initLogger(logFile)
+			logLevel := getLogLevel(cmd.Root())
+			logger, err := initLogger(logFile, logLevel)
 			if err != nil {
 				stdlog.Fatal("Failed to initialize logger:", err)
 			}
@@ -109,6 +111,7 @@ func init() {
 	cobra.OnInitialize(initConfig)
 	rootCmd.SetVersionTemplate("{{.Short}}\n{{.Version}}\n")
 	rootCmd.PersistentFlags().String("log-file", "", "Path to log file")
+	rootCmd.PersistentFlags().String("log-level", "info", "Log level (trace, debug, info, warn, error, fatal, panic)")
 	rootCmd.PersistentFlags().String("toolsets", "all", toolsets.GenerateToolsetsHelp())
 	rootCmd.PersistentFlags().String("tools", "", toolsets.GenerateToolsHelp())
 
@@ -131,9 +134,64 @@ func initConfig() {
 	viper.AutomaticEnv()
 }
 
-func initLogger(outPath string) (*log.Logger, error) {
+// parseLogLevel converts a string log level to logrus.Level
+// Supports: trace, debug, info, warn, error, fatal, panic (case-insensitive)
+func parseLogLevel(level string) (log.Level, error) {
+	switch strings.ToLower(strings.TrimSpace(level)) {
+	case "trace":
+		return log.TraceLevel, nil
+	case "debug":
+		return log.DebugLevel, nil
+	case "info":
+		return log.InfoLevel, nil
+	case "warn", "warning":
+		return log.WarnLevel, nil
+	case "error":
+		return log.ErrorLevel, nil
+	case "fatal":
+		return log.FatalLevel, nil
+	case "panic":
+		return log.PanicLevel, nil
+	default:
+		return log.InfoLevel, fmt.Errorf("invalid log level: %s (valid: trace, debug, info, warn, error, fatal, panic)", level)
+	}
+}
+
+// getLogLevel determines the log level from environment variable or CLI flag
+func getLogLevel(cmd *cobra.Command) log.Level {
+	// Check environment variable first
+	if envLevel := os.Getenv("LOG_LEVEL"); envLevel != "" {
+		level, err := parseLogLevel(envLevel)
+		if err != nil {
+			stdlog.Printf("Warning: %v, using default 'info' level\n", err)
+			return log.InfoLevel
+		}
+		return level
+	}
+
+	// Check CLI flag
+	if cmd != nil {
+		flagLevel, err := cmd.Flags().GetString("log-level")
+		if err == nil && flagLevel != "" {
+			level, err := parseLogLevel(flagLevel)
+			if err != nil {
+				stdlog.Printf("Warning: %v, using default 'info' level\n", err)
+				return log.InfoLevel
+			}
+			return level
+		}
+	}
+
+	// Default to info level
+	return log.InfoLevel
+}
+
+func initLogger(outPath string, level log.Level) (*log.Logger, error) {
+	logger := log.New()
+	logger.SetLevel(level)
+
 	if outPath == "" {
-		return log.New(), nil
+		return logger, nil
 	}
 
 	file, err := os.OpenFile(outPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o666)
@@ -141,8 +199,6 @@ func initLogger(outPath string) (*log.Logger, error) {
 		return nil, fmt.Errorf("failed to open log file: %w", err)
 	}
 
-	logger := log.New()
-	logger.SetLevel(log.DebugLevel)
 	logger.SetOutput(file)
 
 	return logger, nil
