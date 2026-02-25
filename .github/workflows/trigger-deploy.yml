@@ -1,0 +1,19 @@
+name: Trigger Dev Deployment
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  trigger:
+    name: Trigger deployment in infra repo
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger repository_dispatch
+        uses: peter-evans/repository-dispatch@ff45666b9427631e3450c54a1bcbee4d9ff4d7c0
+        with:
+          token: ${{ secrets.REMOTE_REPO_TOKEN }}
+          repository: hashicorp/terraform-mcp-server-remote
+          event-type: deploy-dev
+          client-payload: '{"sha": "${{ github.sha }}", "ref": "${{ github.ref }}"}'
