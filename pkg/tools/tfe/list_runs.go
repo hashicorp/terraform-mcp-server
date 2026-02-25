@@ -4,12 +4,12 @@
 package tools
 
 import (
-	"bytes"
 	"context"
+	"encoding/json"
 	"strings"
+	"time"
 
 	"github.com/hashicorp/go-tfe"
-	"github.com/hashicorp/jsonapi"
 	"github.com/hashicorp/terraform-mcp-server/pkg/client"
 	"github.com/hashicorp/terraform-mcp-server/pkg/utils"
 	"github.com/mark3labs/mcp-go/mcp"
@@ -97,7 +97,6 @@ func listRunsHandler(ctx context.Context, request mcp.CallToolRequest, logger *l
 		return ToolError(logger, "failed to get Terraform client", err)
 	}
 
-	buf := bytes.NewBuffer(nil)
 	if workspaceName != "" {
 		options := &tfe.RunListOptions{
 			ListOptions: tfe.ListOptions{
@@ -124,10 +123,31 @@ func listRunsHandler(ctx context.Context, request mcp.CallToolRequest, logger *l
 			return ToolError(logger, "failed to list runs in workspace", err)
 		}
 
-		err = jsonapi.MarshalPayloadWithoutIncluded(buf, runs)
+		summaries := make([]*RunSummary, len(runs.Items))
+		for i, r := range runs.Items {
+			summaries[i] = &RunSummary{
+				ID:            r.ID,
+				Status:        string(r.Status),
+				Message:       r.Message,
+				Source:        string(r.Source),
+				CreatedAt:     r.CreatedAt,
+				HasChanges:    r.HasChanges,
+				IsDestroy:     r.IsDestroy,
+				PlanOnly:      r.PlanOnly,
+				RefreshOnly:   r.RefreshOnly,
+				WorkspaceName: r.Workspace.Name,
+			}
+		}
+
+		buf, err := json.Marshal(&RunSummaryList{
+			Items:      summaries,
+			Pagination: runs.Pagination,
+		})
 		if err != nil {
 			return ToolError(logger, "failed to marshal runs", err)
 		}
+
+		return mcp.NewToolResultText(string(buf)), nil
 
 	} else {
 		options := &tfe.RunListForOrganizationOptions{
@@ -150,11 +170,54 @@ func listRunsHandler(ctx context.Context, request mcp.CallToolRequest, logger *l
 			return ToolErrorf(logger, "failed to list runs in org '%s'", terraformOrgName)
 		}
 
-		err = jsonapi.MarshalPayloadWithoutIncluded(buf, runs)
+		summaries := make([]*RunSummary, len(runs.Items))
+		for i, r := range runs.Items {
+			summaries[i] = &RunSummary{
+				ID:            r.ID,
+				Status:        string(r.Status),
+				Message:       r.Message,
+				Source:        string(r.Source),
+				CreatedAt:     r.CreatedAt,
+				HasChanges:    r.HasChanges,
+				IsDestroy:     r.IsDestroy,
+				PlanOnly:      r.PlanOnly,
+				RefreshOnly:   r.RefreshOnly,
+				WorkspaceName: r.Workspace.Name,
+			}
+		}
+
+		buf, err := json.Marshal(&RunSummaryList{
+			Items: summaries,
+			Pagination: &tfe.Pagination{
+				CurrentPage:  runs.PaginationNextPrev.CurrentPage,
+				PreviousPage: runs.PaginationNextPrev.PreviousPage,
+				NextPage:     runs.PaginationNextPrev.NextPage,
+			},
+		})
 		if err != nil {
 			return ToolError(logger, "failed to marshal runs", err)
 		}
-	}
 
-	return mcp.NewToolResultText(buf.String()), nil
+		return mcp.NewToolResultText(string(buf)), nil
+	}
+}
+
+// RunSummary is a truncated summary of a Run for top level listing
+type RunSummary struct {
+	ID            string    `json:"id"`
+	Status        string    `json:"status"`
+	Message       string    `json:"message"`
+	Source        string    `json:"source"`
+	CreatedAt     time.Time `json:"created_at"`
+	HasChanges    bool      `json:"has_changes"`
+	IsDestroy     bool      `json:"is_destroy"`
+	PlanOnly      bool      `json:"plan_only"`
+	RefreshOnly   bool      `json:"refresh_only"`
+	WorkspaceName string    `json:"workspace_name"`
+}
+
+// RunSummaryList contains the list of run summaries and pagination details
+type RunSummaryList struct {
+	Items []*RunSummary `json:"items"`
+	*tfe.Pagination
 }
