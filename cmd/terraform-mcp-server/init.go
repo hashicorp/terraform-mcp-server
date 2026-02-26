@@ -197,7 +197,7 @@ func initLogger(outPath string, level log.Level, format string) (*log.Logger, er
 	logger.SetLevel(level)
 
 	// Set formatter based on format parameter
-	if format == "json" {
+	if strings.ToLower(format) == "json" {
 		logger.SetFormatter(&log.JSONFormatter{})
 	} else {
 		logger.SetFormatter(&log.TextFormatter{

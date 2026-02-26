@@ -311,8 +311,15 @@ func TestInitLoggerWithFormat(t *testing.T) {
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
-			if logger.Formatter != tt.expectedLogFormat {
-				t.Errorf("expected format %v, got %v", tt.expectedLogFormat, logger.Formatter)
+			switch tt.expectedLogFormat.(type) {
+			case *log.JSONFormatter:
+				if _, ok := logger.Formatter.(*log.JSONFormatter); !ok {
+					t.Errorf("expected JSONFormatter, got %T", logger.Formatter)
+				}
+			case *log.TextFormatter:
+				if _, ok := logger.Formatter.(*log.TextFormatter); !ok {
+					t.Errorf("expected TextFormatter, got %T", logger.Formatter)
+				}
 			}
 		})
 	}
