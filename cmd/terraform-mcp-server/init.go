@@ -44,7 +44,8 @@ var (
 				stdlog.Fatal("Failed to get log file:", err)
 			}
 			logLevel := getLogLevel(cmd.Root())
-			logger, err := initLogger(logFile, logLevel)
+			logFormat := getLogFormat(cmd)
+			logger, err := initLogger(logFile, logLevel, logFormat)
 			if err != nil {
 				stdlog.Fatal("Failed to initialize logger:", err)
 			}
@@ -67,7 +68,8 @@ var (
 				stdlog.Fatal("Failed to get log file:", err)
 			}
 			logLevel := getLogLevel(cmd.Root())
-			logger, err := initLogger(logFile, logLevel)
+			logFormat := getLogFormat(cmd)
+			logger, err := initLogger(logFile, logLevel, logFormat)
 			if err != nil {
 				stdlog.Fatal("Failed to initialize logger:", err)
 			}
@@ -112,6 +114,7 @@ func init() {
 	rootCmd.SetVersionTemplate("{{.Short}}\n{{.Version}}\n")
 	rootCmd.PersistentFlags().String("log-file", "", "Path to log file")
 	rootCmd.PersistentFlags().String("log-level", "info", "Log level (trace, debug, info, warn, error, fatal, panic)")
+	rootCmd.PersistentFlags().String("log-format", "text", "Log format (text or json)")
 	rootCmd.PersistentFlags().String("toolsets", "all", toolsets.GenerateToolsetsHelp())
 	rootCmd.PersistentFlags().String("tools", "", toolsets.GenerateToolsHelp())
 
@@ -134,34 +137,11 @@ func initConfig() {
 	viper.AutomaticEnv()
 }
 
-// parseLogLevel converts a string log level to logrus.Level
-// Supports: trace, debug, info, warn, error, fatal, panic (case-insensitive)
-func parseLogLevel(level string) (log.Level, error) {
-	switch strings.ToLower(strings.TrimSpace(level)) {
-	case "trace":
-		return log.TraceLevel, nil
-	case "debug":
-		return log.DebugLevel, nil
-	case "info":
-		return log.InfoLevel, nil
-	case "warn", "warning":
-		return log.WarnLevel, nil
-	case "error":
-		return log.ErrorLevel, nil
-	case "fatal":
-		return log.FatalLevel, nil
-	case "panic":
-		return log.PanicLevel, nil
-	default:
-		return log.InfoLevel, fmt.Errorf("invalid log level: %s (valid: trace, debug, info, warn, error, fatal, panic)", level)
-	}
-}
-
 // getLogLevel determines the log level from environment variable or CLI flag
 func getLogLevel(cmd *cobra.Command) log.Level {
 	// Check environment variable first
 	if envLevel := os.Getenv("LOG_LEVEL"); envLevel != "" {
-		level, err := parseLogLevel(envLevel)
+		level, err := log.ParseLevel(envLevel)
 		if err != nil {
 			stdlog.Printf("Warning: %v, using default 'info' level\n", err)
 			return log.InfoLevel
@@ -173,7 +153,7 @@ func getLogLevel(cmd *cobra.Command) log.Level {
 	if cmd != nil {
 		flagLevel, err := cmd.Flags().GetString("log-level")
 		if err == nil && flagLevel != "" {
-			level, err := parseLogLevel(flagLevel)
+			level, err := log.ParseLevel(flagLevel)
 			if err != nil {
 				stdlog.Printf("Warning: %v, using default 'info' level\n", err)
 				return log.InfoLevel
@@ -186,9 +166,44 @@ func getLogLevel(cmd *cobra.Command) log.Level {
 	return log.InfoLevel
 }
 
-func initLogger(outPath string, level log.Level) (*log.Logger, error) {
+// getLogFormat determines the log format from environment variable or CLI flag
+func getLogFormat(cmd *cobra.Command) string {
+	// Check environment variable first
+	if envFormat := os.Getenv("LOG_FORMAT"); envFormat != "" {
+		format := strings.ToLower(strings.TrimSpace(envFormat))
+		if format == "json" || format == "text" {
+			return format
+		}
+		stdlog.Printf("Warning: invalid LOG_FORMAT '%s', using default 'text' format\n", envFormat)
+		return "text"
+	}
+
+	// Check CLI flag
+	if cmd != nil {
+		if flagFormat, err := cmd.Flags().GetString("log-format"); err == nil && flagFormat != "" {
+			format := strings.ToLower(strings.TrimSpace(flagFormat))
+			if format == "json" || format == "text" {
+				return format
+			}
+			stdlog.Printf("Warning: invalid --log-format '%s', using default 'text' format\n", flagFormat)
+		}
+	}
+
+	return "text"
+}
+
+func initLogger(outPath string, level log.Level, format string) (*log.Logger, error) {
 	logger := log.New()
 	logger.SetLevel(level)
+
+	// Set formatter based on format parameter
+	if format == "json" {
+		logger.SetFormatter(&log.JSONFormatter{})
+	} else {
+		logger.SetFormatter(&log.TextFormatter{
+			FullTimestamp: true,
+		})
+	}
 
 	if outPath == "" {
 		return logger, nil

@@ -154,59 +154,6 @@ func TestShouldUseStatelessMode(t *testing.T) {
 	assert.False(t, shouldUseStatelessMode(), "Stateful mode should be used when MCP_SESSION_MODE is set to an invalid value")
 }
 
-func TestParseLogLevel(t *testing.T) {
-	tests := []struct {
-		name      string
-		input     string
-		expected  log.Level
-		expectErr bool
-	}{
-		// Valid levels
-		{"trace lowercase", "trace", log.TraceLevel, false},
-		{"debug lowercase", "debug", log.DebugLevel, false},
-		{"info lowercase", "info", log.InfoLevel, false},
-		{"warn lowercase", "warn", log.WarnLevel, false},
-		{"warning lowercase", "warning", log.WarnLevel, false},
-		{"error lowercase", "error", log.ErrorLevel, false},
-		{"fatal lowercase", "fatal", log.FatalLevel, false},
-		{"panic lowercase", "panic", log.PanicLevel, false},
-
-		// Case insensitive
-		{"TRACE uppercase", "TRACE", log.TraceLevel, false},
-		{"Debug mixed case", "Debug", log.DebugLevel, false},
-		{"INFO uppercase", "INFO", log.InfoLevel, false},
-		{"WaRn mixed case", "WaRn", log.WarnLevel, false},
-
-		// With whitespace
-		{"info with spaces", "  info  ", log.InfoLevel, false},
-		{"debug with tab", "\tdebug\t", log.DebugLevel, false},
-
-		// Invalid levels
-		{"invalid level", "invalid", log.InfoLevel, true},
-		{"empty string", "", log.InfoLevel, true},
-		{"numeric", "123", log.InfoLevel, true},
-		{"special chars", "info!", log.InfoLevel, true},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			level, err := parseLogLevel(tt.input)
-			if tt.expectErr {
-				if err == nil {
-					t.Errorf("expected error for input %q, got none", tt.input)
-				}
-			} else {
-				if err != nil {
-					t.Errorf("unexpected error for input %q: %v", tt.input, err)
-				}
-				if level != tt.expected {
-					t.Errorf("expected level %v for input %q, got %v", tt.expected, tt.input, level)
-				}
-			}
-		})
-	}
-}
-
 func TestGetLogLevel(t *testing.T) {
 	tests := []struct {
 		name        string
@@ -333,7 +280,7 @@ func TestInitLoggerWithLevel(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Test with no log file (stdout)
-			logger, err := initLogger("", tt.level)
+			logger, err := initLogger("", tt.level, "")
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
@@ -341,5 +288,205 @@ func TestInitLoggerWithLevel(t *testing.T) {
 				t.Errorf("expected level %v, got %v", tt.expected, logger.GetLevel())
 			}
 		})
+	}
+}
+
+func TestInitLoggerWithFormat(t *testing.T) {
+	tests := []struct {
+		name              string
+		logFormat         string
+		expectedLogFormat log.Formatter
+	}{
+		{"empty format", "", &log.TextFormatter{}},
+		{"text format", "text", &log.TextFormatter{}},
+		{"json format", "json", &log.JSONFormatter{}},
+		{"TEXT format", "TEXT", &log.TextFormatter{}},
+		{"JSON format", "JSON", &log.JSONFormatter{}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Test with no log file (stdout)
+			logger, err := initLogger("", log.InfoLevel, tt.logFormat)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if logger.Formatter != tt.expectedLogFormat {
+				t.Errorf("expected format %v, got %v", tt.expectedLogFormat, logger.Formatter)
+			}
+		})
+	}
+}
+
+func TestGetLogFormat(t *testing.T) {
+	tests := []struct {
+		name        string
+		envValue    string
+		flagValue   string
+		expected    string
+		description string
+	}{
+		{
+			name:        "env var takes precedence",
+			envValue:    "json",
+			flagValue:   "text",
+			expected:    "json",
+			description: "LOG_FORMAT env var should override --log-format flag",
+		},
+		{
+			name:        "flag used when env not set",
+			envValue:    "",
+			flagValue:   "json",
+			expected:    "json",
+			description: "--log-format flag should be used when LOG_FORMAT is not set",
+		},
+		{
+			name:        "default when neither set",
+			envValue:    "",
+			flagValue:   "",
+			expected:    "text",
+			description: "should default to text format when neither env nor flag is set",
+		},
+		{
+			name:        "invalid env falls back to default",
+			envValue:    "invalid",
+			flagValue:   "",
+			expected:    "text",
+			description: "invalid LOG_FORMAT should fall back to default text format",
+		},
+		{
+			name:        "invalid flag falls back to default",
+			envValue:    "",
+			flagValue:   "invalid",
+			expected:    "text",
+			description: "invalid --log-format should fall back to default text format",
+		},
+		{
+			name:        "env overrides even with invalid flag",
+			envValue:    "json",
+			flagValue:   "invalid",
+			expected:    "json",
+			description: "valid LOG_FORMAT should be used even if flag is invalid",
+		},
+		{
+			name:        "case insensitive - uppercase JSON",
+			envValue:    "JSON",
+			flagValue:   "",
+			expected:    "json",
+			description: "LOG_FORMAT should be case insensitive (JSON -> json)",
+		},
+		{
+			name:        "case insensitive - uppercase TEXT",
+			envValue:    "TEXT",
+			flagValue:   "",
+			expected:    "text",
+			description: "LOG_FORMAT should be case insensitive (TEXT -> text)",
+		},
+		{
+			name:        "case insensitive - mixed case Json",
+			envValue:    "Json",
+			flagValue:   "",
+			expected:    "json",
+			description: "LOG_FORMAT should be case insensitive (Json -> json)",
+		},
+		{
+			name:        "whitespace trimmed from env",
+			envValue:    "  json  ",
+			flagValue:   "",
+			expected:    "json",
+			description: "LOG_FORMAT should trim whitespace from env value",
+		},
+		{
+			name:        "whitespace trimmed from flag",
+			envValue:    "",
+			flagValue:   "  text  ",
+			expected:    "text",
+			description: "--log-format should trim whitespace from flag value",
+		},
+		{
+			name:        "text format explicitly set via env",
+			envValue:    "text",
+			flagValue:   "",
+			expected:    "text",
+			description: "text format should be explicitly settable via LOG_FORMAT",
+		},
+		{
+			name:        "text format explicitly set via flag",
+			envValue:    "",
+			flagValue:   "text",
+			expected:    "text",
+			description: "text format should be explicitly settable via --log-format",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Save and restore original env var
+			originalEnv := os.Getenv("LOG_FORMAT")
+			defer func() {
+				if originalEnv != "" {
+					os.Setenv("LOG_FORMAT", originalEnv)
+				} else {
+					os.Unsetenv("LOG_FORMAT")
+				}
+			}()
+
+			// Set up test environment
+			if tt.envValue != "" {
+				os.Setenv("LOG_FORMAT", tt.envValue)
+			} else {
+				os.Unsetenv("LOG_FORMAT")
+			}
+
+			// Create a test command with the flag
+			cmd := &cobra.Command{}
+			cmd.Flags().String("log-format", tt.flagValue, "test flag")
+
+			// Test the function
+			format := getLogFormat(cmd)
+			if format != tt.expected {
+				t.Errorf("%s: expected format %q, got %q", tt.description, tt.expected, format)
+			}
+		})
+	}
+}
+
+func TestGetLogFormatWithNilCommand(t *testing.T) {
+	// Save and restore original env var
+	originalEnv := os.Getenv("LOG_FORMAT")
+	defer func() {
+		if originalEnv != "" {
+			os.Setenv("LOG_FORMAT", originalEnv)
+		} else {
+			os.Unsetenv("LOG_FORMAT")
+		}
+	}()
+
+	// Test with nil command and no env var
+	os.Unsetenv("LOG_FORMAT")
+	format := getLogFormat(nil)
+	if format != "text" {
+		t.Errorf("expected default text format with nil command, got %q", format)
+	}
+
+	// Test with nil command but env var set to json
+	os.Setenv("LOG_FORMAT", "json")
+	format = getLogFormat(nil)
+	if format != "json" {
+		t.Errorf("expected json format from env var with nil command, got %q", format)
+	}
+
+	// Test with nil command but env var set to text
+	os.Setenv("LOG_FORMAT", "text")
+	format = getLogFormat(nil)
+	if format != "text" {
+		t.Errorf("expected text format from env var with nil command, got %q", format)
+	}
+
+	// Test with nil command and invalid env var
+	os.Setenv("LOG_FORMAT", "invalid")
+	format = getLogFormat(nil)
+	if format != "text" {
+		t.Errorf("expected default text format with invalid env var and nil command, got %q", format)
 	}
 }

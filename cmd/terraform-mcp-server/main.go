@@ -156,7 +156,8 @@ func runDefaultCommand(cmd *cobra.Command, _ []string) {
 		stdlog.Fatal("Failed to get log file:", err)
 	}
 	logLevel := getLogLevel(cmd)
-	logger, err := initLogger(logFile, logLevel)
+	logFormat := getLogFormat(cmd)
+	logger, err := initLogger(logFile, logLevel, logFormat)
 	if err != nil {
 		stdlog.Fatal("Failed to initialize logger:", err)
 	}
@@ -178,7 +179,8 @@ func main() {
 
 		logFile, _ := rootCmd.PersistentFlags().GetString("log-file")
 		logLevel := getLogLevel(rootCmd)
-		logger, err := initLogger(logFile, logLevel)
+		logFormat := getLogFormat(rootCmd)
+		logger, err := initLogger(logFile, logLevel, logFormat)
 		if err != nil {
 			stdlog.Fatal("Failed to initialize logger:", err)
 		}
