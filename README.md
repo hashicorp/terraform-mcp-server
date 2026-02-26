@@ -34,6 +34,7 @@ automation and interaction capabilities for Infrastructure as Code (IaC) develop
 | `TFE_TOKEN` | Terraform Enterprise API token | `""` (empty) |
 | `TFE_SKIP_TLS_VERIFY` | Skip HCP Terraform or Terraform Enterprise TLS verification | `false` |
 | `LOG_LEVEL` | Logging level: `trace`, `debug`, `info`, `warn`, `error`, `fatal`, `panic` (overrides `--log-level` flag) | `info` |
+| `LOG_FORMAT` | Logging format: `text` or `json` (overrides `--log-format` flag)| `text` |
 | `TRANSPORT_MODE` | Set to `streamable-http` to enable HTTP transport (legacy `http` value still supported) | `stdio` |
 | `TRANSPORT_HOST` | Host to bind the HTTP server | `127.0.0.1` |
 | `TRANSPORT_PORT` | HTTP server port | `8080` |
@@ -49,10 +50,10 @@ automation and interaction capabilities for Infrastructure as Code (IaC) develop
 
 ```bash
 # Stdio mode
-terraform-mcp-server stdio [--log-file /path/to/log] [--log-level info] [--toolsets <toolsets>] [--tools <tools>]
+terraform-mcp-server stdio [--log-file /path/to/log] [--log-level info] [--log-format text] [--toolsets <toolsets>] [--tools <tools>]
 
 # StreamableHTTP mode
-terraform-mcp-server streamable-http [--transport-port 8080] [--transport-host 127.0.0.1] [--mcp-endpoint /mcp] [--log-file /path/to/log] [--log-level info] [--toolsets <toolsets>] [--tools <tools>]
+terraform-mcp-server streamable-http [--transport-port 8080] [--transport-host 127.0.0.1] [--mcp-endpoint /mcp] [--log-file /path/to/log] [--log-level info] [--log-format text] [--toolsets <toolsets>] [--tools <tools>]
 ```
 
 ## Instructions
