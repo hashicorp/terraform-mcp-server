@@ -46,6 +46,16 @@ func runStdioServer(logger *log.Logger, enabledToolsets []string) error {
 	return serverInit(ctx, hcServer, logger)
 }
 
+func runSSEServer(logger *log.Logger, host string, port string, keepAlive time.Duration, enabledToolsets []string) error {
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	hcServer := NewServer(version.Version, logger, enabledToolsets)
+	registerToolsAndResources(hcServer, logger, enabledToolsets)
+
+	return sseServerInit(ctx, hcServer, logger, host, port, keepAlive)
+}
+
 func NewServer(version string, logger *log.Logger, enabledToolsets []string, opts ...server.ServerOption) *server.MCPServer {
 	// Create rate limiting middleware with environment-based configuration
 	rateLimitConfig := client.LoadRateLimitConfigFromEnv()
@@ -170,7 +180,25 @@ func runDefaultCommand(cmd *cobra.Command, _ []string) {
 }
 
 func main() {
-	// Check environment variables first - they override command line args
+	if shouldUseSSEMode() {
+		port := getHTTPPort()
+		host := getHTTPHost()
+
+		logFile, _ := rootCmd.PersistentFlags().GetString("log-file")
+		logger, err := initLogger(logFile)
+		if err != nil {
+			stdlog.Fatal("Failed to initialize logger:", err)
+		}
+
+		enabledToolsets := getToolsetsFromCmd(rootCmd, logger)
+
+		keepAlive := getKeepAlive()
+		if err := runSSEServer(logger, host, port, keepAlive, enabledToolsets); err != nil {
+			stdlog.Fatal("failed to run SSE server:", err)
+		}
+		return
+	}
+
 	if shouldUseStreamableHTTPMode() {
 		port := getHTTPPort()
 		host := getHTTPHost()
@@ -196,6 +224,12 @@ func main() {
 		fmt.Println(err)
 		os.Exit(1)
 	}
+}
+
+// shouldUseSSEMode checks if environment variables indicate SSE mode
+func shouldUseSSEMode() bool {
+	transportMode := os.Getenv("TRANSPORT_MODE")
+	return transportMode == "sse"
 }
 
 // shouldUseStreamableHTTPMode checks if environment variables indicate HTTP mode

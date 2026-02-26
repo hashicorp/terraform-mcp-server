@@ -76,6 +76,30 @@ func TestGetHTTPPort(t *testing.T) {
 	assert.Equal(t, "9090", port, "Port should be the value of TRANSPORT_PORT when it is set")
 }
 
+func TestShouldUseSSEMode(t *testing.T) {
+	// Save original env var to restore later
+	origMode := os.Getenv("TRANSPORT_MODE")
+	defer func() {
+		os.Setenv("TRANSPORT_MODE", origMode)
+	}()
+
+	// Test case: When TRANSPORT_MODE is not set, SSE mode should not be used
+	os.Unsetenv("TRANSPORT_MODE")
+	assert.False(t, shouldUseSSEMode(), "SSE mode should not be used when TRANSPORT_MODE is not set")
+
+	// Test case: When TRANSPORT_MODE is set to "sse", SSE mode should be used
+	os.Setenv("TRANSPORT_MODE", "sse")
+	assert.True(t, shouldUseSSEMode(), "SSE mode should be used when TRANSPORT_MODE is set to 'sse'")
+
+	// Test case: When TRANSPORT_MODE is set to "http", SSE mode should not be used
+	os.Setenv("TRANSPORT_MODE", "http")
+	assert.False(t, shouldUseSSEMode(), "SSE mode should not be used when TRANSPORT_MODE is set to 'http'")
+
+	// Test case: When TRANSPORT_MODE is set to "streamable-http", SSE mode should not be used
+	os.Setenv("TRANSPORT_MODE", "streamable-http")
+	assert.False(t, shouldUseSSEMode(), "SSE mode should not be used when TRANSPORT_MODE is set to 'streamable-http'")
+}
+
 func TestShouldUseStreamableHTTPMode(t *testing.T) {
 	// Save original env vars to restore later
 	origMode := os.Getenv("TRANSPORT_MODE")
