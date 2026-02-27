@@ -1,5 +1,9 @@
 ## UNRELEASED
 
+FIXES
+
+* Use absolute URIs with `terraform://` scheme for resource identifiers to comply with MCP specification [#274](https://github.com/hashicorp/terraform-mcp-server/pull/274)
+
 IMPROVEMENTS
 
 * Set custom User-Agent header for TFE API requests to enable tracking MCP server usage separately from other go-tfe clients [268](https://github.com/hashicorp/terraform-mcp-server/pull/268)
