@@ -12,6 +12,7 @@ import (
 	"os/signal"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/hashicorp/terraform-mcp-server/pkg/client"
 	"github.com/hashicorp/terraform-mcp-server/pkg/toolsets"
@@ -25,14 +26,14 @@ import (
 //go:embed instructions.md
 var instructions string
 
-func runHTTPServer(logger *log.Logger, host string, port string, endpointPath string, enabledToolsets []string) error {
+func runHTTPServer(logger *log.Logger, host string, port string, endpointPath string, heartbeatInterval time.Duration, enabledToolsets []string) error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
 	hcServer := NewServer(version.Version, logger, enabledToolsets)
 	registerToolsAndResources(hcServer, logger, enabledToolsets)
 
-	return streamableHTTPServerInit(ctx, hcServer, logger, host, port, endpointPath)
+	return streamableHTTPServerInit(ctx, hcServer, logger, host, port, endpointPath, heartbeatInterval)
 }
 
 func runStdioServer(logger *log.Logger, enabledToolsets []string) error {
@@ -169,7 +170,6 @@ func runDefaultCommand(cmd *cobra.Command, _ []string) {
 }
 
 func main() {
-	// Check environment variables first - they override command line args
 	if shouldUseStreamableHTTPMode() {
 		port := getHTTPPort()
 		host := getHTTPHost()
@@ -183,7 +183,8 @@ func main() {
 
 		enabledToolsets := getToolsetsFromCmd(rootCmd, logger)
 
-		if err := runHTTPServer(logger, host, port, endpointPath, enabledToolsets); err != nil {
+		heartbeatInterval := getHeartbeatInterval()
+		if err := runHTTPServer(logger, host, port, endpointPath, heartbeatInterval, enabledToolsets); err != nil {
 			stdlog.Fatal("failed to run StreamableHTTP server:", err)
 		}
 		return
@@ -249,4 +250,15 @@ func getEndpointPath(cmd *cobra.Command) string {
 	}
 
 	return "/mcp"
+}
+
+// getHeartbeatInterval returns the heartbeat interval duration from the env var or default
+func getHeartbeatInterval() time.Duration {
+	if val := os.Getenv("MCP_HEARTBEAT_INTERVAL"); val != "" {
+		duration, err := time.ParseDuration(val)
+		if err == nil {
+			return duration
+		}
+	}
+	return 0
 }

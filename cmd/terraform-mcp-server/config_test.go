@@ -6,6 +6,7 @@ package main
 import (
 	"os"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -54,7 +55,6 @@ func TestGetEndpointPath(t *testing.T) {
 	os.Setenv("MCP_ENDPOINT", "/api/v1/terraform-mcp")
 	path = getEndpointPath(nil)
 	assert.Equal(t, "/api/v1/terraform-mcp", path, "Endpoint path should be the custom value set in MCP_ENDPOINT")
-
 }
 
 func TestGetHTTPPort(t *testing.T) {
@@ -118,8 +118,8 @@ func TestShouldUseStreamableHTTPMode(t *testing.T) {
 	// Test case: When MCP_ENDPOINT is set, HTTP mode should be used
 	os.Setenv("MCP_ENDPOINT", "/mcp")
 	assert.True(t, shouldUseStreamableHTTPMode(), "HTTP mode should be used when MCP_ENDPOINT is set")
-
 }
+
 func TestShouldUseStatelessMode(t *testing.T) {
 	// Save original env var to restore later
 	origMode := os.Getenv("MCP_SESSION_MODE")
@@ -150,4 +150,32 @@ func TestShouldUseStatelessMode(t *testing.T) {
 	// Test case: Invalid value should default to stateful mode
 	os.Setenv("MCP_SESSION_MODE", "invalid-value")
 	assert.False(t, shouldUseStatelessMode(), "Stateful mode should be used when MCP_SESSION_MODE is set to an invalid value")
+}
+
+func TestGetHeartbeatInterval(t *testing.T) {
+	// Save original env var to restore later
+	origHeartbeat := os.Getenv("MCP_HEARTBEAT_INTERVAL")
+	defer func() {
+		os.Setenv("MCP_HEARTBEAT_INTERVAL", origHeartbeat)
+	}()
+
+	// Test case: When MCP_HEARTBEAT_INTERVAL is not set, default value should be 0
+	os.Unsetenv("MCP_HEARTBEAT_INTERVAL")
+	heartbeat := getHeartbeatInterval()
+	assert.Equal(t, time.Duration(0), heartbeat, "Default heartbeat interval should be 0 when MCP_HEARTBEAT_INTERVAL is not set")
+
+	// Test case: When MCP_HEARTBEAT_INTERVAL is set to a valid duration
+	os.Setenv("MCP_HEARTBEAT_INTERVAL", "30s")
+	heartbeat = getHeartbeatInterval()
+	assert.Equal(t, 30*time.Second, heartbeat, "Heartbeat interval should be 30s when MCP_HEARTBEAT_INTERVAL is set to '30s'")
+
+	// Test case: When MCP_HEARTBEAT_INTERVAL is set to minutes
+	os.Setenv("MCP_HEARTBEAT_INTERVAL", "1m")
+	heartbeat = getHeartbeatInterval()
+	assert.Equal(t, 1*time.Minute, heartbeat, "Heartbeat interval should be 1m when MCP_HEARTBEAT_INTERVAL is set to '1m'")
+
+	// Test case: Invalid value should return 0
+	os.Setenv("MCP_HEARTBEAT_INTERVAL", "invalid")
+	heartbeat = getHeartbeatInterval()
+	assert.Equal(t, time.Duration(0), heartbeat, "Heartbeat interval should be 0 when MCP_HEARTBEAT_INTERVAL is set to an invalid value")
 }

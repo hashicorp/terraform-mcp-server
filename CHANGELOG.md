@@ -2,6 +2,7 @@
 
 IMPROVEMENTS
 
+* Add `--heartbeat-interval` CLI flag and `MCP_HEARTBEAT_INTERVAL` env var for HTTP heartbeat in load-balanced environments
 * Set custom User-Agent header for TFE API requests to enable tracking MCP server usage separately from other go-tfe clients [268](https://github.com/hashicorp/terraform-mcp-server/pull/268)
 
 FIXES
