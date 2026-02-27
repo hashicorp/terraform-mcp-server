@@ -26,14 +26,14 @@ import (
 //go:embed instructions.md
 var instructions string
 
-func runHTTPServer(logger *log.Logger, host string, port string, endpointPath string, keepAlive time.Duration, enabledToolsets []string) error {
+func runHTTPServer(logger *log.Logger, host string, port string, endpointPath string, heartbeatInterval time.Duration, enabledToolsets []string) error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
 	hcServer := NewServer(version.Version, logger, enabledToolsets)
 	registerToolsAndResources(hcServer, logger, enabledToolsets)
 
-	return streamableHTTPServerInit(ctx, hcServer, logger, host, port, endpointPath, keepAlive)
+	return streamableHTTPServerInit(ctx, hcServer, logger, host, port, endpointPath, heartbeatInterval)
 }
 
 func runStdioServer(logger *log.Logger, enabledToolsets []string) error {
@@ -44,16 +44,6 @@ func runStdioServer(logger *log.Logger, enabledToolsets []string) error {
 	registerToolsAndResources(hcServer, logger, enabledToolsets)
 
 	return serverInit(ctx, hcServer, logger)
-}
-
-func runSSEServer(logger *log.Logger, host string, port string, keepAlive time.Duration, enabledToolsets []string) error {
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	defer stop()
-
-	hcServer := NewServer(version.Version, logger, enabledToolsets)
-	registerToolsAndResources(hcServer, logger, enabledToolsets)
-
-	return sseServerInit(ctx, hcServer, logger, host, port, keepAlive)
 }
 
 func NewServer(version string, logger *log.Logger, enabledToolsets []string, opts ...server.ServerOption) *server.MCPServer {
@@ -180,25 +170,6 @@ func runDefaultCommand(cmd *cobra.Command, _ []string) {
 }
 
 func main() {
-	if shouldUseSSEMode() {
-		port := getHTTPPort()
-		host := getHTTPHost()
-
-		logFile, _ := rootCmd.PersistentFlags().GetString("log-file")
-		logger, err := initLogger(logFile)
-		if err != nil {
-			stdlog.Fatal("Failed to initialize logger:", err)
-		}
-
-		enabledToolsets := getToolsetsFromCmd(rootCmd, logger)
-
-		keepAlive := getKeepAlive()
-		if err := runSSEServer(logger, host, port, keepAlive, enabledToolsets); err != nil {
-			stdlog.Fatal("failed to run SSE server:", err)
-		}
-		return
-	}
-
 	if shouldUseStreamableHTTPMode() {
 		port := getHTTPPort()
 		host := getHTTPHost()
@@ -212,8 +183,8 @@ func main() {
 
 		enabledToolsets := getToolsetsFromCmd(rootCmd, logger)
 
-		keepAlive := getKeepAlive()
-		if err := runHTTPServer(logger, host, port, endpointPath, keepAlive, enabledToolsets); err != nil {
+		heartbeatInterval := getHeartbeatInterval()
+		if err := runHTTPServer(logger, host, port, endpointPath, heartbeatInterval, enabledToolsets); err != nil {
 			stdlog.Fatal("failed to run StreamableHTTP server:", err)
 		}
 		return
@@ -224,12 +195,6 @@ func main() {
 		fmt.Println(err)
 		os.Exit(1)
 	}
-}
-
-// shouldUseSSEMode checks if environment variables indicate SSE mode
-func shouldUseSSEMode() bool {
-	transportMode := os.Getenv("TRANSPORT_MODE")
-	return transportMode == "sse"
 }
 
 // shouldUseStreamableHTTPMode checks if environment variables indicate HTTP mode
@@ -287,9 +252,9 @@ func getEndpointPath(cmd *cobra.Command) string {
 	return "/mcp"
 }
 
-// getKeepAlive returns the keep-alive duration from the env var or default
-func getKeepAlive() time.Duration {
-	if val := os.Getenv("MCP_KEEP_ALIVE"); val != "" {
+// getHeartbeatInterval returns the heartbeat interval duration from the env var or default
+func getHeartbeatInterval() time.Duration {
+	if val := os.Getenv("MCP_HEARTBEAT_INTERVAL"); val != "" {
 		duration, err := time.ParseDuration(val)
 		if err == nil {
 			return duration

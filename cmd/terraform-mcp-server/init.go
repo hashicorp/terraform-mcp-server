@@ -56,42 +56,6 @@ var (
 		},
 	}
 
-	sseCmd = &cobra.Command{
-		Use:   "sse",
-		Short: "Start SSE server",
-		Long:  `Start a server that communicates via Server-Sent Events (SSE) transport.`,
-		Run: func(cmd *cobra.Command, _ []string) {
-			logFile, err := rootCmd.PersistentFlags().GetString("log-file")
-			if err != nil {
-				stdlog.Fatal("Failed to get log file:", err)
-			}
-			logger, err := initLogger(logFile)
-			if err != nil {
-				stdlog.Fatal("Failed to initialize logger:", err)
-			}
-
-			port, err := cmd.Flags().GetString("transport-port")
-			if err != nil {
-				stdlog.Fatal("Failed to get SSE port:", err)
-			}
-			host, err := cmd.Flags().GetString("transport-host")
-			if err != nil {
-				stdlog.Fatal("Failed to get SSE host:", err)
-			}
-
-			keepAlive, err := cmd.Flags().GetDuration("keep-alive")
-			if err != nil {
-				stdlog.Fatal("Failed to get keep-alive:", err)
-			}
-
-			enabledToolsets := getToolsetsFromCmd(cmd.Root(), logger)
-
-			if err := runSSEServer(logger, host, port, keepAlive, enabledToolsets); err != nil {
-				stdlog.Fatal("failed to run SSE server:", err)
-			}
-		},
-	}
-
 	streamableHTTPCmd = &cobra.Command{
 		Use:   "streamable-http",
 		Short: "Start StreamableHTTP server",
@@ -120,14 +84,14 @@ var (
 				stdlog.Fatal("Failed to get endpoint path:", err)
 			}
 
-			keepAlive, err := cmd.Flags().GetDuration("keep-alive")
+			heartbeatInterval, err := cmd.Flags().GetDuration("heartbeat-interval")
 			if err != nil {
-				stdlog.Fatal("Failed to get keep-alive:", err)
+				stdlog.Fatal("Failed to get heartbeat-interval:", err)
 			}
 
 			enabledToolsets := getToolsetsFromCmd(cmd.Root(), logger)
 
-			if err := runHTTPServer(logger, host, port, endpointPath, keepAlive, enabledToolsets); err != nil {
+			if err := runHTTPServer(logger, host, port, endpointPath, heartbeatInterval, enabledToolsets); err != nil {
 				stdlog.Fatal("failed to run streamableHTTP server:", err)
 			}
 		},
@@ -153,25 +117,19 @@ func init() {
 	rootCmd.PersistentFlags().String("toolsets", "all", toolsets.GenerateToolsetsHelp())
 	rootCmd.PersistentFlags().String("tools", "", toolsets.GenerateToolsHelp())
 
-	// Add SSE command flags
-	sseCmd.Flags().String("transport-host", "127.0.0.1", "Host to bind to")
-	sseCmd.Flags().StringP("transport-port", "p", "8080", "Port to listen on")
-	sseCmd.Flags().Duration("keep-alive", 0, "Keep-alive interval for SSE connections (e.g., 30s). 0 to disable")
-
 	// Add StreamableHTTP command flags (avoid 'h' shorthand conflict with help)
 	streamableHTTPCmd.Flags().String("transport-host", "127.0.0.1", "Host to bind to")
 	streamableHTTPCmd.Flags().StringP("transport-port", "p", "8080", "Port to listen on")
-	streamableHTTPCmd.Flags().Duration("keep-alive", 0, "Keep-alive interval for HTTP heartbeat (e.g., 30s). 0 to disable")
+	streamableHTTPCmd.Flags().Duration("heartbeat-interval", 0, "Heartbeat interval for HTTP connections (e.g., 30s). 0 to disable")
 	streamableHTTPCmd.Flags().String("mcp-endpoint", "/mcp", "Path for streamable HTTP endpoint")
 
 	// Add the same flags to the alias command for backward compatibility
 	httpCmdAlias.Flags().String("transport-host", "127.0.0.1", "Host to bind to")
 	httpCmdAlias.Flags().StringP("transport-port", "p", "8080", "Port to listen on")
 	httpCmdAlias.Flags().String("mcp-endpoint", "/mcp", "Path for streamable HTTP endpoint")
-	httpCmdAlias.Flags().Duration("keep-alive", 0, "Keep-alive interval for HTTP heartbeat (e.g., 30s). 0 to disable")
+	httpCmdAlias.Flags().Duration("heartbeat-interval", 0, "Heartbeat interval for HTTP connections (e.g., 30s). 0 to disable")
 
 	rootCmd.AddCommand(stdioCmd)
-	rootCmd.AddCommand(sseCmd)
 	rootCmd.AddCommand(streamableHTTPCmd)
 	rootCmd.AddCommand(httpCmdAlias) // Add the alias for backward compatibility
 }
@@ -231,42 +189,7 @@ func serverInit(ctx context.Context, hcServer *server.MCPServer, logger *log.Log
 	return nil
 }
 
-func sseServerInit(ctx context.Context, hcServer *server.MCPServer, logger *log.Logger, host string, port string, keepAlive time.Duration) error {
-	opts := []server.SSEOption{}
-
-	// Configure keep-alive if enabled
-	if keepAlive > 0 {
-		opts = append(opts, server.WithKeepAliveInterval(keepAlive))
-		logger.Infof("SSE keep-alive enabled with interval: %v", keepAlive)
-	}
-
-	sseServer := server.NewSSEServer(hcServer, opts...)
-
-	addr := fmt.Sprintf("%s:%s", host, port)
-
-	_, _ = fmt.Fprintf(os.Stderr, "Terraform MCP Server running on SSE at %s\n", addr)
-
-	errC := make(chan error, 1)
-	go func() {
-		logger.Infof("Starting SSE server on %s", addr)
-		errC <- sseServer.Start(addr)
-	}()
-
-	// Wait for shutdown signal
-	select {
-	case <-ctx.Done():
-		logger.Infof("Shutting down SSE server...")
-		return nil
-	case err := <-errC:
-		if err != nil {
-			return fmt.Errorf("SSE server error: %w", err)
-		}
-	}
-
-	return nil
-}
-
-func streamableHTTPServerInit(ctx context.Context, hcServer *server.MCPServer, logger *log.Logger, host string, port string, endpointPath string, keepAlive time.Duration) error {
+func streamableHTTPServerInit(ctx context.Context, hcServer *server.MCPServer, logger *log.Logger, host string, port string, endpointPath string, heartbeatInterval time.Duration) error {
 	// Ensure endpoint path starts with /
 	endpointPath = path.Join("/", endpointPath)
 	// Create StreamableHTTP server which implements the new streamable-http transport
@@ -293,10 +216,10 @@ func streamableHTTPServerInit(ctx context.Context, hcServer *server.MCPServer, l
 	opts = append(opts, server.WithStateLess(isStateless))
 	logger.Infof("Running with stateless mode: %v", isStateless)
 
-	// Configure keep-alive if enabled
-	if keepAlive > 0 {
-		opts = append(opts, server.WithHeartbeatInterval(keepAlive))
-		logger.Infof("HTTP heartbeat enabled with interval: %v", keepAlive)
+	// Configure heartbeat interval if enabled
+	if heartbeatInterval > 0 {
+		opts = append(opts, server.WithHeartbeatInterval(heartbeatInterval))
+		logger.Infof("HTTP heartbeat enabled with interval: %v", heartbeatInterval)
 	}
 
 	baseStreamableServer := server.NewStreamableHTTPServer(hcServer, opts...)

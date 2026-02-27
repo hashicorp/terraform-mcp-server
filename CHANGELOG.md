@@ -2,8 +2,7 @@
 
 IMPROVEMENTS
 
-* Add `sse` subcommand with `--keep-alive` flag for SSE transport keep-alive support
-* Add `--keep-alive` CLI flag and `MCP_KEEP_ALIVE` env var for heartbeat/keep-alive in load-balanced environments (works with both `streamable-http` and `sse` commands)
+* Add `--heartbeat-interval` CLI flag and `MCP_HEARTBEAT_INTERVAL` env var for HTTP heartbeat in load-balanced environments
 * Set custom User-Agent header for TFE API requests to enable tracking MCP server usage separately from other go-tfe clients [268](https://github.com/hashicorp/terraform-mcp-server/pull/268)
 
 FIXES

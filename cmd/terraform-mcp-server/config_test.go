@@ -55,7 +55,6 @@ func TestGetEndpointPath(t *testing.T) {
 	os.Setenv("MCP_ENDPOINT", "/api/v1/terraform-mcp")
 	path = getEndpointPath(nil)
 	assert.Equal(t, "/api/v1/terraform-mcp", path, "Endpoint path should be the custom value set in MCP_ENDPOINT")
-
 }
 
 func TestGetHTTPPort(t *testing.T) {
@@ -74,30 +73,6 @@ func TestGetHTTPPort(t *testing.T) {
 	os.Setenv("TRANSPORT_PORT", "9090")
 	port = getHTTPPort()
 	assert.Equal(t, "9090", port, "Port should be the value of TRANSPORT_PORT when it is set")
-}
-
-func TestShouldUseSSEMode(t *testing.T) {
-	// Save original env var to restore later
-	origMode := os.Getenv("TRANSPORT_MODE")
-	defer func() {
-		os.Setenv("TRANSPORT_MODE", origMode)
-	}()
-
-	// Test case: When TRANSPORT_MODE is not set, SSE mode should not be used
-	os.Unsetenv("TRANSPORT_MODE")
-	assert.False(t, shouldUseSSEMode(), "SSE mode should not be used when TRANSPORT_MODE is not set")
-
-	// Test case: When TRANSPORT_MODE is set to "sse", SSE mode should be used
-	os.Setenv("TRANSPORT_MODE", "sse")
-	assert.True(t, shouldUseSSEMode(), "SSE mode should be used when TRANSPORT_MODE is set to 'sse'")
-
-	// Test case: When TRANSPORT_MODE is set to "http", SSE mode should not be used
-	os.Setenv("TRANSPORT_MODE", "http")
-	assert.False(t, shouldUseSSEMode(), "SSE mode should not be used when TRANSPORT_MODE is set to 'http'")
-
-	// Test case: When TRANSPORT_MODE is set to "streamable-http", SSE mode should not be used
-	os.Setenv("TRANSPORT_MODE", "streamable-http")
-	assert.False(t, shouldUseSSEMode(), "SSE mode should not be used when TRANSPORT_MODE is set to 'streamable-http'")
 }
 
 func TestShouldUseStreamableHTTPMode(t *testing.T) {
@@ -143,8 +118,8 @@ func TestShouldUseStreamableHTTPMode(t *testing.T) {
 	// Test case: When MCP_ENDPOINT is set, HTTP mode should be used
 	os.Setenv("MCP_ENDPOINT", "/mcp")
 	assert.True(t, shouldUseStreamableHTTPMode(), "HTTP mode should be used when MCP_ENDPOINT is set")
-
 }
+
 func TestShouldUseStatelessMode(t *testing.T) {
 	// Save original env var to restore later
 	origMode := os.Getenv("MCP_SESSION_MODE")
@@ -177,30 +152,30 @@ func TestShouldUseStatelessMode(t *testing.T) {
 	assert.False(t, shouldUseStatelessMode(), "Stateful mode should be used when MCP_SESSION_MODE is set to an invalid value")
 }
 
-func TestGetKeepAlive(t *testing.T) {
+func TestGetHeartbeatInterval(t *testing.T) {
 	// Save original env var to restore later
-	origKeepAlive := os.Getenv("MCP_KEEP_ALIVE")
+	origHeartbeat := os.Getenv("MCP_HEARTBEAT_INTERVAL")
 	defer func() {
-		os.Setenv("MCP_KEEP_ALIVE", origKeepAlive)
+		os.Setenv("MCP_HEARTBEAT_INTERVAL", origHeartbeat)
 	}()
 
-	// Test case: When MCP_KEEP_ALIVE is not set, default value should be 0
-	os.Unsetenv("MCP_KEEP_ALIVE")
-	keepAlive := getKeepAlive()
-	assert.Equal(t, time.Duration(0), keepAlive, "Default keep-alive should be 0 when MCP_KEEP_ALIVE is not set")
+	// Test case: When MCP_HEARTBEAT_INTERVAL is not set, default value should be 0
+	os.Unsetenv("MCP_HEARTBEAT_INTERVAL")
+	heartbeat := getHeartbeatInterval()
+	assert.Equal(t, time.Duration(0), heartbeat, "Default heartbeat interval should be 0 when MCP_HEARTBEAT_INTERVAL is not set")
 
-	// Test case: When MCP_KEEP_ALIVE is set to a valid duration
-	os.Setenv("MCP_KEEP_ALIVE", "30s")
-	keepAlive = getKeepAlive()
-	assert.Equal(t, 30*time.Second, keepAlive, "Keep-alive should be 30s when MCP_KEEP_ALIVE is set to '30s'")
+	// Test case: When MCP_HEARTBEAT_INTERVAL is set to a valid duration
+	os.Setenv("MCP_HEARTBEAT_INTERVAL", "30s")
+	heartbeat = getHeartbeatInterval()
+	assert.Equal(t, 30*time.Second, heartbeat, "Heartbeat interval should be 30s when MCP_HEARTBEAT_INTERVAL is set to '30s'")
 
-	// Test case: When MCP_KEEP_ALIVE is set to minutes
-	os.Setenv("MCP_KEEP_ALIVE", "1m")
-	keepAlive = getKeepAlive()
-	assert.Equal(t, 1*time.Minute, keepAlive, "Keep-alive should be 1m when MCP_KEEP_ALIVE is set to '1m'")
+	// Test case: When MCP_HEARTBEAT_INTERVAL is set to minutes
+	os.Setenv("MCP_HEARTBEAT_INTERVAL", "1m")
+	heartbeat = getHeartbeatInterval()
+	assert.Equal(t, 1*time.Minute, heartbeat, "Heartbeat interval should be 1m when MCP_HEARTBEAT_INTERVAL is set to '1m'")
 
 	// Test case: Invalid value should return 0
-	os.Setenv("MCP_KEEP_ALIVE", "invalid")
-	keepAlive = getKeepAlive()
-	assert.Equal(t, time.Duration(0), keepAlive, "Keep-alive should be 0 when MCP_KEEP_ALIVE is set to an invalid value")
+	os.Setenv("MCP_HEARTBEAT_INTERVAL", "invalid")
+	heartbeat = getHeartbeatInterval()
+	assert.Equal(t, time.Duration(0), heartbeat, "Heartbeat interval should be 0 when MCP_HEARTBEAT_INTERVAL is set to an invalid value")
 }
