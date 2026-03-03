@@ -325,6 +325,122 @@ func TestInitLoggerWithFormat(t *testing.T) {
 	}
 }
 
+func TestGetPaginationLimit(t *testing.T) {
+	tests := []struct {
+		name        string
+		envValue    string
+		flagValue   int
+		expected    int
+		description string
+	}{
+		{
+			name:        "env var takes precedence",
+			envValue:    "50",
+			flagValue:   100,
+			expected:    50,
+			description: "MCP_PAGINATION_LIMIT env var should override --pagination-limit flag",
+		},
+		{
+			name:        "flag used when env not set",
+			envValue:    "",
+			flagValue:   25,
+			expected:    25,
+			description: "--pagination-limit flag should be used when MCP_PAGINATION_LIMIT is not set",
+		},
+		{
+			name:        "default when neither set",
+			envValue:    "",
+			flagValue:   0,
+			expected:    0,
+			description: "should default to 0 when neither env nor flag is set",
+		},
+		{
+			name:        "invalid env falls back to default",
+			envValue:    "invalid",
+			flagValue:   0,
+			expected:    0,
+			description: "invalid MCP_PAGINATION_LIMIT should fall back to default",
+		},
+		{
+			name:        "negative env falls back to default",
+			envValue:    "-5",
+			flagValue:   0,
+			expected:    0,
+			description: "negative MCP_PAGINATION_LIMIT should fall back to default",
+		},
+		{
+			name:        "negative flag falls back to default",
+			envValue:    "",
+			flagValue:   -10,
+			expected:    0,
+			description: "negative --pagination-limit should fall back to default",
+		},
+		{
+			name:        "valid env overrides negative flag",
+			envValue:    "100",
+			flagValue:   -5,
+			expected:    100,
+			description: "valid MCP_PAGINATION_LIMIT should be used even if flag is negative",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Save and restore original env var
+			originalEnv := os.Getenv("MCP_PAGINATION_LIMIT")
+			defer func() {
+				if originalEnv != "" {
+					os.Setenv("MCP_PAGINATION_LIMIT", originalEnv)
+				} else {
+					os.Unsetenv("MCP_PAGINATION_LIMIT")
+				}
+			}()
+
+			// Set up test environment
+			if tt.envValue != "" {
+				os.Setenv("MCP_PAGINATION_LIMIT", tt.envValue)
+			} else {
+				os.Unsetenv("MCP_PAGINATION_LIMIT")
+			}
+
+			// Create a test command with the flag
+			cmd := &cobra.Command{}
+			cmd.Flags().Int("pagination-limit", tt.flagValue, "test flag")
+
+			// Test the function
+			limit := getPaginationLimit(cmd)
+			assert.Equal(t, tt.expected, limit, tt.description)
+		})
+	}
+}
+
+func TestGetPaginationLimitWithNilCommand(t *testing.T) {
+	// Save and restore original env var
+	originalEnv := os.Getenv("MCP_PAGINATION_LIMIT")
+	defer func() {
+		if originalEnv != "" {
+			os.Setenv("MCP_PAGINATION_LIMIT", originalEnv)
+		} else {
+			os.Unsetenv("MCP_PAGINATION_LIMIT")
+		}
+	}()
+
+	// Test with nil command and no env var
+	os.Unsetenv("MCP_PAGINATION_LIMIT")
+	limit := getPaginationLimit(nil)
+	assert.Equal(t, 0, limit, "expected default 0 with nil command")
+
+	// Test with nil command but env var set
+	os.Setenv("MCP_PAGINATION_LIMIT", "75")
+	limit = getPaginationLimit(nil)
+	assert.Equal(t, 75, limit, "expected 75 from env var with nil command")
+
+	// Test with nil command and invalid env var
+	os.Setenv("MCP_PAGINATION_LIMIT", "not-a-number")
+	limit = getPaginationLimit(nil)
+	assert.Equal(t, 0, limit, "expected default 0 with invalid env var and nil command")
+}
+
 func TestGetLogFormat(t *testing.T) {
 	tests := []struct {
 		name        string
