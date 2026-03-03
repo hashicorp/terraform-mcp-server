@@ -495,7 +495,50 @@ To enable stateless mode, set the environment variable:
 ```bash
 export MCP_SESSION_MODE=stateless
 ```
+## Troubleshooting
 
+### Corporate Proxy / TLS Inspection (Zscaler, etc.)
+
+If you're behind a corporate proxy that performs TLS inspection (like Zscaler Internet Access), you may see certificate errors:
+```
+tls: failed to verify certificate: x509: certificate signed by unknown authority
+```
+
+**Solution: Mount your corporate CA certificate into the container:**
+```bash
+docker run -i --rm \
+  -v /path/to/corporate-ca.pem:/etc/ssl/certs/corporate-ca.pem \
+  -e SSL_CERT_FILE=/etc/ssl/certs/corporate-ca.pem \
+  hashicorp/terraform-mcp-server:0.4.0
+```
+
+For MCP client configurations:
+```json
+{
+  "mcpServers": {
+    "terraform": {
+      "command": "docker",
+      "args": [
+        "run",
+        "-i",
+        "--rm",
+        "-v", "/path/to/corporate-ca.pem:/etc/ssl/certs/corporate-ca.pem",
+        "-e", "SSL_CERT_FILE=/etc/ssl/certs/corporate-ca.pem",
+        "-e", "TFE_TOKEN=<>",
+        "hashicorp/terraform-mcp-server:0.4.0"
+      ]
+    }
+  }
+}
+```
+
+**Alternative: Run the binary directly**
+
+If Docker is not permitted in your environment, you can install and run the server binary directly, which will use your system's certificate store:
+```bash
+go install github.com/hashicorp/terraform-mcp-server/cmd/terraform-mcp-server@latest
+terraform-mcp-server stdio
+```
 ## Development
 
 ### Prerequisites
