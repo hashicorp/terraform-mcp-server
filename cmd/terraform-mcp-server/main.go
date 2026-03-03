@@ -25,27 +25,27 @@ import (
 //go:embed instructions.md
 var instructions string
 
-func runHTTPServer(logger *log.Logger, host string, port string, endpointPath string, enabledToolsets []string) error {
+func runHTTPServer(logger *log.Logger, host string, port string, endpointPath string, enabledToolsets []string, paginationLimit int) error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	hcServer := NewServer(version.Version, logger, enabledToolsets)
+	hcServer := NewServer(version.Version, logger, enabledToolsets, paginationLimit)
 	registerToolsAndResources(hcServer, logger, enabledToolsets)
 
 	return streamableHTTPServerInit(ctx, hcServer, logger, host, port, endpointPath)
 }
 
-func runStdioServer(logger *log.Logger, enabledToolsets []string) error {
+func runStdioServer(logger *log.Logger, enabledToolsets []string, paginationLimit int) error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	hcServer := NewServer(version.Version, logger, enabledToolsets)
+	hcServer := NewServer(version.Version, logger, enabledToolsets, paginationLimit)
 	registerToolsAndResources(hcServer, logger, enabledToolsets)
 
 	return serverInit(ctx, hcServer, logger)
 }
 
-func NewServer(version string, logger *log.Logger, enabledToolsets []string, opts ...server.ServerOption) *server.MCPServer {
+func NewServer(version string, logger *log.Logger, enabledToolsets []string, paginationLimit int, opts ...server.ServerOption) *server.MCPServer {
 	// Create rate limiting middleware with environment-based configuration
 	rateLimitConfig := client.LoadRateLimitConfigFromEnv()
 	rateLimitMiddleware := client.NewRateLimitMiddleware(rateLimitConfig, logger)
@@ -58,6 +58,12 @@ func NewServer(version string, logger *log.Logger, enabledToolsets []string, opt
 		server.WithToolHandlerMiddleware(rateLimitMiddleware.Middleware()),
 		server.WithElicitation(),
 	}
+
+	if paginationLimit > 0 {
+		defaultOpts = append(defaultOpts, server.WithPaginationLimit(paginationLimit))
+		logger.Infof("Pagination limit set to %d", paginationLimit)
+	}
+
 	opts = append(defaultOpts, opts...)
 
 	// Create hooks for session management
@@ -164,8 +170,9 @@ func runDefaultCommand(cmd *cobra.Command, _ []string) {
 
 	// Get toolsets from the command that was passed in
 	enabledToolsets := getToolsetsFromCmd(cmd, logger)
+	paginationLimit := getPaginationLimit(cmd)
 
-	if err := runStdioServer(logger, enabledToolsets); err != nil {
+	if err := runStdioServer(logger, enabledToolsets, paginationLimit); err != nil {
 		stdlog.Fatal("failed to run stdio server:", err)
 	}
 }
@@ -186,8 +193,9 @@ func main() {
 		}
 
 		enabledToolsets := getToolsetsFromCmd(rootCmd, logger)
+		paginationLimit := getPaginationLimit(rootCmd)
 
-		if err := runHTTPServer(logger, host, port, endpointPath, enabledToolsets); err != nil {
+		if err := runHTTPServer(logger, host, port, endpointPath, enabledToolsets, paginationLimit); err != nil {
 			stdlog.Fatal("failed to run StreamableHTTP server:", err)
 		}
 		return

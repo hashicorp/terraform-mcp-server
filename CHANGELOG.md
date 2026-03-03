@@ -4,6 +4,7 @@ IMPROVEMENTS
 
 * Set custom User-Agent header for TFE API requests to enable tracking MCP server usage separately from other go-tfe clients [268](https://github.com/hashicorp/terraform-mcp-server/pull/268)
 * Adding a new cli flags `--log-level` to set the desired log level for the server logs and `--log-format` for the logs formatting [286](https://github.com/hashicorp/terraform-mcp-server/pull/286)
+* Add `--pagination-limit` flag and `MCP_PAGINATION_LIMIT` env var to configure page sizes for list operations
 
 FIXES
 

@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"path"
+	"strconv"
 	"strings"
 	"time"
 
@@ -51,8 +52,9 @@ var (
 			}
 
 			enabledToolsets := getToolsetsFromCmd(cmd.Root(), logger)
+			paginationLimit := getPaginationLimit(cmd.Root())
 
-			if err := runStdioServer(logger, enabledToolsets); err != nil {
+			if err := runStdioServer(logger, enabledToolsets, paginationLimit); err != nil {
 				stdlog.Fatal("failed to run stdio server:", err)
 			}
 		},
@@ -89,8 +91,9 @@ var (
 			}
 
 			enabledToolsets := getToolsetsFromCmd(cmd.Root(), logger)
+			paginationLimit := getPaginationLimit(cmd.Root())
 
-			if err := runHTTPServer(logger, host, port, endpointPath, enabledToolsets); err != nil {
+			if err := runHTTPServer(logger, host, port, endpointPath, enabledToolsets, paginationLimit); err != nil {
 				stdlog.Fatal("failed to run streamableHTTP server:", err)
 			}
 		},
@@ -117,6 +120,7 @@ func init() {
 	rootCmd.PersistentFlags().String("log-format", "text", "Log format (text or json)")
 	rootCmd.PersistentFlags().String("toolsets", "all", toolsets.GenerateToolsetsHelp())
 	rootCmd.PersistentFlags().String("tools", "", toolsets.GenerateToolsHelp())
+	rootCmd.PersistentFlags().Int("pagination-limit", 0, "Pagination limit for list operations (0 = use default)")
 
 	// Add StreamableHTTP command flags (avoid 'h' shorthand conflict with help)
 	streamableHTTPCmd.Flags().String("transport-host", "127.0.0.1", "Host to bind to")
@@ -190,6 +194,36 @@ func getLogFormat(cmd *cobra.Command) string {
 	}
 
 	return "text"
+}
+
+// getPaginationLimit determines the pagination limit from environment variable or CLI flag
+func getPaginationLimit(cmd *cobra.Command) int {
+	// Check environment variable first
+	if envLimit := os.Getenv("MCP_PAGINATION_LIMIT"); envLimit != "" {
+		limit, err := strconv.Atoi(envLimit)
+		if err != nil {
+			stdlog.Printf("Warning: invalid MCP_PAGINATION_LIMIT '%s', using default\n", envLimit)
+			return 0
+		}
+		if limit < 0 {
+			stdlog.Printf("Warning: MCP_PAGINATION_LIMIT cannot be negative, using default\n")
+			return 0
+		}
+		return limit
+	}
+
+	// Check CLI flag
+	if cmd != nil {
+		if limit, err := cmd.Flags().GetInt("pagination-limit"); err == nil {
+			if limit < 0 {
+				stdlog.Printf("Warning: --pagination-limit cannot be negative, using default\n")
+				return 0
+			}
+			return limit
+		}
+	}
+
+	return 0
 }
 
 func initLogger(outPath string, level log.Level, format string) (*log.Logger, error) {
