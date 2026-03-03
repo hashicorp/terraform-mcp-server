@@ -180,6 +180,8 @@ func TestGetHeartbeatInterval(t *testing.T) {
 	os.Setenv("MCP_HEARTBEAT_INTERVAL", "invalid")
 	heartbeat = getHeartbeatInterval()
 	assert.Equal(t, time.Duration(0), heartbeat, "Heartbeat interval should be 0 when MCP_HEARTBEAT_INTERVAL is set to an invalid value")
+}
+
 func TestGetLogLevel(t *testing.T) {
 	tests := []struct {
 		name        string
