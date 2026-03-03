@@ -101,7 +101,7 @@ func (h *securityHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Max-Age", "3600")
 		w.Header().Set("Access-Control-Allow-Origin", origin)
 		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Mcp-Session-Id")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Mcp-Session-Id, Authorization, X-Tfe-Token, X-Tfe-Address, X-Tfe-Skip-Tls-Verify")
 	}
 
 	// Handle OPTIONS requests for CORS preflight
@@ -125,31 +125,79 @@ func NewSecurityHandler(handler http.Handler, allowedOrigins []string, corsMode 
 	}
 }
 
+// getHeaderValue extracts header value supporting multiple header name formats
+// This supports proxies like nginx that drop headers with underscores by default
+func getHeaderValue(r *http.Request, header string) string {
+	// Try the standard header name first
+	value := r.Header.Get(textproto.CanonicalMIMEHeaderKey(header))
+	if value != "" {
+		return value
+	}
+
+	// nginx drops headers with underscores by default
+	aliases := map[string][]string{
+		TerraformToken:         {"X-Tfe-Token", "X-Terraform-Token"},
+		TerraformAddress:       {"X-Tfe-Address", "X-Terraform-Address"},
+		TerraformSkipTLSVerify: {"X-Tfe-Skip-Tls-Verify", "X-Terraform-Skip-Tls-Verify"},
+	}
+
+	if headerAliases, ok := aliases[header]; ok {
+		for _, alias := range headerAliases {
+			value = r.Header.Get(alias)
+			if value != "" {
+				return value
+			}
+		}
+	}
+
+	// For token, also check Authorization Bearer header
+	if header == TerraformToken {
+		authHeader := r.Header.Get("Authorization")
+		if strings.HasPrefix(authHeader, "Bearer ") {
+			return strings.TrimPrefix(authHeader, "Bearer ")
+		}
+	}
+
+	return ""
+}
+
 // TerraformContextMiddleware adds Terraform-related header values to the request context
 // This middleware extracts Terraform configuration from HTTP headers, query parameters,
 // or environment variables and adds them to the request context for use by MCP tools
 func TerraformContextMiddleware(logger *log.Logger) func(http.Handler) http.Handler {
+	// Check lock configuration at middleware creation time
+	// When enabled, clients cannot override the TFE address via headers
+	lockAddress := strings.ToLower(os.Getenv("MCP_LOCK_TFE_ADDRESS")) == "true"
+
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			requiredHeaders := []string{TerraformAddress, TerraformToken, TerraformSkipTLSVerify}
 			ctx := r.Context()
 			for _, header := range requiredHeaders {
-				// Priority order: HTTP header -> Query parameter -> Environment variable
-				headerValue := r.Header.Get(textproto.CanonicalMIMEHeaderKey(header))
+				var headerValue string
 
-				if headerValue == "" {
-					headerValue = r.URL.Query().Get(header)
-
-					// Explicitly disallow TerraformToken in query parameters for security reasons
-					if header == TerraformToken && headerValue != "" {
-						logger.Info(fmt.Sprintf("Terraform token was provided in query parameters by client %v, terminating request", r.RemoteAddr))
-						http.Error(w, "Terraform token should not be provided in query parameters for security reasons, use the terraform_token header", http.StatusBadRequest)
-						return
-					}
-				}
-
-				if headerValue == "" {
+				if header == TerraformAddress && lockAddress {
 					headerValue = utils.GetEnv(header, "")
+					if headerValue != "" {
+						logger.Debug("TFE address locked to server configuration")
+					}
+				} else {
+					headerValue = getHeaderValue(r, header)
+
+					if headerValue == "" {
+						headerValue = r.URL.Query().Get(header)
+
+						//  disallow TerraformToken in query parameters for security reasons
+						if header == TerraformToken && headerValue != "" {
+							logger.Info(fmt.Sprintf("Terraform token was provided in query parameters by client %v, terminating request", r.RemoteAddr))
+							http.Error(w, "Terraform token should not be provided in query parameters for security reasons, use the Authorization header or X-TFE-Token header", http.StatusBadRequest)
+							return
+						}
+					}
+
+					if headerValue == "" {
+						headerValue = utils.GetEnv(header, "")
+					}
 				}
 
 				// Add to context using the header name as key
