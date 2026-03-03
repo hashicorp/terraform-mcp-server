@@ -1,7 +1,8 @@
 ## UNRELEASED
 
 IMPROVEMENTS
-
+* Add proxy-friendly header aliases (`X-TFE-Token`, `X-TFE-Address`, `Authorization: Bearer`) for environments where proxies drop headers with underscores
+* Add `MCP_LOCK_TFE_ADDRESS` env var to prevent clients from overriding the TFE address when hosting MCP server centrally
 * Set custom User-Agent header for TFE API requests to enable tracking MCP server usage separately from other go-tfe clients [268](https://github.com/hashicorp/terraform-mcp-server/pull/268)
 * Adding a new cli flags `--log-level` to set the desired log level for the server logs and `--log-format` for the logs formatting [286](https://github.com/hashicorp/terraform-mcp-server/pull/286)
 
