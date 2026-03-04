@@ -271,13 +271,15 @@ func getHeartbeatInterval() time.Duration {
 // Returns true if MCP_DISABLE_STREAMING environment variable is set to "true" or "1"
 // or if --disable-streaming CLI flag is set
 func shouldDisableStreaming(cmd *cobra.Command) bool {
-	// Check environment variable first (takes precedence)
-	value := strings.ToLower(strings.TrimSpace(os.Getenv("MCP_DISABLE_STREAMING")))
-	if value == "true" || value == "1" {
-		return true
+	// Check if environment variable is set (takes precedence)
+	envValue := os.Getenv("MCP_DISABLE_STREAMING")
+	if envValue != "" {
+		// Environment variable is set, use its value
+		value := strings.ToLower(strings.TrimSpace(envValue))
+		return value == "true" || value == "1"
 	}
 
-	// Check CLI flag if command is provided and flag is set
+	// Environment variable not set, check CLI flag
 	if cmd != nil && cmd.Flags().Changed("disable-streaming") {
 		disabled, _ := cmd.Flags().GetBool("disable-streaming")
 		return disabled
