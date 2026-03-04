@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"path"
 
 	"github.com/hashicorp/terraform-mcp-server/pkg/client"
 	"github.com/hashicorp/terraform-mcp-server/pkg/utils"
@@ -28,7 +27,7 @@ func RegisterResources(hcServer *server.MCPServer, logger *log.Logger) {
 
 // TerraformStyleGuideResource returns the resource and handler for the style guide
 func TerraformStyleGuideResource(logger *log.Logger) (mcp.Resource, server.ResourceHandlerFunc) {
-	resourceURI := "/terraform/style-guide"
+	resourceURI := "terraform://guides/style-guide"
 	description := "Terraform Style Guide"
 
 	return mcp.NewResource(
@@ -69,7 +68,7 @@ func TerraformStyleGuideResource(logger *log.Logger) (mcp.Resource, server.Resou
 
 // TerraformModuleDevGuideResource returns a resource and handler for the Terraform Module Development Guide markdown files
 func TerraformModuleDevGuideResource(logger *log.Logger) (mcp.Resource, server.ResourceHandlerFunc) {
-	resourceURI := "/terraform/module-development"
+	resourceURI := "terraform://guides/module-development"
 	description := "Terraform Module Development Guide"
 
 	var urls = []struct {
@@ -114,7 +113,7 @@ func TerraformModuleDevGuideResource(logger *log.Logger) (mcp.Resource, server.R
 				}
 				contents = append(contents, mcp.TextResourceContents{
 					MIMEType: "text/markdown",
-					URI:      path.Join(resourceURI, u.Name),
+					URI:      resourceURI + "/" + u.Name,
 					Text:     string(body),
 				})
 			}
