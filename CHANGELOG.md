@@ -1,5 +1,13 @@
 ## UNRELEASED
 
+FEATURES
+
+* [New Tool] `get_plan_json_output` Retrieves the structured JSON output of a Terraform plan, providing detailed resource changes in a machine-readable format that is easier to parse than plain logs
+* [New Tool] `get_plan_details` Fetches detailed metadata about a specific Terraform plan
+* [New Tool] `get_plan_logs` Retrieves the execution logs of a specific Terraform plan
+* [New Tool] `get_apply_details` Fetches detailed metadata about a specific Terraform apply
+* [New Tool] `get_apply_logs` Retrieves the execution logs of a specific Terraform apply
+
 IMPROVEMENTS
 
 * Add `--heartbeat-interval` CLI flag and `MCP_HEARTBEAT_INTERVAL` env var for HTTP heartbeat in load-balanced environments
