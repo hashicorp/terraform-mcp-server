@@ -1,5 +1,9 @@
 ## UNRELEASED
 
+FIXES
+
+* Use absolute URIs with `terraform://` scheme for resource identifiers to comply with MCP specification [#274](https://github.com/hashicorp/terraform-mcp-server/pull/274)
+
 IMPROVEMENTS
 
 * Add `--heartbeat-interval` CLI flag and `MCP_HEARTBEAT_INTERVAL` env var for HTTP heartbeat in load-balanced environments
