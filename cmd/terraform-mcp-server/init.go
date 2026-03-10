@@ -95,7 +95,7 @@ var (
 
 			enabledToolsets := getToolsetsFromCmd(cmd.Root(), logger)
 
-			if err := runHTTPServer(logger, host, port, endpointPath, heartbeatInterval, enabledToolsets); err != nil {
+			if err := runHTTPServer(logger, host, port, endpointPath, heartbeatInterval, enabledToolsets, cmd); err != nil {
 				stdlog.Fatal("failed to run streamableHTTP server:", err)
 			}
 		},
@@ -128,12 +128,14 @@ func init() {
 	streamableHTTPCmd.Flags().StringP("transport-port", "p", "8080", "Port to listen on")
 	streamableHTTPCmd.Flags().Duration("heartbeat-interval", 0, "Heartbeat interval for HTTP connections (e.g., 30s). 0 to disable")
 	streamableHTTPCmd.Flags().String("mcp-endpoint", "/mcp", "Path for streamable HTTP endpoint")
+	streamableHTTPCmd.Flags().Bool("disable-streaming", false, "Disable SSE streaming and use direct HTTP responses only")
 
 	// Add the same flags to the alias command for backward compatibility
 	httpCmdAlias.Flags().String("transport-host", "127.0.0.1", "Host to bind to")
 	httpCmdAlias.Flags().StringP("transport-port", "p", "8080", "Port to listen on")
 	httpCmdAlias.Flags().String("mcp-endpoint", "/mcp", "Path for streamable HTTP endpoint")
 	httpCmdAlias.Flags().Duration("heartbeat-interval", 0, "Heartbeat interval for HTTP connections (e.g., 30s). 0 to disable")
+	httpCmdAlias.Flags().Bool("disable-streaming", false, "Disable SSE streaming and use direct HTTP responses only")
 
 	rootCmd.AddCommand(stdioCmd)
 	rootCmd.AddCommand(streamableHTTPCmd)
@@ -260,7 +262,7 @@ func serverInit(ctx context.Context, hcServer *server.MCPServer, logger *log.Log
 	return nil
 }
 
-func streamableHTTPServerInit(ctx context.Context, hcServer *server.MCPServer, logger *log.Logger, host string, port string, endpointPath string, heartbeatInterval time.Duration) error {
+func streamableHTTPServerInit(ctx context.Context, hcServer *server.MCPServer, logger *log.Logger, host string, port string, endpointPath string, heartbeatInterval time.Duration, cmd *cobra.Command) error {
 	// Ensure endpoint path starts with /
 	endpointPath = path.Join("/", endpointPath)
 	// Create StreamableHTTP server which implements the new streamable-http transport
@@ -291,6 +293,14 @@ func streamableHTTPServerInit(ctx context.Context, hcServer *server.MCPServer, l
 	if heartbeatInterval > 0 {
 		opts = append(opts, server.WithHeartbeatInterval(heartbeatInterval))
 		logger.Infof("HTTP heartbeat enabled with interval: %v", heartbeatInterval)
+	}
+	// Check if SSE streaming should be disabled
+	disableStreaming := shouldDisableStreaming(cmd)
+	if disableStreaming {
+		opts = append(opts, server.WithDisableStreaming(true))
+		logger.Info("SSE streaming is disabled - using direct HTTP responses only")
+	} else {
+		logger.Info("SSE streaming is enabled (default)")
 	}
 
 	baseStreamableServer := server.NewStreamableHTTPServer(hcServer, opts...)

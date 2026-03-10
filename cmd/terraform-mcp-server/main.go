@@ -26,14 +26,14 @@ import (
 //go:embed instructions.md
 var instructions string
 
-func runHTTPServer(logger *log.Logger, host string, port string, endpointPath string, heartbeatInterval time.Duration, enabledToolsets []string) error {
+func runHTTPServer(logger *log.Logger, host string, port string, endpointPath string, heartbeatInterval time.Duration, enabledToolsets []string, cmd *cobra.Command) error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
 	hcServer := NewServer(version.Version, logger, enabledToolsets)
 	registerToolsAndResources(hcServer, logger, enabledToolsets)
 
-	return streamableHTTPServerInit(ctx, hcServer, logger, host, port, endpointPath, heartbeatInterval)
+	return streamableHTTPServerInit(ctx, hcServer, logger, host, port, endpointPath, heartbeatInterval, cmd)
 }
 
 func runStdioServer(logger *log.Logger, enabledToolsets []string) error {
@@ -188,7 +188,7 @@ func main() {
 		enabledToolsets := getToolsetsFromCmd(rootCmd, logger)
 
 		heartbeatInterval := getHeartbeatInterval()
-		if err := runHTTPServer(logger, host, port, endpointPath, heartbeatInterval, enabledToolsets); err != nil {
+		if err := runHTTPServer(logger, host, port, endpointPath, heartbeatInterval, enabledToolsets, nil); err != nil {
 			stdlog.Fatal("failed to run StreamableHTTP server:", err)
 		}
 		return
@@ -265,4 +265,25 @@ func getHeartbeatInterval() time.Duration {
 		}
 	}
 	return 0
+}
+
+// shouldDisableStreaming checks if SSE streaming should be disabled
+// Returns true if MCP_DISABLE_STREAMING environment variable is set to "true" or "1"
+// or if --disable-streaming CLI flag is set
+func shouldDisableStreaming(cmd *cobra.Command) bool {
+	// Check if environment variable is set (takes precedence)
+	envValue := os.Getenv("MCP_DISABLE_STREAMING")
+	if envValue != "" {
+		// Environment variable is set, use its value
+		value := strings.ToLower(strings.TrimSpace(envValue))
+		return value == "true" || value == "1"
+	}
+
+	// Environment variable not set, check CLI flag
+	if cmd != nil && cmd.Flags().Changed("disable-streaming") {
+		disabled, _ := cmd.Flags().GetBool("disable-streaming")
+		return disabled
+	}
+
+	return false
 }
