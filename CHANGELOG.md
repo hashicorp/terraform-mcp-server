@@ -1,5 +1,9 @@
 ## UNRELEASED
 
+FIXES
+
+* Fix sessions handling in stateless and load balanced environments
+
 IMPROVEMENTS
 
 * Add `--heartbeat-interval` CLI flag and `MCP_HEARTBEAT_INTERVAL` env var for HTTP heartbeat in load-balanced environments
