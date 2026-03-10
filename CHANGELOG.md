@@ -6,6 +6,7 @@ FIXES
 
 IMPROVEMENTS
 
+* Add automated dev deployment workflow triggered on main branch merges
 * Add `--heartbeat-interval` CLI flag and `MCP_HEARTBEAT_INTERVAL` env var for HTTP heartbeat in load-balanced environments
 * Set custom User-Agent header for TFE API requests to enable tracking MCP server usage separately from other go-tfe clients [268](https://github.com/hashicorp/terraform-mcp-server/pull/268)
 * Adding a new cli flags `--log-level` to set the desired log level for the server logs and `--log-format` for the logs formatting [286](https://github.com/hashicorp/terraform-mcp-server/pull/286)
