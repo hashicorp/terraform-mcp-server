@@ -6,10 +6,12 @@ package client
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"sync"
 
 	"github.com/hashicorp/go-tfe"
 	"github.com/hashicorp/terraform-mcp-server/pkg/utils"
+	"github.com/hashicorp/terraform-mcp-server/version"
 	"github.com/mark3labs/mcp-go/server"
 	log "github.com/sirupsen/logrus"
 )
@@ -34,8 +36,10 @@ func NewTfeClient(sessionId string, terraformAddress string, terraformSkipTLSVer
 		Address:           terraformAddress,
 		Token:             terraformToken,
 		RetryServerErrors: true,
+		Headers:           make(http.Header),
 	}
 
+	config.Headers.Set("User-Agent", fmt.Sprintf("terraform-mcp-server/%s", version.GetHumanVersion()))
 	config.HTTPClient = createHTTPClient(terraformSkipTLSVerify, logger)
 
 	client, err := tfe.NewClient(config)

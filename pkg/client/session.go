@@ -15,6 +15,10 @@ type contextKey string
 
 // NewSessionHandler initializes clients for the session
 func NewSessionHandler(ctx context.Context, session server.ClientSession, logger *log.Logger) {
+	if _, ok := activeTfeClients.Load(session.SessionID()); ok {
+		return
+	}
+
 	// Create both TFE and HTTP clients for the session
 	tfeClient, err := CreateTfeClientForSession(ctx, session, logger)
 	if err != nil {
