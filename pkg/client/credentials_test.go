@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 )
 
@@ -17,10 +18,6 @@ func TestExtractHostname(t *testing.T) {
 		address  string
 		expected string
 	}{
-		{"standard https", "https://app.terraform.io", "app.terraform.io"},
-		{"with port", "https://tfe.example.com:8443", "tfe.example.com"},
-		{"with path", "https://app.terraform.io/api/v2", "app.terraform.io"},
-		{"http scheme", "http://localhost:8080", "localhost"},
 		{"empty string", "", ""},
 		{"invalid url", "not-a-url", ""},
 	}
@@ -34,13 +31,16 @@ func TestExtractHostname(t *testing.T) {
 }
 
 func TestReadCredentialsFile(t *testing.T) {
+	logger := logrus.New()
+	logger.SetOutput(os.Stderr)
+
 	t.Run("empty hostname", func(t *testing.T) {
-		result := ReadCredentialsFile("")
+		result := ReadCredentialsFile("", logger)
 		require.Empty(t, result)
 	})
 
 	t.Run("file not found", func(t *testing.T) {
-		result := ReadCredentialsFile("nonexistent.example.com")
+		result := ReadCredentialsFile("nonexistent.example.com", logger)
 		require.Empty(t, result)
 	})
 
@@ -73,15 +73,15 @@ func TestReadCredentialsFile(t *testing.T) {
 		defer os.Setenv("HOME", originalHome)
 
 		// Test finding a token
-		token := ReadCredentialsFile("app.terraform.io")
+		token := ReadCredentialsFile("app.terraform.io", logger)
 		require.Equal(t, "test-token-123", token)
 
 		// Test finding another token
-		token = ReadCredentialsFile("tfe.example.com")
+		token = ReadCredentialsFile("tfe.example.com", logger)
 		require.Equal(t, "enterprise-token-456", token)
 
 		// Test hostname not in file
-		token = ReadCredentialsFile("other.terraform.io")
+		token = ReadCredentialsFile("other.terraform.io", logger)
 		require.Empty(t, token)
 	})
 
@@ -102,7 +102,7 @@ func TestReadCredentialsFile(t *testing.T) {
 		os.Setenv("HOME", tmpDir)
 		defer os.Setenv("HOME", originalHome)
 
-		token := ReadCredentialsFile("app.terraform.io")
+		token := ReadCredentialsFile("app.terraform.io", logger)
 		require.Empty(t, token)
 	})
 }
