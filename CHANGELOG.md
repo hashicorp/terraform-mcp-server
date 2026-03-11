@@ -1,3 +1,9 @@
+## Unreleased
+
+IMPROVEMENTS
+
+* Improved credentials file lookup with warning logs for failure modes
+
 ## 0.4.0
 
 FEATURES

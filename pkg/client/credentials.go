@@ -8,6 +8,8 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+
+	log "github.com/sirupsen/logrus"
 )
 
 // credentialsFile represents the structure of ~/.terraform.d/credentials.tfrc.json
@@ -21,24 +23,33 @@ type credentialEntry struct {
 
 // ReadCredentialsFile reads the Terraform CLI credentials file and returns
 // the token for the specified hostname. Returns empty string if not found.
-func ReadCredentialsFile(hostname string) string {
+func ReadCredentialsFile(hostname string, logger *log.Logger) string {
 	if hostname == "" {
 		return ""
 	}
 
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
+		logger.Warnf("Failed to get home directory for credentials file lookup: %v", err)
 		return ""
 	}
 
 	credPath := filepath.Join(homeDir, ".terraform.d", "credentials.tfrc.json")
 	data, err := os.ReadFile(credPath)
 	if err != nil {
+		if os.IsNotExist(err) {
+			logger.Debugf("No credentials file found at %s", credPath)
+		} else if os.IsPermission(err) {
+			logger.Warnf("Permission denied reading credentials file at %s", credPath)
+		} else {
+			logger.Warnf("Failed to read credentials file at %s: %v", credPath, err)
+		}
 		return ""
 	}
 
 	var creds credentialsFile
 	if err := json.Unmarshal(data, &creds); err != nil {
+		logger.Warnf("Failed to parse credentials file at %s: %v", credPath, err)
 		return ""
 	}
 
@@ -46,6 +57,7 @@ func ReadCredentialsFile(hostname string) string {
 		return entry.Token
 	}
 
+	logger.Debugf("No credentials found for hostname %q in credentials file", hostname)
 	return ""
 }
 
