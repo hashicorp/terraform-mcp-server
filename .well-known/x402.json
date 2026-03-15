@@ -1,0 +1,28 @@
+{
+  "name": "hashicorp/terraform-mcp-server",
+  "description": "🎖️🏎️☁️ - The official Terraform MCP Server seamlessly integrates with the Terraform ecosystem, enabling provider discovery, module analysis, and direct Registry API integration for advanced Infrastructure as Code workflows.",
+  "accepts": [
+    {
+      "network": "eip155:8453",
+      "asset": "USDC",
+      "address": "YOUR_WALLET_ADDRESS"
+    }
+  ],
+  "resources": [
+    {
+      "path": "/stdio",
+      "price": "0.01",
+      "description": "Pay-per-call access to stdio"
+    },
+    {
+      "path": "/streamable-http",
+      "price": "0.01",
+      "description": "Pay-per-call access to streamable-http"
+    },
+    {
+      "path": "/mcp",
+      "price": "0.01",
+      "description": "Pay-per-call access to /mcp"
+    }
+  ]
+}
