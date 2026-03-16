@@ -315,86 +315,47 @@ func TestOptionsRequest(t *testing.T) {
 	assert.NotEmpty(t, rr.Header().Get("Access-Control-Allow-Methods"))
 }
 
-// TestGetHeaderValue tests the helper function that extracts header values
-// supporting multiple header name formats for proxy compatibility
-func TestGetHeaderValue(t *testing.T) {
+// TestGetTokenFromAuthHeader tests the helper function that extracts token from Authorization Bearer header
+func TestGetTokenFromAuthHeader(t *testing.T) {
 	tests := []struct {
 		name     string
-		header   string
 		headers  map[string]string
 		expected string
 	}{
 		{
-			name:     "standard TFE_TOKEN header",
-			header:   TerraformToken,
-			headers:  map[string]string{"Tfe_Token": "standard-token"},
-			expected: "standard-token",
+			name:     "Authorization Bearer token",
+			headers:  map[string]string{"Authorization": "Bearer my-token"},
+			expected: "my-token",
 		},
 		{
-			name:     "X-Tfe-Token alias",
-			header:   TerraformToken,
-			headers:  map[string]string{"X-Tfe-Token": "alias-token"},
-			expected: "alias-token",
+			name:     "Authorization Basic ignored",
+			headers:  map[string]string{"Authorization": "Basic abc123"},
+			expected: "",
 		},
 		{
-			name:     "X-Terraform-Token alias",
-			header:   TerraformToken,
-			headers:  map[string]string{"X-Terraform-Token": "terraform-token"},
-			expected: "terraform-token",
-		},
-		{
-			name:     "Authorization Bearer",
-			header:   TerraformToken,
-			headers:  map[string]string{"Authorization": "Bearer bearer-token"},
-			expected: "bearer-token",
-		},
-		{
-			name:     "standard header takes priority over alias",
-			header:   TerraformToken,
-			headers:  map[string]string{"Tfe_Token": "standard", "X-Tfe-Token": "alias"},
-			expected: "standard",
-		},
-		{
-			name:     "alias takes priority over Bearer",
-			header:   TerraformToken,
-			headers:  map[string]string{"X-Tfe-Token": "alias", "Authorization": "Bearer bearer"},
-			expected: "alias",
-		},
-		{
-			name:     "X-Tfe-Address alias",
-			header:   TerraformAddress,
-			headers:  map[string]string{"X-Tfe-Address": "https://tfe.example.com"},
-			expected: "https://tfe.example.com",
-		},
-		{
-			name:     "X-Terraform-Address alias",
-			header:   TerraformAddress,
-			headers:  map[string]string{"X-Terraform-Address": "https://terraform.example.com"},
-			expected: "https://terraform.example.com",
-		},
-		{
-			name:     "X-Tfe-Skip-Tls-Verify alias",
-			header:   TerraformSkipTLSVerify,
-			headers:  map[string]string{"X-Tfe-Skip-Tls-Verify": "true"},
-			expected: "true",
-		},
-		{
-			name:     "X-Terraform-Skip-Tls-Verify alias",
-			header:   TerraformSkipTLSVerify,
-			headers:  map[string]string{"X-Terraform-Skip-Tls-Verify": "true"},
-			expected: "true",
-		},
-		{
-			name:     "no matching header returns empty",
-			header:   TerraformToken,
+			name:     "no Authorization header",
 			headers:  map[string]string{},
 			expected: "",
 		},
 		{
-			name:     "Authorization without Bearer prefix ignored",
-			header:   TerraformToken,
-			headers:  map[string]string{"Authorization": "Basic abc123"},
+			name:     "empty Authorization header",
+			headers:  map[string]string{"Authorization": ""},
 			expected: "",
+		},
+		{
+			name:     "Bearer with no token",
+			headers:  map[string]string{"Authorization": "Bearer "},
+			expected: "",
+		},
+		{
+			name:     "Bearer with whitespace token",
+			headers:  map[string]string{"Authorization": "Bearer   "},
+			expected: "  ",
+		},
+		{
+			name:     "Bearer lowercase",
+			headers:  map[string]string{"Authorization": "bearer my-token"},
+			expected: "", // Case sensitive - must be "Bearer"
 		},
 	}
 
@@ -404,7 +365,7 @@ func TestGetHeaderValue(t *testing.T) {
 			for k, v := range tt.headers {
 				req.Header.Set(k, v)
 			}
-			result := getHeaderValue(req, tt.header)
+			result := getTokenFromAuthHeader(req)
 			assert.Equal(t, tt.expected, result)
 		})
 	}
@@ -420,23 +381,16 @@ func TestTerraformContextMiddleware(t *testing.T) {
 	origAddress := os.Getenv(TerraformAddress)
 	origToken := os.Getenv(TerraformToken)
 	origSkipTLS := os.Getenv(TerraformSkipTLSVerify)
-	origLock := os.Getenv("MCP_LOCK_TFE_ADDRESS")
 	defer func() {
 		os.Setenv(TerraformAddress, origAddress)
 		os.Setenv(TerraformToken, origToken)
 		os.Setenv(TerraformSkipTLSVerify, origSkipTLS)
-		if origLock != "" {
-			os.Setenv("MCP_LOCK_TFE_ADDRESS", origLock)
-		} else {
-			os.Unsetenv("MCP_LOCK_TFE_ADDRESS")
-		}
 	}()
 
 	// Clear environment variables for clean test state
 	os.Unsetenv(TerraformAddress)
 	os.Unsetenv(TerraformToken)
 	os.Unsetenv(TerraformSkipTLSVerify)
-	os.Unsetenv("MCP_LOCK_TFE_ADDRESS")
 
 	tests := []struct {
 		name                string
@@ -469,6 +423,31 @@ func TestTerraformContextMiddleware(t *testing.T) {
 				TerraformAddress:       "https://header.terraform.io",
 				TerraformToken:         "header-token",
 				TerraformSkipTLSVerify: "true",
+			},
+		},
+		{
+			name: "Authorization Bearer header provides token",
+			headers: map[string]string{
+				"Authorization": "Bearer bearer-token",
+			},
+			queryParams:    map[string]string{},
+			envVars:        map[string]string{},
+			expectedStatus: http.StatusOK,
+			expectedContextVals: map[string]string{
+				TerraformToken: "bearer-token",
+			},
+		},
+		{
+			name: "standard header takes priority over Authorization Bearer",
+			headers: map[string]string{
+				TerraformToken:  "standard-token",
+				"Authorization": "Bearer bearer-token",
+			},
+			queryParams:    map[string]string{},
+			envVars:        map[string]string{},
+			expectedStatus: http.StatusOK,
+			expectedContextVals: map[string]string{
+				TerraformToken: "standard-token",
 			},
 		},
 		{
@@ -652,17 +631,6 @@ func TestTerraformContextMiddleware_SecurityLogging(t *testing.T) {
 	logger := log.New()
 	logger.SetLevel(log.DebugLevel)
 
-	// Clear lock env var
-	origLock := os.Getenv("MCP_LOCK_TFE_ADDRESS")
-	defer func() {
-		if origLock != "" {
-			os.Setenv("MCP_LOCK_TFE_ADDRESS", origLock)
-		} else {
-			os.Unsetenv("MCP_LOCK_TFE_ADDRESS")
-		}
-	}()
-	os.Unsetenv("MCP_LOCK_TFE_ADDRESS")
-
 	// Create a mock handler
 	mockHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
@@ -700,17 +668,6 @@ func TestTerraformContextMiddleware_SecurityLogging(t *testing.T) {
 func TestTerraformContextMiddleware_EdgeCases(t *testing.T) {
 	logger := log.New()
 	logger.SetLevel(log.ErrorLevel)
-
-	// Clear lock env var
-	origLock := os.Getenv("MCP_LOCK_TFE_ADDRESS")
-	defer func() {
-		if origLock != "" {
-			os.Setenv("MCP_LOCK_TFE_ADDRESS", origLock)
-		} else {
-			os.Unsetenv("MCP_LOCK_TFE_ADDRESS")
-		}
-	}()
-	os.Unsetenv("MCP_LOCK_TFE_ADDRESS")
 
 	t.Run("nil logger should not panic", func(t *testing.T) {
 		// This tests that the middleware handles a nil logger gracefully
@@ -769,243 +726,4 @@ func TestTerraformContextMiddleware_EdgeCases(t *testing.T) {
 
 		assert.Equal(t, http.StatusOK, rr.Code)
 	})
-}
-
-// TestTerraformContextMiddleware_LockAddress tests the MCP_LOCK_TFE_ADDRESS functionality
-func TestTerraformContextMiddleware_LockAddress(t *testing.T) {
-	logger := log.New()
-	logger.SetLevel(log.ErrorLevel)
-
-	// Save and restore env vars
-	origLock := os.Getenv("MCP_LOCK_TFE_ADDRESS")
-	origAddress := os.Getenv(TerraformAddress)
-	defer func() {
-		if origLock != "" {
-			os.Setenv("MCP_LOCK_TFE_ADDRESS", origLock)
-		} else {
-			os.Unsetenv("MCP_LOCK_TFE_ADDRESS")
-		}
-		if origAddress != "" {
-			os.Setenv(TerraformAddress, origAddress)
-		} else {
-			os.Unsetenv(TerraformAddress)
-		}
-	}()
-
-	t.Run("locked address ignores client header", func(t *testing.T) {
-		os.Setenv("MCP_LOCK_TFE_ADDRESS", "true")
-		os.Setenv(TerraformAddress, "https://server-locked.terraform.io")
-
-		var capturedAddress string
-		mockHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			ctx := r.Context()
-			if val := ctx.Value(contextKey(TerraformAddress)); val != nil {
-				capturedAddress = val.(string)
-			}
-			w.WriteHeader(http.StatusOK)
-		})
-
-		middleware := TerraformContextMiddleware(logger)
-		handler := middleware(mockHandler)
-
-		req := httptest.NewRequest(http.MethodGet, "/mcp", nil)
-		req.Header.Set("X-Tfe-Address", "https://attacker.terraform.io")
-		rr := httptest.NewRecorder()
-
-		handler.ServeHTTP(rr, req)
-
-		assert.Equal(t, http.StatusOK, rr.Code)
-		assert.Equal(t, "https://server-locked.terraform.io", capturedAddress)
-	})
-
-	t.Run("locked address ignores standard header", func(t *testing.T) {
-		os.Setenv("MCP_LOCK_TFE_ADDRESS", "true")
-		os.Setenv(TerraformAddress, "https://server-locked.terraform.io")
-
-		var capturedAddress string
-		mockHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			ctx := r.Context()
-			if val := ctx.Value(contextKey(TerraformAddress)); val != nil {
-				capturedAddress = val.(string)
-			}
-			w.WriteHeader(http.StatusOK)
-		})
-
-		middleware := TerraformContextMiddleware(logger)
-		handler := middleware(mockHandler)
-
-		req := httptest.NewRequest(http.MethodGet, "/mcp", nil)
-		req.Header.Set(TerraformAddress, "https://attacker.terraform.io")
-		rr := httptest.NewRecorder()
-
-		handler.ServeHTTP(rr, req)
-
-		assert.Equal(t, http.StatusOK, rr.Code)
-		assert.Equal(t, "https://server-locked.terraform.io", capturedAddress)
-	})
-
-	t.Run("unlocked address allows client header", func(t *testing.T) {
-		os.Setenv("MCP_LOCK_TFE_ADDRESS", "false")
-		os.Setenv(TerraformAddress, "https://server.terraform.io")
-
-		var capturedAddress string
-		mockHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			ctx := r.Context()
-			if val := ctx.Value(contextKey(TerraformAddress)); val != nil {
-				capturedAddress = val.(string)
-			}
-			w.WriteHeader(http.StatusOK)
-		})
-
-		middleware := TerraformContextMiddleware(logger)
-		handler := middleware(mockHandler)
-
-		req := httptest.NewRequest(http.MethodGet, "/mcp", nil)
-		req.Header.Set("X-Tfe-Address", "https://client.terraform.io")
-		rr := httptest.NewRecorder()
-
-		handler.ServeHTTP(rr, req)
-
-		assert.Equal(t, http.StatusOK, rr.Code)
-		assert.Equal(t, "https://client.terraform.io", capturedAddress)
-	})
-
-	t.Run("lock not set defaults to unlocked", func(t *testing.T) {
-		os.Unsetenv("MCP_LOCK_TFE_ADDRESS")
-		os.Setenv(TerraformAddress, "https://server.terraform.io")
-
-		var capturedAddress string
-		mockHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			ctx := r.Context()
-			if val := ctx.Value(contextKey(TerraformAddress)); val != nil {
-				capturedAddress = val.(string)
-			}
-			w.WriteHeader(http.StatusOK)
-		})
-
-		middleware := TerraformContextMiddleware(logger)
-		handler := middleware(mockHandler)
-
-		req := httptest.NewRequest(http.MethodGet, "/mcp", nil)
-		req.Header.Set("X-Tfe-Address", "https://client.terraform.io")
-		rr := httptest.NewRecorder()
-
-		handler.ServeHTTP(rr, req)
-
-		assert.Equal(t, http.StatusOK, rr.Code)
-		assert.Equal(t, "https://client.terraform.io", capturedAddress)
-	})
-}
-
-// TestTerraformContextMiddleware_HeaderAliases tests that proxy-friendly header aliases work
-func TestTerraformContextMiddleware_HeaderAliases(t *testing.T) {
-	logger := log.New()
-	logger.SetLevel(log.ErrorLevel)
-
-	// Clear env vars
-	origAddress := os.Getenv(TerraformAddress)
-	origToken := os.Getenv(TerraformToken)
-	origSkipTLS := os.Getenv(TerraformSkipTLSVerify)
-	origLock := os.Getenv("MCP_LOCK_TFE_ADDRESS")
-	defer func() {
-		os.Setenv(TerraformAddress, origAddress)
-		os.Setenv(TerraformToken, origToken)
-		os.Setenv(TerraformSkipTLSVerify, origSkipTLS)
-		if origLock != "" {
-			os.Setenv("MCP_LOCK_TFE_ADDRESS", origLock)
-		} else {
-			os.Unsetenv("MCP_LOCK_TFE_ADDRESS")
-		}
-	}()
-	os.Unsetenv(TerraformAddress)
-	os.Unsetenv(TerraformToken)
-	os.Unsetenv(TerraformSkipTLSVerify)
-	os.Unsetenv("MCP_LOCK_TFE_ADDRESS")
-
-	tests := []struct {
-		name            string
-		headers         map[string]string
-		expectedAddress string
-		expectedToken   string
-		expectedSkipTLS string
-	}{
-		{
-			name: "X-Tfe-* headers work",
-			headers: map[string]string{
-				"X-Tfe-Address":         "https://tfe.example.com",
-				"X-Tfe-Token":           "tfe-token",
-				"X-Tfe-Skip-Tls-Verify": "true",
-			},
-			expectedAddress: "https://tfe.example.com",
-			expectedToken:   "tfe-token",
-			expectedSkipTLS: "true",
-		},
-		{
-			name: "X-Terraform-* headers work",
-			headers: map[string]string{
-				"X-Terraform-Address":         "https://terraform.example.com",
-				"X-Terraform-Token":           "terraform-token",
-				"X-Terraform-Skip-Tls-Verify": "true",
-			},
-			expectedAddress: "https://terraform.example.com",
-			expectedToken:   "terraform-token",
-			expectedSkipTLS: "true",
-		},
-		{
-			name: "Authorization Bearer works for token",
-			headers: map[string]string{
-				"X-Tfe-Address": "https://tfe.example.com",
-				"Authorization": "Bearer my-bearer-token",
-			},
-			expectedAddress: "https://tfe.example.com",
-			expectedToken:   "my-bearer-token",
-			expectedSkipTLS: "",
-		},
-		{
-			name: "mixed header formats work",
-			headers: map[string]string{
-				"X-Tfe-Address":               "https://tfe.example.com",
-				"Authorization":               "Bearer mixed-token",
-				"X-Terraform-Skip-Tls-Verify": "true",
-			},
-			expectedAddress: "https://tfe.example.com",
-			expectedToken:   "mixed-token",
-			expectedSkipTLS: "true",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			var capturedAddress, capturedToken, capturedSkipTLS string
-			mockHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				ctx := r.Context()
-				if val := ctx.Value(contextKey(TerraformAddress)); val != nil {
-					capturedAddress = val.(string)
-				}
-				if val := ctx.Value(contextKey(TerraformToken)); val != nil {
-					capturedToken = val.(string)
-				}
-				if val := ctx.Value(contextKey(TerraformSkipTLSVerify)); val != nil {
-					capturedSkipTLS = val.(string)
-				}
-				w.WriteHeader(http.StatusOK)
-			})
-
-			middleware := TerraformContextMiddleware(logger)
-			handler := middleware(mockHandler)
-
-			req := httptest.NewRequest(http.MethodGet, "/mcp", nil)
-			for k, v := range tt.headers {
-				req.Header.Set(k, v)
-			}
-			rr := httptest.NewRecorder()
-
-			handler.ServeHTTP(rr, req)
-
-			assert.Equal(t, http.StatusOK, rr.Code)
-			assert.Equal(t, tt.expectedAddress, capturedAddress)
-			assert.Equal(t, tt.expectedToken, capturedToken)
-			assert.Equal(t, tt.expectedSkipTLS, capturedSkipTLS)
-		})
-	}
 }
