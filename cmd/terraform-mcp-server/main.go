@@ -12,11 +12,13 @@ import (
 	"os/signal"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/hashicorp/terraform-mcp-server/pkg/client"
 	"github.com/hashicorp/terraform-mcp-server/pkg/toolsets"
 	"github.com/hashicorp/terraform-mcp-server/version"
 
+	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
@@ -25,14 +27,14 @@ import (
 //go:embed instructions.md
 var instructions string
 
-func runHTTPServer(logger *log.Logger, host string, port string, endpointPath string, enabledToolsets []string) error {
+func runHTTPServer(logger *log.Logger, host string, port string, endpointPath string, heartbeatInterval time.Duration, enabledToolsets []string) error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
 	hcServer := NewServer(version.Version, logger, enabledToolsets)
 	registerToolsAndResources(hcServer, logger, enabledToolsets)
 
-	return streamableHTTPServerInit(ctx, hcServer, logger, host, port, endpointPath)
+	return streamableHTTPServerInit(ctx, hcServer, logger, host, port, endpointPath, heartbeatInterval)
 }
 
 func runStdioServer(logger *log.Logger, enabledToolsets []string) error {
@@ -67,6 +69,23 @@ func NewServer(version string, logger *log.Logger, enabledToolsets []string, opt
 	})
 	hooks.AddOnUnregisterSession(func(ctx context.Context, session server.ClientSession) {
 		client.EndSessionHandler(ctx, session, logger)
+	})
+	// When running multiple sessions of the MCP server (load balancing), calling client.NewSessionHandler
+	// in both BeforeListTools and BeforeCallTool ensures that a session that was not initialized during
+	// registration (e.g., due to being routed to a different instance) will still have its clients created
+	// before any tool calls are made. This provides a safety net to ensure that all sessions have
+	// the necessary clients initialized regardless of how they are routed.
+	hooks.AddBeforeListTools(func(ctx context.Context, id any, message *mcp.ListToolsRequest) {
+		session := server.ClientSessionFromContext(ctx)
+		if session != nil {
+			client.NewSessionHandler(ctx, session, logger)
+		}
+	})
+	hooks.AddBeforeCallTool(func(ctx context.Context, id any, message *mcp.CallToolRequest) {
+		session := server.ClientSessionFromContext(ctx)
+		if session != nil {
+			client.NewSessionHandler(ctx, session, logger)
+		}
 	})
 
 	// Add hooks to options
@@ -155,7 +174,9 @@ func runDefaultCommand(cmd *cobra.Command, _ []string) {
 	if err != nil {
 		stdlog.Fatal("Failed to get log file:", err)
 	}
-	logger, err := initLogger(logFile)
+	logLevel := getLogLevel(cmd)
+	logFormat := getLogFormat(cmd)
+	logger, err := initLogger(logFile, logLevel, logFormat)
 	if err != nil {
 		stdlog.Fatal("Failed to initialize logger:", err)
 	}
@@ -169,21 +190,23 @@ func runDefaultCommand(cmd *cobra.Command, _ []string) {
 }
 
 func main() {
-	// Check environment variables first - they override command line args
 	if shouldUseStreamableHTTPMode() {
 		port := getHTTPPort()
 		host := getHTTPHost()
 		endpointPath := getEndpointPath(nil)
 
 		logFile, _ := rootCmd.PersistentFlags().GetString("log-file")
-		logger, err := initLogger(logFile)
+		logLevel := getLogLevel(rootCmd)
+		logFormat := getLogFormat(rootCmd)
+		logger, err := initLogger(logFile, logLevel, logFormat)
 		if err != nil {
 			stdlog.Fatal("Failed to initialize logger:", err)
 		}
 
 		enabledToolsets := getToolsetsFromCmd(rootCmd, logger)
 
-		if err := runHTTPServer(logger, host, port, endpointPath, enabledToolsets); err != nil {
+		heartbeatInterval := getHeartbeatInterval()
+		if err := runHTTPServer(logger, host, port, endpointPath, heartbeatInterval, enabledToolsets); err != nil {
 			stdlog.Fatal("failed to run StreamableHTTP server:", err)
 		}
 		return
@@ -205,19 +228,6 @@ func shouldUseStreamableHTTPMode() bool {
 		os.Getenv("MCP_ENDPOINT") != ""
 }
 
-// shouldUseStatelessMode returns true if the MCP_SESSION_MODE environment variable is set to "stateless"
-func shouldUseStatelessMode() bool {
-	mode := strings.ToLower(os.Getenv("MCP_SESSION_MODE"))
-
-	// Explicitly check for "stateless" value
-	if mode == "stateless" {
-		return true
-	}
-
-	// All other values (including empty string, "stateful", or any other value) default to stateful mode
-	return false
-}
-
 // getHTTPPort returns the port from environment variables or default
 func getHTTPPort() string {
 	if port := os.Getenv("TRANSPORT_PORT"); port != "" {
@@ -232,6 +242,19 @@ func getHTTPHost() string {
 		return host
 	}
 	return "127.0.0.1"
+}
+
+// shouldUseStatelessMode returns true if the MCP_SESSION_MODE environment variable is set to "stateless"
+func shouldUseStatelessMode() bool {
+	mode := strings.ToLower(os.Getenv("MCP_SESSION_MODE"))
+
+	// Explicitly check for "stateless" value
+	if mode == "stateless" {
+		return true
+	}
+
+	// All other values (including empty string, "stateful", or any other value) default to stateful mode
+	return false
 }
 
 // Add function to get endpoint path from environment or flag
@@ -249,4 +272,15 @@ func getEndpointPath(cmd *cobra.Command) string {
 	}
 
 	return "/mcp"
+}
+
+// getHeartbeatInterval returns the heartbeat interval duration from the env var or default
+func getHeartbeatInterval() time.Duration {
+	if val := os.Getenv("MCP_HEARTBEAT_INTERVAL"); val != "" {
+		duration, err := time.ParseDuration(val)
+		if err == nil {
+			return duration
+		}
+	}
+	return 0
 }

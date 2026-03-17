@@ -10,7 +10,14 @@ FEATURES
 
 IMPROVEMENTS
 
+* Add `--heartbeat-interval` CLI flag and `MCP_HEARTBEAT_INTERVAL` env var for HTTP heartbeat in load-balanced environments
 * Set custom User-Agent header for TFE API requests to enable tracking MCP server usage separately from other go-tfe clients [268](https://github.com/hashicorp/terraform-mcp-server/pull/268)
+* Adding a new cli flags `--log-level` to set the desired log level for the server logs and `--log-format` for the logs formatting [286](https://github.com/hashicorp/terraform-mcp-server/pull/286)
+
+FIXES
+
+* Fix sessions handling in stateless and load balanced environments
+* `list_runs` was returning empty response
 
 ## 0.4.0
 
