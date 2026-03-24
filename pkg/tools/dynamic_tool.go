@@ -231,6 +231,8 @@ func (r *DynamicToolRegistry) registerTFETools() {
 
 	if toolsets.IsToolEnabled("get_apply_logs", r.enabledToolsets) {
 		tool := r.createDynamicTFETool("get_apply_logs", tfeTools.GetApplyLogs)
+	if toolsets.IsToolEnabled("get_sentinel_mock", r.enabledToolsets) {
+		tool := r.createDynamicTFETool("get_sentinel_mock", tfeTools.GetSentinelMock)
 		r.mcpServer.AddTool(tool.Tool, tool.Handler)
 	}
 

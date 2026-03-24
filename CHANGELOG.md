@@ -1,5 +1,9 @@
 # 0.5.2
 
+FEATURES
+
+* [New Tool] `get_sentinel_mock` Export and download Sentinel mock bundle data for a Terraform plan
+
 IMPROVEMENTS
 
 * Add http server metrics instrumentation [330](https://github.com/hashicorp/terraform-mcp-server/pull/330)
