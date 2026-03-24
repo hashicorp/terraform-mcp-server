@@ -338,6 +338,58 @@ gemini extensions install https://github.com/hashicorp/terraform-mcp-server
 gemini
 ```
 
+### Usage with Bob IDE / Shell
+
+More about using and adding MCP servers tools in Bob IDE or Shell [Using MCP in Bob](https://bob.ibm.com/docs/ide/configuration/mcp/mcp-in-bob).
+
+<table>
+<tr><th>Version 0.3.0+ or greater</th><th>Version 0.2.3 or lower</th></tr>
+<tr valign=top>
+<td>
+
+```json
+{
+  "mcpServers": {
+    "terraform": {
+      "command": "docker",
+      "args": [
+        "run",
+        "-i",
+        "--rm",
+        "-e", "TFE_ADDRESS=<<PASTE_TFE_ADDRESS_HERE>>",
+        "-e", "TFE_TOKEN=<<PASTE_TFE_TOKEN_HERE>>",
+        "hashicorp/terraform-mcp-server:0.4.0"
+      ],
+      "disabled": false
+    }
+  }
+}
+```
+
+</td>
+<td>
+
+```json
+{
+  "mcpServers": {
+    "terraform": {
+      "command": "docker",
+      "args": [
+        "run",
+        "-i",
+        "--rm",
+        "hashicorp/terraform-mcp-server:0.2.3"
+      ],
+      "disabled": false
+    }
+  }
+}
+```
+
+</td>
+</tr>
+</table>
+
 ## Install from source
 
 Use the latest release version:
