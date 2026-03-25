@@ -11,12 +11,19 @@ import (
 	"os"
 	"os/signal"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
 	"github.com/hashicorp/terraform-mcp-server/pkg/client"
 	"github.com/hashicorp/terraform-mcp-server/pkg/toolsets"
 	"github.com/hashicorp/terraform-mcp-server/version"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp"
+	"go.opentelemetry.io/otel/metric"
+	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
+	"go.opentelemetry.io/otel/sdk/resource"
 
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
@@ -27,11 +34,11 @@ import (
 //go:embed instructions.md
 var instructions string
 
-func runHTTPServer(logger *log.Logger, host string, port string, endpointPath string, heartbeatInterval time.Duration, enabledToolsets []string) error {
+func runHTTPServer(logger *log.Logger, host string, port string, endpointPath string, heartbeatInterval time.Duration, enabledToolsets []string, metricsConfig client.MetricsConfig) error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	hcServer := NewServer(version.Version, logger, enabledToolsets)
+	hcServer := NewServer(version.Version, logger, enabledToolsets, metricsConfig)
 	registerToolsAndResources(hcServer, logger, enabledToolsets)
 
 	return streamableHTTPServerInit(ctx, hcServer, logger, host, port, endpointPath, heartbeatInterval)
@@ -41,13 +48,13 @@ func runStdioServer(logger *log.Logger, enabledToolsets []string) error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	hcServer := NewServer(version.Version, logger, enabledToolsets)
+	hcServer := NewServer(version.Version, logger, enabledToolsets, client.MetricsConfig{})
 	registerToolsAndResources(hcServer, logger, enabledToolsets)
 
 	return serverInit(ctx, hcServer, logger)
 }
 
-func NewServer(version string, logger *log.Logger, enabledToolsets []string, opts ...server.ServerOption) *server.MCPServer {
+func NewServer(version string, logger *log.Logger, enabledToolsets []string, metricsConfig client.MetricsConfig, opts ...server.ServerOption) *server.MCPServer {
 	// Create rate limiting middleware with environment-based configuration
 	rateLimitConfig := client.LoadRateLimitConfigFromEnv()
 	rateLimitMiddleware := client.NewRateLimitMiddleware(rateLimitConfig, logger)
@@ -87,6 +94,26 @@ func NewServer(version string, logger *log.Logger, enabledToolsets []string, opt
 			client.NewSessionHandler(ctx, session, logger)
 		}
 	})
+	if metricsConfig.Enabled {
+		var toolStartTimes sync.Map
+		hooks.AddBeforeCallTool(func(ctx context.Context, id any, message *mcp.CallToolRequest) {
+			toolStartTimes.Store(fmt.Sprintf("%v", id), time.Now())
+		})
+		hooks.AddAfterCallTool(func(ctx context.Context, id any, message *mcp.CallToolRequest, result any) {
+			startTime := time.Now()
+			if storedStart, ok := toolStartTimes.LoadAndDelete(fmt.Sprintf("%v", id)); ok {
+				if ts, ok := storedStart.(time.Time); ok {
+					startTime = ts
+				}
+			}
+			// Check if the result has any errors
+			var toolErr error
+			if res, ok := result.(*mcp.CallToolResult); ok && res.IsError {
+				toolErr = fmt.Errorf("Tool reported error: %+v", res.Result)
+			}
+			client.RecordToolCall(ctx, startTime, toolErr, id, message, metricsConfig, logger)
+		})
+	}
 
 	// Add hooks to options
 	opts = append(opts, server.WithHooks(hooks))
@@ -190,23 +217,25 @@ func runDefaultCommand(cmd *cobra.Command, _ []string) {
 }
 
 func main() {
+	logFile, _ := rootCmd.PersistentFlags().GetString("log-file")
+	logLevel := getLogLevel(rootCmd)
+	logFormat := getLogFormat(rootCmd)
+	logger, err := initLogger(logFile, logLevel, logFormat)
+	if err != nil {
+		stdlog.Fatal("Failed to initialize logger:", err)
+	}
 	if shouldUseStreamableHTTPMode() {
+		logger.Info("Starting in Streamable HTTP mode based on environment configuration")
+
+		metricsConfig, shutdownMetrics := setupMetrics(logger)
+		defer shutdownMetrics()
+
 		port := getHTTPPort()
 		host := getHTTPHost()
 		endpointPath := getEndpointPath(nil)
-
-		logFile, _ := rootCmd.PersistentFlags().GetString("log-file")
-		logLevel := getLogLevel(rootCmd)
-		logFormat := getLogFormat(rootCmd)
-		logger, err := initLogger(logFile, logLevel, logFormat)
-		if err != nil {
-			stdlog.Fatal("Failed to initialize logger:", err)
-		}
-
 		enabledToolsets := getToolsetsFromCmd(rootCmd, logger)
-
 		heartbeatInterval := getHeartbeatInterval()
-		if err := runHTTPServer(logger, host, port, endpointPath, heartbeatInterval, enabledToolsets); err != nil {
+		if err := runHTTPServer(logger, host, port, endpointPath, heartbeatInterval, enabledToolsets, metricsConfig); err != nil {
 			stdlog.Fatal("failed to run StreamableHTTP server:", err)
 		}
 		return
@@ -283,4 +312,76 @@ func getHeartbeatInterval() time.Duration {
 		}
 	}
 	return 0
+}
+
+func setupMetrics(logger *log.Logger) (client.MetricsConfig, func()) {
+	metricsConfig := client.LoadMetricsConfigFromEnv()
+	logger.Infof("Metrics enabled: %t endpoint: %s exportInterval: %s", metricsConfig.Enabled, metricsConfig.Endpoint, metricsConfig.ExportInterval)
+	if !metricsConfig.Enabled {
+		return metricsConfig, func() {}
+	}
+
+	// Context for metrics is for tracking the lifecycle of the metrics setup and shutdown, not tied to individual tool calls.
+	ctxMetrics := context.Background()
+	otel.SetErrorHandler(otel.ErrorHandlerFunc(func(err error) {
+		log.Errorf("OTel Internal Error: %v", err)
+	}))
+
+	shutdown, err := initMetrics(ctxMetrics, &metricsConfig, logger)
+	if err != nil {
+		logger.Errorf("Failed to initialize metrics: %v", err)
+		return metricsConfig, func() {}
+	}
+
+	return metricsConfig, shutdown
+}
+
+func initMetrics(ctx context.Context, config *client.MetricsConfig, logger *log.Logger) (func(), error) {
+	logger.Infof("Initializing exporter and meter provider for OTel metrics...")
+	// Create the Exporter (Sends data to the Collector)
+	// exporter, err := stdoutmetric.New() // For stdio debugging
+	exporter, err := otlpmetrichttp.New(ctx, otlpmetrichttp.WithEndpoint(config.Endpoint), otlpmetrichttp.WithInsecure())
+	if err != nil {
+		return nil, fmt.Errorf("failed to create metrics exporter: %w", err)
+	}
+	// Create the MeterProvider with a PeriodicReader
+	// The reader flushes metrics to the exporter periodically
+	resourceAttrs := resource.NewSchemaless(
+		attribute.String("service.name", config.ServiceName),
+		attribute.String("service.version", config.ServiceVersion),
+	)
+	config.MeterProvider = sdkmetric.NewMeterProvider(
+		sdkmetric.WithReader(sdkmetric.NewPeriodicReader(exporter, sdkmetric.WithInterval(config.ExportInterval))),
+		sdkmetric.WithResource(resourceAttrs),
+	)
+
+	// Set it as the global provider
+	otel.SetMeterProvider(config.MeterProvider)
+
+	meter := config.MeterProvider.Meter(config.ServiceName)
+
+	config.ToolCounter, err = meter.Int64Counter("mcp_tool_calls_total")
+	if err != nil {
+		return nil, fmt.Errorf("failed to create tool counter: %w", err)
+	}
+
+	config.ErrorCounter, err = meter.Int64Counter("mcp_tool_errors_total",
+		metric.WithDescription("Total number of failed tool calls"))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create error counter: %w", err)
+	}
+
+	config.ToolCallLatencyBucket, err = meter.Float64Histogram("mcp_tool_duration_seconds",
+		metric.WithDescription("Duration of tool calls in seconds"),
+		metric.WithUnit("s"))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create latency histogram: %w", err)
+	}
+
+	return func() {
+		logger.Infof("Shutting down metrics exporter..")
+		if err := config.MeterProvider.Shutdown(ctx); err != nil {
+			logger.Errorf("Error shutting down meter provider: %v", err)
+		}
+	}, nil
 }
