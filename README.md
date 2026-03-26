@@ -323,40 +323,19 @@ claude mcp add --transport http terraform http://localhost:8080/mcp
 
 ### Usage with Codex CLI
 
-[Codex CLI](https://github.com/openai/codex) is OpenAI's official coding agent that runs in your terminal. It supports MCP servers to extend its capabilities with external tools.
+[Codex CLI](https://github.com/openai/codex) is OpenAI's official coding agent that runs in your terminal. It supports MCP servers for extended capabilities.
 
 #### Prerequisites
 
-- [Node.js 18+](https://nodejs.org/) installed
-- [OpenAI API key](https://platform.openai.com/api-keys) configured (`OPENAI_API_KEY` environment variable)
-- Codex CLI installed: `npm install -g @openai/codex`
+- Node.js 18+ installed
+- [Codex CLI](https://github.com/openai/codex) installed: `npm install -g @openai/codex`
+- OpenAI API key configured
 
 #### Configuration
 
-Add the Terraform MCP server to Codex using the `codex mcp add` command:
+Codex CLI uses a JSON configuration file for MCP servers. Add the Terraform MCP server to your Codex config at `~/.codex/config.json`:
 
-- Local (`stdio`) Transport
-
-```sh
-codex mcp add terraform --type local --cmd docker -- run -i --rm hashicorp/terraform-mcp-server
-```
-
-- Remote (`streamable-http`) Transport
-
-```sh
-# Run server (example)
-docker run -p 8080:8080 --rm -e TRANSPORT_MODE=streamable-http -e TRANSPORT_HOST=0.0.0.0 hashicorp/terraform-mcp-server
-
-# Add to Codex
-codex mcp add terraform --type http --url http://localhost:8080/mcp
-```
-
-Alternatively, you can configure MCP servers in Codex's configuration file at `~/.codex/config.json`:
-
-<table>
-<tr><th>Version 0.3.0+ or greater</th><th>Version 0.2.3 or lower</th></tr>
-<tr valign=top>
-<td>
+**Stdio Transport (Recommended)**
 
 ```json
 {
@@ -376,29 +355,28 @@ Alternatively, you can configure MCP servers in Codex's configuration file at `~
 }
 ```
 
-</td>
-<td>
+**HTTP Transport**
 
-```json
-{
-  "mcpServers": {
-    "terraform": {
-      "command": "docker",
-      "args": [
-        "run",
-        "-i",
-        "--rm",
-        "hashicorp/terraform-mcp-server:0.2.3"
-      ]
-    }
-  }
-}
+```bash
+# Run the MCP server in HTTP mode
+docker run -p 8080:8080 --rm -e TRANSPORT_MODE=streamable-http -e TRANSPORT_HOST=0.0.0.0 hashicorp/terraform-mcp-server:0.4.0
+
+# Add to Codex CLI config
+openai config set mcpServers.terraform.url=http://localhost:8080/mcp
 ```
-</td>
-</tr>
-</table>
 
-More about using MCP server tools in Codex CLI [user documentation](https://github.com/openai/codex/blob/main/README.md).
+#### Usage Examples
+
+Once configured, you can use Terraform tools within Codex:
+
+```bash
+codex "Search for AWS providers in the Terraform Registry"
+codex "List my HCP Terraform workspaces"
+codex "Create a new Terraform workspace for the staging environment"
+```
+
+For more details on MCP configuration in Codex, refer to the [Codex CLI documentation](https://github.com/openai/codex/tree/main/codex-cli#mcp-agent-mode).
+
 
 ### Usage with Gemini extensions
 
