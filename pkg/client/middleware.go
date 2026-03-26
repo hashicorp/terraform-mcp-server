@@ -7,7 +7,6 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"net/textproto"
 	"os"
 	"strings"
 
@@ -101,7 +100,7 @@ func (h *securityHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Max-Age", "3600")
 		w.Header().Set("Access-Control-Allow-Origin", origin)
 		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Mcp-Session-Id")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Mcp-Session-Id, Authorization")
 	}
 
 	// Handle OPTIONS requests for CORS preflight
@@ -125,6 +124,15 @@ func NewSecurityHandler(handler http.Handler, allowedOrigins []string, corsMode 
 	}
 }
 
+// getTokenFromAuthHeader extracts token from Authorization Bearer header
+func getTokenFromAuthHeader(r *http.Request) string {
+	authHeader := r.Header.Get("Authorization")
+	if strings.HasPrefix(authHeader, "Bearer ") {
+		return strings.TrimPrefix(authHeader, "Bearer ")
+	}
+	return ""
+}
+
 // TerraformContextMiddleware adds Terraform-related header values to the request context
 // This middleware extracts Terraform configuration from HTTP headers, query parameters,
 // or environment variables and adds them to the request context for use by MCP tools
@@ -134,16 +142,22 @@ func TerraformContextMiddleware(logger *log.Logger) func(http.Handler) http.Hand
 			requiredHeaders := []string{TerraformAddress, TerraformToken, TerraformSkipTLSVerify}
 			ctx := r.Context()
 			for _, header := range requiredHeaders {
-				// Priority order: HTTP header -> Query parameter -> Environment variable
-				headerValue := r.Header.Get(textproto.CanonicalMIMEHeaderKey(header))
+				var headerValue string
+
+				// Check standard header first
+				headerValue = r.Header.Get(header)
+
+				// For token, also support Authorization: Bearer header as fallback
+				if headerValue == "" && header == TerraformToken {
+					headerValue = getTokenFromAuthHeader(r)
+				}
 
 				if headerValue == "" {
 					headerValue = r.URL.Query().Get(header)
 
-					// Explicitly disallow TerraformToken in query parameters for security reasons
 					if header == TerraformToken && headerValue != "" {
 						logger.Info(fmt.Sprintf("Terraform token was provided in query parameters by client %v, terminating request", r.RemoteAddr))
-						http.Error(w, "Terraform token should not be provided in query parameters for security reasons, use the terraform_token header", http.StatusBadRequest)
+						http.Error(w, "Terraform token should not be provided in query parameters for security reasons, use the Authorization header", http.StatusBadRequest)
 						return
 					}
 				}

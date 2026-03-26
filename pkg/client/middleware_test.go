@@ -315,6 +315,62 @@ func TestOptionsRequest(t *testing.T) {
 	assert.NotEmpty(t, rr.Header().Get("Access-Control-Allow-Methods"))
 }
 
+// TestGetTokenFromAuthHeader tests the helper function that extracts token from Authorization Bearer header
+func TestGetTokenFromAuthHeader(t *testing.T) {
+	tests := []struct {
+		name     string
+		headers  map[string]string
+		expected string
+	}{
+		{
+			name:     "Authorization Bearer token",
+			headers:  map[string]string{"Authorization": "Bearer my-token"},
+			expected: "my-token",
+		},
+		{
+			name:     "Authorization Basic ignored",
+			headers:  map[string]string{"Authorization": "Basic abc123"},
+			expected: "",
+		},
+		{
+			name:     "no Authorization header",
+			headers:  map[string]string{},
+			expected: "",
+		},
+		{
+			name:     "empty Authorization header",
+			headers:  map[string]string{"Authorization": ""},
+			expected: "",
+		},
+		{
+			name:     "Bearer with no token",
+			headers:  map[string]string{"Authorization": "Bearer "},
+			expected: "",
+		},
+		{
+			name:     "Bearer with whitespace token",
+			headers:  map[string]string{"Authorization": "Bearer   "},
+			expected: "  ",
+		},
+		{
+			name:     "Bearer lowercase",
+			headers:  map[string]string{"Authorization": "bearer my-token"},
+			expected: "", // Case sensitive - must be "Bearer"
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, "/", nil)
+			for k, v := range tt.headers {
+				req.Header.Set(k, v)
+			}
+			result := getTokenFromAuthHeader(req)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
 // TestTerraformContextMiddleware tests the middleware that extracts Terraform configuration
 // from HTTP headers, query parameters, and environment variables and adds them to the request context
 func TestTerraformContextMiddleware(t *testing.T) {
@@ -367,6 +423,31 @@ func TestTerraformContextMiddleware(t *testing.T) {
 				TerraformAddress:       "https://header.terraform.io",
 				TerraformToken:         "header-token",
 				TerraformSkipTLSVerify: "true",
+			},
+		},
+		{
+			name: "Authorization Bearer header provides token",
+			headers: map[string]string{
+				"Authorization": "Bearer bearer-token",
+			},
+			queryParams:    map[string]string{},
+			envVars:        map[string]string{},
+			expectedStatus: http.StatusOK,
+			expectedContextVals: map[string]string{
+				TerraformToken: "bearer-token",
+			},
+		},
+		{
+			name: "standard header takes priority over Authorization Bearer",
+			headers: map[string]string{
+				TerraformToken:  "standard-token",
+				"Authorization": "Bearer bearer-token",
+			},
+			queryParams:    map[string]string{},
+			envVars:        map[string]string{},
+			expectedStatus: http.StatusOK,
+			expectedContextVals: map[string]string{
+				TerraformToken: "standard-token",
 			},
 		},
 		{
@@ -428,7 +509,7 @@ func TestTerraformContextMiddleware(t *testing.T) {
 			envVars:        map[string]string{},
 			expectedStatus: http.StatusBadRequest,
 			expectError:    true,
-			errorMessage:   "Terraform token should not be provided in query parameters for security reasons, use the terraform_token header",
+			errorMessage:   "Terraform token should not be provided in query parameters",
 		},
 		{
 			name: "canonical header names are handled correctly",
