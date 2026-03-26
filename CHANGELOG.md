@@ -9,7 +9,7 @@ IMPROVEMENTS
 * Add `--heartbeat-interval` CLI flag and `MCP_HEARTBEAT_INTERVAL` env var for HTTP heartbeat in load-balanced environments
 * Set custom User-Agent header for TFE API requests to enable tracking MCP server usage separately from other go-tfe clients [268](https://github.com/hashicorp/terraform-mcp-server/pull/268)
 * Adding a new cli flags `--log-level` to set the desired log level for the server logs and `--log-format` for the logs formatting [286](https://github.com/hashicorp/terraform-mcp-server/pull/286)
-* * Improved credentials file lookup with warning logs for failure modes [265] (https://github.com/hashicorp/terraform-mcp-server/issues/228)
+* Add support for reading TFE tokens from credentials.tfrc.json with warning logs for failure modes [#265](https://github.com/hashicorp/terraform-mcp-server/issues/228)
 
 FIXES
 

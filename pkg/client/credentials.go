@@ -1,4 +1,4 @@
-// Copyright IBM Corp. 2025
+// Copyright (c) HashiCorp, Inc.
 // SPDX-License-Identifier: MPL-2.0
 
 package client
@@ -12,7 +12,7 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-// credentialsFile represents the structure of ~/.terraform.d/credentials.tfrc.json
+// credentialsFile represents the structure of credentials.tfrc.json
 type credentialsFile struct {
 	Credentials map[string]credentialEntry `json:"credentials"`
 }
@@ -28,13 +28,14 @@ func ReadCredentialsFile(hostname string, logger *log.Logger) string {
 		return ""
 	}
 
-	homeDir, err := os.UserHomeDir()
+	dir, err := configDir()
 	if err != nil {
-		logger.Warnf("Failed to get home directory for credentials file lookup: %v", err)
+		logger.Warnf("Failed to get config directory for credentials file lookup: %v", err)
 		return ""
 	}
 
-	credPath := filepath.Join(homeDir, ".terraform.d", "credentials.tfrc.json")
+	credPath := filepath.Join(dir, "credentials.tfrc.json")
+
 	data, err := os.ReadFile(credPath)
 	if err != nil {
 		if os.IsNotExist(err) {
