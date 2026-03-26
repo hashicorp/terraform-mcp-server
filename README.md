@@ -321,6 +321,85 @@ docker run -p 8080:8080 --rm -e TRANSPORT_MODE=streamable-http -e TRANSPORT_HOST
 claude mcp add --transport http terraform http://localhost:8080/mcp
 ```
 
+### Usage with Codex CLI
+
+[Codex CLI](https://github.com/openai/codex) is OpenAI's official coding agent that runs in your terminal. It supports MCP servers to extend its capabilities with external tools.
+
+#### Prerequisites
+
+- [Node.js 18+](https://nodejs.org/) installed
+- [OpenAI API key](https://platform.openai.com/api-keys) configured (`OPENAI_API_KEY` environment variable)
+- Codex CLI installed: `npm install -g @openai/codex`
+
+#### Configuration
+
+Add the Terraform MCP server to Codex using the `codex mcp add` command:
+
+- Local (`stdio`) Transport
+
+```sh
+codex mcp add terraform --type local --cmd docker -- run -i --rm hashicorp/terraform-mcp-server
+```
+
+- Remote (`streamable-http`) Transport
+
+```sh
+# Run server (example)
+docker run -p 8080:8080 --rm -e TRANSPORT_MODE=streamable-http -e TRANSPORT_HOST=0.0.0.0 hashicorp/terraform-mcp-server
+
+# Add to Codex
+codex mcp add terraform --type http --url http://localhost:8080/mcp
+```
+
+Alternatively, you can configure MCP servers in Codex's configuration file at `~/.codex/config.json`:
+
+<table>
+<tr><th>Version 0.3.0+ or greater</th><th>Version 0.2.3 or lower</th></tr>
+<tr valign=top>
+<td>
+
+```json
+{
+  "mcpServers": {
+    "terraform": {
+      "command": "docker",
+      "args": [
+        "run",
+        "-i",
+        "--rm",
+        "-e", "TFE_ADDRESS=<<PASTE_TFE_ADDRESS_HERE>>",
+        "-e", "TFE_TOKEN=<<PASTE_TFE_TOKEN_HERE>>",
+        "hashicorp/terraform-mcp-server:0.4.0"
+      ]
+    }
+  }
+}
+```
+
+</td>
+<td>
+
+```json
+{
+  "mcpServers": {
+    "terraform": {
+      "command": "docker",
+      "args": [
+        "run",
+        "-i",
+        "--rm",
+        "hashicorp/terraform-mcp-server:0.2.3"
+      ]
+    }
+  }
+}
+```
+</td>
+</tr>
+</table>
+
+More about using MCP server tools in Codex CLI [user documentation](https://github.com/openai/codex/blob/main/README.md).
+
 ### Usage with Gemini extensions
 
 For security, avoid hardcoding your credentials, create or update `~/.gemini/.env` (where ~ is your home or project directory) for storing HCP Terraform or Terraform Enterprise credentials
