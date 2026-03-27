@@ -3,6 +3,7 @@
 FIXES
 
 * Fix sessions handling in stateless and load balanced environments
+* Fix flaky E2E stdio tests timing out after ~56 requests by using fresh clients per test group
 
 IMPROVEMENTS
 * Add `Authorization: Bearer` header support for Terraform token in proxy environments
