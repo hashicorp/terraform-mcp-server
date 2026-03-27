@@ -155,6 +155,68 @@ func TestLogAndReturnError(t *testing.T) {
 	}
 }
 
+func TestRemoveReadmeSections(t *testing.T) {
+	tests := []struct {
+		name     string
+		readme   string
+		contains []string
+		excludes []string
+	}{
+		{
+			name:     "NoSectionsToRemove",
+			readme:   "# My Module\n\nThis is a description.\n\n## Usage\n\nSome usage info.",
+			contains: []string{"# My Module", "## Usage", "Some usage info."},
+			excludes: []string{},
+		},
+		{
+			name:     "RemovesInputsSection",
+			readme:   "# Module\n\n## Usage\n\nUsage content.\n\n## Inputs\n\n| Name | Type |\n|---|---|\n| var1 | string |",
+			contains: []string{"## Usage", "Usage content."},
+			excludes: []string{"## Inputs", "var1"},
+		},
+		{
+			name:     "RemovesOutputsSection",
+			readme:   "# Module\n\n## Outputs\n\n| Name | Description |\n\n## Usage\n\nUsage info.",
+			contains: []string{"## Usage", "Usage info."},
+			excludes: []string{"## Outputs"},
+		},
+		{
+			name:     "RemovesDependenciesSection",
+			readme:   "# Module\n\n## Dependencies\n\nSome deps.\n\n## Usage\n\nUsage.",
+			contains: []string{"## Usage", "Usage."},
+			excludes: []string{"## Dependencies", "Some deps."},
+		},
+		{
+			name:     "RemovesResourcesSection",
+			readme:   "# Module\n\n## Resources\n\n| Name | Type |\n\n## Notes\n\nSome notes.",
+			contains: []string{"## Notes", "Some notes."},
+			excludes: []string{"## Resources"},
+		},
+		{
+			name:     "EmptyReadme",
+			readme:   "",
+			contains: []string{},
+			excludes: []string{},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			result := RemoveReadmeSections(tc.readme)
+			for _, c := range tc.contains {
+				if !strings.Contains(result, c) {
+					t.Errorf("expected result to contain %q, got %q", c, result)
+				}
+			}
+			for _, e := range tc.excludes {
+				if strings.Contains(result, e) {
+					t.Errorf("expected result to NOT contain %q, got %q", e, result)
+				}
+			}
+		})
+	}
+}
+
 func TestExtractReadme(t *testing.T) {
 	tests := []struct {
 		name     string
