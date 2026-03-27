@@ -46,6 +46,12 @@ func TestE2E(t *testing.T) {
 
 // ensureClientInitialized ensures the MCP client is initialized before running tool tests
 func ensureClientInitialized(t *testing.T, client mcpClient.MCPClient) {
+	// Check if client is already initialized to avoid redundant Initialize calls
+	// which will result in the stdio transport to become unresponsive
+	if c, ok := client.(*mcpClient.Client); ok && c.IsInitialized() {
+		return
+	}
+
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
