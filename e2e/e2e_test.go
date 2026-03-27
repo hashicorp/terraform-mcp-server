@@ -27,52 +27,27 @@ func TestE2E(t *testing.T) {
 		cleanupAllTestContainers(t)
 	})
 
-	testCases := []struct {
-		name          string
-		clientFactory func(t *testing.T) (mcpClient.MCPClient, func())
-	}{
-		{"Stdio", createStdioClient},
-		{"HTTP", createHTTPClient},
-	}
+	// Run Stdio tests with fresh clients per test group to avoid transport exhaustion
+	t.Run("Stdio", func(t *testing.T) {
+		runStdioTestSuite(t)
+	})
 
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			client, cleanup := tc.clientFactory(t)
-			defer cleanup()
-			runTestSuite(t, client, tc.name)
-		})
-	}
+	// Run HTTP tests with a shared client (no transport exhaustion issue)
+	t.Run("HTTP", func(t *testing.T) {
+		client, cleanup := createHTTPClient(t)
+		defer cleanup()
+		runTestSuite(t, client, "HTTP")
+	})
 }
 
-// ensureClientInitialized ensures the MCP client is initialized before running tool tests
-func ensureClientInitialized(t *testing.T, client mcpClient.MCPClient) {
-	// Check if client is already initialized to avoid redundant Initialize calls
-	// which will result in the stdio transport to become unresponsive
-	if c, ok := client.(*mcpClient.Client); ok && c.IsInitialized() {
-		return
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-
-	request := mcp.InitializeRequest{}
-	request.Params.ProtocolVersion = mcp.LATEST_PROTOCOL_VERSION
-	request.Params.ClientInfo = mcp.Implementation{
-		Name:    "e2e-test-client",
-		Version: "0.0.1",
-	}
-
-	result, err := client.Initialize(ctx, request)
-	if err != nil {
-		t.Fatalf("Failed to initialize MCP client: %v", err)
-	}
-	t.Logf("Initialized with server: %s %s", result.ServerInfo.Name, result.ServerInfo.Version)
-	require.Equal(t, "terraform-mcp-server", result.ServerInfo.Name)
-}
-
-// runTestSuite executes all test cases against the provided client
-func runTestSuite(t *testing.T, client mcpClient.MCPClient, transportName string) {
+// runStdioTestSuite runs Stdio tests with fresh clients per test group
+// to avoid mcp-go stdio transport exhaustion after ~56 requests
+func runStdioTestSuite(t *testing.T) {
+	// Test Initialize
 	t.Run("Initialize", func(t *testing.T) {
+		client, cleanup := createStdioClient(t)
+		defer cleanup()
+
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
 
@@ -87,17 +62,89 @@ func runTestSuite(t *testing.T, client mcpClient.MCPClient, transportName string
 		if err != nil {
 			log.Fatalf("Failed to initialize: %v", err)
 		}
-		fmt.Printf(
-			"Initialized with server: %s %s\n\n",
-			result.ServerInfo.Name,
-			result.ServerInfo.Version,
-		)
+		fmt.Printf("Initialized with server: %s %s\n\n", result.ServerInfo.Name, result.ServerInfo.Version)
 		require.Equal(t, "terraform-mcp-server", result.ServerInfo.Name)
 	})
 
+	// Run each test group with a fresh client
+	t.Run("search_providers", func(t *testing.T) {
+		client, cleanup := createStdioClient(t)
+		defer cleanup()
+		initializeClient(t, client)
+		runSearchProviderTests(t, client, "Stdio")
+	})
+
+	t.Run("get_provider_details", func(t *testing.T) {
+		client, cleanup := createStdioClient(t)
+		defer cleanup()
+		initializeClient(t, client)
+		runProviderDetailsTests(t, client, "Stdio")
+	})
+
+	t.Run("search_modules", func(t *testing.T) {
+		client, cleanup := createStdioClient(t)
+		defer cleanup()
+		initializeClient(t, client)
+		runSearchModulesTests(t, client, "Stdio")
+	})
+
+	t.Run("get_module_details", func(t *testing.T) {
+		client, cleanup := createStdioClient(t)
+		defer cleanup()
+		initializeClient(t, client)
+		runModuleDetailsTests(t, client, "Stdio")
+	})
+
+	t.Run("search_policies", func(t *testing.T) {
+		client, cleanup := createStdioClient(t)
+		defer cleanup()
+		initializeClient(t, client)
+		runSearchPoliciesTests(t, client, "Stdio")
+	})
+
+	t.Run("get_policy_details", func(t *testing.T) {
+		client, cleanup := createStdioClient(t)
+		defer cleanup()
+		initializeClient(t, client)
+		runPolicyDetailsTests(t, client, "Stdio")
+	})
+
+	t.Run("get_latest_module_version", func(t *testing.T) {
+		client, cleanup := createStdioClient(t)
+		defer cleanup()
+		initializeClient(t, client)
+		runLatestModuleVersionTests(t, client, "Stdio")
+	})
+
+	t.Run("get_latest_provider_version", func(t *testing.T) {
+		client, cleanup := createStdioClient(t)
+		defer cleanup()
+		initializeClient(t, client)
+		runLatestProviderVersionTests(t, client, "Stdio")
+	})
+}
+
+// initializeClient initializes an MCP client for testing
+func initializeClient(t *testing.T, client mcpClient.MCPClient) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	request := mcp.InitializeRequest{}
+	request.Params.ProtocolVersion = mcp.LATEST_PROTOCOL_VERSION
+	request.Params.ClientInfo = mcp.Implementation{
+		Name:    "e2e-test-client",
+		Version: "0.0.1",
+	}
+
+	result, err := client.Initialize(ctx, request)
+	require.NoError(t, err, "Failed to initialize MCP client")
+	t.Logf("Initialized with server: %s %s", result.ServerInfo.Name, result.ServerInfo.Version)
+}
+
+// runSearchProviderTests runs search_providers test cases
+func runSearchProviderTests(t *testing.T, client mcpClient.MCPClient, transportName string) {
 	for _, testCase := range searchProviderTestCases {
-		t.Run(fmt.Sprintf("%s_search_providers/%s", transportName, testCase.TestName), func(t *testing.T) {
-			ensureClientInitialized(t, client)
+		t.Run(testCase.TestName, func(t *testing.T) {
 			t.Logf("TOOL search_providers %s", testCase.TestDescription)
 			t.Logf("Test payload: %v", testCase.TestPayload)
 
@@ -138,10 +185,12 @@ func runTestSuite(t *testing.T, client mcpClient.MCPClient, transportName string
 			}
 		})
 	}
+}
 
+// runProviderDetailsTests runs get_provider_details test cases
+func runProviderDetailsTests(t *testing.T, client mcpClient.MCPClient, transportName string) {
 	for _, testCase := range providerDetailsTestCases {
-		t.Run(fmt.Sprintf("%s_get_provider_details/%s", transportName, testCase.TestName), func(t *testing.T) {
-			ensureClientInitialized(t, client)
+		t.Run(testCase.TestName, func(t *testing.T) {
 			t.Logf("TOOL get_provider_details %s", testCase.TestDescription)
 			t.Logf("Test payload: %v", testCase.TestPayload)
 
@@ -169,10 +218,12 @@ func runTestSuite(t *testing.T, client mcpClient.MCPClient, transportName string
 			}
 		})
 	}
+}
 
+// runSearchModulesTests runs search_modules test cases
+func runSearchModulesTests(t *testing.T, client mcpClient.MCPClient, transportName string) {
 	for _, testCase := range searchModulesTestCases {
-		t.Run(fmt.Sprintf("%s_search_modules/%s", transportName, testCase.TestName), func(t *testing.T) {
-			ensureClientInitialized(t, client)
+		t.Run(testCase.TestName, func(t *testing.T) {
 			t.Logf("TOOL search_modules %s", testCase.TestDescription)
 			t.Logf("Test payload: %v", testCase.TestPayload)
 
@@ -200,10 +251,12 @@ func runTestSuite(t *testing.T, client mcpClient.MCPClient, transportName string
 			}
 		})
 	}
+}
 
+// runModuleDetailsTests runs get_module_details test cases
+func runModuleDetailsTests(t *testing.T, client mcpClient.MCPClient, transportName string) {
 	for _, testCase := range moduleDetailsTestCases {
-		t.Run(fmt.Sprintf("%s_get_module_details/%s", transportName, testCase.TestName), func(t *testing.T) {
-			ensureClientInitialized(t, client)
+		t.Run(testCase.TestName, func(t *testing.T) {
 			t.Logf("TOOL get_module_details %s", testCase.TestDescription)
 			t.Logf("Test payload: %v", testCase.TestPayload)
 
@@ -236,10 +289,12 @@ func runTestSuite(t *testing.T, client mcpClient.MCPClient, transportName string
 			}
 		})
 	}
+}
 
+// runSearchPoliciesTests runs search_policies test cases
+func runSearchPoliciesTests(t *testing.T, client mcpClient.MCPClient, transportName string) {
 	for _, testCase := range searchPoliciesTestCases {
-		t.Run("CallTool search_policies", func(t *testing.T) {
-			// t.Parallel()
+		t.Run(testCase.TestName, func(t *testing.T) {
 			t.Logf("TOOL search_policies %s", testCase.TestDescription)
 			t.Logf("Test payload: %v", testCase.TestPayload)
 
@@ -263,7 +318,6 @@ func runTestSuite(t *testing.T, client mcpClient.MCPClient, transportName string
 				require.True(t, ok, "expected content to be of type TextContent")
 				t.Logf("Content length: %d", len(textContent.Text))
 
-				// For successful searches, check that the response contains the expected policy information format
 				if len(textContent.Text) > 0 {
 					require.Contains(t, textContent.Text, "terraform_policy_id", "expected content to contain terraform_policy_id")
 					require.Contains(t, textContent.Text, "Name:", "expected content to contain policy Name")
@@ -273,10 +327,12 @@ func runTestSuite(t *testing.T, client mcpClient.MCPClient, transportName string
 			}
 		})
 	}
+}
 
+// runPolicyDetailsTests runs get_policy_details test cases
+func runPolicyDetailsTests(t *testing.T, client mcpClient.MCPClient, transportName string) {
 	for _, testCase := range policyDetailsTestCases {
-		t.Run("CallTool get_policy_details", func(t *testing.T) {
-			// t.Parallel()
+		t.Run(testCase.TestName, func(t *testing.T) {
 			t.Logf("TOOL get_policy_details %s", testCase.TestDescription)
 			t.Logf("Test payload: %v", testCase.TestPayload)
 
@@ -300,16 +356,17 @@ func runTestSuite(t *testing.T, client mcpClient.MCPClient, transportName string
 				require.True(t, ok, "expected content to be of type TextContent")
 				t.Logf("Content length: %d", len(textContent.Text))
 
-				// Add specific assertions for policy details if needed
 				require.Contains(t, textContent.Text, "POLICY_NAME", "expected content to contain policy name")
 				require.Contains(t, textContent.Text, "POLICY_CHECKSUM:", "expected content to contain policy checksum")
 			}
 		})
 	}
+}
 
+// runLatestModuleVersionTests runs get_latest_module_version test cases
+func runLatestModuleVersionTests(t *testing.T, client mcpClient.MCPClient, transportName string) {
 	for _, testCase := range getLatestModuleVersionTestCases {
-		t.Run(fmt.Sprintf("%s_get_latest_module_version/%s", transportName, testCase.TestName), func(t *testing.T) {
-			ensureClientInitialized(t, client)
+		t.Run(testCase.TestName, func(t *testing.T) {
 			t.Logf("TOOL get_latest_module_version %s", testCase.TestDescription)
 			t.Logf("Test payload: %v", testCase.TestPayload)
 
@@ -333,17 +390,17 @@ func runTestSuite(t *testing.T, client mcpClient.MCPClient, transportName string
 				require.True(t, ok, "expected content to be of type TextContent")
 				t.Logf("Module version: %s", textContent.Text)
 
-				// Verify that the response contains a valid version string
 				require.NotEmpty(t, textContent.Text, "expected version string to not be empty")
-				// Basic version format validation (should contain at least one dot for semantic versioning)
 				require.Contains(t, textContent.Text, ".", "expected version to contain at least one dot")
 			}
 		})
 	}
+}
 
+// runLatestProviderVersionTests runs get_latest_provider_version test cases
+func runLatestProviderVersionTests(t *testing.T, client mcpClient.MCPClient, transportName string) {
 	for _, testCase := range getLatestProviderVersionTestCases {
-		t.Run(fmt.Sprintf("%s_get_latest_provider_version/%s", transportName, testCase.TestName), func(t *testing.T) {
-			ensureClientInitialized(t, client)
+		t.Run(testCase.TestName, func(t *testing.T) {
 			t.Logf("TOOL get_latest_provider_version %s", testCase.TestDescription)
 			t.Logf("Test payload: %v", testCase.TestPayload)
 
@@ -367,14 +424,65 @@ func runTestSuite(t *testing.T, client mcpClient.MCPClient, transportName string
 				require.True(t, ok, "expected content to be of type TextContent")
 				t.Logf("Provider version: %s", textContent.Text)
 
-				// Verify that the response contains a valid version string
 				require.NotEmpty(t, textContent.Text, "expected version string to not be empty")
-				// Basic version format validation (should contain at least one dot for semantic versioning)
 				require.Contains(t, textContent.Text, ".", "expected version to contain at least one dot")
 			}
 		})
 	}
+}
 
+// runTestSuite executes all test cases against the provided client (used for HTTP)
+func runTestSuite(t *testing.T, client mcpClient.MCPClient, transportName string) {
+	t.Run("Initialize", func(t *testing.T) {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+
+		request := mcp.InitializeRequest{}
+		request.Params.ProtocolVersion = mcp.LATEST_PROTOCOL_VERSION
+		request.Params.ClientInfo = mcp.Implementation{
+			Name:    "e2e-test-client",
+			Version: "0.0.1",
+		}
+
+		result, err := client.Initialize(ctx, request)
+		if err != nil {
+			log.Fatalf("Failed to initialize: %v", err)
+		}
+		fmt.Printf("Initialized with server: %s %s\n\n", result.ServerInfo.Name, result.ServerInfo.Version)
+		require.Equal(t, "terraform-mcp-server", result.ServerInfo.Name)
+	})
+
+	t.Run("search_providers", func(t *testing.T) {
+		runSearchProviderTests(t, client, transportName)
+	})
+
+	t.Run("get_provider_details", func(t *testing.T) {
+		runProviderDetailsTests(t, client, transportName)
+	})
+
+	t.Run("search_modules", func(t *testing.T) {
+		runSearchModulesTests(t, client, transportName)
+	})
+
+	t.Run("get_module_details", func(t *testing.T) {
+		runModuleDetailsTests(t, client, transportName)
+	})
+
+	t.Run("search_policies", func(t *testing.T) {
+		runSearchPoliciesTests(t, client, transportName)
+	})
+
+	t.Run("get_policy_details", func(t *testing.T) {
+		runPolicyDetailsTests(t, client, transportName)
+	})
+
+	t.Run("get_latest_module_version", func(t *testing.T) {
+		runLatestModuleVersionTests(t, client, transportName)
+	})
+
+	t.Run("get_latest_provider_version", func(t *testing.T) {
+		runLatestProviderVersionTests(t, client, transportName)
+	})
 }
 
 // createStdioClient creates a stdio-based MCP client
