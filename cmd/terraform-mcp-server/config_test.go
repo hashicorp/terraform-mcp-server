@@ -525,3 +525,65 @@ func TestGetLogFormatWithNilCommand(t *testing.T) {
 		t.Errorf("expected default text format with invalid env var and nil command, got %q", format)
 	}
 }
+
+func TestShouldDisableStreaming(t *testing.T) {
+	// Save original env var to restore later
+	origDisableStreaming := os.Getenv("MCP_DISABLE_STREAMING")
+	defer func() {
+		if origDisableStreaming != "" {
+			os.Setenv("MCP_DISABLE_STREAMING", origDisableStreaming)
+		} else {
+			os.Unsetenv("MCP_DISABLE_STREAMING")
+		}
+	}()
+
+	// Test case: When MCP_DISABLE_STREAMING is not set, streaming should be enabled (default)
+	os.Unsetenv("MCP_DISABLE_STREAMING")
+	assert.False(t, shouldDisableStreaming(nil), "Streaming should be enabled when MCP_DISABLE_STREAMING is not set")
+
+	// Test case: When MCP_DISABLE_STREAMING is set to "true", streaming should be disabled
+	os.Setenv("MCP_DISABLE_STREAMING", "true")
+	assert.True(t, shouldDisableStreaming(nil), "Streaming should be disabled when MCP_DISABLE_STREAMING is set to 'true'")
+
+	// Test case: When MCP_DISABLE_STREAMING is set to "1", streaming should be disabled
+	os.Setenv("MCP_DISABLE_STREAMING", "1")
+	assert.True(t, shouldDisableStreaming(nil), "Streaming should be disabled when MCP_DISABLE_STREAMING is set to '1'")
+
+	// Test case: Case insensitivity - uppercase TRUE
+	os.Setenv("MCP_DISABLE_STREAMING", "TRUE")
+	assert.True(t, shouldDisableStreaming(nil), "Streaming should be disabled when MCP_DISABLE_STREAMING is set to 'TRUE' (uppercase)")
+
+	// Test case: Case insensitivity - mixed case
+	os.Setenv("MCP_DISABLE_STREAMING", "TrUe")
+	assert.True(t, shouldDisableStreaming(nil), "Streaming should be disabled when MCP_DISABLE_STREAMING is set to 'TrUe' (mixed case)")
+
+	// Test case: Whitespace handling
+	os.Setenv("MCP_DISABLE_STREAMING", "  true  ")
+	assert.True(t, shouldDisableStreaming(nil), "Streaming should be disabled when MCP_DISABLE_STREAMING is set to '  true  ' (with whitespace)")
+
+	// Test case: When MCP_DISABLE_STREAMING is set to "false", streaming should be enabled
+	os.Setenv("MCP_DISABLE_STREAMING", "false")
+	assert.False(t, shouldDisableStreaming(nil), "Streaming should be enabled when MCP_DISABLE_STREAMING is set to 'false'")
+
+	// Test case: Invalid value should default to enabled
+	os.Setenv("MCP_DISABLE_STREAMING", "0")
+	assert.False(t, shouldDisableStreaming(nil), "Streaming should be enabled when MCP_DISABLE_STREAMING is set to '0'")
+
+	// Test case: Empty string should default to enabled
+	os.Setenv("MCP_DISABLE_STREAMING", "")
+	assert.False(t, shouldDisableStreaming(nil), "Streaming should be enabled when MCP_DISABLE_STREAMING is set to empty string")
+
+	// Test case: CLI flag takes effect when env var not set
+	os.Unsetenv("MCP_DISABLE_STREAMING")
+	cmd := &cobra.Command{}
+	cmd.Flags().Bool("disable-streaming", false, "test flag")
+	cmd.Flags().Set("disable-streaming", "true")
+	assert.True(t, shouldDisableStreaming(cmd), "Streaming should be disabled when --disable-streaming flag is set")
+
+	// Test case: Env var takes precedence over CLI flag
+	os.Setenv("MCP_DISABLE_STREAMING", "false")
+	cmd2 := &cobra.Command{}
+	cmd2.Flags().Bool("disable-streaming", false, "test flag")
+	cmd2.Flags().Set("disable-streaming", "true")
+	assert.False(t, shouldDisableStreaming(cmd2), "Env var should take precedence - false value means enabled")
+}

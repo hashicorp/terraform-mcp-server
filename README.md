@@ -48,13 +48,14 @@ automation and interaction capabilities for Infrastructure as Code (IaC) develop
 | `MCP_RATE_LIMIT_GLOBAL` | Global rate limit (format: `rps:burst`) | `10:20` |
 | `MCP_RATE_LIMIT_SESSION` | Per-session rate limit (format: `rps:burst`) | `5:10` |
 | `ENABLE_TF_OPERATIONS` | Enable tools that require explicit approval | `false` |
+| `MCP_DISABLE_STREAMING` | Disables Server-Sent Events (SSE) streaming and uses direct HTTP request/response only | `false` |
 
 ```bash
 # Stdio mode
 terraform-mcp-server stdio [--log-file /path/to/log] [--log-level info] [--log-format text] [--toolsets <toolsets>] [--tools <tools>]
 
 # StreamableHTTP mode
-terraform-mcp-server streamable-http [--transport-port 8080] [--transport-host 127.0.0.1] [--mcp-endpoint /mcp] [--log-file /path/to/log] [--log-level info] [--log-format text] [--toolsets <toolsets>] [--tools <tools>]
+terraform-mcp-server streamable-http [--transport-port 8080] [--transport-host 127.0.0.1] [--mcp-endpoint /mcp] [--log-file /path/to/log] [--log-level info] [--log-format text] [--disable-streaming ] [--toolsets <toolsets>] [--tools <tools>]
 ```
 
 ## Instructions
