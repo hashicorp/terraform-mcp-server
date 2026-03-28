@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/hashicorp/terraform-mcp-server/pkg/client"
+	"github.com/hashicorp/terraform-mcp-server/pkg/utils"
 	log "github.com/sirupsen/logrus"
 
 	"github.com/mark3labs/mcp-go/mcp"
@@ -163,6 +164,14 @@ func unmarshalTerraformModule(response []byte) (string, error) {
 			}
 		}
 		builder.WriteString("\n")
+	}
+
+	// Format Root Readme
+	if terraformModules.Root.Readme != "" {
+		cleanedReadme := utils.RemoveReadmeSections(terraformModules.Root.Readme)
+		builder.WriteString("### Readme\n\n")
+		builder.WriteString(cleanedReadme)
+		builder.WriteString("\n\n")
 	}
 
 	content := builder.String()

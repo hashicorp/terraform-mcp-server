@@ -113,6 +113,99 @@ func TestUnmarshalModuleSingular_InvalidJSON(t *testing.T) {
 	}
 }
 
+func TestUnmarshalModuleSingular_WithReadme(t *testing.T) {
+	resp := []byte(`{
+		"id": "namespace/name/provider/1.0.0",
+		"owner": "owner",
+		"namespace": "namespace",
+		"name": "name",
+		"version": "1.0.0",
+		"provider": "provider",
+		"provider_logo_url": "",
+		"description": "A test module",
+		"source": "source",
+		"tag": "",
+		"published_at": "2023-01-01T00:00:00Z",
+		"downloads": 1,
+		"verified": true,
+		"root": {
+			"path": "",
+			"name": "root",
+			"readme": "# Module Title\n\nSome description.\n\n## Inputs\n\n| Name | Type |\n\n## Usage\n\nUsage info here.",
+			"empty": false,
+			"inputs": [],
+			"outputs": [],
+			"dependencies": [],
+			"provider_dependencies": [],
+			"resources": []
+		},
+		"submodules": [],
+		"examples": [],
+		"providers": ["provider"],
+		"versions": ["1.0.0"],
+		"deprecation": null
+	}`)
+	out, err := unmarshalTerraformModule(resp)
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if !strings.Contains(out, "### Readme") {
+		t.Errorf("expected output to contain '### Readme' section, got %q", out)
+	}
+	if !strings.Contains(out, "Module Title") {
+		t.Errorf("expected output to contain readme content, got %q", out)
+	}
+	// The Inputs section from the README should be removed by RemoveReadmeSections
+	if strings.Contains(out, "## Inputs") {
+		t.Errorf("expected '## Inputs' section to be removed from readme, got %q", out)
+	}
+	// Other readme content should be preserved
+	if !strings.Contains(out, "## Usage") {
+		t.Errorf("expected '## Usage' section to be preserved in readme, got %q", out)
+	}
+}
+
+func TestUnmarshalModuleSingular_EmptyReadme(t *testing.T) {
+	resp := []byte(`{
+		"id": "namespace/name/provider/1.0.0",
+		"owner": "owner",
+		"namespace": "namespace",
+		"name": "name",
+		"version": "1.0.0",
+		"provider": "provider",
+		"provider_logo_url": "",
+		"description": "A test module",
+		"source": "source",
+		"tag": "",
+		"published_at": "2023-01-01T00:00:00Z",
+		"downloads": 1,
+		"verified": true,
+		"root": {
+			"path": "",
+			"name": "root",
+			"readme": "",
+			"empty": false,
+			"inputs": [],
+			"outputs": [],
+			"dependencies": [],
+			"provider_dependencies": [],
+			"resources": []
+		},
+		"submodules": [],
+		"examples": [],
+		"providers": ["provider"],
+		"versions": ["1.0.0"],
+		"deprecation": null
+	}`)
+	out, err := unmarshalTerraformModule(resp)
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if strings.Contains(out, "### Readme") {
+		t.Errorf("expected output NOT to contain '### Readme' when readme is empty, got %q", out)
+	}
+}
+
 // --- ValidateModuleID ---
 func TestValidateModuleID_ValidFormat(t *testing.T) {
 	validIDs := []string{

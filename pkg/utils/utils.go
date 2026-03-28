@@ -107,6 +107,39 @@ func ExtractReadme(readme string) string {
 	return strings.TrimSuffix(builder.String(), "\n")
 }
 
+// RemoveReadmeSections removes sections from a README that duplicate information
+// already surfaced in structured fields (inputs, outputs, dependencies, resources).
+func RemoveReadmeSections(readme string) string {
+	lines := strings.Split(readme, "\n")
+	var result []string
+	skipSection := false
+
+	for _, line := range lines {
+		lowerLine := strings.ToLower(strings.TrimSpace(line))
+		if strings.HasPrefix(lowerLine, "##") || strings.HasPrefix(lowerLine, "###") || strings.HasPrefix(lowerLine, "####") {
+			if strings.Contains(lowerLine, "inputs") ||
+				strings.Contains(lowerLine, "outputs") ||
+				strings.Contains(lowerLine, "dependencies") ||
+				strings.Contains(lowerLine, "provider dependencies") ||
+				strings.Contains(lowerLine, "resources") {
+				skipSection = true
+				continue
+			} else {
+				skipSection = false
+			}
+		}
+
+		if !skipSection {
+			result = append(result, line)
+		}
+	}
+
+	cleaned := strings.Join(result, "\n")
+	cleaned = regexp.MustCompile(`\n{3,}`).ReplaceAllString(cleaned, "\n\n")
+
+	return strings.TrimSpace(cleaned)
+}
+
 // GetEnv retrieves the value of an environment variable or returns a fallback value if not set
 func GetEnv(key, fallback string) string {
 	if value, ok := os.LookupEnv(key); ok {

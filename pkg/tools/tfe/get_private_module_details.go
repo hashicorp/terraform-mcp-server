@@ -7,11 +7,11 @@ import (
 	"context"
 	"fmt"
 	"path"
-	"regexp"
 	"strings"
 
 	"github.com/hashicorp/go-tfe"
 	"github.com/hashicorp/terraform-mcp-server/pkg/client"
+	"github.com/hashicorp/terraform-mcp-server/pkg/utils"
 	log "github.com/sirupsen/logrus"
 
 	"github.com/mark3labs/mcp-go/mcp"
@@ -242,7 +242,7 @@ func buildPrivateModuleDetailsResponse(registryModule *tfe.RegistryModule,
 	}
 
 	if terraformRegistryModule != nil && terraformRegistryModule.Root.Readme != "" {
-		cleanedReadme := removeReadmeSections(terraformRegistryModule.Root.Readme)
+		cleanedReadme := utils.RemoveReadmeSections(terraformRegistryModule.Root.Readme)
 		builder.WriteString("README:\n")
 		builder.WriteString(strings.Repeat("-", 20) + "\n")
 		builder.WriteString(cleanedReadme)
@@ -258,35 +258,4 @@ func buildPrivateModuleDetailsResponse(registryModule *tfe.RegistryModule,
 	}).Info("Successfully retrieved private module details")
 
 	return mcp.NewToolResultText(builder.String())
-}
-
-func removeReadmeSections(readme string) string {
-	lines := strings.Split(readme, "\n")
-	var result []string
-	skipSection := false
-
-	for _, line := range lines {
-		lowerLine := strings.ToLower(strings.TrimSpace(line))
-		if strings.HasPrefix(lowerLine, "##") || strings.HasPrefix(lowerLine, "###") || strings.HasPrefix(lowerLine, "####") {
-			if strings.Contains(lowerLine, "inputs") ||
-				strings.Contains(lowerLine, "outputs") ||
-				strings.Contains(lowerLine, "dependencies") ||
-				strings.Contains(lowerLine, "provider dependencies") ||
-				strings.Contains(lowerLine, "resources") {
-				skipSection = true
-				continue
-			} else {
-				skipSection = false
-			}
-		}
-
-		if !skipSection {
-			result = append(result, line)
-		}
-	}
-
-	cleaned := strings.Join(result, "\n")
-	cleaned = regexp.MustCompile(`\n{3,}`).ReplaceAllString(cleaned, "\n\n")
-
-	return strings.TrimSpace(cleaned)
 }
