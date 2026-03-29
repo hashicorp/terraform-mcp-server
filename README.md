@@ -4,6 +4,10 @@ The Terraform MCP Server is a [Model Context Protocol (MCP)](https://modelcontex
 server that provides seamless integration with Terraform Registry APIs, enabling advanced
 automation and interaction capabilities for Infrastructure as Code (IaC) development.
 
+## Hosted deployment
+
+A hosted deployment is available on [Fronteir AI](https://fronteir.ai/mcp/hashicorp-terraform-mcp-server).
+
 ## Features
 
 - **Dual Transport Support**: Both Stdio and StreamableHTTP transports with configurable endpoints
