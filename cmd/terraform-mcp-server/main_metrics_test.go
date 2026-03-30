@@ -241,6 +241,30 @@ func TestAttachMetricsHooksAfterCallWithoutStartTimeStillRecords(t *testing.T) {
 	assert.EqualValues(t, 1, toolCalls.DataPoints[0].Value)
 }
 
+func TestAttachMetricsHooksMalformedIDDoesNotPanicAndRecordsMetrics(t *testing.T) {
+	metricsConfig, reader := newMetricsConfigForHooks(t)
+	hooks := &mcpserver.Hooks{}
+	attachMetricsHooks(hooks, metricsConfig, metricsTestLogger())
+	require.Len(t, hooks.OnBeforeCallTool, 1)
+	require.Len(t, hooks.OnAfterCallTool, 1)
+
+	request := &mcp.CallToolRequest{Params: mcp.CallToolParams{Name: "malformed_id_tool"}}
+	malformedID := []any{"bad", 1}
+
+	assert.NotPanics(t, func() {
+		hooks.OnBeforeCallTool[0](context.Background(), malformedID, request)
+	})
+	assert.NotPanics(t, func() {
+		hooks.OnAfterCallTool[0](context.Background(), malformedID, request, mcp.NewToolResultText("ok"))
+	})
+
+	resourceMetrics := collectMetrics(t, reader)
+	toolCalls := findInt64SumMetric(t, resourceMetrics, "mcp_tool_calls_total")
+	require.Len(t, toolCalls.DataPoints, 1)
+	assert.EqualValues(t, 1, toolCalls.DataPoints[0].Value)
+	assert.Contains(t, toolCalls.DataPoints[0].Attributes.ToSlice(), attribute.String("tool.name", "malformed_id_tool"))
+}
+
 func TestNewServerWithHooksOptionPassesThrough(t *testing.T) {
 	customHooks := &mcpserver.Hooks{}
 	customHooks.AddBeforeCallTool(func(ctx context.Context, id any, message *mcp.CallToolRequest) {})
