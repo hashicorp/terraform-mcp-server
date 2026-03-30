@@ -49,7 +49,7 @@ automation and interaction capabilities for Infrastructure as Code (IaC) develop
 | `MCP_RATE_LIMIT_GLOBAL` | Global rate limit (format: `rps:burst`) | `10:20` |
 | `MCP_RATE_LIMIT_SESSION` | Per-session rate limit (format: `rps:burst`) | `5:10` |
 | `ENABLE_TF_OPERATIONS` | Enable tools that require explicit approval | `false` |
-| `OTEL_METRICS_ENABLED` | Enable tools metrics using otel and datadog | `false` |
+| `OTEL_METRICS_ENABLED` | Enable tools metrics using otel | `false` |
 | `OTEL_METRICS_SERVICE_VERSION` | Version of the terraform-mcp-server sending metrics, which is used to set metric attributes. It also helps track metrics across different deployments | `latest` |
 | `OTEL_METRICS_SERVICE_NAME` | Identifies the source of the metrics (e.g., "terraform-mcp-server") | `terraform-mcp-server` |
 | `OTEL_METRICS_EXPORT_INTERVAL` | Controls the frequency of metric flushes | `2` |
