@@ -241,7 +241,7 @@ func TestAttachMetricsHooksAfterCallWithoutStartTimeStillRecords(t *testing.T) {
 	assert.EqualValues(t, 1, toolCalls.DataPoints[0].Value)
 }
 
-func TestAttachMetricsHooksMalformedIDDoesNotPanicAndRecordsMetrics(t *testing.T) {
+func TestAttachMetricsHooksAndRecordToolCallWithMalformedID(t *testing.T) {
 	metricsConfig, reader := newMetricsConfigForHooks(t)
 	hooks := &mcpserver.Hooks{}
 	attachMetricsHooks(hooks, metricsConfig, metricsTestLogger())
