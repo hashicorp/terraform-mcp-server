@@ -4,6 +4,10 @@ FIXES
 
 * Fix sessions handling in stateless and load balanced environments
 
+FEATURES
+
+* [New Tool] `get_sentinel_mock` Export and download Sentinel mock bundle data for a Terraform plan
+
 IMPROVEMENTS
 * Add `Authorization: Bearer` header support for Terraform token in proxy environments
 * Add `--heartbeat-interval` CLI flag and `MCP_HEARTBEAT_INTERVAL` env var for HTTP heartbeat in load-balanced environments
