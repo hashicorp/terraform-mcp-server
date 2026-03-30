@@ -94,8 +94,11 @@ var (
 			}
 
 			enabledToolsets := getToolsetsFromCmd(cmd.Root(), logger)
+			stdlog.Printf("Starting StreamableHTTP server with host: %s, port: %s, endpoint: %s, heartbeatInterval: %v, enabledToolsets: %v", host, port, endpointPath, heartbeatInterval, enabledToolsets)
+			metricsConfig, shutdownMetrics := setupMetrics(logger)
+			defer shutdownMetrics()
 
-			if err := runHTTPServer(logger, host, port, endpointPath, heartbeatInterval, enabledToolsets); err != nil {
+			if err := runHTTPServer(logger, host, port, endpointPath, heartbeatInterval, enabledToolsets, metricsConfig); err != nil {
 				stdlog.Fatal("failed to run streamableHTTP server:", err)
 			}
 		},

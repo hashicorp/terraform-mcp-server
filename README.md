@@ -10,6 +10,7 @@ automation and interaction capabilities for Infrastructure as Code (IaC) develop
 - **Terraform Registry Integration**: Direct integration with public Terraform Registry APIs for providers, modules, and policies
 - **HCP Terraform & Terraform Enterprise Support**: Full workspace management, organization/project listing, and private registry access
 - **Workspace Operations**: Create, update, delete workspaces with support for variables, tags, and run management
+- **OTel metrics for monitoring tool usage**: Integration with open telemetry meters to track tool-call volume, latency and failures in Streamable HTTP mode
 
 > **Security Note:** At this stage, the MCP server is intended for local use only. If using the StreamableHTTP transport, always configure the MCP_ALLOWED_ORIGINS environment variable to restrict access to trusted origins only. This helps prevent DNS rebinding attacks and other cross-origin vulnerabilities.
 
@@ -48,6 +49,12 @@ automation and interaction capabilities for Infrastructure as Code (IaC) develop
 | `MCP_RATE_LIMIT_GLOBAL` | Global rate limit (format: `rps:burst`) | `10:20` |
 | `MCP_RATE_LIMIT_SESSION` | Per-session rate limit (format: `rps:burst`) | `5:10` |
 | `ENABLE_TF_OPERATIONS` | Enable tools that require explicit approval | `false` |
+| `OTEL_METRICS_ENABLED` | Enable tools metrics using otel | `false` |
+| `OTEL_METRICS_SERVICE_VERSION` | Version of the terraform-mcp-server sending metrics, which is used to set metric attributes. It also helps track metrics across different deployments | `latest` |
+| `OTEL_METRICS_SERVICE_NAME` | Identifies the source of the metrics (e.g., "terraform-mcp-server") | `terraform-mcp-server` |
+| `OTEL_METRICS_EXPORT_INTERVAL` | Controls the frequency of metric flushes | `2` |
+| `OTEL_METRICS_ENDPOINT` | URL of your OTel Collector or backend | `localhost:4318` |
+
 
 ```bash
 # Stdio mode
