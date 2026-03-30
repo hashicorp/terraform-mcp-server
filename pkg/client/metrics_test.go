@@ -2,7 +2,6 @@ package client
 
 import (
 	"context"
-	"errors"
 	"io"
 	"testing"
 	"time"
@@ -18,11 +17,11 @@ import (
 
 func TestLoadMetricsConfigFromEnv(t *testing.T) {
 	t.Run("uses environment overrides", func(t *testing.T) {
-		t.Setenv("MCP_METRICS_ENDPOINT", "collector.internal:4318")
-		t.Setenv("MCP_METRICS_EXPORT_INTERVAL", "5s")
-		t.Setenv("MCP_METRICS_SERVICE_NAME", "custom-mcp")
-		t.Setenv("MCP_METRICS_SERVICE_VERSION", "1.2.3")
-		t.Setenv("MCP_METRICS_ENABLED", "true")
+		t.Setenv("OTEL_METRICS_ENDPOINT", "collector.internal:4318")
+		t.Setenv("OTEL_METRICS_EXPORT_INTERVAL", "5s")
+		t.Setenv("OTEL_METRICS_SERVICE_NAME", "custom-mcp")
+		t.Setenv("OTEL_METRICS_SERVICE_VERSION", "1.2.3")
+		t.Setenv("OTEL_METRICS_ENABLED", "true")
 
 		config := LoadMetricsConfigFromEnv()
 
@@ -34,11 +33,11 @@ func TestLoadMetricsConfigFromEnv(t *testing.T) {
 	})
 
 	t.Run("keeps default export interval when invalid", func(t *testing.T) {
-		t.Setenv("MCP_METRICS_ENDPOINT", "")
-		t.Setenv("MCP_METRICS_EXPORT_INTERVAL", "not-a-duration")
-		t.Setenv("MCP_METRICS_SERVICE_NAME", "")
-		t.Setenv("MCP_METRICS_SERVICE_VERSION", "")
-		t.Setenv("MCP_METRICS_ENABLED", "")
+		t.Setenv("OTEL_METRICS_ENDPOINT", "")
+		t.Setenv("OTEL_METRICS_EXPORT_INTERVAL", "not-a-duration")
+		t.Setenv("OTEL_METRICS_SERVICE_NAME", "")
+		t.Setenv("OTEL_METRICS_SERVICE_VERSION", "")
+		t.Setenv("OTEL_METRICS_ENABLED", "")
 
 		config := LoadMetricsConfigFromEnv()
 		defaults := DefaultMetricsConfig()
@@ -86,7 +85,7 @@ func TestRecordToolCallRecordsMetrics(t *testing.T) {
 	RecordToolCall(
 		context.Background(),
 		time.Now().Add(-150*time.Millisecond),
-		errors.New("tool failed"),
+		true,
 		"request-1",
 		request,
 		config,
@@ -120,7 +119,7 @@ func TestRecordToolCallSkipsWhenMetricsDisabled(t *testing.T) {
 		RecordToolCall(
 			context.Background(),
 			time.Now(),
-			nil,
+			false,
 			"request-2",
 			&mcp.CallToolRequest{Params: mcp.CallToolParams{Name: "list_runs"}},
 			MetricsConfig{Enabled: false},

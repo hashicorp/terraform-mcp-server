@@ -29,7 +29,7 @@ func metricsTestLogger() *log.Logger {
 }
 
 func TestSetupMetricsDisabledReturnsNoopShutdown(t *testing.T) {
-	t.Setenv("MCP_METRICS_ENABLED", "")
+	t.Setenv("OTEL_METRICS_ENABLED", "")
 
 	metricsConfig, shutdown := setupMetrics(metricsTestLogger())
 
@@ -70,11 +70,11 @@ func TestInitMetricsSuccessInitializesInstrumentsAndShutdown(t *testing.T) {
 }
 
 func TestSetupMetricsEnabledInitializesAndReturnsShutdown(t *testing.T) {
-	t.Setenv("MCP_METRICS_ENABLED", "true")
-	t.Setenv("MCP_METRICS_ENDPOINT", "localhost:4318")
-	t.Setenv("MCP_METRICS_EXPORT_INTERVAL", "50ms")
-	t.Setenv("MCP_METRICS_SERVICE_NAME", "terraform-mcp-server-test")
-	t.Setenv("MCP_METRICS_SERVICE_VERSION", "test")
+	t.Setenv("OTEL_METRICS_ENABLED", "true")
+	t.Setenv("OTEL_METRICS_ENDPOINT", "localhost:4318")
+	t.Setenv("OTEL_METRICS_EXPORT_INTERVAL", "50ms")
+	t.Setenv("OTEL_METRICS_SERVICE_NAME", "terraform-mcp-server-test")
+	t.Setenv("OTEL_METRICS_SERVICE_VERSION", "test")
 
 	metricsConfig, shutdown := setupMetrics(metricsTestLogger())
 

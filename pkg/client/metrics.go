@@ -41,45 +41,45 @@ func DefaultMetricsConfig() MetricsConfig {
 
 func LoadMetricsConfigFromEnv() MetricsConfig {
 	config := DefaultMetricsConfig()
-	if endpoint := os.Getenv("MCP_METRICS_ENDPOINT"); endpoint != "" {
+	if endpoint := os.Getenv("OTEL_METRICS_ENDPOINT"); endpoint != "" {
 		config.Endpoint = endpoint
-		log.Infof("Using env value for MCP_METRICS_ENDPOINT: %s", endpoint)
+		log.Infof("Using env value for OTEL_METRICS_ENDPOINT: %s", endpoint)
 	} else {
-		log.Infof("MCP_METRICS_ENDPOINT not set in env, using default: %s", config.Endpoint)
+		log.Infof("OTEL_METRICS_ENDPOINT not set in env, using default: %s", config.Endpoint)
 	}
-	if interval := os.Getenv("MCP_METRICS_EXPORT_INTERVAL"); interval != "" {
+	if interval := os.Getenv("OTEL_METRICS_EXPORT_INTERVAL"); interval != "" {
 		if dur, err := time.ParseDuration(interval); err == nil {
 			config.ExportInterval = dur
-			log.Infof("Using env value for MCP_METRICS_EXPORT_INTERVAL: %s", interval)
+			log.Infof("Using env value for OTEL_METRICS_EXPORT_INTERVAL: %s", interval)
 		} else {
-			log.Warnf("Error parsing MCP_METRICS_EXPORT_INTERVAL: %v", err)
+			log.Warnf("Error parsing OTEL_METRICS_EXPORT_INTERVAL: %v", err)
 			log.Infof("Using default export interval: %s", config.ExportInterval)
 		}
 	} else {
-		log.Infof("MCP_METRICS_EXPORT_INTERVAL not set in env, using default: %s", config.ExportInterval)
+		log.Infof("OTEL_METRICS_EXPORT_INTERVAL not set in env, using default: %s", config.ExportInterval)
 	}
-	if serviceName := os.Getenv("MCP_METRICS_SERVICE_NAME"); serviceName != "" {
+	if serviceName := os.Getenv("OTEL_METRICS_SERVICE_NAME"); serviceName != "" {
 		config.ServiceName = serviceName
-		log.Infof("Using env value for MCP_METRICS_SERVICE_NAME: %s", serviceName)
+		log.Infof("Using env value for OTEL_METRICS_SERVICE_NAME: %s", serviceName)
 	} else {
-		log.Infof("MCP_METRICS_SERVICE_NAME not set in env, using default: %s", config.ServiceName)
+		log.Infof("OTEL_METRICS_SERVICE_NAME not set in env, using default: %s", config.ServiceName)
 	}
-	if serviceVersion := os.Getenv("MCP_METRICS_SERVICE_VERSION"); serviceVersion != "" {
+	if serviceVersion := os.Getenv("OTEL_METRICS_SERVICE_VERSION"); serviceVersion != "" {
 		config.ServiceVersion = serviceVersion
-		log.Infof("Using env value for MCP_METRICS_SERVICE_VERSION: %s", serviceVersion)
+		log.Infof("Using env value for OTEL_METRICS_SERVICE_VERSION: %s", serviceVersion)
 	} else {
-		log.Infof("MCP_METRICS_SERVICE_VERSION not set in env, using default: %s", config.ServiceVersion)
+		log.Infof("OTEL_METRICS_SERVICE_VERSION not set in env, using default: %s", config.ServiceVersion)
 	}
-	if enabled := os.Getenv("MCP_METRICS_ENABLED"); enabled == "true" {
+	if enabled := os.Getenv("OTEL_METRICS_ENABLED"); enabled == "true" {
 		config.Enabled = true
-		log.Infof("MCP_METRICS_ENABLED set to true in env, enabling metrics")
+		log.Infof("OTEL_METRICS_ENABLED set to true in env, enabling metrics")
 	} else {
-		log.Infof("MCP_METRICS_ENABLED not set in env, using default: %t", config.Enabled)
+		log.Infof("OTEL_METRICS_ENABLED not set in env, using default: %t", config.Enabled)
 	}
 	return config
 }
 
-func RecordToolCall(ctx context.Context, startTime time.Time, toolErr error, id any, message *mcp.CallToolRequest, config MetricsConfig, logger *log.Logger) {
+func RecordToolCall(ctx context.Context, startTime time.Time, toolErr bool, id any, message *mcp.CallToolRequest, config MetricsConfig, logger *log.Logger) {
 	logger.Infof("Recording tool call for tool: %s id: %v", message.Params.Name, id)
 	if !config.Enabled || config.ToolCounter == nil {
 		logger.Errorf("DEBUG: Either metrics are not enabled or ToolCounter is NIL! Initialization failed.")
@@ -98,8 +98,8 @@ func RecordToolCall(ctx context.Context, startTime time.Time, toolErr error, id 
 	// Record Latency (Histogram)
 	config.ToolCallLatencyBucket.Record(ctx, elapsed, attrs)
 	// Record errors if any
-	if toolErr != nil {
+	if toolErr == true {
 		config.ErrorCounter.Add(ctx, 1, attrs)
-		logger.Errorf("Recorded error for tool %s: %v", message.Params.Name, toolErr)
+		logger.Errorf("Recorded error for tool %s", message.Params.Name)
 	}
 }

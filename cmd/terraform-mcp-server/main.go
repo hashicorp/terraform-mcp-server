@@ -91,9 +91,9 @@ func attachMetricsHooks(hooks *server.Hooks, metricsConfig client.MetricsConfig,
 			}
 		}
 
-		var toolErr error
+		var toolErr bool
 		if res, ok := result.(*mcp.CallToolResult); ok && res.IsError {
-			toolErr = fmt.Errorf("Tool reported error: %+v", res.Result)
+			toolErr = true
 		}
 		client.RecordToolCall(ctx, startTime, toolErr, id, message, metricsConfig, logger)
 	})
