@@ -64,26 +64,7 @@ func runHTTPServer(logger *log.Logger, host string, port string, endpointPath st
 			client.NewSessionHandler(ctx, session, logger)
 		}
 	})
-	if metricsConfig.Enabled {
-		var toolStartTimes sync.Map
-		hooks.AddBeforeCallTool(func(ctx context.Context, id any, message *mcp.CallToolRequest) {
-			toolStartTimes.Store(fmt.Sprintf("%v", id), time.Now())
-		})
-		hooks.AddAfterCallTool(func(ctx context.Context, id any, message *mcp.CallToolRequest, result any) {
-			startTime := time.Now()
-			if storedStart, ok := toolStartTimes.LoadAndDelete(fmt.Sprintf("%v", id)); ok {
-				if ts, ok := storedStart.(time.Time); ok {
-					startTime = ts
-				}
-			}
-			// Check if the result has any errors
-			var toolErr error
-			if res, ok := result.(*mcp.CallToolResult); ok && res.IsError {
-				toolErr = fmt.Errorf("Tool reported error: %+v", res.Result)
-			}
-			client.RecordToolCall(ctx, startTime, toolErr, id, message, metricsConfig, logger)
-		})
-	}
+	attachMetricsHooks(hooks, metricsConfig, logger)
 
 	opts := []server.ServerOption{server.WithHooks(hooks)}
 
@@ -93,11 +74,36 @@ func runHTTPServer(logger *log.Logger, host string, port string, endpointPath st
 	return streamableHTTPServerInit(ctx, hcServer, logger, host, port, endpointPath, heartbeatInterval)
 }
 
+func attachMetricsHooks(hooks *server.Hooks, metricsConfig client.MetricsConfig, logger *log.Logger) {
+	if !metricsConfig.Enabled {
+		return
+	}
+
+	var toolStartTimes sync.Map
+	hooks.AddBeforeCallTool(func(ctx context.Context, id any, message *mcp.CallToolRequest) {
+		toolStartTimes.Store(fmt.Sprintf("%v", id), time.Now())
+	})
+	hooks.AddAfterCallTool(func(ctx context.Context, id any, message *mcp.CallToolRequest, result any) {
+		startTime := time.Now()
+		if storedStart, ok := toolStartTimes.LoadAndDelete(fmt.Sprintf("%v", id)); ok {
+			if ts, ok := storedStart.(time.Time); ok {
+				startTime = ts
+			}
+		}
+
+		var toolErr error
+		if res, ok := result.(*mcp.CallToolResult); ok && res.IsError {
+			toolErr = fmt.Errorf("Tool reported error: %+v", res.Result)
+		}
+		client.RecordToolCall(ctx, startTime, toolErr, id, message, metricsConfig, logger)
+	})
+}
+
 func runStdioServer(logger *log.Logger, enabledToolsets []string) error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	hcServer := NewServer(version.Version, logger, enabledToolsets, client.MetricsConfig{})
+	hcServer := NewServer(version.Version, logger, enabledToolsets)
 	registerToolsAndResources(hcServer, logger, enabledToolsets)
 
 	return serverInit(ctx, hcServer, logger)
