@@ -103,7 +103,16 @@ func runStdioServer(logger *log.Logger, enabledToolsets []string) error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	hcServer := NewServer(version.Version, logger, enabledToolsets)
+	// Create hooks for session management
+	hooks := &server.Hooks{}
+	hooks.AddOnRegisterSession(func(ctx context.Context, session server.ClientSession) {
+		client.NewSessionHandler(ctx, session, logger)
+	})
+	hooks.AddOnUnregisterSession(func(ctx context.Context, session server.ClientSession) {
+		client.EndSessionHandler(ctx, session, logger)
+	})
+
+	hcServer := NewServer(version.Version, logger, enabledToolsets, server.WithHooks(hooks))
 	registerToolsAndResources(hcServer, logger, enabledToolsets)
 
 	return serverInit(ctx, hcServer, logger)
