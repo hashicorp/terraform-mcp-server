@@ -5,6 +5,7 @@ FIXES
 * Fix sessions handling in stateless and load balanced environments
 
 IMPROVEMENTS
+
 * Add `Authorization: Bearer` header support for Terraform token in proxy environments
 * Add `--heartbeat-interval` CLI flag and `MCP_HEARTBEAT_INTERVAL` env var for HTTP heartbeat in load-balanced environments
 * Set custom User-Agent header for TFE API requests to enable tracking MCP server usage separately from other go-tfe clients [268](https://github.com/hashicorp/terraform-mcp-server/pull/268)
@@ -13,9 +14,9 @@ IMPROVEMENTS
 
 FIXES
 
-* `list_runs` was returning empty response
+* `list_runs` was returning empty response due to JSON marshalling error 
 
-## 0.4.0
+## 0.5.0
 
 FEATURES
 
