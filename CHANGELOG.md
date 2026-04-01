@@ -1,15 +1,20 @@
-## UNRELEASED
+# 0.5.0
 
-FIXES
+FEATURES
 
-* Fix sessions handling in stateless and load balanced environments
+* [New Tool] `get_plan_json_output` Retrieves the structured JSON output of a Terraform plan, providing detailed resource changes in a machine-readable format that is easier to parse than plain logs
+* [New Tool] `get_plan_details` Fetches detailed metadata about a specific Terraform plan
+* [New Tool] `get_plan_logs` Retrieves the execution logs of a specific Terraform plan
+* [New Tool] `get_apply_details` Fetches detailed metadata about a specific Terraform apply
+* [New Tool] `get_apply_logs` Retrieves the execution logs of a specific Terraform apply
 
 IMPROVEMENTS
+
 * Add `Authorization: Bearer` header support for Terraform token in proxy environments
 * Add `--heartbeat-interval` CLI flag and `MCP_HEARTBEAT_INTERVAL` env var for HTTP heartbeat in load-balanced environments
 * Set custom User-Agent header for TFE API requests to enable tracking MCP server usage separately from other go-tfe clients [268](https://github.com/hashicorp/terraform-mcp-server/pull/268)
 * Adding a new cli flags `--log-level` to set the desired log level for the server logs and `--log-format` for the logs formatting [286](https://github.com/hashicorp/terraform-mcp-server/pull/286)
-* Add otel instrumentation for tool call metrics - tool call count, tool error count and tool call latency [300](https://github.com/hashicorp/terraform-mcp-server/pull/300)
+* Add OpenTelemtry instrumentation for tool call metrics - tool call count, tool error count and tool call latency [300](https://github.com/hashicorp/terraform-mcp-server/pull/300)
 
 FIXES
 
