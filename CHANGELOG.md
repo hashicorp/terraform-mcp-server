@@ -18,9 +18,9 @@ IMPROVEMENTS
 
 FIXES
 
-* `list_runs` was returning empty response
+* `list_runs` was returning empty response due to JSON marshalling error 
 
-## 0.4.0
+## 0.5.0
 
 FEATURES
 

@@ -7,11 +7,11 @@
     "url": "https://github.com/hashicorp/terraform-mcp-server",
     "source": "github"
   },
-  "version": "0.4.0",
+  "version": "0.5.0",
   "packages": [
     {
       "registryType": "oci",
-      "identifier": "docker.io/hashicorp/terraform-mcp-server:0.4.0",
+      "identifier": "docker.io/hashicorp/terraform-mcp-server:0.5.0",
       "transport": {
         "type": "stdio"
       },
