@@ -1,4 +1,5 @@
 # 0.5.0
+* Add Codex CLI plugin manifest and SKILL.md documentation
 
 FEATURES
 
