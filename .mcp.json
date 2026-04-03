@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "terraform-mcp-server": {
+      "command": "terraform-mcp-server",
+      "args": []
+    }
+  }
+}

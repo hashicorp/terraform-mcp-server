@@ -1,0 +1,24 @@
+{
+  "name": "terraform-mcp-server",
+  "version": "0.1.0",
+  "description": "Terraform automation from Codex via MCP",
+  "author": {
+    "name": "hashicorp",
+    "url": "https://github.com/hashicorp/terraform-mcp-server"
+  },
+  "homepage": "https://github.com/hashicorp/terraform-mcp-server",
+  "repository": "https://github.com/hashicorp/terraform-mcp-server",
+  "keywords": [
+    "mcp",
+    "codex"
+  ],
+  "mcpServers": "./.mcp.json",
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Terraform MCP Server",
+    "shortDescription": "Terraform automation from Codex via MCP",
+    "longDescription": "The Terraform MCP Server provides integration with Terraform ecosystem for IaC development.",
+    "category": "Infrastructure",
+    "websiteURL": "https://github.com/hashicorp/terraform-mcp-server"
+  }
+}
