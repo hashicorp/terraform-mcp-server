@@ -43,7 +43,7 @@ jobs:
         run: |
           mtef similarity analyze \
             --url https://localhost:8000 \
-            --server-urls "http://localhost:8080/mcp:streamable-http" \
+            --server-urls "http://172.17.0.1:8080/mcp:streamable-http" \
             --threshold 0.95 \
             --insecure \
             --format json > similarity-report.json
