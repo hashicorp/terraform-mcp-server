@@ -95,7 +95,7 @@ More about using MCP server tools in VS Code's [agent mode documentation](https:
           "--rm",
           "-e", "TFE_TOKEN=${input:tfe_token}",
           "-e", "TFE_ADDRESS=${input:tfe_address}",
-          "hashicorp/terraform-mcp-server:0.5.0"
+          "hashicorp/terraform-mcp-server:0.5.1"
         ]
       }
     },
@@ -159,7 +159,7 @@ Optionally, you can add a similar example (i.e. without the mcp key) to a file c
         "--rm",
         "-e", "TFE_TOKEN=${input:tfe_token}",
         "-e", "TFE_ADDRESS=${input:tfe_address}",
-        "hashicorp/terraform-mcp-server:0.5.0"
+        "hashicorp/terraform-mcp-server:0.5.1"
       ]
     }
   },
@@ -226,7 +226,7 @@ Add this to your Cursor config (`~/.cursor/mcp.json`) or via Settings → Cursor
         "--rm",
         "-e", "TFE_ADDRESS=<<PASTE_TFE_ADDRESS_HERE>>",
         "-e", "TFE_TOKEN=<<PASTE_TFE_TOKEN_HERE>>",
-        "hashicorp/terraform-mcp-server:0.5.0"
+        "hashicorp/terraform-mcp-server:0.5.1"
       ]
     }
   }
@@ -279,7 +279,7 @@ More about using MCP server tools in Claude Desktop [user documentation](https:/
         "--rm",
         "-e", "TFE_ADDRESS=<<PASTE_TFE_ADDRESS_HERE>>",
         "-e", "TFE_TOKEN=<<PASTE_TFE_TOKEN_HERE>>",
-        "hashicorp/terraform-mcp-server:0.5.0"
+        "hashicorp/terraform-mcp-server:0.5.1"
       ]
     }
   }
@@ -365,7 +365,7 @@ More about using and adding MCP servers tools in Bob IDE or Shell [Using MCP in 
         "--rm",
         "-e", "TFE_ADDRESS=<<PASTE_TFE_ADDRESS_HERE>>",
         "-e", "TFE_TOKEN=<<PASTE_TFE_TOKEN_HERE>>",
-        "hashicorp/terraform-mcp-server:0.5.0"
+        "hashicorp/terraform-mcp-server:0.5.1"
       ],
       "disabled": false
     }
@@ -569,7 +569,7 @@ tls: failed to verify certificate: x509: certificate signed by unknown authority
 docker run -i --rm \
   -v /path/to/corporate-ca.pem:/etc/ssl/certs/corporate-ca.pem \
   -e SSL_CERT_FILE=/etc/ssl/certs/corporate-ca.pem \
-  hashicorp/terraform-mcp-server:0.5.0
+  hashicorp/terraform-mcp-server:0.5.1
 ```
 
 For MCP client configurations:
@@ -585,7 +585,7 @@ For MCP client configurations:
         "-v", "/path/to/corporate-ca.pem:/etc/ssl/certs/corporate-ca.pem",
         "-e", "SSL_CERT_FILE=/etc/ssl/certs/corporate-ca.pem",
         "-e", "TFE_TOKEN=<>",
-        "hashicorp/terraform-mcp-server:0.5.0"
+        "hashicorp/terraform-mcp-server:0.5.1"
       ]
     }
   }
