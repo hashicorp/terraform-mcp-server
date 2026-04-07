@@ -1,10 +1,10 @@
 # 0.5.1
 
-FIX
+HOTFIX
 
 * Bump mark3labs/mcp-go package to fix race condition crash bug
 
-# 0.5.0
+# 0.5.1
 
 FEATURES
 
@@ -26,7 +26,7 @@ FIXES
 
 * `list_runs` was returning empty response due to JSON marshalling error 
 
-## 0.5.0
+## 0.5.1
 
 FEATURES
 
