@@ -4,6 +4,11 @@ HOTFIX
 
 * Bump mark3labs/mcp-go package to fix race condition crash bug
 
+IMPROVEMENTS
+
+* Fix `clean` Makefile target to correctly remove binary from `bin/` directory
+* Add Kiro CLI to README installation instructions
+
 # 0.5.1
 
 FEATURES
