@@ -259,9 +259,9 @@ Add this to your Cursor config (`~/.cursor/mcp.json`) or via Settings → Cursor
   <img alt="Add terraform MCP server to Cursor" src="https://cursor.com/deeplink/mcp-install-dark.png" height="32" />
 </a>
 
-### Usage with Claude Desktop / Amazon Q Developer / Amazon Q CLI
+### Usage with Claude Desktop / Amazon Q Developer / Kiro CLI
 
-More about using MCP server tools in Claude Desktop [user documentation](https://modelcontextprotocol.io/quickstart/user). Read more about using MCP server in Amazon Q from the [documentation](https://docs.aws.amazon.com/amazonq/latest/qdeveloper-ug/qdev-mcp.html).
+More about using MCP server tools in Claude Desktop [user documentation](https://modelcontextprotocol.io/quickstart/user). Read more about using MCP server in [Amazon Q Developer](https://docs.aws.amazon.com/amazonq/latest/qdeveloper-ug/qdev-mcp.html) and [Kiro CLI](https://kiro.dev/docs/mcp/).
 
 <table>
 <tr><th>Version 0.3.0+ or greater</th><th>Version 0.2.3 or lower</th></tr>
