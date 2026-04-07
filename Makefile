@@ -40,7 +40,7 @@ test-e2e:
 
 # Clean build artifacts
 clean:
-	rm -f $(BINARY_NAME)
+	rm -f bin/$(BINARY_NAME)
 	$(GO) clean
 
 # Download dependencies
