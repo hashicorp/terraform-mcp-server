@@ -9,7 +9,7 @@ IMPROVEMENTS
 * Fix `clean` Makefile target to correctly remove binary from `bin/` directory
 * Add Kiro CLI to README installation instructions
 
-# 0.5.1
+# 0.5.0
 
 FEATURES
 
@@ -31,7 +31,7 @@ FIXES
 
 * `list_runs` was returning empty response due to JSON marshalling error 
 
-## 0.5.1
+## 0.4.0
 
 FEATURES
 
