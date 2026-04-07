@@ -1,3 +1,9 @@
+# 0.5.1
+
+FIX
+
+* Bump mark3labs/mcp-go package to fix race condition crash bug
+
 # 0.5.0
 
 FEATURES
