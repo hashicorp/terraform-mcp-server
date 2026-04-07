@@ -27,7 +27,7 @@ jobs:
 
       - name: Deploy mcp-tef server
         run: |
-          mtef deploy --insecure --network host
+          mtef deploy --insecure
           sleep 10
 
       - name: Build and start terraform-mcp-server
