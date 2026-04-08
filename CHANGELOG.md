@@ -4,6 +4,10 @@ HOTFIX
 
 * Bump mark3labs/mcp-go package to fix race condition crash bug
 
+FIXES
+
+* Use absolute URIs with `terraform://` scheme for resource identifiers to comply with MCP specification [#274](https://github.com/hashicorp/terraform-mcp-server/pull/274)
+
 IMPROVEMENTS
 
 * Fix `clean` Makefile target to correctly remove binary from `bin/` directory
