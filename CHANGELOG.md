@@ -1,3 +1,9 @@
+# 0.5.2
+
+IMPROVEMENTS
+
+* Add http server metrics instrumentation [330](https://github.com/hashicorp/terraform-mcp-server/pull/330)
+
 # 0.5.1
 
 HOTFIX
