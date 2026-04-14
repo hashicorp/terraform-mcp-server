@@ -23,6 +23,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 )
 
 var (
@@ -334,9 +335,11 @@ func streamableHTTPServerInit(ctx context.Context, hcServer *server.MCPServer, l
 	})
 
 	addr := fmt.Sprintf("%s:%s", host, port)
+	// Add http server instrumentation for standard server metrics
+	instrumentedHandler := otelhttp.NewHandler(mux, "terraform-mcp-server")
 	httpServer := &http.Server{
 		Addr:              addr,
-		Handler:           mux,
+		Handler:           instrumentedHandler,
 		ReadTimeout:       30 * time.Second,
 		ReadHeaderTimeout: 30 * time.Second,
 		WriteTimeout:      30 * time.Second,
