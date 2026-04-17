@@ -100,6 +100,7 @@ func CreateTfeClientForSession(ctx context.Context, session server.ClientSession
 		if err != nil {
 			return nil, err
 		}
+		logger.Infof("Read TFE_TOKEN from credentials.tfrc.son")
 	}
 
 	client, err := NewTfeClient(session.SessionID(), terraformAddress, parseTerraformSkipTLSVerify(ctx), terraformToken, logger)
