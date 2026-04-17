@@ -5,6 +5,8 @@ package client
 
 import (
 	"encoding/json"
+	"errors"
+	"fmt"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -23,16 +25,16 @@ type credentialEntry struct {
 
 // ReadCredentialsFile reads the Terraform CLI credentials file and returns
 // the token for the specified hostname. Returns empty string if not found.
-func ReadCredentialsFile(hostname string, logger *log.Logger) string {
+func ReadCredentialsFile(hostname string, logger *log.Logger) (string, error) {
 	if hostname == "" {
-		return ""
+		return "", errors.New("ReadCredentialsFile: hostname is empty")
 	}
 
 	cfg := newConfig()
 	dir, err := cfg.configDir(logger)
 	if err != nil {
-		logger.Warnf("Failed to get config directory for credentials file lookup: %v", err)
-		return ""
+		logger.Errorf("Failed to get config directory for credentials file lookup: %v", err)
+		return "", err
 	}
 
 	credPath := filepath.Join(dir, "credentials.tfrc.json")
@@ -46,21 +48,21 @@ func ReadCredentialsFile(hostname string, logger *log.Logger) string {
 		} else {
 			logger.Warnf("Failed to read credentials file at %s: %v", credPath, err)
 		}
-		return ""
+		return "", err
 	}
 
 	var creds credentialsFile
 	if err := json.Unmarshal(data, &creds); err != nil {
 		logger.Warnf("Failed to parse credentials file at %s: %v", credPath, err)
-		return ""
+		return "", err
 	}
 
 	if entry, ok := creds.Credentials[hostname]; ok {
-		return entry.Token
+		return entry.Token, nil
 	}
 
 	logger.Debugf("No credentials found for hostname %q in credentials file", hostname)
-	return ""
+	return "", errors.New(fmt.Sprintf("No credentials found for hostname %q in credentials file", hostname))
 }
 
 // extractHostname extracts the hostname from a Terraform address URL.

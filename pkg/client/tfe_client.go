@@ -85,6 +85,7 @@ func GetTfeClientFromContext(ctx context.Context, logger *log.Logger) (*tfe.Clie
 
 // CreateTfeClientForSession creates only a TFE client for the session
 func CreateTfeClientForSession(ctx context.Context, session server.ClientSession, logger *log.Logger) (*tfe.Client, error) {
+	var err error
 	terraformAddress, ok := ctx.Value(contextKey(TerraformAddress)).(string)
 	if !ok || terraformAddress == "" {
 		terraformAddress = utils.GetEnv(TerraformAddress, DefaultTerraformAddress)
@@ -95,7 +96,8 @@ func CreateTfeClientForSession(ctx context.Context, session server.ClientSession
 		terraformToken = utils.GetEnv(TerraformToken, "")
 	}
 	if terraformToken == "" {
-		terraformToken = ReadCredentialsFile(extractHostname(terraformAddress), logger)
+		terraformToken, err = ReadCredentialsFile(extractHostname(terraformAddress), logger)
+		return nil, err
 	}
 
 	client, err := NewTfeClient(session.SessionID(), terraformAddress, parseTerraformSkipTLSVerify(ctx), terraformToken, logger)

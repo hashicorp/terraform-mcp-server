@@ -4,6 +4,7 @@
 package client
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -35,13 +36,15 @@ func TestReadCredentialsFile(t *testing.T) {
 	logger.SetOutput(os.Stderr)
 
 	t.Run("empty hostname", func(t *testing.T) {
-		result := ReadCredentialsFile("", logger)
+		result, err := ReadCredentialsFile("", logger)
 		require.Empty(t, result)
+		require.Error(t, err)
 	})
 
 	t.Run("file not found", func(t *testing.T) {
-		result := ReadCredentialsFile("nonexistent.example.com", logger)
+		result, err := ReadCredentialsFile("nonexistent.example.com", logger)
 		require.Empty(t, result)
+		require.Error(t, err)
 	})
 
 	t.Run("valid credentials file", func(t *testing.T) {
@@ -73,16 +76,19 @@ func TestReadCredentialsFile(t *testing.T) {
 		defer os.Setenv("HOME", originalHome)
 
 		// Test finding a token
-		token := ReadCredentialsFile("app.terraform.io", logger)
+		token, err := ReadCredentialsFile("app.terraform.io", logger)
 		require.Equal(t, "test-token-123", token)
+		require.Empty(t, err)
 
 		// Test finding another token
-		token = ReadCredentialsFile("tfe.example.com", logger)
+		token, err = ReadCredentialsFile("tfe.example.com", logger)
 		require.Equal(t, "enterprise-token-456", token)
+		require.Empty(t, err)
 
 		// Test hostname not in file
-		token = ReadCredentialsFile("other.terraform.io", logger)
+		token, err = ReadCredentialsFile("other.terraform.io", logger)
 		require.Empty(t, token)
+		require.Error(t, errors.New("No credentials found for hostname \"other.terraform.io\" in credentials file"))
 	})
 
 	t.Run("malformed json", func(t *testing.T) {
@@ -102,7 +108,8 @@ func TestReadCredentialsFile(t *testing.T) {
 		os.Setenv("HOME", tmpDir)
 		defer os.Setenv("HOME", originalHome)
 
-		token := ReadCredentialsFile("app.terraform.io", logger)
+		token, err := ReadCredentialsFile("app.terraform.io", logger)
 		require.Empty(t, token)
+		require.Error(t, err)
 	})
 }
