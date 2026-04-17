@@ -28,7 +28,8 @@ func ReadCredentialsFile(hostname string, logger *log.Logger) string {
 		return ""
 	}
 
-	dir, err := configDir()
+	cfg := newConfig()
+	dir, err := cfg.configDir(logger)
 	if err != nil {
 		logger.Warnf("Failed to get config directory for credentials file lookup: %v", err)
 		return ""
