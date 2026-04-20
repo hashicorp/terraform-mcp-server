@@ -23,6 +23,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 )
 
 var (
@@ -266,6 +267,7 @@ func serverInit(ctx context.Context, hcServer *server.MCPServer, logger *log.Log
 func streamableHTTPServerInit(ctx context.Context, hcServer *server.MCPServer, logger *log.Logger, host string, port string, endpointPath string, heartbeatInterval time.Duration) error {
 	// Ensure endpoint path starts with /
 	endpointPath = path.Join("/", endpointPath)
+	var handler http.Handler
 	// Create StreamableHTTP server which implements the new streamable-http transport
 	// This is the modern MCP transport that supports both direct HTTP responses and SSE streams
 	opts := []server.StreamableHTTPOption{
@@ -334,9 +336,16 @@ func streamableHTTPServerInit(ctx context.Context, hcServer *server.MCPServer, l
 	})
 
 	addr := fmt.Sprintf("%s:%s", host, port)
+	if enableOtelMetrics := os.Getenv("OTEL_METRICS_ENABLED"); enableOtelMetrics == "true" {
+		// Add http server instrumentation for standard server metrics
+		handler = otelhttp.NewHandler(mux, "terraform-mcp-server")
+	} else {
+		handler = mux
+	}
+
 	httpServer := &http.Server{
 		Addr:              addr,
-		Handler:           mux,
+		Handler:           handler,
 		ReadTimeout:       30 * time.Second,
 		ReadHeaderTimeout: 30 * time.Second,
 		WriteTimeout:      30 * time.Second,
