@@ -16,7 +16,7 @@ import (
 type platformConfig struct{}
 
 func (*platformConfig) configDir(logger *log.Logger) (string, error) {
-	logger.Info("OS type is UNIX")
+	logger.Debug("OS type is UNIX")
 	dir, err := os.UserHomeDir()
 	if err != nil {
 		return "", err

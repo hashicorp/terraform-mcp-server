@@ -4,7 +4,6 @@
 package client
 
 import (
-	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -71,9 +70,7 @@ func TestReadCredentialsFile(t *testing.T) {
 		require.NoError(t, err)
 
 		// Override HOME for this test
-		originalHome := os.Getenv("HOME")
-		os.Setenv("HOME", tmpDir)
-		defer os.Setenv("HOME", originalHome)
+		t.Setenv("HOME", tmpDir)
 
 		// Test finding a token
 		token, err := ReadCredentialsFile("app.terraform.io", logger)
@@ -83,12 +80,12 @@ func TestReadCredentialsFile(t *testing.T) {
 		// Test finding another token
 		token, err = ReadCredentialsFile("tfe.example.com", logger)
 		require.Equal(t, "enterprise-token-456", token)
-		require.Empty(t, err)
+		require.NoError(t, err)
 
 		// Test hostname not in file
 		token, err = ReadCredentialsFile("other.terraform.io", logger)
 		require.Empty(t, token)
-		require.Error(t, errors.New("No credentials found for hostname \"other.terraform.io\" in credentials file"))
+		require.EqualError(t, err, "No credentials found for hostname \"other.terraform.io\" in credentials file")
 	})
 
 	t.Run("malformed json", func(t *testing.T) {
@@ -104,9 +101,7 @@ func TestReadCredentialsFile(t *testing.T) {
 		err = os.WriteFile(credPath, []byte("not valid json"), 0600)
 		require.NoError(t, err)
 
-		originalHome := os.Getenv("HOME")
-		os.Setenv("HOME", tmpDir)
-		defer os.Setenv("HOME", originalHome)
+		t.Setenv("HOME", tmpDir)
 
 		token, err := ReadCredentialsFile("app.terraform.io", logger)
 		require.Empty(t, token)

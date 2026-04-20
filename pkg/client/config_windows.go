@@ -17,7 +17,7 @@ type platformConfig struct{}
 
 func (*platformConfig) configDir(logger *log.Logger) (string, error) {
 	// On Windows, Terraform uses %APPDATA%/terraform.d (no leading dot)
-	logger.Info("OS type is WINDOWS")
+	logger.Debug("OS type is WINDOWS")
 	appData := os.Getenv("APPDATA")
 	if appData == "" {
 		// Fallback to UserHomeDir if APPDATA not set

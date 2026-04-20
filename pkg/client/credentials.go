@@ -24,7 +24,7 @@ type credentialEntry struct {
 }
 
 // ReadCredentialsFile reads the Terraform CLI credentials file and returns
-// the token for the specified hostname. Returns empty string if not found.
+// the token for the specified hostname
 func ReadCredentialsFile(hostname string, logger *log.Logger) (string, error) {
 	if hostname == "" {
 		return "", errors.New("ReadCredentialsFile: hostname is empty")
@@ -62,7 +62,7 @@ func ReadCredentialsFile(hostname string, logger *log.Logger) (string, error) {
 	}
 
 	logger.Debugf("No credentials found for hostname %q in credentials file", hostname)
-	return "", errors.New(fmt.Sprintf("No credentials found for hostname %q in credentials file", hostname))
+	return "", fmt.Errorf("No credentials found for hostname %q in credentials file", hostname)
 }
 
 // extractHostname extracts the hostname from a Terraform address URL.
