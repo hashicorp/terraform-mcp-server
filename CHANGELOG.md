@@ -1,4 +1,11 @@
 # 0.5.1
+# Unreleased
+
+FEATURES
+
+* Add TFE support for get_policy_details tool
+
+
 
 HOTFIX
 
