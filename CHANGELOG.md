@@ -3,6 +3,7 @@
 IMPROVEMENTS
 
 * Add http server metrics instrumentation [330](https://github.com/hashicorp/terraform-mcp-server/pull/330)
+* Add support for configuring TFE token via credentials.tfrc.json [333](https://github.com/hashicorp/terraform-mcp-server/pull/333)
 
 # 0.5.1
 
