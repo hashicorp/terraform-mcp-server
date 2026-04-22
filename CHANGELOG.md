@@ -3,6 +3,8 @@
 IMPROVEMENTS
 
 * Add http server metrics instrumentation [330](https://github.com/hashicorp/terraform-mcp-server/pull/330)
+* Add support for configuring TFE token via credentials.tfrc.json [333](https://github.com/hashicorp/terraform-mcp-server/pull/333)
+* Bump golang to 1.26.2 to fix security scan
 
 # 0.5.1
 # Unreleased
