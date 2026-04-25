@@ -347,6 +347,8 @@ func TestGetAllValidToolNames(t *testing.T) {
 		"get_provider_details",
 		"search_modules",
 		"get_module_details",
+		"get_module_examples",
+		"get_module_submodules",
 		"search_policies",
 		"get_policy_details",
 		"list_workspaces",
