@@ -46,6 +46,16 @@ func RegisterTools(hcServer *server.MCPServer, logger *log.Logger, enabledToolse
 		hcServer.AddTool(tool.Tool, tool.Handler)
 	}
 
+	if toolsets.IsToolEnabled("get_module_examples", enabledToolsets) {
+		tool := registryTools.ModuleExamples(logger)
+		hcServer.AddTool(tool.Tool, tool.Handler)
+	}
+
+	if toolsets.IsToolEnabled("get_module_submodules", enabledToolsets) {
+		tool := registryTools.ModuleSubmodules(logger)
+		hcServer.AddTool(tool.Tool, tool.Handler)
+	}
+
 	if toolsets.IsToolEnabled("get_latest_module_version", enabledToolsets) {
 		tool := registryTools.GetLatestModuleVersion(logger)
 		hcServer.AddTool(tool.Tool, tool.Handler)
