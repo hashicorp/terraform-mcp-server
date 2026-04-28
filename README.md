@@ -515,6 +515,22 @@ curl http://localhost:8080/health
 
 [Check out available resources here :link:](https://developer.hashicorp.com/terraform/docs/tools/mcp-server/reference#available-tools)
 
+## Available Metrics
+
+Two kinds of metrics are collected.
+First, standard HTTP server metrics are added by wrapping the HTTP mux with otelhttp.NewHandler(...). This emits:
+
+1. http.server.request.body.size
+2. http.server.response.body.size
+3. http.server.request.duration
+
+Second, the MCP server records custom tool metrics around tool execution using MCP hooks (BeforeCallTool / AfterCallTool). These emit:
+
+1. mcp_tool_calls_total
+2. mcp_tool_errors_total
+3. mcp_tool_duration_seconds
+
+
 ### Tool Filtering
 
 Control which tools are available using `--toolsets` (groups) or `--tools` (individual):
