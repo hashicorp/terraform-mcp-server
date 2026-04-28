@@ -4,6 +4,7 @@
 package client
 
 import (
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -415,7 +416,6 @@ func TestTerraformContextMiddleware(t *testing.T) {
 			},
 			envVars: map[string]string{
 				TerraformAddress:       "https://env.terraform.io",
-				TerraformToken:         "env-token",
 				TerraformSkipTLSVerify: "false",
 			},
 			expectedStatus: http.StatusOK,
@@ -531,19 +531,19 @@ func TestTerraformContextMiddleware(t *testing.T) {
 			name: "mixed sources - headers override query params, query params override env",
 			headers: map[string]string{
 				TerraformAddress: "https://header.terraform.io", // Header wins
+				TerraformToken:   "header-token",                // Must provide token via header too
 			},
 			queryParams: map[string]string{
 				TerraformSkipTLSVerify: "true", // Query param wins over env
 			},
 			envVars: map[string]string{
 				TerraformAddress:       "https://env.terraform.io", // Overridden by header
-				TerraformToken:         "env-token",                // Used since not in header/query
 				TerraformSkipTLSVerify: "false",                    // Overridden by query param
 			},
 			expectedStatus: http.StatusOK,
 			expectedContextVals: map[string]string{
 				TerraformAddress:       "https://header.terraform.io",
-				TerraformToken:         "env-token",
+				TerraformToken:         "header-token",
 				TerraformSkipTLSVerify: "true",
 			},
 		},
@@ -636,6 +636,10 @@ func TestTerraformContextMiddleware_SecurityLogging(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 	})
 
+	// Clear env vars to ensure clean state
+	os.Unsetenv(TerraformToken)
+	os.Unsetenv(TerraformAddress)
+
 	middleware := TerraformContextMiddleware(logger)
 	handler := middleware(mockHandler)
 
@@ -668,6 +672,10 @@ func TestTerraformContextMiddleware_SecurityLogging(t *testing.T) {
 func TestTerraformContextMiddleware_EdgeCases(t *testing.T) {
 	logger := log.New()
 	logger.SetLevel(log.ErrorLevel)
+
+	// Clear env vars to ensure clean state
+	os.Unsetenv(TerraformToken)
+	os.Unsetenv(TerraformAddress)
 
 	t.Run("nil logger should not panic", func(t *testing.T) {
 		// This tests that the middleware handles a nil logger gracefully
@@ -726,4 +734,116 @@ func TestTerraformContextMiddleware_EdgeCases(t *testing.T) {
 
 		assert.Equal(t, http.StatusOK, rr.Code)
 	})
+}
+
+// TestTerraformContextMiddleware_RejectAddressHeaderWhenTokenFromEnv tests that the middleware
+// rejects Terraform-Address headers when TFE_TOKEN is set via env var.
+func TestTerraformContextMiddleware_RejectAddressHeaderWhenTokenFromEnv(t *testing.T) {
+	// Set TFE_TOKEN via environment variable
+	os.Setenv(TerraformToken, "test-token-from-env")
+	defer os.Unsetenv(TerraformToken)
+
+	logger := log.New()
+	logger.SetOutput(io.Discard)
+
+	middleware := TerraformContextMiddleware(logger)
+
+	handlerReached := false
+	nextHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		handlerReached = true
+		w.WriteHeader(http.StatusOK)
+	})
+
+	handler := middleware(nextHandler)
+
+	// Create request with Terraform-Address header (this attempts to redirect)
+	req := httptest.NewRequest("POST", "/mcp", nil)
+	req.Header.Set(TerraformAddress, "https://malicious-server.com")
+
+	rr := httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+
+	// Should be rejected with a 403
+	assert.Equal(t, http.StatusForbidden, rr.Code)
+
+	// The handler should not be reached
+	assert.False(t, handlerReached, "handler should not have been reached when address header is rejected")
+
+	// Confirm error message
+	assert.Contains(t, rr.Body.String(), "Cannot specify Terraform address via header")
+}
+
+// TestTerraformContextMiddleware_AllowAddressHeaderWhenTokenFromHeader tests that the middleware
+// allows Terraform-Address headers when TFE_TOKEN is not set via env var.
+// legit use case where a user can provide both address and token via headers.
+func TestTerraformContextMiddleware_AllowAddressHeaderWhenTokenFromHeader(t *testing.T) {
+	// Ensure TFE_TOKEN is NOT set via environment
+	os.Unsetenv(TerraformToken)
+
+	logger := log.New()
+	logger.SetOutput(io.Discard)
+
+	middleware := TerraformContextMiddleware(logger)
+
+	handlerReached := false
+	nextHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		handlerReached = true
+		w.WriteHeader(http.StatusOK)
+	})
+
+	handler := middleware(nextHandler)
+
+	// Create request with both address and token from headers this is a legit use case
+	req := httptest.NewRequest("POST", "/mcp", nil)
+	req.Header.Set(TerraformAddress, "https://app.terraform.io")
+	req.Header.Set("Authorization", "Bearer user-provided-token")
+
+	rr := httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+
+	// Should be allowed
+	assert.Equal(t, http.StatusOK, rr.Code)
+
+	// Handler should have been reached
+	assert.True(t, handlerReached, "handler should have been reached when token is not from env")
+}
+
+// TestTerraformContextMiddleware_AllowAddressEnvWhenTokenFromEnv tests that the middleware
+// allows Terraform-Address from env var's even when TFE_TOKEN is also from env.
+// Only the header-based override is blocked, not the env var config.
+func TestTerraformContextMiddleware_AllowAddressEnvWhenTokenFromEnv(t *testing.T) {
+	// Set both TFE_TOKEN and TFE_ADDRESS via env var's
+	os.Setenv(TerraformToken, "test-token-from-env")
+	os.Setenv(TerraformAddress, "https://env.terraform.io")
+	defer func() {
+		os.Unsetenv(TerraformToken)
+		os.Unsetenv(TerraformAddress)
+	}()
+
+	logger := log.New()
+	logger.SetOutput(io.Discard)
+
+	middleware := TerraformContextMiddleware(logger)
+
+	var capturedAddress string
+	nextHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := r.Context()
+		if val := ctx.Value(contextKey(TerraformAddress)); val != nil {
+			capturedAddress = val.(string)
+		}
+		w.WriteHeader(http.StatusOK)
+	})
+
+	handler := middleware(nextHandler)
+
+	// Create request without Terraform-Address header
+	req := httptest.NewRequest("POST", "/mcp", nil)
+
+	rr := httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+
+	assert.Equal(t, http.StatusOK, rr.Code)
+
+	// The address from the env should be in the context
+	assert.Equal(t, "https://env.terraform.io", capturedAddress)
 }
