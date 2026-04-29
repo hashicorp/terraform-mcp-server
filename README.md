@@ -1,5 +1,7 @@
 # <img src="public/images/Terraform-LogoMark_onDark.svg" width="30" align="left" style="margin-right: 12px;"/> Terraform MCP Server
 
+[![Add to Kiro](https://kiro.dev/images/add-to-kiro.svg)](https://kiro.dev/launch/mcp/add?name=terraform&config=%7B%22command%22%3A%22docker%22%2C%22args%22%3A%5B%22run%22%2C%22-i%22%2C%22--rm%22%2C%22hashicorp%2Fterraform-mcp-server%22%5D%7D)
+
 The Terraform MCP Server is a [Model Context Protocol (MCP)](https://modelcontextprotocol.io/introduction)
 server that provides seamless integration with Terraform Registry APIs, enabling advanced
 automation and interaction capabilities for Infrastructure as Code (IaC) development.
@@ -307,6 +309,28 @@ More about using MCP server tools in Claude Desktop [user documentation](https:/
 </td>
 </tr>
 </table>
+
+### Usage with Kiro
+
+To install in [Kiro](https://kiro.dev), click the badge at the top of this README or manually add the following to your Kiro MCP config file (`.kiro/settings/mcp.json` or `~/.kiro/settings/mcp.json`):
+
+```json
+{
+  "mcpServers": {
+    "terraform": {
+      "command": "docker",
+      "args": [
+        "run",
+        "-i",
+        "--rm",
+        "-e", "TFE_ADDRESS=<<PASTE_TFE_ADDRESS_HERE>>",
+        "-e", "TFE_TOKEN=<<PASTE_TFE_TOKEN_HERE>>",
+        "hashicorp/terraform-mcp-server:0.5.1"
+      ]
+    }
+  }
+}
+```
 
 ### Usage with Claude Code
 
