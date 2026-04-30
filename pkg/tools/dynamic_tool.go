@@ -233,6 +233,10 @@ func (r *DynamicToolRegistry) registerTFETools() {
 		tool := r.createDynamicTFETool("get_apply_logs", tfeTools.GetApplyLogs)
 		r.mcpServer.AddTool(tool.Tool, tool.Handler)
 	}
+	if toolsets.IsToolEnabled("get_sentinel_mock", r.enabledToolsets) {
+		tool := r.createDynamicTFETool("get_sentinel_mock", tfeTools.GetSentinelMock)
+		r.mcpServer.AddTool(tool.Tool, tool.Handler)
+	}
 
 	// Terraform toolset - Variable set tools
 	if toolsets.IsToolEnabled("list_variable_sets", r.enabledToolsets) {
