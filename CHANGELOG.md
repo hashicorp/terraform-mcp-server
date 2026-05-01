@@ -1,3 +1,9 @@
+# 0.6.0
+
+IMPROVEMENTS
+
+* Migrate to the official mcp go-sdk
+
 # 0.5.2
 
 IMPROVEMENTS
