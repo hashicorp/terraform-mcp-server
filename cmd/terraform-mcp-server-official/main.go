@@ -4,17 +4,23 @@ import (
 	"context"
 	"fmt"
 	stdlog "log"
+	"net/http"
 	"os"
 	"os/signal"
+	"path"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/hashicorp/terraform-mcp-server/pkg/client"
+	mcpofficial "github.com/hashicorp/terraform-mcp-server/pkg/mcp-official"
 	"github.com/hashicorp/terraform-mcp-server/pkg/toolsets"
 	"github.com/hashicorp/terraform-mcp-server/version"
-	"github.com/mark3labs/mcp-go/server"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 )
 
 var (
@@ -94,7 +100,53 @@ var (
 )
 
 func main() {
+	logFile, _ := rootCmd.PersistentFlags().GetString("log-file")
+	logLevel := getLogLevel(rootCmd)
+	logger, err := initLogger(logFile, logLevel)
+	if err != nil {
+		stdlog.Fatal("Failed to initialize logger:", err)
+	}
+	if shouldUseStreamableHTTPMode() {
+		logger.Info("Starting in Streamable HTTP mode based on environment configuration")
+		port := getHTTPPort()
+		host := getHTTPHost()
+		endpointPath := getEndpointPath(nil)
+		enabledToolsets := getToolsetsFromCmd(rootCmd, logger)
+		heartbeatInterval := getHeartbeatInterval()
+		if err := runHTTPServer(logger, host, port, endpointPath, heartbeatInterval, enabledToolsets); err != nil {
+			stdlog.Fatal("failed to run StreamableHTTP server:", err)
+		}
+		return
+	}
 
+	// Fall back to normal CLI behavior
+	if err := rootCmd.Execute(); err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
+}
+
+func init() {
+	cobra.OnInitialize(initConfig)
+	rootCmd.SetVersionTemplate("{{.Short}}\n{{.Version}}\n")
+	rootCmd.PersistentFlags().String("log-file", "", "Path to log file")
+	rootCmd.PersistentFlags().String("log-level", "info", "Log level (trace, debug, info, warn, error, fatal, panic)")
+	rootCmd.PersistentFlags().String("log-format", "text", "Log format (text or json)")
+	rootCmd.PersistentFlags().String("toolsets", "all", toolsets.GenerateToolsetsHelp())
+	rootCmd.PersistentFlags().String("tools", "", toolsets.GenerateToolsHelp())
+
+	// Add StreamableHTTP command flags (avoid 'h' shorthand conflict with help)
+	streamableHTTPCmd.Flags().String("transport-host", "127.0.0.1", "Host to bind to")
+	streamableHTTPCmd.Flags().StringP("transport-port", "p", "8080", "Port to listen on")
+	streamableHTTPCmd.Flags().Duration("heartbeat-interval", 0, "Heartbeat interval for HTTP connections (e.g., 30s). 0 to disable")
+	streamableHTTPCmd.Flags().String("mcp-endpoint", "/mcp", "Path for streamable HTTP endpoint")
+
+	rootCmd.AddCommand(stdioCmd)
+	rootCmd.AddCommand(streamableHTTPCmd)
+}
+
+func initConfig() {
+	viper.AutomaticEnv()
 }
 
 // runDefaultCommand handles the default behavior when no subcommand is provided
@@ -118,135 +170,129 @@ func runDefaultCommand(cmd *cobra.Command, _ []string) {
 	}
 }
 
-// getLogLevel determines the log level from environment variable or CLI flag
-func getLogLevel(cmd *cobra.Command) log.Level {
-	// Check environment variable first
-	if envLevel := os.Getenv("stdio_LEVEL"); envLevel != "" {
-		level, err := log.ParseLevel(envLevel)
-		if err != nil {
-			stdlog.Printf("Warning: %v, using default 'info' level\n", err)
-			return log.InfoLevel
-		}
-		return level
-	}
-
-	// Check CLI flag
-	if cmd != nil {
-		flagLevel, err := cmd.Flags().GetString("log-level")
-		if err == nil && flagLevel != "" {
-			level, err := log.ParseLevel(flagLevel)
-			if err != nil {
-				stdlog.Printf("Warning: %v, using default 'info' level\n", err)
-				return log.InfoLevel
-			}
-			return level
-		}
-	}
-
-	// Default to info level
-	return log.InfoLevel
-}
-
-func initLogger(outPath string, level log.Level) (*log.Logger, error) {
-	logger := log.New()
-	logger.SetLevel(level)
-
-	if outPath == "" {
-		return logger, nil
-	}
-
-	file, err := os.OpenFile(outPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o666)
-	if err != nil {
-		return nil, fmt.Errorf("failed to open log file: %w", err)
-	}
-
-	logger.SetOutput(file)
-
-	return logger, nil
-}
-
-func getToolsetsFromCmd(cmd *cobra.Command, logger *log.Logger) []string {
-	// Check if --tools flag is set (individual tool mode)
-	toolsFlag, err := cmd.Flags().GetString("tools")
-	if err != nil {
-		// Try root persistent flags
-		toolsFlag, err = cmd.Root().PersistentFlags().GetString("tools")
-	}
-
-	if err == nil && toolsFlag != "" {
-		// Ensure --toolsets is not also set
-		toolsetsFlag, _ := cmd.Flags().GetString("toolsets")
-		if toolsetsFlag == "" {
-			toolsetsFlag, _ = cmd.Root().PersistentFlags().GetString("toolsets")
-		}
-		if toolsetsFlag != "" && toolsetsFlag != "default" {
-			logger.Fatal("Cannot use both --tools and --toolsets flags together")
-		}
-		return parseIndividualTools(toolsFlag, logger)
-	}
-
-	// Fall back to toolsets mode
-	toolsetsFlag, err := cmd.Flags().GetString("toolsets")
-	if err != nil {
-		toolsetsFlag, err = cmd.Root().PersistentFlags().GetString("toolsets")
-		if err != nil {
-			logger.Warnf("Failed to get toolsets flag, using default: %v", err)
-			toolsetsFlag = "default"
-		}
-	}
-	return parseToolsets(toolsetsFlag, logger)
-}
-
-// parseIndividualTools parses and validates the tools flag value
-func parseIndividualTools(toolsFlag string, logger *log.Logger) []string {
-	rawTools := strings.Split(toolsFlag, ",")
-
-	validTools, invalidTools := toolsets.ParseIndividualTools(rawTools)
-	if len(invalidTools) > 0 {
-		logger.Warnf("Invalid tool names ignored: %v", invalidTools)
-	}
-
-	if len(validTools) == 0 {
-		logger.Warn("No valid tools specified, falling back to default toolsets")
-		return parseToolsets("default", logger)
-	}
-
-	// Use the public API to enable individual tools mode
-	result := toolsets.EnableIndividualTools(validTools)
-	logger.Infof("Enabled individual tools: %v", validTools)
-	return result
-}
-
-// parseToolsets parses and validates the toolsets flag value
-func parseToolsets(toolsetsFlag string, logger *log.Logger) []string {
-	rawToolsets := strings.Split(toolsetsFlag, ",")
-
-	cleaned, invalid := toolsets.CleanToolsets(rawToolsets)
-	if len(invalid) > 0 {
-		logger.Warnf("Invalid toolsets ignored: %v", invalid)
-	}
-
-	expanded := toolsets.ExpandDefaultToolset(cleaned)
-
-	logger.Infof("Enabled toolsets: %v", expanded)
-	return expanded
-}
-
 func runStdioServer(logger *log.Logger, enabledToolsets []string) error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	// Create hooks for session management
-	hooks := &server.Hooks{}
-	hooks.AddOnRegisterSession(func(ctx context.Context, session server.ClientSession) {
-		client.NewSessionHandler(ctx, session, logger)
-	})
-	hooks.AddOnUnregisterSession(func(ctx context.Context, session server.ClientSession) {
-		client.EndSessionHandler(ctx, session, logger)
+	hcServer := mcpofficial.NewServer(0)
+	if err := hcServer.Run(ctx, &mcp.StdioTransport{}); err != nil {
+		log.Fatalf("Stdio server error: %v", err)
+		return err
+	}
+	return nil
+}
+
+func runHTTPServer(logger *log.Logger, host, port, endpointPath string, heartbeatInterval time.Duration, enabledToolsets []string) error {
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	hcServer := mcpofficial.NewServer(heartbeatInterval)
+
+	// Ensure endpoint path starts with /
+	endpointPath = path.Join("/", endpointPath)
+	logger.Infof("Using endpoint path: %s", endpointPath)
+
+	var handler http.Handler
+
+	// Check if stateless mode is enabled
+	isStateless := shouldUseStatelessMode()
+	logger.Infof("Running with stateless mode: %v", isStateless)
+
+	// Create StreamableHTTP server which implements the new streamable-http transport
+	// This is the modern MCP transport that supports both direct HTTP responses and SSE streams
+	opts := &mcp.StreamableHTTPOptions{
+		Stateless: isStateless,
+	}
+	// Load TLS configuration
+	tlsConfig, err := client.GetTLSConfigFromEnv()
+	if err != nil {
+		return fmt.Errorf("TLS configuration error: %w", err)
+	}
+
+	// Create the base MCP handler
+	mcpHandler := mcp.NewStreamableHTTPHandler(func(r *http.Request) *mcp.Server {
+		return hcServer
+	}, opts)
+
+	// Load CORS configuration
+	corsConfig := client.LoadCORSConfigFromEnv()
+	// Log CORS configuration
+	logger.Infof("CORS Mode: %s", corsConfig.Mode)
+	if len(corsConfig.AllowedOrigins) > 0 {
+		logger.Infof("Allowed Origins: %s", strings.Join(corsConfig.AllowedOrigins, ", "))
+	} else if corsConfig.Mode == "strict" {
+		logger.Warnf("No allowed origins configured in strict mode. All cross-origin requests will be rejected.")
+	} else if corsConfig.Mode == "development" {
+		logger.Infof("Development mode: localhost origins are automatically allowed")
+	} else if corsConfig.Mode == "disabled" {
+		logger.Warnf("CORS validation is disabled. This is not recommended for production.")
+	}
+
+	// Create a security wrapper around the streamable server
+	streamableServer := client.NewSecurityHandler(mcpHandler, corsConfig.AllowedOrigins, corsConfig.Mode, logger)
+
+	mux := http.NewServeMux()
+
+	// Apply middleware
+	streamableServer = client.TerraformContextMiddleware(logger)(streamableServer)
+
+	// Handle the /mcp endpoint with the streamable server (with security wrapper)
+	mux.Handle(endpointPath, streamableServer)
+	mux.Handle(endpointPath+"/", streamableServer)
+
+	// Add health check endpoint
+	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		response := fmt.Sprintf(`{"status":"ok","service":"terraform-mcp-server","transport":"streamable-http","endpoint":"%s"}`, endpointPath)
+		w.Write([]byte(response))
 	})
 
-	hcServer := NewServer(version.Version, logger, enabledToolsets, server.WithHooks(hooks))
-	registerToolsAndResources(hcServer, logger, enabledToolsets)
+	addr := fmt.Sprintf("%s:%s", host, port)
+	if enableOtelMetrics := os.Getenv("OTEL_METRICS_ENABLED"); enableOtelMetrics == "true" {
+		// Add http server instrumentation for standard server metrics
+		handler = otelhttp.NewHandler(mux, "terraform-mcp-server")
+	} else {
+		handler = mux
+	}
 
-	return serverInit(ctx, hcServer, logger)
+	httpServer := &http.Server{
+		Addr:              addr,
+		Handler:           handler,
+		ReadTimeout:       30 * time.Second,
+		ReadHeaderTimeout: 30 * time.Second,
+		WriteTimeout:      30 * time.Second,
+		IdleTimeout:       60 * time.Second,
+	}
+
+	if tlsConfig != nil {
+		httpServer.TLSConfig = tlsConfig.Config
+		logger.Infof("TLS enabled with certificate: %s", tlsConfig.CertFile)
+	} else {
+		if !client.IsLocalHost(host) {
+			return fmt.Errorf("TLS is required for non-localhost binding (%s). Set MCP_TLS_CERT_FILE and MCP_TLS_KEY_FILE environment variables", host)
+		}
+		logger.Warnf("TLS is disabled on StreamableHTTP server; this is not recommended for production")
+	}
+
+	// Start server in goroutine
+	errC := make(chan error, 1)
+	go func() {
+		logger.Infof("Starting StreamableHTTP server on %s%s", addr, endpointPath)
+		errC <- httpServer.ListenAndServe()
+	}()
+
+	// Wait for shutdown signal
+	select {
+	case <-ctx.Done():
+		logger.Infof("Shutting down StreamableHTTP server...")
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		return httpServer.Shutdown(shutdownCtx)
+	case err := <-errC:
+		if err != nil && err != http.ErrServerClosed {
+			return fmt.Errorf("StreamableHTTP server error: %w", err)
+		}
+	}
+
+	return nil
 }
