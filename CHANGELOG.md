@@ -1,3 +1,9 @@
+# 0.6.0
+
+IMPROVEMENTS
+
+* Migrate to the official mcp go-sdk [348](https://github.com/hashicorp/terraform-mcp-server/pull/348)
+
 # 0.5.2
 
 IMPROVEMENTS
