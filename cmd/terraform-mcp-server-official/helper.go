@@ -142,6 +142,7 @@ func getLogLevel(cmd *cobra.Command) log.Level {
 // shouldUseStreamableHTTPMode checks if environment variables indicate HTTP mode
 func shouldUseStreamableHTTPMode() bool {
 	transportMode := os.Getenv("TRANSPORT_MODE")
+	log.Infof("Checking if streamable HTTP mode should be used with TRANSPORT_MODE=%s", transportMode)
 	return transportMode == "http" || transportMode == "streamable-http" ||
 		os.Getenv("TRANSPORT_PORT") != "" ||
 		os.Getenv("TRANSPORT_HOST") != "" ||
