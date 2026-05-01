@@ -55,14 +55,14 @@ func NewServer(heartbeatInterval time.Duration) *mcp.Server {
 
 	type SearchArgs struct {
 		// Required field
-		TerraformOrgName string `json:"terraform_org_name" jsonschema:"description=The Terraform organization name,required"`
+		TerraformOrgName string `json:"terraform_org_name" jsonschema:"The Terraform organization name"`
 
 		// Optional fields (will be empty strings if not provided)
-		ProjectID    string `json:"project_id" jsonschema:"description=Filter by project ID"`
-		SearchQuery  string `json:"search_query" jsonschema:"description=Search term"`
-		Tags         string `json:"tags" jsonschema:"description=Comma-separated tags"`
-		ExcludeTags  string `json:"exclude_tags" jsonschema:"description=Tags to exclude"`
-		WildcardName string `json:"wildcard_name" jsonschema:"description=Wildcard pattern"`
+		ProjectID    string `json:"project_id,omitempty" jsonschema:"Filter by project ID"`
+		SearchQuery  string `json:"search_query,omitempty" jsonschema:"Search term"`
+		Tags         string `json:"tags,omitempty" jsonschema:"Comma-separated tags"`
+		ExcludeTags  string `json:"exclude_tags,omitempty" jsonschema:"Tags to exclude"`
+		WildcardName string `json:"wildcard_name,omitempty" jsonschema:"Wildcard pattern"`
 	}
 
 	mcp.AddTool(svr, &mcp.Tool{
