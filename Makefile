@@ -25,6 +25,9 @@ OS       = $(shell uname | tr [[:upper:]] [[:lower:]])
 build:
 	CGO_ENABLED=0 GOARCH=$(ARCH) GOOS=$(OS) $(GO) build $(LDFLAGS) -o bin/$(BINARY_NAME) ./cmd/terraform-mcp-server
 
+build-official:
+	CGO_ENABLED=0 GOARCH=$(ARCH) GOOS=$(OS) $(GO) build $(LDFLAGS) -o bin/$(BINARY_NAME) ./cmd/terraform-mcp-server-official
+
 crt-build:
 	@mkdir -p $(TARGET_DIR)
 	@$(CURDIR)/scripts/crt-build.sh build
