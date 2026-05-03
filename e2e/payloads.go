@@ -21,6 +21,8 @@ type RegistryTestCase struct {
 	TestDescription string                 `json:"testDescription"`
 	TestContentType ContentType            `json:"testContentType,omitempty"`
 	TestPayload     map[string]interface{} `json:"testPayload,omitempty"`
+	// ExpectsContent lists substrings that must appear in a successful response body.
+	ExpectsContent []string `json:"expectsContent,omitempty"`
 }
 
 var searchProviderTestCases = []RegistryTestCase{
@@ -367,6 +369,78 @@ var moduleDetailsTestCases = []RegistryTestCase{
 		TestDescription: "Testing get_module_details with invalid module_id format",
 		TestPayload: map[string]interface{}{
 			"module_id": "invalid-format",
+		},
+	},
+}
+
+var moduleExamplesTestCases = []RegistryTestCase{
+	{
+		TestName:        "list_examples",
+		TestShouldFail:  false,
+		TestDescription: "Testing get_module_examples with valid module_id",
+		TestPayload: map[string]interface{}{
+			"module_id": "terraform-google-modules/kubernetes-engine/google/44.0.0",
+		},
+	},
+	{
+		TestName:        "specific_example",
+		TestShouldFail:  false,
+		TestDescription: "Testing get_module_examples with valid example_name",
+		TestPayload: map[string]interface{}{
+			"module_id":    "terraform-google-modules/kubernetes-engine/google/44.0.0",
+			"example_name": "simple_zonal_private",
+		},
+		ExpectsContent: []string{"### README"},
+	},
+	{
+		TestName:        "missing_module_id",
+		TestShouldFail:  true,
+		TestDescription: "Testing get_module_examples missing module_id",
+		TestPayload:     map[string]interface{}{},
+	},
+	{
+		TestName:        "invalid_example_name",
+		TestShouldFail:  true,
+		TestDescription: "Testing get_module_examples with invalid example_name",
+		TestPayload: map[string]interface{}{
+			"module_id":    "terraform-google-modules/kubernetes-engine/google/44.0.0",
+			"example_name": "missing-example",
+		},
+	},
+}
+
+var moduleSubmodulesTestCases = []RegistryTestCase{
+	{
+		TestName:        "list_submodules",
+		TestShouldFail:  false,
+		TestDescription: "Testing get_module_submodules with valid module_id",
+		TestPayload: map[string]interface{}{
+			"module_id": "terraform-google-modules/kubernetes-engine/google/44.0.0",
+		},
+	},
+	{
+		TestName:        "specific_submodule",
+		TestShouldFail:  false,
+		TestDescription: "Testing get_module_submodules with valid submodule_name",
+		TestPayload: map[string]interface{}{
+			"module_id":      "terraform-google-modules/kubernetes-engine/google/44.0.0",
+			"submodule_name": "fleet-app-operator-permissions",
+		},
+		ExpectsContent: []string{"### README"},
+	},
+	{
+		TestName:        "missing_module_id",
+		TestShouldFail:  true,
+		TestDescription: "Testing get_module_submodules missing module_id",
+		TestPayload:     map[string]interface{}{},
+	},
+	{
+		TestName:        "invalid_submodule_name",
+		TestShouldFail:  true,
+		TestDescription: "Testing get_module_submodules with invalid submodule_name",
+		TestPayload: map[string]interface{}{
+			"module_id":      "terraform-google-modules/kubernetes-engine/google/44.0.0",
+			"submodule_name": "missing-submodule",
 		},
 	},
 }
