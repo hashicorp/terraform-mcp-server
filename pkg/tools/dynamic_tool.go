@@ -182,6 +182,12 @@ func (r *DynamicToolRegistry) registerTFETools() {
 		r.mcpServer.AddTool(tool.Tool, tool.Handler)
 	}
 
+	// Read-only counterpart to action_run's comment-write path. See #347.
+	if toolsets.IsToolEnabled("list_run_comments", r.enabledToolsets) {
+		tool := r.createDynamicTFETool("list_run_comments", tfeTools.ListRunComments)
+		r.mcpServer.AddTool(tool.Tool, tool.Handler)
+	}
+
 	// Create run tool with conditional options based on TF operations setting
 	if toolsets.IsToolEnabled("create_run", r.enabledToolsets) {
 		var tool server.ServerTool
