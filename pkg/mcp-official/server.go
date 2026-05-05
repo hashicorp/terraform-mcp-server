@@ -39,6 +39,8 @@ func NewServer(heartbeatInterval time.Duration) *mcp.Server {
 		},
 		svrOptions,
 	)
+
+	// list_workspaces
 	type WorkspaceSummary struct {
 		ID            string    `json:"id"`
 		Name          string    `json:"workspace_name"`
@@ -48,80 +50,61 @@ func NewServer(heartbeatInterval time.Duration) *mcp.Server {
 		ExecutionMode string    `json:"execution_mode"`
 	}
 
-	// WorkspaceSummaryList contains the list of workspace summaries and pagination details
 	type WorkspaceSummaryList struct {
 		Items []*WorkspaceSummary `json:"items"`
 	}
 
-	type SearchArgs struct {
-		// Required field
-		TerraformOrgName string `json:"terraform_org_name" jsonschema:"The Terraform organization name"`
-
-		// Optional fields (will be empty strings if not provided)
-		ProjectID    string `json:"project_id,omitempty" jsonschema:"Filter by project ID"`
-		SearchQuery  string `json:"search_query,omitempty" jsonschema:"Search term"`
-		Tags         string `json:"tags,omitempty" jsonschema:"Comma-separated tags"`
-		ExcludeTags  string `json:"exclude_tags,omitempty" jsonschema:"Tags to exclude"`
-		WildcardName string `json:"wildcard_name,omitempty" jsonschema:"Wildcard pattern"`
+	type ListWorkspacesArgs struct {
+		TerraformOrgName string `json:"terraform_org_name" jsonschema:"required,description=The Terraform organization name"`
+		ProjectID        string `json:"project_id,omitempty" jsonschema:"description=Filter by project ID"`
+		SearchQuery      string `json:"search_query,omitempty" jsonschema:"description=Search term"`
+		Tags             string `json:"tags,omitempty" jsonschema:"description=Comma-separated tags"`
+		ExcludeTags      string `json:"exclude_tags,omitempty" jsonschema:"description=Tags to exclude"`
+		WildcardName     string `json:"wildcard_name,omitempty" jsonschema:"description=Wildcard pattern"`
 	}
 
 	mcp.AddTool(svr, &mcp.Tool{
 		Name:        "list_workspaces",
 		Description: "List Terraform workspaces in an organization",
-	}, func(ctx context.Context, request *mcp.CallToolRequest, input SearchArgs) (*mcp.CallToolResult, *WorkspaceSummaryList, error) {
+	}, func(ctx context.Context, request *mcp.CallToolRequest, input ListWorkspacesArgs) (*mcp.CallToolResult, *WorkspaceSummaryList, error) {
 		terraformOrgName := strings.TrimSpace(input.TerraformOrgName)
-		projectID := input.ProjectID
-		searchQuery := input.SearchQuery
-		tagsStr := input.Tags
-		excludeTagsStr := input.ExcludeTags
-		wildcardName := input.WildcardName
+		if terraformOrgName == "" {
+			return nil, nil, fmt.Errorf("terraform_org_name is required")
+		}
 
 		var tags []string
-		if tagsStr != "" {
-			tags = strings.Split(strings.TrimSpace(tagsStr), ",")
+		if input.Tags != "" {
+			tags = strings.Split(strings.TrimSpace(input.Tags), ",")
 			for i, tag := range tags {
 				tags[i] = strings.TrimSpace(tag)
 			}
 		}
 
 		var excludeTags []string
-		if excludeTagsStr != "" {
-			excludeTags = strings.Split(strings.TrimSpace(excludeTagsStr), ",")
+		if input.ExcludeTags != "" {
+			excludeTags = strings.Split(strings.TrimSpace(input.ExcludeTags), ",")
 			for i, tag := range excludeTags {
 				excludeTags[i] = strings.TrimSpace(tag)
 			}
 		}
 
-		session := request.Session
-		if session == nil {
-			return nil, nil, fmt.Errorf("no active session")
-		}
-		var client *tfe.Client
-		if value, ok := activeTfeClients.Load(session.ID()); ok {
-			// Try to get existing client
-			client = value.(*tfe.Client)
-		}
-		var err error
-		if client == nil {
-			log.Printf("TFE client not found, creating a new one")
-			client, err = CreateTfeClientForSession(ctx, session.ID())
-			if err != nil {
-				return nil, nil, err
-			}
+		client, err := getClientFromSession(ctx, request)
+		if err != nil {
+			return nil, nil, err
 		}
 
 		workspaces, err := client.Workspaces.List(ctx, terraformOrgName, &tfe.WorkspaceListOptions{
-			ProjectID:    projectID,
-			Search:       searchQuery,
+			ProjectID:    input.ProjectID,
+			Search:       input.SearchQuery,
 			Tags:         strings.Join(tags, ","),
 			ExcludeTags:  strings.Join(excludeTags, ","),
-			WildcardName: wildcardName,
+			WildcardName: input.WildcardName,
 		})
 		if err != nil {
 			return nil, nil, fmt.Errorf("failed to list workspaces in org '%s': %w", terraformOrgName, err)
 		}
 		if len(workspaces.Items) == 0 {
-			return nil, nil, fmt.Errorf("no workspaces to list in organization %q", terraformOrgName)
+			return nil, nil, fmt.Errorf("no workspaces found in organization %q", terraformOrgName)
 		}
 
 		summaries := make([]*WorkspaceSummary, len(workspaces.Items))
@@ -135,9 +118,78 @@ func NewServer(heartbeatInterval time.Duration) *mcp.Server {
 				ExecutionMode: w.ExecutionMode,
 			}
 		}
-		return nil, &WorkspaceSummaryList{
-			Items: summaries,
+		return nil, &WorkspaceSummaryList{Items: summaries}, nil
+	})
+
+	// attach_policy_set_to_workspaces
+	type AttachPolicySetArgs struct {
+		PolicySetID  string `json:"policy_set_id" jsonschema:"required,description=The ID of the policy set to attach (e.g. polset-3yVQZvHzf5j3WRJ1)"`
+		WorkspaceIDs string `json:"workspace_ids" jsonschema:"required,description=Comma-separated list of workspace IDs to attach the policy set to"`
+	}
+
+	type AttachPolicySetResult struct {
+		Message string `json:"message"`
+		Count   int    `json:"workspaces_attached"`
+	}
+
+	mcp.AddTool(svr, &mcp.Tool{
+		Name:        "attach_policy_set_to_workspaces",
+		Description: "Attach a policy set to one or more workspaces. Note: Policy sets marked as global cannot be attached to individual workspaces.",
+	}, func(ctx context.Context, request *mcp.CallToolRequest, input AttachPolicySetArgs) (*mcp.CallToolResult, *AttachPolicySetResult, error) {
+		policySetID := strings.TrimSpace(input.PolicySetID)
+		if policySetID == "" {
+			return nil, nil, fmt.Errorf("policy_set_id is required")
+		}
+
+		workspaceIDsList := strings.Split(input.WorkspaceIDs, ",")
+		var workspaces []*tfe.Workspace
+		for _, id := range workspaceIDsList {
+			trimmedID := strings.TrimSpace(id)
+			if trimmedID != "" {
+				workspaces = append(workspaces, &tfe.Workspace{ID: trimmedID})
+			}
+		}
+
+		if len(workspaces) == 0 {
+			return nil, nil, fmt.Errorf("no valid workspace IDs provided")
+		}
+
+		client, err := getClientFromSession(ctx, request)
+		if err != nil {
+			return nil, nil, err
+		}
+
+		err = client.PolicySets.AddWorkspaces(ctx, policySetID, tfe.PolicySetAddWorkspacesOptions{
+			Workspaces: workspaces,
+		})
+		if err != nil {
+			return nil, nil, fmt.Errorf("failed to attach policy set '%s' to workspaces: %w", policySetID, err)
+		}
+
+		return nil, &AttachPolicySetResult{
+			Message: fmt.Sprintf("Successfully attached policy set %s to %d workspace(s)", policySetID, len(workspaces)),
+			Count:   len(workspaces),
 		}, nil
 	})
+
 	return svr
+}
+
+// getClientFromSession extracts or creates a TFE client for the current session
+func getClientFromSession(ctx context.Context, request *mcp.CallToolRequest) (*tfe.Client, error) {
+	session := request.Session
+	if session == nil {
+		return nil, fmt.Errorf("no active session")
+	}
+
+	if value, ok := activeTfeClients.Load(session.ID()); ok {
+		return value.(*tfe.Client), nil
+	}
+
+	log.Printf("TFE client not found, creating a new one")
+	client, err := CreateTfeClientForSession(ctx, session.ID())
+	if err != nil {
+		return nil, err
+	}
+	return client, nil
 }
