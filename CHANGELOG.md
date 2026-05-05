@@ -1,5 +1,9 @@
 # 0.5.2
 
+FEATURES
+
+* [New Tool] `list_run_comments` Lists comments on a Terraform run, returning each comment's ID and body so agents can read context that humans left on a run [352](https://github.com/hashicorp/terraform-mcp-server/pull/352)
+
 IMPROVEMENTS
 
 * Add http server metrics instrumentation [330](https://github.com/hashicorp/terraform-mcp-server/pull/330)
