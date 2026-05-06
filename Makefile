@@ -61,7 +61,7 @@ docker-build:
 
 # Build docker image for official binary
 docker-build-official:
-    $(DOCKER) build --build-arg VERSION=$(VERSION) -f Dockerfile.official -t $(BINARY_NAME)-official:$(VERSION) .
+	$(DOCKER) build --build-arg VERSION=$(VERSION) -f Dockerfile.official -t $(BINARY_NAME)-official:$(VERSION) .
 
 
 # Run HTTP server locally
@@ -113,8 +113,8 @@ cleanup-test-containers:
 # Clean up official test containers
 cleanup-test-containers-official:
 	@echo "Cleaning up officialtest containers..."
-    @$(DOCKER) ps -q --filter "ancestor=$(BINARY_NAME)-official:test-e2e-official" | xargs -r $(DOCKER) stop
-    @$(DOCKER) ps -aq --filter "ancestor=$(BINARY_NAME)-official:test-e2e-official" | xargs -r $(DOCKER) rm
+	@$(DOCKER) ps -q --filter "ancestor=$(BINARY_NAME)-official:test-e2e-official" | xargs -r $(DOCKER) stop
+	@$(DOCKER) ps -aq --filter "ancestor=$(BINARY_NAME)-official:test-e2e-official" | xargs -r $(DOCKER) rm
 	@echo "Official test container cleanup complete"
 
 # Show help
