@@ -41,6 +41,10 @@ test:
 test-e2e:
 	@trap '$(MAKE) cleanup-test-containers' EXIT; $(GO) test -v --tags e2e ./e2e
 
+# Run e2e tests for the official mcp server
+test-e2e-official:
+	@trap '$(MAKE) cleanup-test-containers-official' EXIT; $(GO) test -v --tags e2e ./cmd/terraform-mcp-server-official/e2e
+
 # Clean build artifacts
 clean:
 	rm -f bin/$(BINARY_NAME)
@@ -53,6 +57,11 @@ deps:
 # Build docker image
 docker-build:
 	$(DOCKER) build --build-arg VERSION=$(VERSION) -t $(BINARY_NAME):$(VERSION) .
+
+# Build docker image for official binary
+docker-build-official:
+    $(DOCKER) build --build-arg VERSION=$(VERSION) -f Dockerfile.official -t terraform-mcp-server-official:$(VERSION) .
+
 
 # Run HTTP server locally
 run-http:
@@ -99,6 +108,13 @@ cleanup-test-containers:
 	@$(DOCKER) ps -q --filter "ancestor=$(BINARY_NAME):test-e2e" | xargs -r $(DOCKER) stop
 	@$(DOCKER) ps -aq --filter "ancestor=$(BINARY_NAME):test-e2e" | xargs -r $(DOCKER) rm
 	@echo "Test container cleanup complete"
+
+# Clean up official test containers
+cleanup-test-containers-official:
+	@echo "Cleaning up officialtest containers..."
+    @$(DOCKER) ps -q --filter "ancestor=terraform-mcp-server-official:test-e2e" | xargs -r $(DOCKER) stop
+    @$(DOCKER) ps -aq --filter "ancestor=terraform-mcp-server-official:test-e2e" | xargs -r $(DOCKER) rm
+	@echo "Official test container cleanup complete"
 
 # Show help
 help:
