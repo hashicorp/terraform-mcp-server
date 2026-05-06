@@ -26,7 +26,7 @@ build:
 	CGO_ENABLED=0 GOARCH=$(ARCH) GOOS=$(OS) $(GO) build $(LDFLAGS) -o bin/$(BINARY_NAME) ./cmd/terraform-mcp-server
 
 build-official:
-	CGO_ENABLED=0 GOARCH=$(ARCH) GOOS=$(OS) $(GO) build $(LDFLAGS) -o bin/$(BINARY_NAME) ./cmd/terraform-mcp-server-official
+	CGO_ENABLED=0 GOARCH=$(ARCH) GOOS=$(OS) $(GO) build $(LDFLAGS) -o bin/$(BINARY_NAME)-official ./cmd/terraform-mcp-server-official
 
 crt-build:
 	@mkdir -p $(TARGET_DIR)
@@ -43,11 +43,12 @@ test-e2e:
 
 # Run e2e tests for the official mcp server
 test-e2e-official:
-	@trap '$(MAKE) cleanup-test-containers-official' EXIT; $(GO) test -v --tags e2e ./cmd/terraform-mcp-server-official/e2e
+	@trap '$(MAKE) cleanup-test-containers-official' EXIT; $(GO) test -v --tags e2e ./cmd/$(BINARY_NAME)-official/e2e
 
 # Clean build artifacts
 clean:
 	rm -f bin/$(BINARY_NAME)
+	rm -f bin/$(BINARY_NAME)-official
 	$(GO) clean
 
 # Download dependencies
@@ -60,7 +61,7 @@ docker-build:
 
 # Build docker image for official binary
 docker-build-official:
-    $(DOCKER) build --build-arg VERSION=$(VERSION) -f Dockerfile.official -t terraform-mcp-server-official:$(VERSION) .
+    $(DOCKER) build --build-arg VERSION=$(VERSION) -f Dockerfile.official -t $(BINARY_NAME)-official:$(VERSION) .
 
 
 # Run HTTP server locally
@@ -112,8 +113,8 @@ cleanup-test-containers:
 # Clean up official test containers
 cleanup-test-containers-official:
 	@echo "Cleaning up officialtest containers..."
-    @$(DOCKER) ps -q --filter "ancestor=terraform-mcp-server-official:test-e2e" | xargs -r $(DOCKER) stop
-    @$(DOCKER) ps -aq --filter "ancestor=terraform-mcp-server-official:test-e2e" | xargs -r $(DOCKER) rm
+    @$(DOCKER) ps -q --filter "ancestor=$(BINARY_NAME)-official:test-e2e-official" | xargs -r $(DOCKER) stop
+    @$(DOCKER) ps -aq --filter "ancestor=$(BINARY_NAME)-official:test-e2e-official" | xargs -r $(DOCKER) rm
 	@echo "Official test container cleanup complete"
 
 # Show help
