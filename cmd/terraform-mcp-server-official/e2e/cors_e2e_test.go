@@ -98,7 +98,7 @@ func startHTTPContainerWithCORS(t *testing.T, port, mode, origins string) string
 		"-e", fmt.Sprintf("MCP_CORS_MODE=%s", mode),
 		"-e", fmt.Sprintf("MCP_ALLOWED_ORIGINS=%s", origins),
 		"-p", portMapping,
-		"terraform-mcp-server:test-e2e",
+		"terraform-mcp-server-official:test-e2e-official",
 	)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
