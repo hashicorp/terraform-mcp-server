@@ -195,3 +195,69 @@ jobs:
             docker.io/hashicorppreview/${{ env.repo }}:latest
             docker.io/hashicorppreview/${{ env.repo }}:${{ env.product_version }}-dev
             docker.io/hashicorppreview/${{ env.repo }}:${{ env.product_version }}-${{ github.sha }}
+
+  build-docker-official:
+      name: Docker official ${{ matrix.arch }} build
+      needs:
+        - set-product-version
+        - build
+      runs-on: ubuntu-latest
+      strategy:
+        matrix:
+          include:
+            - { arch: "386" }
+            - { arch: "arm" }
+            - { arch: "amd64" }
+            - { arch: "arm64" }
+        fail-fast: false # recommended during development
+        continue-on-error: true
+      env:
+        # Windows Warning: Do not set environment variables that case-conflict with variables used within an action
+        # on windows this will cause the action to not be able to set the environment variables.
+        # In this case setting `env.version` here means the action will be unable to set `env.VERSION` internally and fail.
+        repo: ${{ github.event.repository.name }}
+        product_version: ${{ needs.set-product-version.outputs.product-version }}
+      steps:
+        - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+        - name: Docker Build (Action)
+          uses: hashicorp/actions-docker-build@v2
+          with:
+          #   # Add smoke test here. Below is a sample smoke test that runs the built image
+          #   # and validates the version.
+          #   smoke_test: |
+          #     TEST_VERSION="$(docker run "${IMAGE_NAME}" | awk '/CLI version/{print $3}')"
+          #     if [ "${TEST_VERSION}" != "${{ env.product_version }}" ]; then
+          #       printf "fail: container smoke test, got=%q want=%q\n" "${TEST_VERSION}" "${{ env.product_version }}"
+          #       exit 1
+          #     fi
+          #     printf "ok: container smoke test\n"
+            version: ${{ env.product_version }}
+            target: release-default # default release image target that is specified in the Dockerfile
+            dockerfile: 'Dockerfile.official'
+            arch: ${{ matrix.arch }}
+            tags: |
+              docker.io/hashicorp/${{ env.repo }}-official:${{ env.product_version }}
+              public.ecr.aws/hashicorp/${{ env.repo }}-official:${{ env.product_version }}
+            # dev_tags are tags that get automatically pushed whenever successful
+            # builds make it to the stable channel. The intention is for these tags
+            # to be used for early testing of new code prior to official releases
+            # going out. The stable channel implies that all tests and scans have
+            # completed successfully, so these images should be _stable_ but are not
+            # intended for production use.
+            #
+            # Here we have two example dev tags. The first (ending -dev) is a tag
+            # that will be updated over-and-over as new builds arrive in stable.
+            #
+            # The second (using the git SHA) will produce a new separate tag for
+            # each commit that is built. (These can still be overridden if the same
+            # commit is built successfully a second time, but that is a less likely
+            # scenario.) These kinds of dev tags are useful if you want to be able
+            # to use Docker images built from those specific commits.
+            #
+            # NOTE: dev_tags MUST publish to the 'hashicorppreview' DockerHub org, it
+            # will fail to any other DockerHub org or registry. You can optionally
+            # prepend docker.io
+            dev_tags: |
+              docker.io/hashicorppreview/${{ env.repo }}-official:latest
+              docker.io/hashicorppreview/${{ env.repo }}-official:${{ env.product_version }}-dev
+              docker.io/hashicorppreview/${{ env.repo }}-official:${{ env.product_version }}-${{ github.sha }}
