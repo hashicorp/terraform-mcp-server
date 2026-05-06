@@ -380,7 +380,7 @@ func createStdioClient(t *testing.T) (mcpClient.MCPClient, func()) {
 		"--rm",
 		"-e", "MCP_RATE_LIMIT_GLOBAL=50:100",
 		"-e", "MCP_RATE_LIMIT_SESSION=50:100",
-		"terraform-mcp-server-official:test-e2e",
+		"terraform-mcp-server-official:test-e2e-official",
 	}
 	t.Log("Starting Stdio MCP client...")
 	client, err := mcpClient.NewStdioMCPClient(args[0], []string{}, args[1:]...)
@@ -437,7 +437,7 @@ func startHTTPContainer(t *testing.T, port string) string {
 		"-e", "MCP_RATE_LIMIT_GLOBAL=50:100",
 		"-e", "MCP_RATE_LIMIT_SESSION=50:100",
 		"-p", portMapping,
-		"terraform-mcp-server-official:test-e2e",
+		"terraform-mcp-server-official:test-e2e-official",
 	)
 	output, err := cmd.Output()
 	require.NoError(t, err, "expected to start HTTP container successfully")
@@ -490,7 +490,7 @@ func cleanupAllTestContainers(t *testing.T) {
 	t.Log("Cleaning up all test containers...")
 
 	// Find all containers with our test image
-	cmd := exec.Command("docker", "ps", "-q", "--filter", "ancestor=terraform-mcp-server-official:test-e2e")
+	cmd := exec.Command("docker", "ps", "-q", "--filter", "ancestor=terraform-mcp-server-official:test-e2e-official")
 	output, err := cmd.Output()
 	if err != nil {
 		t.Logf("Warning: failed to list test containers: %v", err)
