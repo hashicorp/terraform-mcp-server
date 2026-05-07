@@ -61,7 +61,6 @@ jobs:
           tar xzf mcp-publisher_linux_${ARCH}.tar.gz mcp-publisher
           chmod +x mcp-publisher
           
-          rm -f *checksums.txt *.tar.gz
 
       - name: Authenticate with MCP Registry
         run: ./mcp-publisher login github-oidc
