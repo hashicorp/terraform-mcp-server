@@ -49,7 +49,7 @@ func ensureClientInitialized(t *testing.T, client *mcp.ClientSession) {
 	result := client.InitializeResult()
 	require.NotNil(t, result)
 	t.Logf("Initialized with server: %s %s", result.ServerInfo.Name, result.ServerInfo.Version)
-	require.Equal(t, "terraform-mcp-server", result.ServerInfo.Name)
+	require.Equal(t, "terraform-mcp-official", result.ServerInfo.Name)
 }
 
 // runTestSuite executes all test cases against the provided client
@@ -94,7 +94,7 @@ func runTestSuite(t *testing.T, client *mcp.ClientSession, transportName string)
 			result.ServerInfo.Name,
 			result.ServerInfo.Version,
 		)
-		require.Equal(t, "terraform-mcp-server", result.ServerInfo.Name)
+		require.Equal(t, "terraform-mcp-official", result.ServerInfo.Name)
 	})
 
 	for _, testCase := range searchProviderTestCases {
