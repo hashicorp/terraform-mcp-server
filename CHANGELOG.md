@@ -1,12 +1,15 @@
-IMPROVEMENTS
-
-* Run as a non-root user for Kubernetes compatibility. [356] https://github.com/hashicorp/terraform-mcp-server/pull/356
-
-# 0.5.2
+# 0.5.3
 
 FEATURES
 
 * [New Tool] `get_sentinel_mock` Export and download Sentinel mock bundle data for a Terraform plan
+
+IMPROVEMENTS
+
+* Add a new metric to capture client type and version [355](https://github.com/hashicorp/terraform-mcp-server/pull/355)
+* Run as a non-root user for Kubernetes compatibility. [356] https://github.com/hashicorp/terraform-mcp-server/pull/356
+
+# 0.5.2
 
 IMPROVEMENTS
 

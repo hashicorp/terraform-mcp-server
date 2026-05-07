@@ -78,6 +78,13 @@ func attachMetricsHooks(hooks *server.Hooks, metricsConfig client.MetricsConfig,
 	if !metricsConfig.Enabled {
 		return
 	}
+	hooks.AddAfterInitialize(func(ctx context.Context, id any, message *mcp.InitializeRequest, result *mcp.InitializeResult) {
+		if message != nil && message.Params.ClientInfo.Name != "" {
+			clientName := message.Params.ClientInfo.Name
+			clientVersion := message.Params.ClientInfo.Version
+			client.RecordClientType(ctx, clientName, clientVersion, metricsConfig, logger)
+		}
+	})
 
 	var toolStartTimes sync.Map
 	hooks.AddBeforeCallTool(func(ctx context.Context, id any, message *mcp.CallToolRequest) {
@@ -391,6 +398,12 @@ func initMetrics(ctx context.Context, config *client.MetricsConfig, logger *log.
 		metric.WithUnit("s"))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create latency histogram: %w", err)
+	}
+
+	config.ClientTypeCounter, err = meter.Int64Counter("mcp_client_type_total",
+		metric.WithDescription("Total number of connections by client type"))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create client type counter: %w", err)
 	}
 
 	return func() {
