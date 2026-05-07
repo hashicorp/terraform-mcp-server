@@ -6,16 +6,16 @@ package e2e
 import (
 	"context"
 	"fmt"
-	"log"
 	"net/http"
 	"os"
 	"os/exec"
+	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
 
-	mcpClient "github.com/mark3labs/mcp-go/client"
-	"github.com/mark3labs/mcp-go/mcp"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/require"
 )
 
@@ -29,7 +29,7 @@ func TestE2E(t *testing.T) {
 
 	testCases := []struct {
 		name          string
-		clientFactory func(t *testing.T) (mcpClient.MCPClient, func())
+		clientFactory func(t *testing.T) (*mcp.ClientSession, func())
 	}{
 		{"Stdio", createStdioClient},
 		{"HTTP", createHTTPClient},
@@ -37,50 +37,58 @@ func TestE2E(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			client, cleanup := tc.clientFactory(t)
+			session, cleanup := tc.clientFactory(t)
 			defer cleanup()
-			runTestSuite(t, client, tc.name)
+			runTestSuite(t, session, tc.name)
 		})
 	}
 }
 
 // ensureClientInitialized ensures the MCP client is initialized before running tool tests
-func ensureClientInitialized(t *testing.T, client mcpClient.MCPClient) {
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-
-	request := mcp.InitializeRequest{}
-	request.Params.ProtocolVersion = mcp.LATEST_PROTOCOL_VERSION
-	request.Params.ClientInfo = mcp.Implementation{
-		Name:    "e2e-test-client",
-		Version: "0.0.1",
-	}
-
-	result, err := client.Initialize(ctx, request)
-	if err != nil {
-		t.Fatalf("Failed to initialize MCP client: %v", err)
-	}
+func ensureClientInitialized(t *testing.T, client *mcp.ClientSession) {
+	result := client.InitializeResult()
+	require.NotNil(t, result)
 	t.Logf("Initialized with server: %s %s", result.ServerInfo.Name, result.ServerInfo.Version)
 	require.Equal(t, "terraform-mcp-server", result.ServerInfo.Name)
 }
 
 // runTestSuite executes all test cases against the provided client
-func runTestSuite(t *testing.T, client mcpClient.MCPClient, transportName string) {
+func runTestSuite(t *testing.T, client *mcp.ClientSession, transportName string) {
 	t.Run("Initialize", func(t *testing.T) {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
-
-		request := mcp.InitializeRequest{}
-		request.Params.ProtocolVersion = mcp.LATEST_PROTOCOL_VERSION
-		request.Params.ClientInfo = mcp.Implementation{
+		client := mcp.NewClient(&mcp.Implementation{
 			Name:    "e2e-test-client",
 			Version: "0.0.1",
+		}, nil)
+
+		var transport mcp.Transport
+		_, thisFile, _, ok := runtime.Caller(0)
+		require.True(t, ok)
+		repoRoot := filepath.Clean(filepath.Join(filepath.Dir(thisFile), "..", "..", ".."))
+		serverBinaryPath := filepath.Join(t.TempDir(), "terraform-mcp-server-official")
+		cmd := exec.Command("go", "build", "-o", serverBinaryPath, "./cmd/terraform-mcp-server-official")
+		cmd.Dir = repoRoot
+		require.NoError(t, cmd.Run())
+		switch transportName {
+		case "Stdio":
+			transport = &mcp.CommandTransport{
+				Command: exec.Command(serverBinaryPath),
+			}
+		case "HTTP":
+
+		default:
+			t.Fatalf("unsupported transport: %s", transportName)
 		}
 
-		result, err := client.Initialize(ctx, request)
-		if err != nil {
-			log.Fatalf("Failed to initialize: %v", err)
-		}
+		session, err := client.Connect(ctx, transport, nil)
+		require.NoError(t, err)
+
+		defer session.Close()
+
+		result := session.InitializeResult()
+		require.NotNil(t, result)
+
 		fmt.Printf(
 			"Initialized with server: %s %s\n\n",
 			result.ServerInfo.Name,
@@ -98,9 +106,9 @@ func runTestSuite(t *testing.T, client mcpClient.MCPClient, transportName string
 			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 			defer cancel()
 
-			request := mcp.CallToolRequest{}
-			request.Params.Name = "search_providers"
-			request.Params.Arguments = testCase.TestPayload
+			request := &mcp.CallToolParams{}
+			request.Name = "search_providers"
+			request.Arguments = testCase.TestPayload
 
 			response, err := client.CallTool(ctx, request)
 			if testCase.TestShouldFail {
@@ -111,7 +119,7 @@ func runTestSuite(t *testing.T, client mcpClient.MCPClient, transportName string
 				require.False(t, response.IsError, "expected result not to be an error")
 				require.Len(t, response.Content, 1, "expected content to have one item")
 
-				textContent, ok := response.Content[0].(mcp.TextContent)
+				textContent, ok := response.Content[0].(*mcp.TextContent)
 				require.True(t, ok, "expected content to be of type TextContent")
 				t.Logf("Content length: %d", len(textContent.Text))
 
@@ -142,9 +150,9 @@ func runTestSuite(t *testing.T, client mcpClient.MCPClient, transportName string
 			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 			defer cancel()
 
-			request := mcp.CallToolRequest{}
-			request.Params.Name = "get_provider_details"
-			request.Params.Arguments = testCase.TestPayload
+			request := &mcp.CallToolParams{}
+			request.Name = "get_provider_details"
+			request.Arguments = testCase.TestPayload
 
 			response, err := client.CallTool(ctx, request)
 			if testCase.TestShouldFail {
@@ -155,7 +163,7 @@ func runTestSuite(t *testing.T, client mcpClient.MCPClient, transportName string
 				require.False(t, response.IsError, "expected result not to be an error")
 				require.Len(t, response.Content, 1, "expected content to have one item")
 
-				textContent, ok := response.Content[0].(mcp.TextContent)
+				textContent, ok := response.Content[0].(*mcp.TextContent)
 				require.True(t, ok, "expected content to be of type TextContent")
 				t.Logf("Content length: %d", len(textContent.Text))
 
@@ -173,9 +181,9 @@ func runTestSuite(t *testing.T, client mcpClient.MCPClient, transportName string
 			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 			defer cancel()
 
-			request := mcp.CallToolRequest{}
-			request.Params.Name = "search_modules"
-			request.Params.Arguments = testCase.TestPayload
+			request := &mcp.CallToolParams{}
+			request.Name = "search_modules"
+			request.Arguments = testCase.TestPayload
 
 			response, err := client.CallTool(ctx, request)
 			if testCase.TestShouldFail {
@@ -185,7 +193,7 @@ func runTestSuite(t *testing.T, client mcpClient.MCPClient, transportName string
 				require.NoError(t, err, "expected to call 'search_modules' tool successfully")
 				require.False(t, response.IsError, "expected result not to be an error")
 				if len(response.Content) > 0 {
-					textContent, ok := response.Content[0].(mcp.TextContent)
+					textContent, ok := response.Content[0].(*mcp.TextContent)
 					require.True(t, ok, "expected content to be of type TextContent")
 					t.Logf("Content length: %d", len(textContent.Text))
 				} else {
@@ -204,9 +212,9 @@ func runTestSuite(t *testing.T, client mcpClient.MCPClient, transportName string
 			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 			defer cancel()
 
-			request := mcp.CallToolRequest{}
-			request.Params.Name = "get_module_details"
-			request.Params.Arguments = testCase.TestPayload
+			request := &mcp.CallToolParams{}
+			request.Name = "get_module_details"
+			request.Arguments = testCase.TestPayload
 
 			response, err := client.CallTool(ctx, request)
 			if testCase.TestShouldFail {
@@ -217,7 +225,7 @@ func runTestSuite(t *testing.T, client mcpClient.MCPClient, transportName string
 				require.False(t, response.IsError, "expected result not to be an error")
 				require.Len(t, response.Content, 1, "expected content to have one item")
 
-				textContent, ok := response.Content[0].(mcp.TextContent)
+				textContent, ok := response.Content[0].(*mcp.TextContent)
 				require.True(t, ok, "expected content to be of type TextContent")
 				t.Logf("Content length: %d", len(textContent.Text))
 
@@ -240,9 +248,9 @@ func runTestSuite(t *testing.T, client mcpClient.MCPClient, transportName string
 			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 			defer cancel()
 
-			request := mcp.CallToolRequest{}
-			request.Params.Name = "search_policies"
-			request.Params.Arguments = testCase.TestPayload
+			request := &mcp.CallToolParams{}
+			request.Name = "search_policies"
+			request.Arguments = testCase.TestPayload
 
 			response, err := client.CallTool(ctx, request)
 			if testCase.TestShouldFail {
@@ -253,7 +261,7 @@ func runTestSuite(t *testing.T, client mcpClient.MCPClient, transportName string
 				require.False(t, response.IsError, "expected result not to be an error")
 				require.Len(t, response.Content, 1, "expected content to have one item")
 
-				textContent, ok := response.Content[0].(mcp.TextContent)
+				textContent, ok := response.Content[0].(*mcp.TextContent)
 				require.True(t, ok, "expected content to be of type TextContent")
 				t.Logf("Content length: %d", len(textContent.Text))
 
@@ -277,9 +285,9 @@ func runTestSuite(t *testing.T, client mcpClient.MCPClient, transportName string
 			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 			defer cancel()
 
-			request := mcp.CallToolRequest{}
-			request.Params.Name = "get_policy_details"
-			request.Params.Arguments = testCase.TestPayload
+			request := &mcp.CallToolParams{}
+			request.Name = "get_policy_details"
+			request.Arguments = testCase.TestPayload
 
 			response, err := client.CallTool(ctx, request)
 			if testCase.TestShouldFail {
@@ -290,7 +298,7 @@ func runTestSuite(t *testing.T, client mcpClient.MCPClient, transportName string
 				require.False(t, response.IsError, "expected result not to be an error")
 				require.Len(t, response.Content, 1, "expected content to have at least one item")
 
-				textContent, ok := response.Content[0].(mcp.TextContent)
+				textContent, ok := response.Content[0].(*mcp.TextContent)
 				require.True(t, ok, "expected content to be of type TextContent")
 				t.Logf("Content length: %d", len(textContent.Text))
 
@@ -310,9 +318,9 @@ func runTestSuite(t *testing.T, client mcpClient.MCPClient, transportName string
 			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 			defer cancel()
 
-			request := mcp.CallToolRequest{}
-			request.Params.Name = "get_latest_module_version"
-			request.Params.Arguments = testCase.TestPayload
+			request := &mcp.CallToolParams{}
+			request.Name = "get_latest_module_version"
+			request.Arguments = testCase.TestPayload
 
 			response, err := client.CallTool(ctx, request)
 			if testCase.TestShouldFail {
@@ -323,7 +331,7 @@ func runTestSuite(t *testing.T, client mcpClient.MCPClient, transportName string
 				require.False(t, response.IsError, "expected result not to be an error")
 				require.Len(t, response.Content, 1, "expected content to have one item")
 
-				textContent, ok := response.Content[0].(mcp.TextContent)
+				textContent, ok := response.Content[0].(*mcp.TextContent)
 				require.True(t, ok, "expected content to be of type TextContent")
 				t.Logf("Module version: %s", textContent.Text)
 
@@ -344,9 +352,9 @@ func runTestSuite(t *testing.T, client mcpClient.MCPClient, transportName string
 			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 			defer cancel()
 
-			request := mcp.CallToolRequest{}
-			request.Params.Name = "get_latest_provider_version"
-			request.Params.Arguments = testCase.TestPayload
+			request := &mcp.CallToolParams{}
+			request.Name = "get_latest_provider_version"
+			request.Arguments = testCase.TestPayload
 
 			response, err := client.CallTool(ctx, request)
 			if testCase.TestShouldFail {
@@ -357,7 +365,7 @@ func runTestSuite(t *testing.T, client mcpClient.MCPClient, transportName string
 				require.False(t, response.IsError, "expected result not to be an error")
 				require.Len(t, response.Content, 1, "expected content to have one item")
 
-				textContent, ok := response.Content[0].(mcp.TextContent)
+				textContent, ok := response.Content[0].(*mcp.TextContent)
 				require.True(t, ok, "expected content to be of type TextContent")
 				t.Logf("Provider version: %s", textContent.Text)
 
@@ -372,58 +380,57 @@ func runTestSuite(t *testing.T, client mcpClient.MCPClient, transportName string
 }
 
 // createStdioClient creates a stdio-based MCP client
-func createStdioClient(t *testing.T) (mcpClient.MCPClient, func()) {
-	args := []string{
-		"docker",
-		"run",
-		"-i",
-		"--rm",
-		"-e", "MCP_RATE_LIMIT_GLOBAL=50:100",
-		"-e", "MCP_RATE_LIMIT_SESSION=50:100",
-		"terraform-mcp-server-official:test-e2e-official",
+func createStdioClient(t *testing.T) (*mcp.ClientSession, func()) {
+	t.Helper()
+
+	ctx := context.Background()
+	client := mcp.NewClient(&mcp.Implementation{
+		Name:    "e2e-test-client",
+		Version: "test",
+	}, nil)
+
+	transport := &mcp.CommandTransport{
+		Command: exec.Command(
+			"docker",
+			"run",
+			"-i",
+			"--rm",
+			"-e", "MCP_RATE_LIMIT_GLOBAL=50:100",
+			"-e", "MCP_RATE_LIMIT_SESSION=50:100",
+			"terraform-mcp-server-official:test-e2e-official"),
 	}
 	t.Log("Starting Stdio MCP client...")
-	client, err := mcpClient.NewStdioMCPClient(args[0], []string{}, args[1:]...)
-	require.NoError(t, err, "expected to create stdio client successfully")
-
-	cleanup := func() {
-		client.Close()
+	session, err := client.Connect(ctx, transport, nil)
+	if err != nil {
+		t.Fatal(err)
 	}
 
-	return client, cleanup
+	return session, func() { _ = session.Close() }
 }
 
 // createHTTPClient creates an HTTP-based MCP client
-func createHTTPClient(t *testing.T) (mcpClient.MCPClient, func()) {
+func createHTTPClient(t *testing.T) (*mcp.ClientSession, func()) {
 	t.Log("Starting HTTP MCP server...")
 
 	port := getTestPort()
 	baseURL := fmt.Sprintf("http://localhost:%s", port)
-	mcpURL := fmt.Sprintf("http://localhost:%s/mcp", port)
 
-	// Start container in HTTP mode
-	containerID := startHTTPContainer(t, port)
+	ctx := context.Background()
+	client := mcp.NewClient(&mcp.Implementation{
+		Name:    "e2e-test-client",
+		Version: "test",
+	}, nil)
 
-	// Ensure container cleanup even if test fails
-	t.Cleanup(func() {
-		stopContainer(t, containerID)
-	})
-
-	// Wait for server to be ready
-	waitForServer(t, baseURL)
-
-	// Create client with MCP endpoint
-	client, err := mcpClient.NewStreamableHttpClient(mcpURL)
-	require.NoError(t, err, "expected to create HTTP client successfully")
-
-	cleanup := func() {
-		if client != nil {
-			client.Close()
-		}
-		// Container cleanup handled by t.Cleanup()
+	transport := &mcp.StreamableClientTransport{
+		Endpoint: baseURL,
 	}
 
-	return client, cleanup
+	session, err := client.Connect(ctx, transport, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	return session, func() { _ = session.Close() }
 }
 
 // startHTTPContainer starts a Docker container in HTTP mode and returns container ID
