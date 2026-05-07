@@ -324,6 +324,7 @@ func initializeMCPSession(t *testing.T, mcpURL, origin string) string {
 	defer resp.Body.Close()
 
 	// Check if we got a successful response
+	t.Logf("mcpURL: %s, Origin: %s, Status Code: %d", mcpURL, origin, resp.StatusCode)
 	require.Equal(t, 200, resp.StatusCode, "Failed to initialize MCP session")
 
 	// Extract the session ID from the response headers
