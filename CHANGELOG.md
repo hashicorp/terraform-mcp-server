@@ -1,3 +1,7 @@
+IMPROVEMENTS
+
+* Run as a non-root user for Kubernetes compatibility. [356] https://github.com/hashicorp/terraform-mcp-server/pull/356
+
 # 0.5.2
 
 FEATURES
