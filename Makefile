@@ -36,7 +36,7 @@ test:
 
 # Run e2e tests
 test-e2e:
-	@trap '$(MAKE) cleanup-test-containers' EXIT; $(GO) test -v --tags e2e ./e2e
+	@trap '$(MAKE) cleanup-test-containers' EXIT; DOCKER=$(DOCKER) $(GO) test -v --tags e2e ./e2e
 
 # Clean build artifacts
 clean:
