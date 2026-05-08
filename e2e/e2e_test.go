@@ -374,7 +374,7 @@ func runTestSuite(t *testing.T, client mcpClient.MCPClient, transportName string
 // createStdioClient creates a stdio-based MCP client
 func createStdioClient(t *testing.T) (mcpClient.MCPClient, func()) {
 	args := []string{
-		"docker",
+		containerRuntime(),
 		"run",
 		"-i",
 		"--rm",
@@ -430,7 +430,7 @@ func createHTTPClient(t *testing.T) (mcpClient.MCPClient, func()) {
 func startHTTPContainer(t *testing.T, port string) string {
 	portMapping := fmt.Sprintf("%s:8080", port)
 	cmd := exec.Command(
-		"docker", "run", "-d", "--rm",
+		containerRuntime(), "run", "-d", "--rm",
 		"-e", "TRANSPORT_MODE=streamable-http",
 		"-e", "TRANSPORT_HOST=0.0.0.0",
 		"-e", "MCP_SESSION_MODE=stateful",
@@ -472,11 +472,11 @@ func stopContainer(t *testing.T, containerID string) {
 	}
 
 	t.Logf("Stopping container: %s", containerID)
-	cmd := exec.Command("docker", "stop", containerID)
+	cmd := exec.Command(containerRuntime(), "stop", containerID)
 	if err := cmd.Run(); err != nil {
 		t.Logf("Warning: failed to stop container %s: %v", containerID, err)
 		// Try force kill if stop fails
-		killCmd := exec.Command("docker", "kill", containerID)
+		killCmd := exec.Command(containerRuntime(), "kill", containerID)
 		if killErr := killCmd.Run(); killErr != nil {
 			t.Logf("Warning: failed to kill container %s: %v", containerID, killErr)
 		}
@@ -490,7 +490,7 @@ func cleanupAllTestContainers(t *testing.T) {
 	t.Log("Cleaning up all test containers...")
 
 	// Find all containers with our test image
-	cmd := exec.Command("docker", "ps", "-q", "--filter", "ancestor=terraform-mcp-server:test-e2e")
+	cmd := exec.Command(containerRuntime(), "ps", "-q", "--filter", "ancestor=terraform-mcp-server:test-e2e")
 	output, err := cmd.Output()
 	if err != nil {
 		t.Logf("Warning: failed to list test containers: %v", err)
@@ -504,7 +504,7 @@ func cleanupAllTestContainers(t *testing.T) {
 	}
 
 	// Stop all found containers
-	stopCmd := exec.Command("docker", "stop")
+	stopCmd := exec.Command(containerRuntime(), "stop")
 	stopCmd.Stdin = strings.NewReader(containerIDs)
 	if err := stopCmd.Run(); err != nil {
 		t.Logf("Warning: failed to stop some test containers: %v", err)
@@ -519,6 +519,15 @@ func getTestPort() string {
 		return port
 	}
 	return "8080"
+}
+
+// containerRuntime returns the container runtime binary to use.
+// It reads the DOCKER environment variable, falling back to "docker".
+func containerRuntime() string {
+	if rt := os.Getenv("DOCKER"); rt != "" {
+		return rt
+	}
+	return "docker"
 }
 
 func buildDockerImage(t *testing.T) {

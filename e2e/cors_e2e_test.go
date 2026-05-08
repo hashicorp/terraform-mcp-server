@@ -74,7 +74,7 @@ func TestCORSE2E(t *testing.T) {
 
 			containerID := startHTTPContainerWithCORS(t, config.port, config.mode, config.origins)
 			defer func() {
-				stopCmd := exec.Command("docker", "stop", containerID)
+				stopCmd := exec.Command(containerRuntime(), "stop", containerID)
 				stopCmd.Run()
 			}()
 
@@ -90,7 +90,7 @@ func TestCORSE2E(t *testing.T) {
 func startHTTPContainerWithCORS(t *testing.T, port, mode, origins string) string {
 	portMapping := fmt.Sprintf("%s:8080", port)
 	cmd := exec.Command(
-		"docker", "run", "-d", "--rm",
+		containerRuntime(), "run", "-d", "--rm",
 		"-e", "TRANSPORT_MODE=streamable-http",
 		"-e", "TRANSPORT_HOST=0.0.0.0",
 		"-e", "MCP_SESSION_MODE=stateful",
