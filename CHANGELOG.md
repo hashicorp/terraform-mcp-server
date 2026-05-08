@@ -1,3 +1,6 @@
+
+* Use the configured container runtime for e2e tests instead of hardcoded Docker commands, enabling Podman-based test runs [358](https://github.com/hashicorp/terraform-mcp-server/pull/358)
+
 # 0.5.2
 
 FEATURES
