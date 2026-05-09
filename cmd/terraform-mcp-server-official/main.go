@@ -197,10 +197,54 @@ func runHTTPServer(logger *log.Logger, host, port, endpointPath string, heartbea
 	isStateless := shouldUseStatelessMode()
 	logger.Infof("Running with stateless mode: %v", isStateless)
 
+	// Load CORS configuration
+	corsConfig := client.LoadCORSConfigFromEnv()
+	// Log CORS configuration
+	logger.Infof("CORS Mode: %s", corsConfig.Mode)
+	cors := http.NewCrossOriginProtection()
+	if len(corsConfig.AllowedOrigins) > 0 {
+		logger.Infof("Allowed Origins: %s", strings.Join(corsConfig.AllowedOrigins, ", "))
+		switch corsConfig.Mode {
+		case "strict":
+			for _, origin := range corsConfig.AllowedOrigins {
+				err := cors.AddTrustedOrigin(origin)
+				if err != nil {
+					logger.Warnf("Strict mode: Error adding %s to trusted origins: %v", origin, err)
+				}
+			}
+		case "development":
+			err := cors.AddTrustedOrigin("http://localhost:3000")
+			if err != nil {
+				logger.Warnf("Development mode: Error adding localhost:3000 to trusted origins: %v", err)
+			}
+			err = cors.AddTrustedOrigin("http://127.0.0.1:3000")
+			if err != nil {
+				logger.Warnf("Development mode: Error adding 127.0.0.1:3000 to trusted origins: %v", err)
+			}
+			for _, origin := range corsConfig.AllowedOrigins {
+				err = cors.AddTrustedOrigin(origin)
+				if err != nil {
+					logger.Warnf("Development mode: Error adding %s to trusted origins: %v", origin, err)
+				}
+			}
+		case "disabled":
+			cors = nil
+		default:
+			logger.Warnf("Unknown CORS mode: %s", corsConfig.Mode)
+		}
+	} else if corsConfig.Mode == "strict" {
+		logger.Warnf("No allowed origins configured in strict mode. All cross-origin requests will be rejected.")
+	} else if corsConfig.Mode == "development" {
+		logger.Infof("Development mode: localhost origins are automatically allowed")
+	} else if corsConfig.Mode == "disabled" {
+		logger.Warnf("CORS validation is disabled. This is not recommended for production.")
+	}
+
 	// Create StreamableHTTP server which implements the new streamable-http transport
 	// This is the modern MCP transport that supports both direct HTTP responses and SSE streams
 	opts := &mcp.StreamableHTTPOptions{
-		Stateless: isStateless,
+		Stateless:             isStateless,
+		CrossOriginProtection: cors,
 	}
 	// Load TLS configuration
 	tlsConfig, err := client.GetTLSConfigFromEnv()
@@ -213,27 +257,13 @@ func runHTTPServer(logger *log.Logger, host, port, endpointPath string, heartbea
 		return hcServer
 	}, opts)
 
-	// Load CORS configuration
-	corsConfig := client.LoadCORSConfigFromEnv()
-	// Log CORS configuration
-	logger.Infof("CORS Mode: %s", corsConfig.Mode)
-	if len(corsConfig.AllowedOrigins) > 0 {
-		logger.Infof("Allowed Origins: %s", strings.Join(corsConfig.AllowedOrigins, ", "))
-	} else if corsConfig.Mode == "strict" {
-		logger.Warnf("No allowed origins configured in strict mode. All cross-origin requests will be rejected.")
-	} else if corsConfig.Mode == "development" {
-		logger.Infof("Development mode: localhost origins are automatically allowed")
-	} else if corsConfig.Mode == "disabled" {
-		logger.Warnf("CORS validation is disabled. This is not recommended for production.")
-	}
-
 	// Create a security wrapper around the streamable server
-	streamableServer := client.NewSecurityHandler(mcpHandler, corsConfig.AllowedOrigins, corsConfig.Mode, logger)
+	//streamableServer := client.NewSecurityHandler(mcpHandler, corsConfig.AllowedOrigins, corsConfig.Mode, logger)
 
 	mux := http.NewServeMux()
 
 	// Apply middleware
-	streamableServer = client.TerraformContextMiddleware(logger)(streamableServer)
+	streamableServer := client.TerraformContextMiddleware(logger)(mcpHandler)
 
 	// Handle the /mcp endpoint with the streamable server (with security wrapper)
 	mux.Handle(endpointPath, streamableServer)
