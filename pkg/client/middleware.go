@@ -156,7 +156,9 @@ func TerraformContextMiddleware(logger *log.Logger) func(http.Handler) http.Hand
 					headerValue = r.URL.Query().Get(header)
 
 					if header == TerraformToken && headerValue != "" {
-						logger.Info(fmt.Sprintf("Terraform token was provided in query parameters by client %v, terminating request", r.RemoteAddr))
+						if logger != nil {
+							logger.Info(fmt.Sprintf("Terraform token was provided in query parameters by client %v, terminating request", r.RemoteAddr))
+						}
 						http.Error(w, "Terraform token should not be provided in query parameters for security reasons, use the Authorization header", http.StatusBadRequest)
 						return
 					}
@@ -170,10 +172,12 @@ func TerraformContextMiddleware(logger *log.Logger) func(http.Handler) http.Hand
 				ctx = context.WithValue(ctx, contextKey(header), headerValue)
 
 				// Log the source of the configuration (without exposing sensitive values)
-				if header == TerraformToken && headerValue != "" {
-					logger.Debug("Terraform token provided via request context")
-				} else if header == TerraformAddress && headerValue != "" {
-					logger.Debug("Terraform address configured via request context")
+				if logger != nil {
+					if header == TerraformToken && headerValue != "" {
+						logger.Debug("Terraform token provided via request context")
+					} else if header == TerraformAddress && headerValue != "" {
+						logger.Debug("Terraform address configured via request context")
+					}
 				}
 			}
 

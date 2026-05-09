@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"os/exec"
@@ -513,12 +514,17 @@ func cleanupAllTestContainers(t *testing.T) {
 	}
 }
 
-// getTestPort returns the test port from environment variable or default
+// getTestPort returns a free port for testing
 func getTestPort() string {
 	if port := os.Getenv("E2E_TEST_PORT"); port != "" {
 		return port
 	}
-	return "8080"
+	l, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		return "8080"
+	}
+	defer l.Close()
+	return fmt.Sprintf("%d", l.Addr().(*net.TCPAddr).Port)
 }
 
 func buildDockerImage(t *testing.T) {
