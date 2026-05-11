@@ -82,7 +82,9 @@ func attachMetricsHooks(hooks *server.Hooks, metricsConfig client.MetricsConfig,
 		if message != nil && message.Params.ClientInfo.Name != "" {
 			clientName := message.Params.ClientInfo.Name
 			clientVersion := message.Params.ClientInfo.Version
-			client.RecordClientType(ctx, clientName, clientVersion, metricsConfig, logger)
+			clientTitle := message.Params.ClientInfo.Title
+			clientDesc := message.Params.ClientInfo.Description
+			client.RecordClientType(ctx, clientName, clientVersion, clientTitle, clientDesc, metricsConfig, logger)
 		}
 	})
 

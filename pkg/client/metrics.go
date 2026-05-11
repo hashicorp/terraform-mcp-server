@@ -83,7 +83,7 @@ func LoadMetricsConfigFromEnv() MetricsConfig {
 func RecordToolCall(ctx context.Context, startTime time.Time, toolErr bool, id any, message *mcp.CallToolRequest, config MetricsConfig, logger *log.Logger) {
 	logger.Infof("Recording tool call for tool: %s id: %v", message.Params.Name, id)
 	if !config.Enabled || config.ToolCounter == nil {
-		logger.Errorf("DEBUG: Either metrics are not enabled or ToolCounter is NIL! Initialization failed.")
+		logger.Debugf("Either metrics are not enabled or ToolCounter is NIL! Initialization failed.")
 		return
 	}
 	// Calculate latency
@@ -106,15 +106,17 @@ func RecordToolCall(ctx context.Context, startTime time.Time, toolErr bool, id a
 }
 
 // RecordClientType records the type and version of the client making the tool call (e.g., CLI, VSCode, Web, etc.)
-func RecordClientType(ctx context.Context, clientName string, clientVersion string, config MetricsConfig, logger *log.Logger) {
-	logger.Infof("Recording client type for client: %s version: %s", clientName, clientVersion)
+func RecordClientType(ctx context.Context, clientName string, clientVersion string, clientTitle string, clientDesc string, config MetricsConfig, logger *log.Logger) {
+	logger.Infof("Recording client type for client: %s version: %s title: %s description: %s", clientName, clientVersion, clientTitle, clientDesc)
 	if !config.Enabled || config.ClientTypeCounter == nil {
-		logger.Errorf("DEBUG: Either metrics are not enabled or ClientTypeCounter is NIL! Initialization failed.")
+		logger.Debugf("Either metrics are not enabled or ClientTypeCounter is NIL! Initialization failed.")
 		return
 	}
 	attrs := metric.WithAttributes(
 		attribute.String("client.name", clientName),
 		attribute.String("client.version", clientVersion),
+		attribute.String("client.title", clientTitle),
+		attribute.String("client.description", clientDesc),
 		attribute.String("service.name", config.ServiceName),
 		attribute.String("service.version", config.ServiceVersion),
 	)

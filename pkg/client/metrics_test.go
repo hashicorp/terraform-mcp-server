@@ -203,7 +203,7 @@ func TestRecordClientTypeSuccess(t *testing.T) {
 	config, reader := newTestMetricsConfig(t)
 	ctx := context.Background()
 
-	RecordClientType(ctx, "Claude", "1.0.0", config, testLogger())
+	RecordClientType(ctx, "Claude", "1.0.0", "Claude Title", "Claude Description", config, testLogger())
 
 	var resourceMetrics metricdata.ResourceMetrics
 	require.NoError(t, reader.Collect(ctx, &resourceMetrics))
@@ -215,6 +215,8 @@ func TestRecordClientTypeSuccess(t *testing.T) {
 	attrs := clientTypes.DataPoints[0].Attributes.ToSlice()
 	assert.Contains(t, attrs, attribute.String("client.name", "Claude"))
 	assert.Contains(t, attrs, attribute.String("client.version", "1.0.0"))
+	assert.Contains(t, attrs, attribute.String("client.title", "Claude Title"))
+	assert.Contains(t, attrs, attribute.String("client.description", "Claude Description"))
 	assert.Contains(t, attrs, attribute.String("service.name", "terraform-mcp-server"))
 	assert.Contains(t, attrs, attribute.String("service.version", "test-version"))
 }
@@ -225,9 +227,9 @@ func TestRecordClientTypeMultipleCalls(t *testing.T) {
 	ctx := context.Background()
 
 	// Record same client multiple times
-	RecordClientType(ctx, "Claude", "1.0.0", config, testLogger())
-	RecordClientType(ctx, "Claude", "1.0.0", config, testLogger())
-	RecordClientType(ctx, "Bedrock", "2.0.0", config, testLogger())
+	RecordClientType(ctx, "Claude", "1.0.0", "Claude Title", "Claude Description", config, testLogger())
+	RecordClientType(ctx, "Claude", "1.0.0", "Claude Title 2", "Claude Description 2", config, testLogger())
+	RecordClientType(ctx, "Bedrock", "2.0.0", "Bedrock Title", "Bedrock Description", config, testLogger())
 
 	var resourceMetrics metricdata.ResourceMetrics
 	require.NoError(t, reader.Collect(ctx, &resourceMetrics))
@@ -260,6 +262,6 @@ func TestRecordClientTypeMetricsDisabled(t *testing.T) {
 	ctx := context.Background()
 
 	assert.NotPanics(t, func() {
-		RecordClientType(ctx, "Claude", "1.0.0", config, testLogger())
+		RecordClientType(ctx, "Claude", "1.0.0", "Claude Title", "Claude Description", config, testLogger())
 	})
 }
