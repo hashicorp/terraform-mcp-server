@@ -61,9 +61,9 @@ func TestCORSE2E(t *testing.T) {
 		origins string
 		port    string
 	}{
-		{"strict mode", "strict", "https://example.com,https://allowed.com", "8081"},
-		{"development mode", "development", "https://example.com", "8082"},
-		{"disabled mode", "disabled", "", "8083"},
+		{"strict mode", "strict", "https://example.com,https://allowed.com", getTestPort()},
+		{"development mode", "development", "https://example.com", getTestPort()},
+		{"disabled mode", "disabled", "", getTestPort()},
 	}
 
 	for _, config := range corsConfigs {
