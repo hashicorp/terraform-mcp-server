@@ -228,7 +228,7 @@ func TestRecordClientTypeMultipleCalls(t *testing.T) {
 
 	// Record same client multiple times
 	RecordClientType(ctx, "Claude", "1.0.0", "Claude Title", "Claude Description", config, testLogger())
-	RecordClientType(ctx, "Claude", "1.0.0", "Claude Title 2", "Claude Description 2", config, testLogger())
+	RecordClientType(ctx, "Claude", "1.0.0", "Claude Title", "Claude Description", config, testLogger())
 	RecordClientType(ctx, "Bedrock", "2.0.0", "Bedrock Title", "Bedrock Description", config, testLogger())
 
 	var resourceMetrics metricdata.ResourceMetrics
