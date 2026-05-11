@@ -137,12 +137,24 @@ func getTokenFromAuthHeader(r *http.Request) string {
 // This middleware extracts Terraform configuration from HTTP headers, query parameters,
 // or environment variables and adds them to the request context for use by MCP tools
 func TerraformContextMiddleware(logger *log.Logger) func(http.Handler) http.Handler {
+	// Check at startup if token is configured via env var
+	tokenFromEnv := utils.GetEnv(TerraformToken, "") != ""
+
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			requiredHeaders := []string{TerraformAddress, TerraformToken, TerraformSkipTLSVerify}
 			ctx := r.Context()
 			for _, header := range requiredHeaders {
 				var headerValue string
+
+				//If TFE_TOKEN is set via env var, reject TFE_ADDRESS from headers.
+				// This will help prevent potential attackers from redirecting requests to a bad server
+				// that could harvest the Authorization header containing the token.
+				if header == TerraformAddress && tokenFromEnv && r.Header.Get(header) != "" {
+					logger.Warn("Rejecting Terraform-Address header: cannot override address when token is set via environment variable")
+					http.Error(w, "Cannot specify Terraform address via header when token is configured server-side", http.StatusForbidden)
+					return
+				}
 
 				// Check standard header first
 				headerValue = r.Header.Get(header)

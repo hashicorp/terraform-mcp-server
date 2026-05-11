@@ -43,9 +43,24 @@ jobs:
         run: make crt-build
 
       - name: Install MCP Publisher CLI
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          curl -L "https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_$(uname -s | tr '[:upper:]' '[:lower:]')_$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/').tar.gz" | tar xz mcp-publisher
+          # Determine architecture
+          ARCH=$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/')
+          
+          # Download the latest release with checksums
+          gh release download --repo modelcontextprotocol/registry \
+            --pattern "*checksums.txt" \
+            --pattern "*linux_${ARCH}*"
+          
+          # Verify checksum before extracting
+          sha256sum --check *checksums.txt --ignore-missing
+          
+          # Extract and make executable
+          tar xzf mcp-publisher_linux_${ARCH}.tar.gz mcp-publisher
           chmod +x mcp-publisher
+          
 
       - name: Authenticate with MCP Registry
         run: ./mcp-publisher login github-oidc

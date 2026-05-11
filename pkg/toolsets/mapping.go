@@ -39,6 +39,7 @@ var ToolToToolset = map[string]string{
 	"get_plan_json_output":                Terraform,
 	"get_apply_details":                   Terraform,
 	"get_apply_logs":                      Terraform,
+	"get_sentinel_mock":                   Terraform,
 	"create_run":                          Terraform,
 	"action_run":                          Terraform,
 	"list_workspace_variables":            Terraform,
