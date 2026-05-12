@@ -27,6 +27,13 @@ type MetricsConfig struct {
 	ClientTypeCounter     metric.Int64Counter      // Client type count (e.g. cli, cpi, vscode, web etc.)
 }
 
+type ClientInfo struct {
+	Name        string
+	Version     string
+	Title       string
+	Description string
+}
+
 func DefaultMetricsConfig() MetricsConfig {
 	return MetricsConfig{
 		Enabled:              false,
@@ -106,17 +113,17 @@ func RecordToolCall(ctx context.Context, startTime time.Time, toolErr bool, id a
 }
 
 // RecordClientType records the type and version of the client making the tool call (e.g., CLI, VSCode, Web, etc.)
-func RecordClientType(ctx context.Context, clientName string, clientVersion string, clientTitle string, clientDesc string, config MetricsConfig, logger *log.Logger) {
-	logger.Infof("Recording client type for client: %s version: %s title: %s description: %s", clientName, clientVersion, clientTitle, clientDesc)
+func RecordClientType(ctx context.Context, ci ClientInfo, config MetricsConfig, logger *log.Logger) {
+	logger.Infof("Recording client type for client: %s version: %s title: %s description: %s", ci.Name, ci.Version, ci.Title, ci.Description)
 	if !config.Enabled || config.ClientTypeCounter == nil {
 		logger.Debugf("Either metrics are not enabled or ClientTypeCounter is NIL! Initialization failed.")
 		return
 	}
 	attrs := metric.WithAttributes(
-		attribute.String("client.name", clientName),
-		attribute.String("client.version", clientVersion),
-		attribute.String("client.title", clientTitle),
-		attribute.String("client.description", clientDesc),
+		attribute.String("client.name", ci.Name),
+		attribute.String("client.version", ci.Version),
+		attribute.String("client.title", ci.Title),
+		attribute.String("client.description", ci.Description),
 		attribute.String("service.name", config.ServiceName),
 		attribute.String("service.version", config.ServiceVersion),
 	)

@@ -202,8 +202,13 @@ func newTestMetricsConfig(t *testing.T) (MetricsConfig, *sdkmetric.ManualReader)
 func TestRecordClientTypeSuccess(t *testing.T) {
 	config, reader := newTestMetricsConfig(t)
 	ctx := context.Background()
-
-	RecordClientType(ctx, "Claude", "1.0.0", "Claude Title", "Claude Description", config, testLogger())
+	ci := ClientInfo{
+		Name:        "Claude",
+		Version:     "1.0.0",
+		Title:       "Claude Title",
+		Description: "Claude Description",
+	}
+	RecordClientType(ctx, ci, config, testLogger())
 
 	var resourceMetrics metricdata.ResourceMetrics
 	require.NoError(t, reader.Collect(ctx, &resourceMetrics))
@@ -227,9 +232,21 @@ func TestRecordClientTypeMultipleCalls(t *testing.T) {
 	ctx := context.Background()
 
 	// Record same client multiple times
-	RecordClientType(ctx, "Claude", "1.0.0", "Claude Title", "Claude Description", config, testLogger())
-	RecordClientType(ctx, "Claude", "1.0.0", "Claude Title", "Claude Description", config, testLogger())
-	RecordClientType(ctx, "Bedrock", "2.0.0", "Bedrock Title", "Bedrock Description", config, testLogger())
+	ciClaude := ClientInfo{
+		Name:        "Claude",
+		Version:     "1.0.0",
+		Title:       "Claude Title",
+		Description: "Claude Description",
+	}
+	ciBedrock := ClientInfo{
+		Name:        "Bedrock",
+		Version:     "2.0.0",
+		Title:       "Bedrock Title",
+		Description: "Bedrock Description",
+	}
+	RecordClientType(ctx, ciClaude, config, testLogger())
+	RecordClientType(ctx, ciClaude, config, testLogger())
+	RecordClientType(ctx, ciBedrock, config, testLogger())
 
 	var resourceMetrics metricdata.ResourceMetrics
 	require.NoError(t, reader.Collect(ctx, &resourceMetrics))
@@ -261,7 +278,14 @@ func TestRecordClientTypeMetricsDisabled(t *testing.T) {
 	config := MetricsConfig{Enabled: false}
 	ctx := context.Background()
 
+	ci := ClientInfo{
+		Name:        "Claude",
+		Version:     "1.0.0",
+		Title:       "Claude Title",
+		Description: "Claude Description",
+	}
+
 	assert.NotPanics(t, func() {
-		RecordClientType(ctx, "Claude", "1.0.0", "Claude Title", "Claude Description", config, testLogger())
+		RecordClientType(ctx, ci, config, testLogger())
 	})
 }
