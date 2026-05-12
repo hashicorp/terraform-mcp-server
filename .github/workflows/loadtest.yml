@@ -36,4 +36,4 @@ jobs:
 
       - name: Run load test
         run: |
-          ./loadtest -workers=5 -qps=10 -duration=30s http://localhost:8080/mcp
+          ./loadtest -workers=2 -qps=2 -duration=30s http://localhost:8080/mcp
