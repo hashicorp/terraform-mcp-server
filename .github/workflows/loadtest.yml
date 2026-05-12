@@ -1,0 +1,39 @@
+# Copyright (c) HashiCorp, Inc.
+# SPDX-License-Identifier: MPL-2.0
+name: Load Test
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  loadtest:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out code
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
+
+      - name: Set up Go
+        uses: actions/setup-go@7a3fe6cf4cb3a834922a1244abfce67bcef6a0c5
+        with:
+          go-version-file: "go.mod"
+
+      - name: Build server
+        run: go build -o terraform-mcp-server ./cmd/terraform-mcp-server
+
+      - name: Build loadtest
+        run: go build -o loadtest ./cmd/loadtest
+
+      - name: Start server
+        run: |
+          ./terraform-mcp-server http -p 8080 &
+          sleep 3
+          curl -sf http://localhost:8080/health || exit 1
+
+      - name: Run load test
+        run: |
+          ./loadtest -workers=5 -qps=10 -duration=30s http://localhost:8080/mcp
