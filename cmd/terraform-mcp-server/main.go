@@ -46,6 +46,8 @@ func runHTTPServer(logger *log.Logger, host string, port string, endpointPath st
 		client.NewSessionHandler(ctx, session, logger)
 	})
 	hooks.AddOnUnregisterSession(func(ctx context.Context, session server.ClientSession) {
+		// Clean up client info populated in the metrics hooks, for the session
+		sessionClientInfo.Delete(session.SessionID())
 		client.EndSessionHandler(ctx, session, logger)
 	})
 	// When running multiple sessions of the MCP server (load balancing), calling client.NewSessionHandler
