@@ -2,11 +2,14 @@ name: Version Consistency Check
 
 on:
   push:
-    branches: 
+    branches:
       - 'release/*'
   pull_request:
-    branches: 
+    branches:
       - 'release/*'
+
+permissions:
+  contents: read
 
 jobs:
   version-check:
