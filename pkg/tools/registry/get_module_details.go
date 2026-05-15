@@ -59,7 +59,7 @@ func getModuleDetailsHandler(ctx context.Context, request mcp.CallToolRequest, l
 		return ToolError(logger, "failed to get http client for public Terraform registry", err)
 	}
 
-	response, err := getModuleDetails(httpClient, moduleID, 0, logger)
+	response, err := getModuleDetails(ctx, httpClient, moduleID, 0, logger)
 	if err != nil {
 		return ToolErrorf(logger, "module not found: %s - use search_modules first to find valid module IDs", moduleID)
 	}
@@ -75,14 +75,14 @@ func getModuleDetailsHandler(ctx context.Context, request mcp.CallToolRequest, l
 	return mcp.NewToolResultText(moduleData), nil
 }
 
-func getModuleDetails(httpClient *http.Client, moduleID string, currentOffset int, logger *log.Logger) ([]byte, error) {
+func getModuleDetails(ctx context.Context, httpClient *http.Client, moduleID string, currentOffset int, logger *log.Logger) ([]byte, error) {
 	uri := "modules"
 	if moduleID != "" {
 		uri = fmt.Sprintf("modules/%s", moduleID)
 	}
 
 	uri = fmt.Sprintf("%s?offset=%v", uri, currentOffset)
-	response, err := client.SendRegistryCall(httpClient, "GET", uri, logger)
+	response, err := client.SendRegistryCall(ctx, httpClient, "GET", uri, logger)
 	if err != nil {
 		return nil, fmt.Errorf("getting module(s) for: %v, please provide a different provider name like aws, azurerm or google etc", moduleID)
 	}

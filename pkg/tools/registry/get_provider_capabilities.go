@@ -74,7 +74,7 @@ func getProviderCapabilitiesHandler(ctx context.Context, request mcp.CallToolReq
 			return ToolError(logger, "failed to get http client for public Terraform registry", err)
 		}
 
-		latestVersion, err := client.GetLatestProviderVersion(httpClient, namespace, name, logger)
+		latestVersion, err := client.GetLatestProviderVersion(ctx, httpClient, namespace, name, logger)
 		if err != nil {
 			return ToolErrorf(logger, "provider not found: %s/%s - verify the namespace and provider name are correct", namespace, name)
 		}
@@ -87,7 +87,7 @@ func getProviderCapabilitiesHandler(ctx context.Context, request mcp.CallToolReq
 	}
 
 	uri := fmt.Sprintf("providers/%s/%s/%s", namespace, name, version)
-	response, err := client.SendRegistryCall(httpClient, "GET", uri, logger)
+	response, err := client.SendRegistryCall(ctx, httpClient, "GET", uri, logger)
 	if err != nil {
 		return ToolErrorf(logger, "failed to fetch provider docs for %s/%s:%s - verify the provider exists", namespace, name, version)
 	}
