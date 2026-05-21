@@ -571,6 +571,60 @@ To enable stateless mode, set the environment variable:
 ```bash
 export MCP_SESSION_MODE=stateless
 ```
+
+## Token Passthrough for Centralized Deployments
+
+When running the MCP server centrally (StreamableHTTP mode) for multiple users, each user can pass their own Terraform token via HTTP headers for RBAC enforcement. This allows a single server instance to serve multiple users with different permissions.
+
+### Supported Headers
+
+| Header | Description |
+|--------|-------------|
+| `TFE_TOKEN` | Terraform API token |
+| `Authorization: Bearer <token>` | Alternative method using standard Bearer auth |
+| `TFE_ADDRESS` | Override the Terraform address (blocked when server token is set via env) |
+| `TFE_SKIP_TLS_VERIFY` | Skip TLS verification for the request |
+
+### Example: curl
+
+```bash
+# Using TFE_TOKEN header
+curl -X POST http://localhost:8080/mcp \
+  -H "Content-Type: application/json" \
+  -H "TFE_TOKEN: your-user-token" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"initialize",...}'
+
+# Using Authorization Bearer header
+curl -X POST http://localhost:8080/mcp \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer your-user-token" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"initialize",...}'
+```
+
+### Security Considerations
+
+- **TFE_ADDRESS override is blocked** when the server has `TFE_TOKEN` set via environment variable. This prevents attackers from redirecting requests to a malicious server that could harvest tokens.
+- **Never pass tokens in query parameters** - the server will reject such requests with a 400 error.
+- Always use TLS (`MCP_TLS_CERT_FILE`/`MCP_TLS_KEY_FILE`) when deploying centrally to protect tokens in transit.
+- Configure `MCP_ALLOWED_ORIGINS` to restrict which clients can connect.
+
+### Centralized Deployment Example
+
+```bash
+# Start server centrally (no token set server-side)
+docker run -p 8080:8080 \
+  -e TRANSPORT_MODE=streamable-http \
+  -e TRANSPORT_HOST=0.0.0.0 \
+  -e TFE_ADDRESS=https://tfe.company.com \
+  -e MCP_TLS_CERT_FILE=/certs/server.pem \
+  -e MCP_TLS_KEY_FILE=/certs/server-key.pem \
+  -e MCP_ALLOWED_ORIGINS=https://ide.company.com \
+  -v /path/to/certs:/certs \
+  hashicorp/terraform-mcp-server:0.5.2
+```
+
+Users then connect with their individual tokens passed via headers, enabling per-user RBAC enforcement.
+
 ## Troubleshooting
 
 ### Corporate Proxy / TLS Inspection (Zscaler, etc.)
