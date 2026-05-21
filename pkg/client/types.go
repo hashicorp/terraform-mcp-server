@@ -447,6 +447,22 @@ type WorkspaceToolResponse struct {
 	Readme    string          `jsonapi:"attr,readme,omitempty"`
 }
 
+type WorkspaceUpdateToolResponse struct {
+	ID                  string     `json:"id"`
+	Name                string     `json:"name"`
+	Description         string     `json:"description,omitempty"`
+	AutoApply           bool       `json:"auto_apply"`
+	ExecutionMode       string     `json:"execution_mode"`
+	TerraformVersion    string     `json:"terraform_version,omitempty"`
+	WorkingDirectory    string     `json:"working_directory,omitempty"`
+	QueueAllRuns        bool       `json:"queue_all_runs"`
+	SpeculativeEnabled  bool       `json:"speculative_enabled"`
+	FileTriggersEnabled bool       `json:"file_triggers_enabled"`
+	TriggerPrefixes     []string   `json:"trigger_prefixes,omitempty"`
+	Tags                []*tfe.Tag `json:"tags,omitempty"`
+	UpdatedAt           string     `json:"updated_at,omitempty"`
+}
+
 type ModuleMetadata struct {
 	Data struct {
 		Type       string `json:"type"`

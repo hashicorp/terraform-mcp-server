@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hashicorp/go-tfe"
+	"github.com/hashicorp/terraform-mcp-server/pkg/client"
 	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 )
@@ -126,25 +126,7 @@ func TestUpdateWorkspace(t *testing.T) {
 	})
 
 	t.Run("workspace update result structure", func(t *testing.T) {
-		// Test the WorkspaceUpdateResult structure
-		type WorkspaceUpdateResult struct {
-			ID                  string     `json:"id"`
-			Name                string     `json:"name"`
-			Description         string     `json:"description,omitempty"`
-			AutoApply           bool       `json:"auto_apply"`
-			ExecutionMode       string     `json:"execution_mode"`
-			TerraformVersion    string     `json:"terraform_version,omitempty"`
-			WorkingDirectory    string     `json:"working_directory,omitempty"`
-			QueueAllRuns        bool       `json:"queue_all_runs"`
-			SpeculativeEnabled  bool       `json:"speculative_enabled"`
-			FileTriggersEnabled bool       `json:"file_triggers_enabled"`
-			TriggerPrefixes     []string   `json:"trigger_prefixes,omitempty"`
-			Tags                []*tfe.Tag `json:"tags,omitempty"`
-			UpdatedAt           string     `json:"updated_at,omitempty"`
-			Message             string     `json:"message"`
-		}
-
-		result := WorkspaceUpdateResult{
+		result := client.WorkspaceUpdateToolResponse{
 			ID:                  "ws-123456",
 			Name:                "updated-workspace",
 			Description:         "Updated workspace description",
@@ -157,7 +139,6 @@ func TestUpdateWorkspace(t *testing.T) {
 			FileTriggersEnabled: false,
 			TriggerPrefixes:     []string{"modules/", "environments/"},
 			UpdatedAt:           time.Now().Format("2006-01-02T15:04:05Z"),
-			Message:             "Workspace updated successfully",
 		}
 
 		// Test JSON marshaling
@@ -170,7 +151,7 @@ func TestUpdateWorkspace(t *testing.T) {
 		assert.Contains(t, string(jsonData), "Workspace updated successfully")
 
 		// Test JSON unmarshaling
-		var unmarshaled WorkspaceUpdateResult
+		var unmarshaled client.WorkspaceUpdateToolResponse
 		err = json.Unmarshal(jsonData, &unmarshaled)
 		assert.NoError(t, err)
 		assert.Equal(t, result.ID, unmarshaled.ID)
@@ -178,7 +159,6 @@ func TestUpdateWorkspace(t *testing.T) {
 		assert.Equal(t, result.AutoApply, unmarshaled.AutoApply)
 		assert.Equal(t, result.ExecutionMode, unmarshaled.ExecutionMode)
 		assert.Equal(t, result.TriggerPrefixes, unmarshaled.TriggerPrefixes)
-		assert.Equal(t, result.Message, unmarshaled.Message)
 	})
 
 	t.Run("boolean parameter parsing", func(t *testing.T) {

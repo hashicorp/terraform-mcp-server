@@ -168,7 +168,23 @@ func updateWorkspaceHandler(ctx context.Context, request mcp.CallToolRequest, lo
 		return ToolErrorf(logger, "failed to update workspace '%s' in org '%s': %v", workspaceName, terraformOrgName, err)
 	}
 
-	resultJSON, err := json.Marshal(workspace)
+	updatedWorkSpace := client.WorkspaceUpdateToolResponse{
+		ID:                  workspace.ID,
+		Name:                workspace.Name,
+		Description:         workspace.Description,
+		ExecutionMode:       workspace.ExecutionMode,
+		Tags:                workspace.Tags,
+		WorkingDirectory:    workspace.WorkingDirectory,
+		UpdatedAt:           workspace.UpdatedAt.Format("2006-01-02T15:04:05Z07:00"),
+		TerraformVersion:    workspace.TerraformVersion,
+		AutoApply:           workspace.AutoApply,
+		QueueAllRuns:        workspace.QueueAllRuns,
+		SpeculativeEnabled:  workspace.SpeculativeEnabled,
+		FileTriggersEnabled: workspace.FileTriggersEnabled,
+		TriggerPrefixes:     workspace.TriggerPrefixes,
+	}
+
+	resultJSON, err := json.Marshal(updatedWorkSpace)
 	if err != nil {
 		return ToolError(logger, "failed to marshal workspace update result", err)
 	}
