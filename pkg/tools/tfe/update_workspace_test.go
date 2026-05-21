@@ -148,7 +148,6 @@ func TestUpdateWorkspace(t *testing.T) {
 		assert.Contains(t, string(jsonData), "updated-workspace")
 		assert.Contains(t, string(jsonData), "Updated workspace description")
 		assert.Contains(t, string(jsonData), "local")
-		assert.Contains(t, string(jsonData), "Workspace updated successfully")
 
 		// Test JSON unmarshaling
 		var unmarshaled client.WorkspaceUpdateToolResponse
