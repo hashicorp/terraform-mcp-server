@@ -2,6 +2,7 @@
 
 FEATURES
 
+* [New Tool] `force_unlock_workspace` Force-unlocks a Terraform workspace by ID via the go-tfe `Workspaces.ForceUnlock` API; destructive, gated behind `ENABLE_TF_OPERATIONS` [371](https://github.com/hashicorp/terraform-mcp-server/pull/371)
 * [New Tool] `get_sentinel_mock` Export and download Sentinel mock bundle data for a Terraform plan
 
 IMPROVEMENTS
