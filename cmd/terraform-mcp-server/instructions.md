@@ -34,8 +34,9 @@ The Terraform MCP server provides tools for generating better Terraform code thr
 
 ### Workspace Management
 - **Discovery**: `search_workspaces` (empty query returns all) → `get_workspace_details`
-- **Operations**: `create_workspace`, `update_workspace`, `delete_workspace_safely`
+- **Operations**: `create_workspace`, `update_workspace`, `delete_workspace_safely`, `force_unlock_workspace`
 - `delete_workspace_safely` only works if workspace has no managed resources
+- `force_unlock_workspace` recovers a workspace whose lock is stuck; destructive — use only after the responsible run has been completed or cancelled
 
 ### Run Execution
 - **Discovery**: `search_run` (empty query returns all) → `get_run_details` (supports json output)

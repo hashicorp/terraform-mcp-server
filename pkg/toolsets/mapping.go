@@ -32,6 +32,7 @@ var ToolToToolset = map[string]string{
 	"create_no_code_workspace":            Terraform,
 	"update_workspace":                    Terraform,
 	"delete_workspace_safely":             Terraform,
+	"force_unlock_workspace":              Terraform,
 	"list_runs":                           Terraform,
 	"get_run_details":                     Terraform,
 	"get_plan_details":                    Terraform,
