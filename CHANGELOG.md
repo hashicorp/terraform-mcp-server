@@ -10,6 +10,10 @@ IMPROVEMENTS
 * Run as a non-root user for Kubernetes compatibility. [356] https://github.com/hashicorp/terraform-mcp-server/pull/356
 * Bump go version to 1.26.3 [366] https://github.com/hashicorp/terraform-mcp-server/pull/366
 
+FIXES
+
+* `--tools` and `--toolsets` CLI flags were silently ignored when streamable-HTTP mode was selected via the `TRANSPORT_MODE` env var, because the env-var fast path in `main()` bypassed cobra's `Execute()` and therefore skipped persistent-flag parsing. The HTTP-mode detection now runs inside `runDefaultCommand` so the flags are always parsed before they are read. [376](https://github.com/hashicorp/terraform-mcp-server/issues/376)
+
 # 0.5.2
 
 IMPROVEMENTS
