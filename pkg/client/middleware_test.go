@@ -847,3 +847,49 @@ func TestTerraformContextMiddleware_AllowAddressEnvWhenTokenFromEnv(t *testing.T
 	// The address from the env should be in the context
 	assert.Equal(t, "https://env.terraform.io", capturedAddress)
 }
+
+func TestGetClientIP(t *testing.T) {
+	tests := []struct {
+		name       string
+		headers    map[string]string
+		remoteAddr string
+		expected   string
+	}{
+		{
+			name:       "X-Forwarded-For single IP",
+			headers:    map[string]string{"X-Forwarded-For": "192.168.1.100"},
+			remoteAddr: "10.0.0.1:12345",
+			expected:   "192.168.1.100",
+		},
+		{
+			name:       "X-Forwarded-For multiple IPs takes first",
+			headers:    map[string]string{"X-Forwarded-For": "192.168.1.100, 10.0.0.50"},
+			remoteAddr: "10.0.0.1:12345",
+			expected:   "192.168.1.100",
+		},
+		{
+			name:       "X-Real-IP fallback",
+			headers:    map[string]string{"X-Real-IP": "192.168.1.200"},
+			remoteAddr: "10.0.0.1:12345",
+			expected:   "192.168.1.200",
+		},
+		{
+			name:       "RemoteAddr fallback strips port",
+			headers:    map[string]string{},
+			remoteAddr: "10.0.0.1:12345",
+			expected:   "10.0.0.1",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			req := httptest.NewRequest("GET", "/test", nil)
+			req.RemoteAddr = tc.remoteAddr
+			for k, v := range tc.headers {
+				req.Header.Set(k, v)
+			}
+			result := getClientIP(req)
+			assert.Equal(t, tc.expected, result)
+		})
+	}
+}

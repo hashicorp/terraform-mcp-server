@@ -53,7 +53,7 @@ func getLatestProviderVersionHandler(ctx context.Context, request mcp.CallToolRe
 		return ToolError(logger, "failed to get http client for public Terraform registry", err)
 	}
 
-	version, err := client.GetLatestProviderVersion(httpClient, namespace, name, logger)
+	version, err := client.GetLatestProviderVersion(ctx, httpClient, namespace, name, logger)
 	if err != nil {
 		return ToolErrorf(logger, "provider not found: %s/%s - verify the namespace and provider name are correct", namespace, name)
 	}

@@ -21,12 +21,14 @@ const (
 	TerraformToken          = "TFE_TOKEN"
 	TerraformSkipTLSVerify  = "TFE_SKIP_TLS_VERIFY"
 	DefaultTerraformAddress = "https://app.terraform.io"
+	ForwardClientIP         = "MCP_FORWARD_CLIENT_IP"
+	ClientIPKey             = "CLIENT_IP"
 )
 
 var activeTfeClients sync.Map
 
 // NewTfeClient creates a new TFE client for the given session
-func NewTfeClient(sessionId string, terraformAddress string, terraformSkipTLSVerify bool, terraformToken string, logger *log.Logger) (*tfe.Client, error) {
+func NewTfeClient(sessionId string, terraformAddress string, terraformSkipTLSVerify bool, terraformToken string, clientIP string, logger *log.Logger) (*tfe.Client, error) {
 	if terraformToken == "" {
 		logger.Warn("No Terraform token provided, TFE client will not be available")
 		return nil, utils.LogAndReturnError(logger, "required input: no Terraform token provided", nil)
@@ -40,6 +42,9 @@ func NewTfeClient(sessionId string, terraformAddress string, terraformSkipTLSVer
 	}
 
 	config.Headers.Set("User-Agent", fmt.Sprintf("terraform-mcp-server/%s", version.GetHumanVersion()))
+	if clientIP != "" {
+		config.Headers.Set("X-Forwarded-For", clientIP)
+	}
 	config.HTTPClient = createHTTPClient(terraformSkipTLSVerify, logger)
 
 	client, err := tfe.NewClient(config)
@@ -103,6 +108,9 @@ func CreateTfeClientForSession(ctx context.Context, session server.ClientSession
 		logger.Info("Read TFE_TOKEN from credentials.tfrc.json")
 	}
 
-	client, err := NewTfeClient(session.SessionID(), terraformAddress, parseTerraformSkipTLSVerify(ctx), terraformToken, logger)
+
+	// Get client IP from context for X-Forwarded-For header
+	clientIP, _ := ctx.Value(contextKey(ClientIPKey)).(string)
+	client, err := NewTfeClient(session.SessionID(), terraformAddress, parseTerraformSkipTLSVerify(ctx), terraformToken, clientIP, logger)
 	return client, err
 }

@@ -52,7 +52,7 @@ func getProviderDocsHandler(ctx context.Context, request mcp.CallToolRequest, lo
 		return ToolError(logger, "failed to get http client for public Terraform registry", err)
 	}
 
-	detailResp, err := client.SendRegistryCall(httpClient, "GET", path.Join("provider-docs", providerDocID), logger, "v2")
+	detailResp, err := client.SendRegistryCall(ctx, httpClient, "GET", path.Join("provider-docs", providerDocID), logger, "v2")
 	if err != nil {
 		return ToolErrorf(logger, "provider doc not found: %s - use search_providers first to find valid provider_doc_id values", providerDocID)
 	}

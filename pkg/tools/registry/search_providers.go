@@ -75,7 +75,7 @@ func resolveProviderDocIDHandler(ctx context.Context, request mcp.CallToolReques
 		return ToolError(logger, "failed to get http client for public Terraform registry", err)
 	}
 
-	providerDetail, err := resolveProviderDetails(request, httpClient, logger)
+	providerDetail, err := resolveProviderDetails(ctx, request, httpClient, logger)
 	if err != nil {
 		return ToolErrorf(logger, "failed to resolve provider: %v - %s", err, defaultErrorGuide)
 	}
@@ -94,7 +94,7 @@ func resolveProviderDocIDHandler(ctx context.Context, request mcp.CallToolReques
 
 	// Check if we need to use v2 API for guides, functions, or overview
 	if utils.IsV2ProviderDocumentType(providerDetail.ProviderDocumentType) {
-		content, err := providerDetailsV2(httpClient, providerDetail, logger)
+		content, err := providerDetailsV2(ctx, httpClient, providerDetail, logger)
 		if err != nil {
 			return ToolErrorf(logger, "failed to find %s documentation for provider '%s' in the '%s' namespace - %s",
 				providerDetail.ProviderDocumentType, providerDetail.ProviderName, providerDetail.ProviderNamespace, defaultErrorGuide)
@@ -108,7 +108,7 @@ func resolveProviderDocIDHandler(ctx context.Context, request mcp.CallToolReques
 
 	// For resources/data-sources, use the v1 API for better performance (single response)
 	uri := path.Join("providers", providerDetail.ProviderNamespace, providerDetail.ProviderName, providerDetail.ProviderVersion)
-	response, err := client.SendRegistryCall(httpClient, "GET", uri, logger)
+	response, err := client.SendRegistryCall(ctx, httpClient, "GET", uri, logger)
 	if err != nil {
 		return ToolErrorf(logger, "failed to get provider '%s' version '%s' in namespace '%s' - %s",
 			providerDetail.ProviderName, providerDetail.ProviderVersion, providerDetail.ProviderNamespace, defaultErrorGuide)
@@ -131,7 +131,7 @@ func resolveProviderDocIDHandler(ctx context.Context, request mcp.CallToolReques
 			cs_pn, err_pn := utils.ContainsSlug(fmt.Sprintf("%s_%s", providerDetail.ProviderName, doc.Slug), serviceSlug)
 			if (cs || cs_pn) && err == nil && err_pn == nil {
 				contentAvailable = true
-				descriptionSnippet, err := getContentSnippet(httpClient, doc.ID, logger)
+				descriptionSnippet, err := getContentSnippet(ctx, httpClient, doc.ID, logger)
 				if err != nil {
 					logger.Warnf("Error fetching content snippet for provider doc ID: %s: %v", doc.ID, err)
 				}
@@ -147,7 +147,7 @@ func resolveProviderDocIDHandler(ctx context.Context, request mcp.CallToolReques
 	return mcp.NewToolResultText(builder.String()), nil
 }
 
-func resolveProviderDetails(request mcp.CallToolRequest, httpClient *http.Client, logger *log.Logger) (client.ProviderDetail, error) {
+func resolveProviderDetails(ctx context.Context, request mcp.CallToolRequest, httpClient *http.Client, logger *log.Logger) (client.ProviderDetail, error) {
 	providerDetail := client.ProviderDetail{}
 	providerName := request.GetString("provider_name", "")
 	if providerName == "" {
@@ -173,7 +173,7 @@ func resolveProviderDetails(request mcp.CallToolRequest, httpClient *http.Client
 	if utils.IsValidProviderVersionFormat(providerVersion) {
 		providerVersionValue = providerVersion
 	} else {
-		providerVersionValue, err = client.GetLatestProviderVersion(httpClient, providerNamespace, providerName, logger)
+		providerVersionValue, err = client.GetLatestProviderVersion(ctx, httpClient, providerNamespace, providerName, logger)
 		if err != nil {
 			providerVersionValue = ""
 			logger.Debugf("Error getting latest provider version in %s namespace: %v", providerNamespace, err)
@@ -183,7 +183,7 @@ func resolveProviderDetails(request mcp.CallToolRequest, httpClient *http.Client
 	// If the provider version doesn't exist, try the hashicorp namespace
 	if providerVersionValue == "" {
 		tryProviderNamespace := "hashicorp"
-		providerVersionValue, err = client.GetLatestProviderVersion(httpClient, tryProviderNamespace, providerName, logger)
+		providerVersionValue, err = client.GetLatestProviderVersion(ctx, httpClient, tryProviderNamespace, providerName, logger)
 		if err != nil {
 			namespaceTried := providerNamespace
 			if providerNamespace != tryProviderNamespace {
@@ -207,21 +207,21 @@ func resolveProviderDetails(request mcp.CallToolRequest, httpClient *http.Client
 }
 
 // providerDetailsV2 retrieves a list of documentation items for a specific provider category using v2 API
-func providerDetailsV2(httpClient *http.Client, providerDetail client.ProviderDetail, logger *log.Logger) (string, error) {
-	providerVersionID, err := client.GetProviderVersionID(httpClient, providerDetail.ProviderNamespace, providerDetail.ProviderName, providerDetail.ProviderVersion, logger)
+func providerDetailsV2(ctx context.Context, httpClient *http.Client, providerDetail client.ProviderDetail, logger *log.Logger) (string, error) {
+	providerVersionID, err := client.GetProviderVersionID(ctx, httpClient, providerDetail.ProviderNamespace, providerDetail.ProviderName, providerDetail.ProviderVersion, logger)
 	if err != nil {
 		return "", fmt.Errorf("getting provider version ID: %w", err)
 	}
 
 	category := providerDetail.ProviderDocumentType
 	if category == "overview" {
-		return client.GetProviderOverviewDocs(httpClient, providerVersionID, logger)
+		return client.GetProviderOverviewDocs(ctx, httpClient, providerVersionID, logger)
 	}
 
 	uriPrefix := fmt.Sprintf("provider-docs?filter[provider-version]=%s&filter[category]=%s&filter[language]=hcl",
 		providerVersionID, category)
 
-	docs, err := client.SendPaginatedRegistryCall(httpClient, uriPrefix, logger)
+	docs, err := client.SendPaginatedRegistryCall(ctx, httpClient, uriPrefix, logger)
 	if err != nil {
 		return "", fmt.Errorf("getting provider documentation: %w", err)
 	}
@@ -235,7 +235,7 @@ func providerDetailsV2(httpClient *http.Client, providerDetail client.ProviderDe
 	builder.WriteString("Each result includes:\n- providerDocID: tfprovider-compatible identifier\n- Title: Service or resource name\n- Category: Type of document\n- Description: Brief summary of the document\n")
 	builder.WriteString("For best results, select libraries based on the service_slug match and category of information requested.\n\n---\n\n")
 	for _, doc := range docs {
-		descriptionSnippet, err := getContentSnippet(httpClient, doc.ID, logger)
+		descriptionSnippet, err := getContentSnippet(ctx, httpClient, doc.ID, logger)
 		if err != nil {
 			logger.Warnf("Error fetching content snippet for provider doc ID: %s: %v", doc.ID, err)
 		}
@@ -245,8 +245,8 @@ func providerDetailsV2(httpClient *http.Client, providerDetail client.ProviderDe
 	return builder.String(), nil
 }
 
-func getContentSnippet(httpClient *http.Client, docID string, logger *log.Logger) (string, error) {
-	docContent, err := client.SendRegistryCall(httpClient, "GET", fmt.Sprintf("provider-docs/%s", docID), logger, "v2")
+func getContentSnippet(ctx context.Context, httpClient *http.Client, docID string, logger *log.Logger) (string, error) {
+	docContent, err := client.SendRegistryCall(ctx, httpClient, "GET", fmt.Sprintf("provider-docs/%s", docID), logger, "v2")
 	if err != nil {
 		return "", fmt.Errorf("fetching provider-docs/%s: %w", docID, err)
 	}

@@ -4,6 +4,7 @@
 package client
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -102,7 +103,7 @@ func TestSendRegistryCall(t *testing.T) {
 			}))
 			defer server.Close()
 
-			_, err := SendRegistryCall(server.Client(), tc.httpMethod, tc.uri, logger, tc.apiVersion, server.URL)
+			_, err := SendRegistryCall(context.Background(), server.Client(), tc.httpMethod, tc.uri, logger, tc.apiVersion, server.URL)
 
 			if tc.expectErrContent == "" {
 				require.NoError(t, err, "TestSendRegistryCall (%s)", tc.name)

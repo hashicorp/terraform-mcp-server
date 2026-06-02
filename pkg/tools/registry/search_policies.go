@@ -69,7 +69,7 @@ func getSearchPoliciesHandler(ctx context.Context, request mcp.CallToolRequest, 
 		}.Encode(),
 	}).String()
 
-	policyResp, err := client.SendRegistryCall(httpClient, "GET", uri, logger, "v2")
+	policyResp, err := client.SendRegistryCall(ctx, httpClient, "GET", uri, logger, "v2")
 	if err != nil {
 		return ToolError(logger, "failed to fetch policies from registry", err)
 	}

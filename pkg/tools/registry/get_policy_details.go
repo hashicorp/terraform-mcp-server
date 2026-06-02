@@ -52,7 +52,7 @@ func getPolicyDetailsHandler(ctx context.Context, request mcp.CallToolRequest, l
 		return ToolError(logger, "failed to get http client for public Terraform registry", err)
 	}
 
-	policyResp, err := client.SendRegistryCall(httpClient, "GET", (&url.URL{Path: terraformPolicyID, RawQuery: url.Values{"include": {"policies,policy-modules,policy-library"}}.Encode()}).String(), logger, "v2")
+	policyResp, err := client.SendRegistryCall(ctx, httpClient, "GET", (&url.URL{Path: terraformPolicyID, RawQuery: url.Values{"include": {"policies,policy-modules,policy-library"}}.Encode()}).String(), logger, "v2")
 	if err != nil {
 		return ToolErrorf(logger, "policy not found: %s - verify the terraform_policy_id is correct or use search_policies to find valid IDs", terraformPolicyID)
 	}
