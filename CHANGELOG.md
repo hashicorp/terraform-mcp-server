@@ -10,6 +10,10 @@ IMPROVEMENTS
 * Run as a non-root user for Kubernetes compatibility. [356] https://github.com/hashicorp/terraform-mcp-server/pull/356
 * Bump go version to 1.26.3 [366] https://github.com/hashicorp/terraform-mcp-server/pull/366
 
+FIXES
+
+* Fix `--tools` alone being falsely flagged as conflicting with `--toolsets` [380](https://github.com/hashicorp/terraform-mcp-server/pull/380)
+
 # 0.5.2
 
 IMPROVEMENTS
