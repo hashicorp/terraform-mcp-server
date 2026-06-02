@@ -64,7 +64,7 @@ func getSearchModulesHandler(ctx context.Context, request mcp.CallToolRequest, l
 		return ToolError(logger, "failed to get http client for public Terraform registry", err)
 	}
 
-	response, err := sendSearchModulesCall(httpClient, moduleQuery, currentOffsetValue, logger)
+	response, err := sendSearchModulesCall(ctx, httpClient, moduleQuery, currentOffsetValue, logger)
 	if err != nil {
 		return ToolErrorf(logger, "no modules found for query: %s - try a different search term", moduleQuery)
 	}
@@ -81,7 +81,7 @@ func getSearchModulesHandler(ctx context.Context, request mcp.CallToolRequest, l
 	return mcp.NewToolResultText(modulesData), nil
 }
 
-func sendSearchModulesCall(providerClient *http.Client, moduleQuery string, currentOffset int, logger *log.Logger) ([]byte, error) {
+func sendSearchModulesCall(ctx context.Context, providerClient *http.Client, moduleQuery string, currentOffset int, logger *log.Logger) ([]byte, error) {
 	uri := "modules"
 	if moduleQuery != "" {
 		uri = fmt.Sprintf("%s/search?q='%s'&offset=%v", uri, url.PathEscape(moduleQuery), currentOffset)
@@ -89,7 +89,7 @@ func sendSearchModulesCall(providerClient *http.Client, moduleQuery string, curr
 		uri = fmt.Sprintf("%s?offset=%v", uri, currentOffset)
 	}
 
-	response, err := client.SendRegistryCall(providerClient, "GET", uri, logger)
+	response, err := client.SendRegistryCall(ctx, providerClient, "GET", uri, logger)
 	if err != nil {
 		return nil, fmt.Errorf("getting module(s) for: %v, call error: %v", moduleQuery, err)
 	}

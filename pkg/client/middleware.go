@@ -189,8 +189,34 @@ func TerraformContextMiddleware(logger *log.Logger) func(http.Handler) http.Hand
 				}
 			}
 
+			// Capture client IP for X-Forwarded-For header forwarding
+			if utils.GetEnv(ForwardClientIP, "") == "true" {
+				clientIP := getClientIP(r)
+				ctx = context.WithValue(ctx, contextKey(ClientIPKey), clientIP)
+				logger.Debugf("Client IP captured for forwarding: %s", clientIP)
+			}
 			// Call the next handler with the enriched context
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}
+}
+
+// getClientIP extracts the client IP from the request
+func getClientIP(r *http.Request) string {
+	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
+		if idx := strings.Index(xff, ","); idx != -1 {
+			return strings.TrimSpace(xff[:idx])
+		}
+		return strings.TrimSpace(xff)
+	}
+
+	if xri := r.Header.Get("X-Real-IP"); xri != "" {
+		return strings.TrimSpace(xri)
+	}
+
+	addr := r.RemoteAddr
+	if idx := strings.LastIndex(addr, ":"); idx != -1 {
+		return addr[:idx]
+	}
+	return addr
 }

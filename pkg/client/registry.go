@@ -62,7 +62,7 @@ func createHTTPClient(insecureSkipVerify bool, logger *log.Logger) *http.Client 
 	return retryClient.StandardClient()
 }
 
-func SendRegistryCall(client *http.Client, method string, uri string, logger *log.Logger, callOptions ...string) ([]byte, error) {
+func SendRegistryCall(ctx context.Context, client *http.Client, method string, uri string, logger *log.Logger, callOptions ...string) ([]byte, error) {
 	ver := "v1"
 	if len(callOptions) > 0 {
 		ver = callOptions[0] // API version will be the first optional arg to this function
@@ -79,6 +79,10 @@ func SendRegistryCall(client *http.Client, method string, uri string, logger *lo
 		return nil, err
 	}
 	req.Header.Set("User-Agent", fmt.Sprintf("terraform-mcp-server/%s", version.GetHumanVersion()))
+	// Set X-Forwarded-For if client IP is in context
+	if clientIP, ok := ctx.Value(contextKey(ClientIPKey)).(string); ok && clientIP != "" {
+		req.Header.Set("X-Forwarded-For", clientIP)
+	}
 
 	resp, err := client.Do(req)
 	if err != nil {
@@ -100,13 +104,13 @@ func SendRegistryCall(client *http.Client, method string, uri string, logger *lo
 	return body, nil
 }
 
-func SendPaginatedRegistryCall(client *http.Client, uriPrefix string, logger *log.Logger) ([]ProviderDocData, error) {
+func SendPaginatedRegistryCall(ctx context.Context, client *http.Client, uriPrefix string, logger *log.Logger) ([]ProviderDocData, error) {
 	var results []ProviderDocData
 	page := 1
 
 	for {
 		uri := fmt.Sprintf("%s&page[number]=%d", uriPrefix, page)
-		resp, err := SendRegistryCall(client, "GET", uri, logger, "v2")
+		resp, err := SendRegistryCall(ctx, client, "GET", uri, logger, "v2")
 		if err != nil {
 			return nil, utils.LogAndReturnError(logger, fmt.Sprintf("calling paginated registry API (page %d)", page), err)
 		}
