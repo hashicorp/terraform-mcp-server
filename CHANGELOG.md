@@ -9,6 +9,8 @@ IMPROVEMENTS
 * Add a new metric to capture client type and version [355](https://github.com/hashicorp/terraform-mcp-server/pull/355)
 * Run as a non-root user for Kubernetes compatibility. [356] https://github.com/hashicorp/terraform-mcp-server/pull/356
 * Bump go version to 1.26.3 [366] https://github.com/hashicorp/terraform-mcp-server/pull/366
+* Bump `golang.org/x/net` to v0.55.0 and `golang.org/x/sys` to v0.45.0 to address security scan findings [376](https://github.com/hashicorp/terraform-mcp-server/pull/376)
+
 
 # 0.5.2
 
