@@ -230,12 +230,15 @@ func getToolsetsFromCmd(cmd *cobra.Command, logger *log.Logger) []string {
 	}
 
 	if err == nil && toolsFlag != "" {
-		// Ensure --toolsets is not also set
-		toolsetsFlag, _ := cmd.Flags().GetString("toolsets")
-		if toolsetsFlag == "" {
-			toolsetsFlag, _ = cmd.Root().PersistentFlags().GetString("toolsets")
+		// Ensure --toolsets is not also explicitly set. The flag is declared with
+		// a non-empty default ("all"), so a value-based check would always fire
+		// when only --tools is passed; pflag's Changed field is the precise
+		// "was this flag set on the command line?" signal.
+		toolsetsFlagDef := cmd.Flags().Lookup("toolsets")
+		if toolsetsFlagDef == nil {
+			toolsetsFlagDef = cmd.Root().PersistentFlags().Lookup("toolsets")
 		}
-		if toolsetsFlag != "" && toolsetsFlag != "default" {
+		if toolsetsFlagDef != nil && toolsetsFlagDef.Changed {
 			logger.Fatal("Cannot use both --tools and --toolsets flags together")
 		}
 		return parseIndividualTools(toolsFlag, logger)
