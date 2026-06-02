@@ -14,9 +14,9 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-func GetLatestProviderVersion(httpClient *http.Client, providerNamespace string, providerName string, logger *log.Logger) (string, error) {
+func GetLatestProviderVersion(ctx context.Context, httpClient *http.Client, providerNamespace string, providerName string, logger *log.Logger) (string, error) {
 	uri := fmt.Sprintf("providers/%s/%s", providerNamespace, providerName)
-	jsonData, err := SendRegistryCall(httpClient, "GET", uri, logger, "v1")
+	jsonData, err := SendRegistryCall(ctx, httpClient, "GET", uri, logger, "v1")
 	if err != nil {
 		return "", utils.LogAndReturnError(logger, "making the latest provider version API request", err)
 	}
@@ -32,9 +32,9 @@ func GetLatestProviderVersion(httpClient *http.Client, providerNamespace string,
 
 // Every provider version has a unique ID, which is used to identify the provider version in the registry and its specific documentation
 // https://registry.terraform.io/v2/providers/hashicorp/aws?include=provider-versions
-func GetProviderVersionID(httpClient *http.Client, namespace string, name string, version string, logger *log.Logger) (string, error) {
+func GetProviderVersionID(ctx context.Context, httpClient *http.Client, namespace string, name string, version string, logger *log.Logger) (string, error) {
 	uri := fmt.Sprintf("providers/%s/%s?include=provider-versions", namespace, name)
-	response, err := SendRegistryCall(httpClient, "GET", uri, logger, "v2")
+	response, err := SendRegistryCall(ctx, httpClient, "GET", uri, logger, "v2")
 	if err != nil {
 		return "", utils.LogAndReturnError(logger, "making provider version ID request", err)
 	}
@@ -50,10 +50,10 @@ func GetProviderVersionID(httpClient *http.Client, namespace string, name string
 	return "", fmt.Errorf("provider version %s not found", version)
 }
 
-func GetProviderOverviewDocs(httpClient *http.Client, providerVersionID string, logger *log.Logger) (string, error) {
+func GetProviderOverviewDocs(ctx context.Context, httpClient *http.Client, providerVersionID string, logger *log.Logger) (string, error) {
 	// https://registry.terraform.io/v2/provider-docs?filter[provider-version]=21818&filter[category]=overview&filter[slug]=index
 	uri := fmt.Sprintf("provider-docs?filter[provider-version]=%s&filter[category]=overview&filter[slug]=index", providerVersionID)
-	response, err := SendRegistryCall(httpClient, "GET", uri, logger, "v2")
+	response, err := SendRegistryCall(ctx, httpClient, "GET", uri, logger, "v2")
 	if err != nil {
 		return "", utils.LogAndReturnError(logger, "getting provider docs overview", err)
 	}
@@ -64,7 +64,7 @@ func GetProviderOverviewDocs(httpClient *http.Client, providerVersionID string, 
 
 	resourceContent := ""
 	for _, providerOverviewPage := range providerOverview.Data {
-		resourceContentNew, err := GetProviderResourceDocs(httpClient, providerOverviewPage.ID, logger)
+		resourceContentNew, err := GetProviderResourceDocs(ctx, httpClient, providerOverviewPage.ID, logger)
 		resourceContent += resourceContentNew
 		if err != nil {
 			return "", utils.LogAndReturnError(logger, "getting provider resource docs looping", err)
@@ -74,10 +74,10 @@ func GetProviderOverviewDocs(httpClient *http.Client, providerVersionID string, 
 	return resourceContent, nil
 }
 
-func GetProviderResourceDocs(httpClient *http.Client, providerDocsID string, logger *log.Logger) (string, error) {
+func GetProviderResourceDocs(ctx context.Context, httpClient *http.Client, providerDocsID string, logger *log.Logger) (string, error) {
 	// https://registry.terraform.io/v2/provider-docs/8862001
 	uri := fmt.Sprintf("provider-docs/%s", providerDocsID)
-	response, err := SendRegistryCall(httpClient, "GET", uri, logger, "v2")
+	response, err := SendRegistryCall(ctx, httpClient, "GET", uri, logger, "v2")
 	if err != nil {
 		return "", utils.LogAndReturnError(logger, "getting provider resource docs ", err)
 	}

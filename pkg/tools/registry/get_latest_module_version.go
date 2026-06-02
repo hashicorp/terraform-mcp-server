@@ -67,7 +67,7 @@ func getLatestModuleVersionHandler(ctx context.Context, request mcp.CallToolRequ
 	}
 
 	uri := fmt.Sprintf("modules/%s/%s/%s", modulePublisher, moduleName, moduleProvider)
-	response, err := client.SendRegistryCall(httpClient, http.MethodGet, uri, logger)
+	response, err := client.SendRegistryCall(ctx, httpClient, http.MethodGet, uri, logger)
 	if err != nil {
 		return ToolErrorf(logger, "fetching module information for %s/%s from the %s provider: %v", modulePublisher, moduleName, moduleProvider, err)
 	}
