@@ -95,7 +95,7 @@ More about using MCP server tools in VS Code's [agent mode documentation](https:
           "--rm",
           "-e", "TFE_TOKEN=${input:tfe_token}",
           "-e", "TFE_ADDRESS=${input:tfe_address}",
-          "hashicorp/terraform-mcp-server:0.5.2"
+          "hashicorp/terraform-mcp-server:1.0"
         ]
       }
     },
@@ -159,7 +159,7 @@ Optionally, you can add a similar example (i.e. without the mcp key) to a file c
         "--rm",
         "-e", "TFE_TOKEN=${input:tfe_token}",
         "-e", "TFE_ADDRESS=${input:tfe_address}",
-        "hashicorp/terraform-mcp-server:0.5.2"
+        "hashicorp/terraform-mcp-server:1.0"
       ]
     }
   },
@@ -226,7 +226,7 @@ Add this to your Cursor config (`~/.cursor/mcp.json`) or via Settings → Cursor
         "--rm",
         "-e", "TFE_ADDRESS=<<PASTE_TFE_ADDRESS_HERE>>",
         "-e", "TFE_TOKEN=<<PASTE_TFE_TOKEN_HERE>>",
-        "hashicorp/terraform-mcp-server:0.5.2"
+        "hashicorp/terraform-mcp-server:1.0"
       ]
     }
   }
@@ -279,7 +279,7 @@ More about using MCP server tools in Claude Desktop [user documentation](https:/
         "--rm",
         "-e", "TFE_ADDRESS=<<PASTE_TFE_ADDRESS_HERE>>",
         "-e", "TFE_TOKEN=<<PASTE_TFE_TOKEN_HERE>>",
-        "hashicorp/terraform-mcp-server:0.5.2"
+        "hashicorp/terraform-mcp-server:1.0"
       ]
     }
   }
@@ -365,7 +365,7 @@ More about using and adding MCP servers tools in Bob IDE or Shell [Using MCP in 
         "--rm",
         "-e", "TFE_ADDRESS=<<PASTE_TFE_ADDRESS_HERE>>",
         "-e", "TFE_TOKEN=<<PASTE_TFE_TOKEN_HERE>>",
-        "hashicorp/terraform-mcp-server:0.5.2"
+        "hashicorp/terraform-mcp-server:1.0"
       ],
       "disabled": false
     }
@@ -620,7 +620,7 @@ docker run -p 8080:8080 \
   -e MCP_TLS_KEY_FILE=/certs/server-key.pem \
   -e MCP_ALLOWED_ORIGINS=https://ide.company.com \
   -v /path/to/certs:/certs \
-  hashicorp/terraform-mcp-server:0.5.2
+  hashicorp/terraform-mcp-server:1.0
 ```
 
 Users then connect with their individual tokens passed via headers, enabling per-user RBAC enforcement.
@@ -639,7 +639,7 @@ tls: failed to verify certificate: x509: certificate signed by unknown authority
 docker run -i --rm \
   -v /path/to/corporate-ca.pem:/etc/ssl/certs/corporate-ca.pem \
   -e SSL_CERT_FILE=/etc/ssl/certs/corporate-ca.pem \
-  hashicorp/terraform-mcp-server:0.5.2
+  hashicorp/terraform-mcp-server:1.0
 ```
 
 For MCP client configurations:
@@ -655,7 +655,7 @@ For MCP client configurations:
         "-v", "/path/to/corporate-ca.pem:/etc/ssl/certs/corporate-ca.pem",
         "-e", "SSL_CERT_FILE=/etc/ssl/certs/corporate-ca.pem",
         "-e", "TFE_TOKEN=<>",
-        "hashicorp/terraform-mcp-server:0.5.2"
+        "hashicorp/terraform-mcp-server:1.0"
       ]
     }
   }
