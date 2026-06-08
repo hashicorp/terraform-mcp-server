@@ -5,7 +5,7 @@ FEATURES
 * [New Tool] `get_sentinel_mock` Export and download Sentinel mock bundle data for a Terraform plan
 
 IMPROVEMENTS
-
+* Add loadtest CLI and CI workflow for HTTP server saturation testing [342](https://github.com/hashicorp/terraform-mcp-server/pull/342)
 * Add a new metric to capture client type and version [355](https://github.com/hashicorp/terraform-mcp-server/pull/355)
 * Run as a non-root user for Kubernetes compatibility. [356] https://github.com/hashicorp/terraform-mcp-server/pull/356
 * Bump go version to 1.26.3 [366] https://github.com/hashicorp/terraform-mcp-server/pull/366
