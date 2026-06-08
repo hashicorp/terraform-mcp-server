@@ -5,7 +5,7 @@ go 1.26.3
 require (
 	github.com/hashicorp/go-cleanhttp v0.5.2
 	github.com/hashicorp/go-retryablehttp v0.7.8
-	github.com/hashicorp/go-tfe v1.105.0
+	github.com/hashicorp/go-tfe v1.108.0
 	github.com/hashicorp/jsonapi v1.5.0
 	github.com/mark3labs/mcp-go v0.54.0
 	github.com/modelcontextprotocol/go-sdk v1.6.1
