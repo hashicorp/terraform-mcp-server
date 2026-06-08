@@ -7,7 +7,7 @@ require (
 	github.com/hashicorp/go-retryablehttp v0.7.8
 	github.com/hashicorp/go-tfe v1.105.0
 	github.com/hashicorp/jsonapi v1.5.0
-	github.com/mark3labs/mcp-go v0.54.0
+	github.com/mark3labs/mcp-go v0.54.1
 	github.com/modelcontextprotocol/go-sdk v1.6.1
 	github.com/sirupsen/logrus v1.9.4
 	github.com/spf13/cobra v1.10.2
