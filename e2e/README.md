@@ -32,3 +32,7 @@ Initialized with server: terraform-mcp-server test-e2e
 PASS
 ok      terraform-mcp-server/e2e    2.771s
 ```
+
+# TFE testing
+
+The tools were tested manually for TFE version 2.0.1. Check [TFECO-12306](https://hashicorp.atlassian.net/browse/TFECO-12306) for details

@@ -4,11 +4,12 @@
 package tools
 
 import (
+	"bytes"
 	"context"
-	"encoding/json"
 	"strings"
 
 	"github.com/hashicorp/go-tfe"
+	"github.com/hashicorp/jsonapi"
 	"github.com/hashicorp/terraform-mcp-server/pkg/client"
 	log "github.com/sirupsen/logrus"
 
@@ -167,11 +168,11 @@ func updateWorkspaceHandler(ctx context.Context, request mcp.CallToolRequest, lo
 	if err != nil {
 		return ToolErrorf(logger, "failed to update workspace '%s' in org '%s': %v", workspaceName, terraformOrgName, err)
 	}
-
-	resultJSON, err := json.Marshal(workspace)
+	buf := bytes.NewBuffer(nil)
+	err = jsonapi.MarshalPayload(buf, workspace)
 	if err != nil {
 		return ToolError(logger, "failed to marshal workspace update result", err)
 	}
 
-	return mcp.NewToolResultText(string(resultJSON)), nil
+	return mcp.NewToolResultText(buf.String()), nil
 }

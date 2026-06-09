@@ -1,6 +1,6 @@
 module github.com/hashicorp/terraform-mcp-server
 
-go 1.26.3
+go 1.26.4
 
 require (
 	github.com/hashicorp/go-cleanhttp v0.5.2
@@ -8,6 +8,7 @@ require (
 	github.com/hashicorp/go-tfe v1.105.0
 	github.com/hashicorp/jsonapi v1.5.0
 	github.com/mark3labs/mcp-go v0.54.0
+	github.com/modelcontextprotocol/go-sdk v1.6.1
 	github.com/sirupsen/logrus v1.9.4
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/viper v1.21.0
@@ -21,7 +22,7 @@ require (
 	golang.org/x/time v0.14.0
 )
 
-require github.com/google/jsonschema-go v0.4.2 // indirect
+require github.com/google/jsonschema-go v0.4.3 // indirect
 
 require (
 	github.com/cenkalti/backoff/v5 v5.0.3 // indirect
@@ -31,10 +32,13 @@ require (
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.28.0 // indirect
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.2 // indirect
+	github.com/segmentio/asm v1.1.3 // indirect
+	github.com/segmentio/encoding v0.5.4 // indirect
 	go.opentelemetry.io/auto/sdk v1.2.1 // indirect
 	go.opentelemetry.io/otel/trace v1.43.0 // indirect
 	go.opentelemetry.io/proto/otlp v1.10.0 // indirect
-	golang.org/x/net v0.53.0 // indirect
+	golang.org/x/net v0.55.0 // indirect
+	golang.org/x/oauth2 v0.35.0 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20260401024825-9d38bb4040a9 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260401024825-9d38bb4040a9 // indirect
 	google.golang.org/grpc v1.80.0 // indirect
@@ -60,7 +64,7 @@ require (
 	github.com/yosida95/uritemplate/v3 v3.0.2 // indirect
 	go.yaml.in/yaml/v3 v3.0.4 // indirect
 	golang.org/x/sync v0.20.0 // indirect
-	golang.org/x/sys v0.43.0 // indirect
-	golang.org/x/text v0.36.0
+	golang.org/x/sys v0.45.0 // indirect
+	golang.org/x/text v0.37.0
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
