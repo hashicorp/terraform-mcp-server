@@ -182,6 +182,57 @@ func TestGetHeartbeatInterval(t *testing.T) {
 	assert.Equal(t, time.Duration(0), heartbeat, "Heartbeat interval should be 0 when MCP_HEARTBEAT_INTERVAL is set to an invalid value")
 }
 
+func TestGetOrganizationAllowlist(t *testing.T) {
+	origAllowlist := os.Getenv("MCP_ORGANIZATION_ALLOWLIST")
+	defer func() {
+		os.Setenv("MCP_ORGANIZATION_ALLOWLIST", origAllowlist)
+	}()
+
+	tests := []struct {
+		name      string
+		envValue  string
+		flagValue string
+		expected  []string
+	}{
+		{
+			name:      "env var takes precedence over flag",
+			envValue:  "env-alpha, env-beta",
+			flagValue: "flag-alpha",
+			expected:  []string{"env-alpha", "env-beta"},
+		},
+		{
+			name:      "flag used when env not set",
+			flagValue: "flag-alpha, flag-beta",
+			expected:  []string{"flag-alpha", "flag-beta"},
+		},
+		{
+			name:     "empty when neither set",
+			expected: nil,
+		},
+		{
+			name:      "blank CSV fields disable allowlist",
+			flagValue: " , ,, ",
+			expected:  nil,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.envValue != "" {
+				os.Setenv("MCP_ORGANIZATION_ALLOWLIST", tt.envValue)
+			} else {
+				os.Unsetenv("MCP_ORGANIZATION_ALLOWLIST")
+			}
+
+			cmd := &cobra.Command{}
+			cmd.Flags().String("organization-allowlist", tt.flagValue, "test flag")
+
+			result := getOrganizationAllowlist(cmd)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
 func TestGetLogLevel(t *testing.T) {
 	tests := []struct {
 		name        string

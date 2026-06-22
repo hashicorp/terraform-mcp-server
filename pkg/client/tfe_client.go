@@ -29,6 +29,22 @@ var activeTfeClients sync.Map
 
 // NewTfeClient creates a new TFE client for the given session
 func NewTfeClient(sessionId string, terraformAddress string, terraformSkipTLSVerify bool, terraformToken string, clientIP string, logger *log.Logger) (*tfe.Client, error) {
+	client, err := newTfeClient(terraformAddress, terraformSkipTLSVerify, terraformToken, clientIP, logger)
+	if err != nil {
+		return nil, err
+	}
+
+	activeTfeClients.Store(sessionId, client)
+	logger.WithField("session_id", sessionId).Info("Created TFE client")
+	return client, nil
+}
+
+// NewTfeClientForToken creates a TFE client without storing it in session state.
+func NewTfeClientForToken(terraformAddress string, terraformSkipTLSVerify bool, terraformToken string, clientIP string, logger *log.Logger) (*tfe.Client, error) {
+	return newTfeClient(terraformAddress, terraformSkipTLSVerify, terraformToken, clientIP, logger)
+}
+
+func newTfeClient(terraformAddress string, terraformSkipTLSVerify bool, terraformToken string, clientIP string, logger *log.Logger) (*tfe.Client, error) {
 	if terraformToken == "" {
 		logger.Warn("No Terraform token provided, TFE client will not be available")
 		return nil, utils.LogAndReturnError(logger, "required input: no Terraform token provided", nil)
@@ -53,8 +69,6 @@ func NewTfeClient(sessionId string, terraformAddress string, terraformSkipTLSVer
 		return nil, utils.LogAndReturnError(logger, "creating TFE client", err)
 	}
 
-	activeTfeClients.Store(sessionId, client)
-	logger.WithField("session_id", sessionId).Info("Created TFE client")
 	return client, nil
 }
 
@@ -107,7 +121,6 @@ func CreateTfeClientForSession(ctx context.Context, session server.ClientSession
 		}
 		logger.Info("Read TFE_TOKEN from credentials.tfrc.json")
 	}
-
 
 	// Get client IP from context for X-Forwarded-For header
 	clientIP, _ := ctx.Value(contextKey(ClientIPKey)).(string)

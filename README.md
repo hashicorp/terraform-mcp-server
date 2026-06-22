@@ -47,6 +47,7 @@ automation and interaction capabilities for Infrastructure as Code (IaC) develop
 | `MCP_TLS_KEY_FILE` |  Path to TLS key file, required for non-localhost deployment (e.g. `/path/to/key.pem`)| `""` (empty) |
 | `MCP_RATE_LIMIT_GLOBAL` | Global rate limit (format: `rps:burst`) | `10:20` |
 | `MCP_RATE_LIMIT_SESSION` | Per-session rate limit (format: `rps:burst`) | `5:10` |
+| `MCP_ORGANIZATION_ALLOWLIST` | CSV list of HCP Terraform organization names allowed to access the HTTP server | `""` (empty) |
 | `ENABLE_TF_OPERATIONS` | Enable tools that require explicit approval | `false` |
 | `OTEL_METRICS_ENABLED` | Enable tools and server metrics using otel | `false` |
 | `OTEL_METRICS_SERVICE_VERSION` | Version of the terraform-mcp-server sending metrics, which is used to set metric attributes. It also helps track metrics across different deployments | `latest` |
@@ -60,7 +61,7 @@ automation and interaction capabilities for Infrastructure as Code (IaC) develop
 terraform-mcp-server stdio [--log-file /path/to/log] [--log-level info] [--log-format text] [--toolsets <toolsets>] [--tools <tools>]
 
 # StreamableHTTP mode
-terraform-mcp-server streamable-http [--transport-port 8080] [--transport-host 127.0.0.1] [--mcp-endpoint /mcp] [--log-file /path/to/log] [--log-level info] [--log-format text] [--toolsets <toolsets>] [--tools <tools>]
+terraform-mcp-server streamable-http [--transport-port 8080] [--transport-host 127.0.0.1] [--mcp-endpoint /mcp] [--organization-allowlist <orgs-csv>] [--log-file /path/to/log] [--log-level info] [--log-format text] [--toolsets <toolsets>] [--tools <tools>]
 ```
 
 ## Instructions
@@ -558,6 +559,7 @@ Modern HTTP-based transport supporting both direct HTTP requests and Server-Sent
 - **Endpoint**: `http://{hostname}:8080/mcp`
 - **Health Check**: `http://{hostname}:8080/health`
 - **Environment Configuration**: Set `TRANSPORT_MODE=http` or `TRANSPORT_PORT=8080` to enable
+- **Organization Allowlist**: Set `MCP_ORGANIZATION_ALLOWLIST` or `--organization-allowlist` to a CSV list of allowed HCP Terraform organization names
 
 ## Session Modes
 
@@ -574,6 +576,8 @@ export MCP_SESSION_MODE=stateless
 ## Token Passthrough for Centralized Deployments
 
 When running the MCP server centrally (StreamableHTTP mode) for multiple users, each user can pass their own Terraform token via HTTP headers for RBAC enforcement. This allows a single server instance to serve multiple users with different permissions.
+
+When `MCP_ORGANIZATION_ALLOWLIST` or `--organization-allowlist` is configured, the allowlist must be a CSV list of HCP Terraform organization names. The server requires `Authorization: Bearer <token>` and rejects requests unless that token can access at least one organization in the CSV allowlist. Organization name matching is case-insensitive.
 
 ### Supported Headers
 
@@ -618,6 +622,7 @@ docker run -p 8080:8080 \
   -e MCP_TLS_CERT_FILE=/certs/server.pem \
   -e MCP_TLS_KEY_FILE=/certs/server-key.pem \
   -e MCP_ALLOWED_ORIGINS=https://ide.company.com \
+  -e MCP_ORGANIZATION_ALLOWLIST=team-alpha,team-beta \
   -v /path/to/certs:/certs \
   hashicorp/terraform-mcp-server:1.0.0
 ```
