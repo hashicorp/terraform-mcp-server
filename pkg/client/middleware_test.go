@@ -387,6 +387,9 @@ func TestOrganizationAllowlistMiddleware(t *testing.T) {
 		allowlist        []string
 		authHeader       string
 		tfeTokenHeader   string
+		headerValues     map[string]string
+		queryValues      map[string]string
+		envValues        map[string]string
 		contextValues    map[string]string
 		expectedStatus   int
 		expectedNextCall bool
@@ -415,10 +418,28 @@ func TestOrganizationAllowlistMiddleware(t *testing.T) {
 			expectedStatus: http.StatusUnauthorized,
 		},
 		{
+			name:       "TFE_ADDRESS header rejected when allowlist configured",
+			allowlist:  []string{"alpha"},
+			authHeader: "Bearer user-token",
+			headerValues: map[string]string{
+				TerraformAddress: "https://attacker.example.com",
+			},
+			expectedStatus: http.StatusForbidden,
+		},
+		{
+			name:       "TFE_ADDRESS query parameter rejected when allowlist configured",
+			allowlist:  []string{"alpha"},
+			authHeader: "Bearer user-token",
+			queryValues: map[string]string{
+				TerraformAddress: "https://attacker.example.com",
+			},
+			expectedStatus: http.StatusForbidden,
+		},
+		{
 			name:       "client initialization error rejected as bad gateway",
 			allowlist:  []string{"alpha"},
 			authHeader: "Bearer user-token",
-			contextValues: map[string]string{
+			envValues: map[string]string{
 				TerraformAddress: "://bad-address",
 			},
 			expectedStatus: http.StatusBadGateway,
@@ -427,6 +448,9 @@ func TestOrganizationAllowlistMiddleware(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			for key, value := range tt.envValues {
+				t.Setenv(key, value)
+			}
 			nextCalled := false
 			mockHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				nextCalled = true
@@ -447,6 +471,14 @@ func TestOrganizationAllowlistMiddleware(t *testing.T) {
 			if tt.tfeTokenHeader != "" {
 				req.Header.Set(TerraformToken, tt.tfeTokenHeader)
 			}
+			for key, value := range tt.headerValues {
+				req.Header.Set(key, value)
+			}
+			q := req.URL.Query()
+			for key, value := range tt.queryValues {
+				q.Set(key, value)
+			}
+			req.URL.RawQuery = q.Encode()
 
 			rr := httptest.NewRecorder()
 			handler.ServeHTTP(rr, req)
@@ -536,6 +568,18 @@ func TestTokenHasAllowedOrganization(t *testing.T) {
 			assert.Equal(t, tt.expectedPages, tt.lister.pageNumbers)
 		})
 	}
+}
+
+func TestOrganizationListerForRequestIgnoresContextAddress(t *testing.T) {
+	logger := log.New()
+	logger.SetLevel(log.ErrorLevel)
+
+	ctx := context.WithValue(context.Background(), contextKey(TerraformAddress), "://bad-address")
+
+	lister, err := organizationListerForRequest(ctx, "user-token", logger)
+
+	assert.NoError(t, err)
+	assert.NotNil(t, lister)
 }
 
 // TestGetTokenFromAuthHeader tests the helper function that extracts token from Authorization Bearer header

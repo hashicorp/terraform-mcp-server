@@ -164,6 +164,12 @@ func OrganizationAllowlistMiddleware(allowlist []string, logger *log.Logger) fun
 				return
 			}
 
+			if r.Header.Get(TerraformAddress) != "" || r.URL.Query().Get(TerraformAddress) != "" {
+				logger.Warn("Rejecting request: Terraform address override is not allowed when organization allowlist is configured")
+				http.Error(w, "Cannot specify Terraform address when organization allowlist is configured", http.StatusForbidden)
+				return
+			}
+
 			token := strings.TrimSpace(getTokenFromAuthHeader(r))
 			if token == "" {
 				logger.Warn("Rejecting request: organization allowlist requires Authorization bearer token")
@@ -201,11 +207,7 @@ func OrganizationAllowlistMiddleware(allowlist []string, logger *log.Logger) fun
 }
 
 func organizationListerForRequest(ctx context.Context, token string, logger *log.Logger) (organizationLister, error) {
-	terraformAddress, ok := ctx.Value(contextKey(TerraformAddress)).(string)
-	if !ok || terraformAddress == "" {
-		terraformAddress = utils.GetEnv(TerraformAddress, DefaultTerraformAddress)
-	}
-
+	terraformAddress := utils.GetEnv(TerraformAddress, DefaultTerraformAddress)
 	clientIP, _ := ctx.Value(contextKey(ClientIPKey)).(string)
 	tfeClient, err := NewTfeClientForToken(terraformAddress, parseTerraformSkipTLSVerify(ctx), token, clientIP, logger)
 	if err != nil {
