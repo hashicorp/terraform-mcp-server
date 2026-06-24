@@ -36,7 +36,7 @@ import (
 var instructions string
 var sessionClientInfo sync.Map // map[string]client.ClientInfo
 
-func runHTTPServer(logger *log.Logger, host string, port string, endpointPath string, heartbeatInterval time.Duration, enabledToolsets []string, metricsConfig client.MetricsConfig) error {
+func runHTTPServer(logger *log.Logger, host string, port string, endpointPath string, heartbeatInterval time.Duration, enabledToolsets []string, metricsConfig client.MetricsConfig, organizationAllowlist []string) error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
@@ -74,7 +74,7 @@ func runHTTPServer(logger *log.Logger, host string, port string, endpointPath st
 	hcServer := NewServer(version.Version, logger, enabledToolsets, opts...)
 	registerToolsAndResources(hcServer, logger, enabledToolsets)
 
-	return streamableHTTPServerInit(ctx, hcServer, logger, host, port, endpointPath, heartbeatInterval)
+	return streamableHTTPServerInit(ctx, hcServer, logger, host, port, endpointPath, heartbeatInterval, organizationAllowlist)
 }
 
 func attachMetricsHooks(hooks *server.Hooks, metricsConfig client.MetricsConfig, logger *log.Logger) {
@@ -294,7 +294,11 @@ func main() {
 		endpointPath := getEndpointPath(nil)
 		enabledToolsets := getToolsetsFromCmd(rootCmd, logger)
 		heartbeatInterval := getHeartbeatInterval()
-		if err := runHTTPServer(logger, host, port, endpointPath, heartbeatInterval, enabledToolsets, metricsConfig); err != nil {
+		organizationAllowlist, err := getOrganizationAllowlist(rootCmd)
+		if err != nil {
+			stdlog.Fatal(err)
+		}
+		if err := runHTTPServer(logger, host, port, endpointPath, heartbeatInterval, enabledToolsets, metricsConfig, organizationAllowlist); err != nil {
 			stdlog.Fatal("failed to run StreamableHTTP server:", err)
 		}
 		return
@@ -371,6 +375,24 @@ func getHeartbeatInterval() time.Duration {
 		}
 	}
 	return 0
+}
+
+func getOrganizationAllowlist(cmd *cobra.Command) ([]string, error) {
+	if envAllowlist, ok := os.LookupEnv(client.OrganizationAllowlistEnv); ok {
+		return client.ParseOrganizationAllowlistCSV(envAllowlist)
+	}
+
+	if cmd != nil {
+		if cmd.Flags().Changed("organization-allowlist") {
+			allowlist, err := cmd.Flags().GetString("organization-allowlist")
+			if err != nil {
+				return nil, err
+			}
+			return client.ParseOrganizationAllowlistCSV(allowlist)
+		}
+	}
+
+	return nil, nil
 }
 
 func setupMetrics(logger *log.Logger) (client.MetricsConfig, func()) {

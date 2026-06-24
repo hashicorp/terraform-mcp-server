@@ -4,6 +4,8 @@
 package client
 
 import (
+	"context"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -11,6 +13,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/hashicorp/go-tfe"
 	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 )
@@ -138,6 +141,48 @@ func TestLoadCORSConfigFromEnv(t *testing.T) {
 	config = LoadCORSConfigFromEnv()
 	assert.Equal(t, "development", config.Mode)
 	assert.Equal(t, []string{"https://example.com", "https://test.com"}, config.AllowedOrigins)
+}
+
+func TestParseOrganizationAllowlistCSV(t *testing.T) {
+	tests := []struct {
+		name        string
+		input       string
+		expected    []string
+		expectedErr error
+	}{
+		{
+			name:        "empty CSV is malformed",
+			input:       "",
+			expectedErr: ErrMalformedOrganizationAllowlist,
+		},
+		{
+			name:     "trims spaces and ignores empty fields",
+			input:    " alpha, beta ,, gamma ",
+			expected: []string{"alpha", "beta", "gamma"},
+		},
+		{
+			name:     "normalizes case",
+			input:    "Alpha,alpha,ALPHA",
+			expected: []string{"alpha", "alpha", "alpha"},
+		},
+		{
+			name:        "blank fields only are malformed",
+			input:       " , ,, ",
+			expectedErr: ErrMalformedOrganizationAllowlist,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := ParseOrganizationAllowlistCSV(tt.input)
+			assert.Equal(t, tt.expected, result)
+			if tt.expectedErr != nil {
+				assert.ErrorIs(t, err, tt.expectedErr)
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
 }
 
 // TestSecurityHandler tests the HTTP handler that applies CORS validation logic
@@ -314,6 +359,233 @@ func TestOptionsRequest(t *testing.T) {
 	assert.Equal(t, http.StatusOK, rr.Code)
 	assert.Equal(t, "https://example.com", rr.Header().Get("Access-Control-Allow-Origin"))
 	assert.NotEmpty(t, rr.Header().Get("Access-Control-Allow-Methods"))
+}
+
+type fakeOrganizationLister struct {
+	pages       []*tfe.OrganizationList
+	err         error
+	pageNumbers []int
+}
+
+func (l *fakeOrganizationLister) List(_ context.Context, options *tfe.OrganizationListOptions) (*tfe.OrganizationList, error) {
+	if options != nil {
+		l.pageNumbers = append(l.pageNumbers, options.PageNumber)
+	}
+	if l.err != nil {
+		return nil, l.err
+	}
+	if len(l.pages) == 0 {
+		return &tfe.OrganizationList{}, nil
+	}
+	page := len(l.pageNumbers) - 1
+	if page >= len(l.pages) {
+		return l.pages[len(l.pages)-1], nil
+	}
+	return l.pages[page], nil
+}
+
+func TestOrganizationAllowlistMiddleware(t *testing.T) {
+	logger := log.New()
+	logger.SetLevel(log.ErrorLevel)
+
+	tests := []struct {
+		name             string
+		allowlist        []string
+		authHeader       string
+		tfeTokenHeader   string
+		headerValues     map[string]string
+		queryValues      map[string]string
+		envValues        map[string]string
+		contextValues    map[string]string
+		expectedStatus   int
+		expectedNextCall bool
+	}{
+		{
+			name:             "empty allowlist disables gate",
+			allowlist:        nil,
+			expectedStatus:   http.StatusOK,
+			expectedNextCall: true,
+		},
+		{
+			name:           "missing Authorization rejected when allowlist configured",
+			allowlist:      []string{"alpha"},
+			expectedStatus: http.StatusUnauthorized,
+		},
+		{
+			name:           "blank bearer token rejected",
+			allowlist:      []string{"alpha"},
+			authHeader:     "Bearer   ",
+			expectedStatus: http.StatusUnauthorized,
+		},
+		{
+			name:           "TFE_TOKEN header does not satisfy allowlist gate",
+			allowlist:      []string{"alpha"},
+			tfeTokenHeader: "header-token",
+			expectedStatus: http.StatusUnauthorized,
+		},
+		{
+			name:       "TFE_ADDRESS header rejected when allowlist configured",
+			allowlist:  []string{"alpha"},
+			authHeader: "Bearer user-token",
+			headerValues: map[string]string{
+				TerraformAddress: "https://attacker.example.com",
+			},
+			expectedStatus: http.StatusForbidden,
+		},
+		{
+			name:       "TFE_ADDRESS query parameter rejected when allowlist configured",
+			allowlist:  []string{"alpha"},
+			authHeader: "Bearer user-token",
+			queryValues: map[string]string{
+				TerraformAddress: "https://attacker.example.com",
+			},
+			expectedStatus: http.StatusForbidden,
+		},
+		{
+			name:       "client initialization error rejected as bad gateway",
+			allowlist:  []string{"alpha"},
+			authHeader: "Bearer user-token",
+			envValues: map[string]string{
+				TerraformAddress: "://bad-address",
+			},
+			expectedStatus: http.StatusBadGateway,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			for key, value := range tt.envValues {
+				t.Setenv(key, value)
+			}
+			nextCalled := false
+			mockHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				nextCalled = true
+				w.WriteHeader(http.StatusOK)
+			})
+
+			handler := OrganizationAllowlistMiddleware(tt.allowlist, logger)(mockHandler)
+
+			req := httptest.NewRequest(http.MethodPost, "/mcp", nil)
+			ctx := req.Context()
+			for key, value := range tt.contextValues {
+				ctx = context.WithValue(ctx, contextKey(key), value)
+			}
+			req = req.WithContext(ctx)
+			if tt.authHeader != "" {
+				req.Header.Set("Authorization", tt.authHeader)
+			}
+			if tt.tfeTokenHeader != "" {
+				req.Header.Set(TerraformToken, tt.tfeTokenHeader)
+			}
+			for key, value := range tt.headerValues {
+				req.Header.Set(key, value)
+			}
+			q := req.URL.Query()
+			for key, value := range tt.queryValues {
+				q.Set(key, value)
+			}
+			req.URL.RawQuery = q.Encode()
+
+			rr := httptest.NewRecorder()
+			handler.ServeHTTP(rr, req)
+
+			assert.Equal(t, tt.expectedStatus, rr.Code)
+			assert.Equal(t, tt.expectedNextCall, nextCalled)
+		})
+	}
+}
+
+func TestTokenHasAllowedOrganization(t *testing.T) {
+	tests := []struct {
+		name          string
+		allowed       map[string]struct{}
+		lister        *fakeOrganizationLister
+		expected      bool
+		expectedErr   error
+		expectedPages []int
+	}{
+		{
+			name:    "matching organization allowed case insensitively",
+			allowed: map[string]struct{}{"beta": {}},
+			lister: &fakeOrganizationLister{
+				pages: []*tfe.OrganizationList{{
+					Items: []*tfe.Organization{{Name: "alpha"}, {Name: "Beta"}},
+				}},
+			},
+			expected:      true,
+			expectedPages: []int{1},
+		},
+		{
+			name:    "non matching organization rejected",
+			allowed: map[string]struct{}{"beta": {}},
+			lister: &fakeOrganizationLister{
+				pages: []*tfe.OrganizationList{{
+					Items: []*tfe.Organization{{Name: "alpha"}},
+				}},
+			},
+			expected:      false,
+			expectedPages: []int{1},
+		},
+		{
+			name:    "checks paginated organizations",
+			allowed: map[string]struct{}{"gamma": {}},
+			lister: &fakeOrganizationLister{
+				pages: []*tfe.OrganizationList{
+					{
+						Items:      []*tfe.Organization{{Name: "alpha"}},
+						Pagination: &tfe.Pagination{CurrentPage: 1, NextPage: 2, TotalPages: 2},
+					},
+					{
+						Items:      []*tfe.Organization{{Name: "gamma"}},
+						Pagination: &tfe.Pagination{CurrentPage: 2, TotalPages: 2},
+					},
+				},
+			},
+			expected:      true,
+			expectedPages: []int{1, 2},
+		},
+		{
+			name:          "unauthorized organization list returns unauthorized error",
+			allowed:       map[string]struct{}{"alpha": {}},
+			lister:        &fakeOrganizationLister{err: tfe.ErrUnauthorized},
+			expectedErr:   tfe.ErrUnauthorized,
+			expectedPages: []int{1},
+		},
+		{
+			name:          "upstream organization list error is returned",
+			allowed:       map[string]struct{}{"alpha": {}},
+			lister:        &fakeOrganizationLister{err: errors.New("upstream unavailable")},
+			expectedErr:   errors.New("upstream unavailable"),
+			expectedPages: []int{1},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			allowed, err := tokenHasAllowedOrganization(context.Background(), tt.lister, tt.allowed)
+
+			assert.Equal(t, tt.expected, allowed)
+			if tt.expectedErr != nil {
+				assert.Error(t, err)
+				assert.Contains(t, err.Error(), tt.expectedErr.Error())
+			} else {
+				assert.NoError(t, err)
+			}
+			assert.Equal(t, tt.expectedPages, tt.lister.pageNumbers)
+		})
+	}
+}
+
+func TestOrganizationListerForRequestIgnoresContextAddress(t *testing.T) {
+	logger := log.New()
+	logger.SetLevel(log.ErrorLevel)
+
+	ctx := context.WithValue(context.Background(), contextKey(TerraformAddress), "://bad-address")
+
+	lister, err := organizationListerForRequest(ctx, "user-token", logger)
+
+	assert.NoError(t, err)
+	assert.NotNil(t, lister)
 }
 
 // TestGetTokenFromAuthHeader tests the helper function that extracts token from Authorization Bearer header

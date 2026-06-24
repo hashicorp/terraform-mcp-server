@@ -95,11 +95,15 @@ var (
 			}
 
 			enabledToolsets := getToolsetsFromCmd(cmd.Root(), logger)
-			stdlog.Printf("Starting StreamableHTTP server with host: %s, port: %s, endpoint: %s, heartbeatInterval: %v, enabledToolsets: %v", host, port, endpointPath, heartbeatInterval, enabledToolsets)
+			organizationAllowlist, err := getOrganizationAllowlist(cmd)
+			if err != nil {
+				stdlog.Fatal(err)
+			}
+			stdlog.Printf("Starting StreamableHTTP server with host: %s, port: %s, endpoint: %s, heartbeatInterval: %v, enabledToolsets: %v, organizationAllowlistConfigured: %t, organizationAllowlistCount: %d", host, port, endpointPath, heartbeatInterval, enabledToolsets, len(organizationAllowlist) > 0, len(organizationAllowlist))
 			metricsConfig, shutdownMetrics := setupMetrics(logger)
 			defer shutdownMetrics()
 
-			if err := runHTTPServer(logger, host, port, endpointPath, heartbeatInterval, enabledToolsets, metricsConfig); err != nil {
+			if err := runHTTPServer(logger, host, port, endpointPath, heartbeatInterval, enabledToolsets, metricsConfig, organizationAllowlist); err != nil {
 				stdlog.Fatal("failed to run streamableHTTP server:", err)
 			}
 		},
@@ -132,12 +136,14 @@ func init() {
 	streamableHTTPCmd.Flags().StringP("transport-port", "p", "8080", "Port to listen on")
 	streamableHTTPCmd.Flags().Duration("heartbeat-interval", 0, "Heartbeat interval for HTTP connections (e.g., 30s). 0 to disable")
 	streamableHTTPCmd.Flags().String("mcp-endpoint", "/mcp", "Path for streamable HTTP endpoint")
+	streamableHTTPCmd.Flags().String("organization-allowlist", "", "Comma-separated list of HCP Terraform organization names allowed to access the HTTP server")
 
 	// Add the same flags to the alias command for backward compatibility
 	httpCmdAlias.Flags().String("transport-host", "127.0.0.1", "Host to bind to")
 	httpCmdAlias.Flags().StringP("transport-port", "p", "8080", "Port to listen on")
 	httpCmdAlias.Flags().String("mcp-endpoint", "/mcp", "Path for streamable HTTP endpoint")
 	httpCmdAlias.Flags().Duration("heartbeat-interval", 0, "Heartbeat interval for HTTP connections (e.g., 30s). 0 to disable")
+	httpCmdAlias.Flags().String("organization-allowlist", "", "Comma-separated list of HCP Terraform organization names allowed to access the HTTP server")
 
 	rootCmd.AddCommand(stdioCmd)
 	rootCmd.AddCommand(streamableHTTPCmd)
@@ -264,7 +270,7 @@ func serverInit(ctx context.Context, hcServer *server.MCPServer, logger *log.Log
 	return nil
 }
 
-func streamableHTTPServerInit(ctx context.Context, hcServer *server.MCPServer, logger *log.Logger, host string, port string, endpointPath string, heartbeatInterval time.Duration) error {
+func streamableHTTPServerInit(ctx context.Context, hcServer *server.MCPServer, logger *log.Logger, host string, port string, endpointPath string, heartbeatInterval time.Duration, organizationAllowlist []string) error {
 	// Ensure endpoint path starts with /
 	endpointPath = path.Join("/", endpointPath)
 	var handler http.Handler
@@ -315,13 +321,12 @@ func streamableHTTPServerInit(ctx context.Context, hcServer *server.MCPServer, l
 		logger.Warnf("CORS validation is disabled. This is not recommended for production.")
 	}
 
-	// Create a security wrapper around the streamable server
-	streamableServer := client.NewSecurityHandler(baseStreamableServer, corsConfig.AllowedOrigins, corsConfig.Mode, logger)
-
 	mux := http.NewServeMux()
 
 	// Apply middleware
+	streamableServer := client.OrganizationAllowlistMiddleware(organizationAllowlist, logger)(baseStreamableServer)
 	streamableServer = client.TerraformContextMiddleware(logger)(streamableServer)
+	streamableServer = client.NewSecurityHandler(streamableServer, corsConfig.AllowedOrigins, corsConfig.Mode, logger)
 
 	// Handle the /mcp endpoint with the streamable server (with security wrapper)
 	mux.Handle(endpointPath, streamableServer)

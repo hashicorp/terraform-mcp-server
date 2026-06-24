@@ -5,19 +5,40 @@ package client
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"os"
 	"strings"
 
+	"github.com/hashicorp/go-tfe"
 	"github.com/hashicorp/terraform-mcp-server/pkg/utils"
 	log "github.com/sirupsen/logrus"
 )
+
+const OrganizationAllowlistEnv = "MCP_ORGANIZATION_ALLOWLIST"
+
+var ErrMalformedOrganizationAllowlist = errors.New("malformed organization allowlist")
 
 // CORSConfig holds CORS configuration
 type CORSConfig struct {
 	AllowedOrigins []string
 	Mode           string // "strict", "development", "disabled"
+}
+
+// ParseOrganizationAllowlistCSV parses a CSV list of HCP Terraform organization names.
+func ParseOrganizationAllowlistCSV(allowlistCSV string) ([]string, error) {
+	var allowlist []string
+	for _, organizationName := range strings.Split(allowlistCSV, ",") {
+		organizationName = strings.TrimSpace(organizationName)
+		if organizationName != "" {
+			allowlist = append(allowlist, strings.ToLower(organizationName))
+		}
+	}
+	if len(allowlist) == 0 {
+		return nil, ErrMalformedOrganizationAllowlist
+	}
+	return allowlist, nil
 }
 
 // LoadCORSConfigFromEnv loads CORS configuration from environment variables
@@ -121,6 +142,111 @@ func NewSecurityHandler(handler http.Handler, allowedOrigins []string, corsMode 
 		allowedOrigins: allowedOrigins,
 		corsMode:       corsMode,
 		logger:         logger,
+	}
+}
+
+type organizationLister interface {
+	List(ctx context.Context, options *tfe.OrganizationListOptions) (*tfe.OrganizationList, error)
+}
+
+// OrganizationAllowlistMiddleware rejects HTTP requests whose bearer token cannot access an allowlisted organization.
+func OrganizationAllowlistMiddleware(allowlist []string, logger *log.Logger) func(http.Handler) http.Handler {
+	allowedOrganizations := make(map[string]struct{}, len(allowlist))
+	for _, organizationName := range allowlist {
+		organizationName = strings.TrimSpace(strings.ToLower(organizationName))
+		if organizationName != "" {
+			allowedOrganizations[organizationName] = struct{}{}
+		}
+	}
+
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if len(allowedOrganizations) == 0 {
+				next.ServeHTTP(w, r)
+				return
+			}
+
+			if r.Header.Get(TerraformAddress) != "" || r.URL.Query().Get(TerraformAddress) != "" {
+				logger.Warn("Rejecting request: Terraform address override is not allowed when organization allowlist is configured")
+				http.Error(w, "Cannot specify Terraform address when organization allowlist is configured", http.StatusForbidden)
+				return
+			}
+
+			token := strings.TrimSpace(getTokenFromAuthHeader(r))
+			if token == "" {
+				logger.Warn("Rejecting request: organization allowlist requires Authorization bearer token")
+				http.Error(w, "Authorization bearer token is required", http.StatusUnauthorized)
+				return
+			}
+
+			lister, err := organizationListerForRequest(r.Context(), token, logger)
+			if err != nil {
+				logger.WithError(err).Error("Failed to initialize organization allowlist client")
+				http.Error(w, "Failed to validate organization allowlist", http.StatusBadGateway)
+				return
+			}
+
+			allowed, err := tokenHasAllowedOrganization(r.Context(), lister, allowedOrganizations)
+			if err != nil {
+				if errors.Is(err, tfe.ErrUnauthorized) {
+					logger.Warn("Rejecting request: Terraform token is unauthorized")
+					http.Error(w, "Terraform token is unauthorized", http.StatusUnauthorized)
+					return
+				}
+				logger.WithError(err).Error("Failed to validate organization membership for supplied authorization token")
+				http.Error(w, "Failed to validate organization membership for supplied authorization token", http.StatusBadGateway)
+				return
+			}
+			if !allowed {
+				logger.Warn("Rejecting request: Supplied authorization token does not have access to any organizations allowed by this server")
+				http.Error(w, "Supplied authorization token does not have access to any organizations allowed by this server", http.StatusForbidden)
+				return
+			}
+
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
+func organizationListerForRequest(ctx context.Context, token string, logger *log.Logger) (organizationLister, error) {
+	terraformAddress := utils.GetEnv(TerraformAddress, DefaultTerraformAddress)
+	clientIP, _ := ctx.Value(contextKey(ClientIPKey)).(string)
+	tfeClient, err := NewTfeClientForToken(terraformAddress, parseTerraformSkipTLSVerify(ctx), token, clientIP, logger)
+	if err != nil {
+		return nil, err
+	}
+	return tfeClient.Organizations, nil
+}
+
+func tokenHasAllowedOrganization(ctx context.Context, lister organizationLister, allowedOrganizations map[string]struct{}) (bool, error) {
+	pageNumber := 1
+	for {
+		orgs, err := lister.List(ctx, &tfe.OrganizationListOptions{
+			ListOptions: tfe.ListOptions{
+				PageNumber: pageNumber,
+				PageSize:   100,
+			},
+		})
+		if err != nil {
+			return false, err
+		}
+		if orgs == nil {
+			return false, nil
+		}
+
+		for _, org := range orgs.Items {
+			if org == nil {
+				continue
+			}
+			if _, ok := allowedOrganizations[strings.ToLower(org.Name)]; ok {
+				return true, nil
+			}
+		}
+
+		if orgs.Pagination == nil || orgs.NextPage == 0 {
+			return false, nil
+		}
+		pageNumber = orgs.NextPage
 	}
 }
 

@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/hashicorp/terraform-mcp-server/pkg/client"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
@@ -180,6 +181,96 @@ func TestGetHeartbeatInterval(t *testing.T) {
 	os.Setenv("MCP_HEARTBEAT_INTERVAL", "invalid")
 	heartbeat = getHeartbeatInterval()
 	assert.Equal(t, time.Duration(0), heartbeat, "Heartbeat interval should be 0 when MCP_HEARTBEAT_INTERVAL is set to an invalid value")
+}
+
+func TestGetOrganizationAllowlist(t *testing.T) {
+	origAllowlist, hadOrigAllowlist := os.LookupEnv("MCP_ORGANIZATION_ALLOWLIST")
+	defer func() {
+		if hadOrigAllowlist {
+			os.Setenv("MCP_ORGANIZATION_ALLOWLIST", origAllowlist)
+		} else {
+			os.Unsetenv("MCP_ORGANIZATION_ALLOWLIST")
+		}
+	}()
+
+	tests := []struct {
+		name        string
+		envSet      bool
+		envValue    string
+		flagSet     bool
+		flagValue   string
+		expected    []string
+		expectedErr error
+	}{
+		{
+			name:      "env var takes precedence over flag",
+			envSet:    true,
+			envValue:  "env-alpha, env-beta",
+			flagSet:   true,
+			flagValue: "flag-alpha",
+			expected:  []string{"env-alpha", "env-beta"},
+		},
+		{
+			name:      "flag used when env not set",
+			flagSet:   true,
+			flagValue: "flag-alpha, flag-beta",
+			expected:  []string{"flag-alpha", "flag-beta"},
+		},
+		{
+			name:     "empty when neither set",
+			expected: nil,
+		},
+		{
+			name:        "blank CSV flag is malformed",
+			flagSet:     true,
+			flagValue:   " , ,, ",
+			expectedErr: client.ErrMalformedOrganizationAllowlist,
+		},
+		{
+			name:        "empty CSV flag is malformed",
+			flagSet:     true,
+			flagValue:   "",
+			expectedErr: client.ErrMalformedOrganizationAllowlist,
+		},
+		{
+			name:        "blank CSV env var is malformed",
+			envSet:      true,
+			envValue:    " , ,, ",
+			flagSet:     true,
+			flagValue:   "flag-alpha",
+			expectedErr: client.ErrMalformedOrganizationAllowlist,
+		},
+		{
+			name:        "empty CSV env var is malformed",
+			envSet:      true,
+			envValue:    "",
+			expectedErr: client.ErrMalformedOrganizationAllowlist,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.envSet {
+				os.Setenv("MCP_ORGANIZATION_ALLOWLIST", tt.envValue)
+			} else {
+				os.Unsetenv("MCP_ORGANIZATION_ALLOWLIST")
+			}
+
+			cmd := &cobra.Command{}
+			cmd.Flags().String("organization-allowlist", "", "test flag")
+			if tt.flagSet {
+				assert.NoError(t, cmd.Flags().Set("organization-allowlist", tt.flagValue))
+			}
+
+			result, err := getOrganizationAllowlist(cmd)
+			assert.Equal(t, tt.expected, result)
+			if tt.expectedErr != nil {
+				assert.ErrorIs(t, err, tt.expectedErr)
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
 }
 
 func TestGetLogLevel(t *testing.T) {

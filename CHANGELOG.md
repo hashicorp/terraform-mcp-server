@@ -11,6 +11,7 @@ IMPROVEMENTS
 * Run as a non-root user for Kubernetes compatibility. [356] https://github.com/hashicorp/terraform-mcp-server/pull/356
 * Bump go version to 1.26.4 [383](https://github.com/hashicorp/terraform-mcp-server/pull/383)
 * Add support for X-Forwarded-For header [367](https://github.com/hashicorp/terraform-mcp-server/pull/367)
+* Add an organization allowlist gate for StreamableHTTP deployments [386](https://github.com/hashicorp/terraform-mcp-server/pull/386)
 
 FIXES
 
