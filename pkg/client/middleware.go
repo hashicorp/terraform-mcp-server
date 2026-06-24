@@ -18,6 +18,8 @@ import (
 
 const OrganizationAllowlistEnv = "MCP_ORGANIZATION_ALLOWLIST"
 
+var ErrMalformedOrganizationAllowlist = errors.New("malformed organization allowlist")
+
 // CORSConfig holds CORS configuration
 type CORSConfig struct {
 	AllowedOrigins []string
@@ -25,7 +27,7 @@ type CORSConfig struct {
 }
 
 // ParseOrganizationAllowlistCSV parses a CSV list of HCP Terraform organization names.
-func ParseOrganizationAllowlistCSV(allowlistCSV string) []string {
+func ParseOrganizationAllowlistCSV(allowlistCSV string) ([]string, error) {
 	var allowlist []string
 	for _, organizationName := range strings.Split(allowlistCSV, ",") {
 		organizationName = strings.TrimSpace(organizationName)
@@ -34,9 +36,9 @@ func ParseOrganizationAllowlistCSV(allowlistCSV string) []string {
 		}
 	}
 	if len(allowlist) == 0 {
-		return nil
+		return nil, ErrMalformedOrganizationAllowlist
 	}
-	return allowlist
+	return allowlist, nil
 }
 
 // LoadCORSConfigFromEnv loads CORS configuration from environment variables

@@ -95,7 +95,10 @@ var (
 			}
 
 			enabledToolsets := getToolsetsFromCmd(cmd.Root(), logger)
-			organizationAllowlist := getOrganizationAllowlist(cmd)
+			organizationAllowlist, err := getOrganizationAllowlist(cmd)
+			if err != nil {
+				stdlog.Fatal(err)
+			}
 			stdlog.Printf("Starting StreamableHTTP server with host: %s, port: %s, endpoint: %s, heartbeatInterval: %v, enabledToolsets: %v, organizationAllowlistConfigured: %t, organizationAllowlistCount: %d", host, port, endpointPath, heartbeatInterval, enabledToolsets, len(organizationAllowlist) > 0, len(organizationAllowlist))
 			metricsConfig, shutdownMetrics := setupMetrics(logger)
 			defer shutdownMetrics()

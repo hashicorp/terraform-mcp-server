@@ -294,7 +294,10 @@ func main() {
 		endpointPath := getEndpointPath(nil)
 		enabledToolsets := getToolsetsFromCmd(rootCmd, logger)
 		heartbeatInterval := getHeartbeatInterval()
-		organizationAllowlist := getOrganizationAllowlist(rootCmd)
+		organizationAllowlist, err := getOrganizationAllowlist(rootCmd)
+		if err != nil {
+			stdlog.Fatal(err)
+		}
 		if err := runHTTPServer(logger, host, port, endpointPath, heartbeatInterval, enabledToolsets, metricsConfig, organizationAllowlist); err != nil {
 			stdlog.Fatal("failed to run StreamableHTTP server:", err)
 		}
@@ -374,18 +377,22 @@ func getHeartbeatInterval() time.Duration {
 	return 0
 }
 
-func getOrganizationAllowlist(cmd *cobra.Command) []string {
-	if envAllowlist := os.Getenv(client.OrganizationAllowlistEnv); envAllowlist != "" {
+func getOrganizationAllowlist(cmd *cobra.Command) ([]string, error) {
+	if envAllowlist, ok := os.LookupEnv(client.OrganizationAllowlistEnv); ok {
 		return client.ParseOrganizationAllowlistCSV(envAllowlist)
 	}
 
 	if cmd != nil {
-		if allowlist, err := cmd.Flags().GetString("organization-allowlist"); err == nil && allowlist != "" {
+		if cmd.Flags().Changed("organization-allowlist") {
+			allowlist, err := cmd.Flags().GetString("organization-allowlist")
+			if err != nil {
+				return nil, err
+			}
 			return client.ParseOrganizationAllowlistCSV(allowlist)
 		}
 	}
 
-	return nil
+	return nil, nil
 }
 
 func setupMetrics(logger *log.Logger) (client.MetricsConfig, func()) {

@@ -145,14 +145,15 @@ func TestLoadCORSConfigFromEnv(t *testing.T) {
 
 func TestParseOrganizationAllowlistCSV(t *testing.T) {
 	tests := []struct {
-		name     string
-		input    string
-		expected []string
+		name        string
+		input       string
+		expected    []string
+		expectedErr error
 	}{
 		{
-			name:     "empty CSV disables allowlist",
-			input:    "",
-			expected: nil,
+			name:        "empty CSV is malformed",
+			input:       "",
+			expectedErr: ErrMalformedOrganizationAllowlist,
 		},
 		{
 			name:     "trims spaces and ignores empty fields",
@@ -165,16 +166,21 @@ func TestParseOrganizationAllowlistCSV(t *testing.T) {
 			expected: []string{"alpha", "alpha", "alpha"},
 		},
 		{
-			name:     "blank fields only disable allowlist",
-			input:    " , ,, ",
-			expected: nil,
+			name:        "blank fields only are malformed",
+			input:       " , ,, ",
+			expectedErr: ErrMalformedOrganizationAllowlist,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := ParseOrganizationAllowlistCSV(tt.input)
+			result, err := ParseOrganizationAllowlistCSV(tt.input)
 			assert.Equal(t, tt.expected, result)
+			if tt.expectedErr != nil {
+				assert.ErrorIs(t, err, tt.expectedErr)
+			} else {
+				assert.NoError(t, err)
+			}
 		})
 	}
 }
