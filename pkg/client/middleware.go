@@ -191,13 +191,13 @@ func OrganizationAllowlistMiddleware(allowlist []string, logger *log.Logger) fun
 					http.Error(w, "Terraform token is unauthorized", http.StatusUnauthorized)
 					return
 				}
-				logger.WithError(err).Error("Failed to list Terraform organizations for allowlist validation")
-				http.Error(w, "Failed to validate organization allowlist", http.StatusBadGateway)
+				logger.WithError(err).Error("Failed to validate organization membership for supplied authorization token")
+				http.Error(w, "Failed to validate organization membership for supplied authorization token", http.StatusBadGateway)
 				return
 			}
 			if !allowed {
-				logger.Warn("Rejecting request: Terraform token cannot access an allowlisted organization")
-				http.Error(w, "Terraform token cannot access an allowlisted organization", http.StatusForbidden)
+				logger.Warn("Rejecting request: Supplied authorization token does not have access to any organizations allowed by this server")
+				http.Error(w, "Supplied authorization token does not have access to any organizations allowed by this server", http.StatusForbidden)
 				return
 			}
 
