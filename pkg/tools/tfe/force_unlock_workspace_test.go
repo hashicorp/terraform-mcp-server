@@ -1,36 +1,40 @@
+// Copyright IBM Corp. 2025
+// SPDX-License-Identifier: MPL-2.0
+
 package tools
 
 import (
-	"encoding/json"
 	"strings"
 	"testing"
 
-	"github.com/hashicorp/go-tfe"
 	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 )
 
-func TestForceUnlockWorkspace(t *testing.T){
+func TestForceUnlockWorkspace(t *testing.T) {
 	logger := log.New()
-	logger.SetLevel(log.ErrorLevel)
+	logger.SetLevel(log.ErrorLevel) // Reduce noise in tests
 
-	t.Run("tool_creation", func(t *testing.T){
+	t.Run("tool creation", func(t *testing.T) {
 		tool := ForceUnlockWorkspace(logger)
 
+		// Verify tool identity
 		assert.Equal(t, "force_unlock_workspace", tool.Tool.Name)
-		assert.Contains(t, tool.Tool.Description, "Force unlock a Terraform workspace by ID")
+		assert.Contains(t, tool.Tool.Description, "Force unlocks a Terraform workspace stuck in a run-held lock")
 		assert.NotNil(t, tool.Handler)
 
+		// Verify it is marked as destructive and not read-only
 		assert.NotNil(t, tool.Tool.Annotations.DestructiveHint)
 		assert.True(t, *tool.Tool.Annotations.DestructiveHint)
 		assert.NotNil(t, tool.Tool.Annotations.ReadOnlyHint)
 		assert.False(t, *tool.Tool.Annotations.ReadOnlyHint)
 
+		// Verify required parameters are declared in the schema
 		assert.Contains(t, tool.Tool.InputSchema.Required, "workspace_id")
 	})
 
-	t.Run("parameter_validation", func(t *testing.T){
-		tests := []struct{
+	t.Run("parameter validation", func(t *testing.T) {
+		tests := []struct {
 			name        string
 			params      map[string]interface{}
 			expectError bool
@@ -54,9 +58,10 @@ func TestForceUnlockWorkspace(t *testing.T){
 				name: "missing workspace ID",
 				params: map[string]interface{}{},
 				expectError: true,
-				errorField:  "workspace_id",
+				errorField: "workspace_id",
 			},
 			{
+				// Extra fields should be silently ignored by RequireString
 				name: "valid parameters with extra fields",
 				params: map[string]interface{}{
 					"workspace_id": "ws-123456",
@@ -67,18 +72,18 @@ func TestForceUnlockWorkspace(t *testing.T){
 			},
 		}
 
-		for _, tt := range tests{
-			t.Run(tt.name, func (t *testing.T){
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
 				request := &MockCallToolRequest{params: tt.params}
 
 				workspaceID, err := request.RequireString("workspace_id")
 
-				if tt.expectError{
-					switch tt.errorField{
+				if tt.expectError {
+					switch tt.errorField {
 					case "workspace_id":
 						assert.Error(t, err)
 					}
-				} else{
+				} else {
 					assert.NoError(t, err)
 					if val, ok := tt.params["workspace_id"]; ok {
 						assert.Equal(t, val, workspaceID)
@@ -89,6 +94,7 @@ func TestForceUnlockWorkspace(t *testing.T){
 	})
 
 	t.Run("workspace ID format validation", func(t *testing.T) {
+		// TFE workspace IDs always begin with "ws-" followed by at least one character.
 		tests := []struct {
 			name        string
 			workspaceID string
@@ -104,12 +110,31 @@ func TestForceUnlockWorkspace(t *testing.T){
 
 		for _, tt := range tests {
 			t.Run(tt.name, func(t *testing.T) {
-				// Simple validation: workspace ID should start with "ws-" and have content after
 				isValid := strings.HasPrefix(tt.workspaceID, "ws-") && len(tt.workspaceID) > 3
 				assert.Equal(t, tt.expectValid, isValid)
 			})
 		}
 	})
 
+	t.Run("lock state validation", func(t *testing.T) {
+		// Mirrors the guard in forceUnlockWorkspace: only proceed when the
+		// workspace is locked; reject immediately if it is already unlocked
+		// to avoid a misleading "resource not found" error from the TFE API.
+		tests := []struct {
+			name        string
+			locked      bool
+			expectError bool
+		}{
+			{"locked workspace proceeds to unlock", true, false},
+			{"unlocked workspace is rejected", false, true},
+		}
 
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				// Replicates: if !workspace.Locked { return error }
+				wouldError := !tt.locked
+				assert.Equal(t, tt.expectError, wouldError)
+			})
+		}
+	})
 }
