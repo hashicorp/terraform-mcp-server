@@ -20,7 +20,7 @@ func TestForceUnlockWorkspace(t *testing.T) {
 
 		// Verify tool identity
 		assert.Equal(t, "force_unlock_workspace", tool.Tool.Name)
-		assert.Contains(t, tool.Tool.Description, "Force unlocks a Terraform workspace stuck in a run-held lock")
+		assert.Contains(t, tool.Tool.Description, "Force unlocks a Terraform workspace stuck in a lock")
 		assert.NotNil(t, tool.Handler)
 
 		// Verify it is marked as destructive and not read-only
