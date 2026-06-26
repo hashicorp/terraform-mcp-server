@@ -115,26 +115,4 @@ func TestForceUnlockWorkspace(t *testing.T) {
 			})
 		}
 	})
-
-	t.Run("lock state validation", func(t *testing.T) {
-		// Mirrors the guard in forceUnlockWorkspace: only proceed when the
-		// workspace is locked; reject immediately if it is already unlocked
-		// to avoid a misleading "resource not found" error from the TFE API.
-		tests := []struct {
-			name        string
-			locked      bool
-			expectError bool
-		}{
-			{"locked workspace proceeds to unlock", true, false},
-			{"unlocked workspace is rejected", false, true},
-		}
-
-		for _, tt := range tests {
-			t.Run(tt.name, func(t *testing.T) {
-				// Replicates: if !workspace.Locked { return error }
-				wouldError := !tt.locked
-				assert.Equal(t, tt.expectError, wouldError)
-			})
-		}
-	})
 }

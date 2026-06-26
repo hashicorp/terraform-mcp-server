@@ -16,11 +16,10 @@ import (
 
 // ForceUnlockWorkspace creates a tool to force unlock a Terraform workspace that
 // is stuck in a locked state due to a crashed, interrupted, or timed-out run.
-// Gated behind ENABLE_TF_OPERATIONS=true, same as delete_workspace_safely and action_run.
 func ForceUnlockWorkspace(logger *log.Logger) server.ServerTool {
 	return server.ServerTool{
 		Tool: mcp.NewTool("force_unlock_workspace",
-			mcp.WithDescription(`Force unlocks a Terraform workspace stuck in a run-held lock. Prefer cancelling or discarding the active run via action_run first — force-unlocking while a run is in progress can corrupt state. Requires workspace admin permissions (e.g. an Owners team token). Gated behind ENABLE_TF_OPERATIONS=true.`),
+			mcp.WithDescription(`Force unlocks a Terraform workspace stuck in a run-held lock. Prefer using the action_run tool with "discard" or "cancel" before force-unlocking a workspace. Requires workspace admin permissions (e.g. an Owners team token).`),
 			mcp.WithTitleAnnotation("Force unlock a Terraform workspace by ID"),
 			mcp.WithReadOnlyHintAnnotation(false),
 			mcp.WithDestructiveHintAnnotation(true),
@@ -54,15 +53,13 @@ func forceUnlockWorkspace(ctx context.Context, request mcp.CallToolRequest, logg
 		return ToolErrorf(logger, "workspace not found: %s", workspaceID)
 	}
 
-	// Guard: ForceUnlock only applies to run-held locks. Reject early if the
+	// Guard: Reject early if the
 	// workspace is not locked to avoid a misleading "resource not found" from
 	// the TFE API.
 	if !workspace.Locked {
-		return ToolErrorf(logger, "workspace '%s' is not locked", workspaceID)
+		return ToolErrorf(logger, "workspace %q is not locked", workspaceID)
 	}
-
-	// Perform the force unlock. This calls POST /workspaces/:id/actions/force-unlock
-	// and requires workspace admin permissions (e.g. an Owners team token).
+	
 	workspace, err = tfeClient.Workspaces.ForceUnlock(ctx, workspaceID)
 	if err != nil {
 		return ToolErrorf(logger, "failed to force unlock workspace '%s'. This is the reported error: %v", workspaceID, err)
