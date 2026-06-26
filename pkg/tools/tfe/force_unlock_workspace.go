@@ -19,7 +19,7 @@ import (
 func ForceUnlockWorkspace(logger *log.Logger) server.ServerTool {
 	return server.ServerTool{
 		Tool: mcp.NewTool("force_unlock_workspace",
-			mcp.WithDescription(`Force unlocks a Terraform workspace stuck in a run-held lock. Prefer using the action_run tool with "discard" or "cancel" before force-unlocking a workspace. Requires workspace admin permissions (e.g. an Owners team token).`),
+			mcp.WithDescription(`Force unlocks a Terraform workspace stuck in a lock. Prefer using the action_run tool with "discard" or "cancel" before force-unlocking a workspace. Requires workspace admin permissions (e.g. an Owners team token).`),
 			mcp.WithTitleAnnotation("Force unlock a Terraform workspace by ID"),
 			mcp.WithReadOnlyHintAnnotation(false),
 			mcp.WithDestructiveHintAnnotation(true),
