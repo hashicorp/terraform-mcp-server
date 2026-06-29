@@ -61,7 +61,7 @@ docker-build:
 
 # Build docker image for official binary
 docker-build-official:
-	$(DOCKER) build --build-arg VERSION=$(VERSION) -f Dockerfile.official -t $(BINARY_NAME)-official:$(VERSION) .
+	$(DOCKER) build --no-cache --build-arg VERSION=$(VERSION) -f Dockerfile.official -t $(BINARY_NAME)-official:$(VERSION) .
 
 
 # Run HTTP server locally
