@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"os/exec"
 	"strings"
@@ -314,7 +315,7 @@ func initializeMCPSession(t *testing.T, mcpURL, origin string) string {
 	require.NoError(t, err)
 
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Accept", "application/json")
+	req.Header.Set("Accept", "application/json, text/event-stream")
 	if origin != "" {
 		req.Header.Set("Origin", origin)
 	}
@@ -333,9 +334,18 @@ func initializeMCPSession(t *testing.T, mcpURL, origin string) string {
 	require.NotEmpty(t, sessionID, "Expected to receive a session ID")
 
 	// Verify we got a valid response
-	var initResp InitializeResponse
-	err = json.NewDecoder(resp.Body).Decode(&initResp)
+	bodyBytes, err := io.ReadAll(resp.Body)
 	require.NoError(t, err)
+	// SSE body format: "event: message\ndata: {...}\n\n"
+	// Extract the JSON from the "data: " line
+	var initResp InitializeResponse
+	for _, line := range strings.Split(string(bodyBytes), "\n") {
+		if strings.HasPrefix(line, "data: ") {
+			err = json.Unmarshal([]byte(strings.TrimPrefix(line, "data: ")), &initResp)
+			require.NoError(t, err)
+			break
+		}
+	}
 	assert.Equal(t, "terraform-mcp-official", initResp.Result.ServerInfo.Name)
 
 	return sessionID
