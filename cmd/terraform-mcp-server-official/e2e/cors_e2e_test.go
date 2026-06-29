@@ -314,7 +314,7 @@ func initializeMCPSession(t *testing.T, mcpURL, origin string) string {
 	require.NoError(t, err)
 
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Accept", "application/json, text/event-stream")
+	req.Header.Set("Accept", "application/json")
 	if origin != "" {
 		req.Header.Set("Origin", origin)
 	}
@@ -336,7 +336,7 @@ func initializeMCPSession(t *testing.T, mcpURL, origin string) string {
 	var initResp InitializeResponse
 	err = json.NewDecoder(resp.Body).Decode(&initResp)
 	require.NoError(t, err)
-	assert.Equal(t, "terraform-mcp-server", initResp.Result.ServerInfo.Name)
+	assert.Equal(t, "terraform-mcp-official", initResp.Result.ServerInfo.Name)
 
 	return sessionID
 }
