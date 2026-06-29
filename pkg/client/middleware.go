@@ -122,6 +122,11 @@ func (h *securityHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Origin", origin)
 		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
 		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Mcp-Session-Id, Authorization")
+
+		// Strip Origin from the forwarded request so the inner handler's
+		// CrossOriginProtection does not re-evaluate it.
+		r = r.Clone(r.Context())
+		r.Header.Del("Origin")
 	}
 
 	// Handle OPTIONS requests for CORS preflight
