@@ -258,12 +258,12 @@ func runHTTPServer(logger *log.Logger, host, port, endpointPath string, heartbea
 	}, opts)
 
 	// Create a security wrapper around the streamable server
-	//streamableServer := client.NewSecurityHandler(mcpHandler, corsConfig.AllowedOrigins, corsConfig.Mode, logger)
+	streamableServer := client.NewSecurityHandler(mcpHandler, corsConfig.AllowedOrigins, corsConfig.Mode, logger)
 
 	mux := http.NewServeMux()
 
 	// Apply middleware
-	streamableServer := client.TerraformContextMiddleware(logger)(mcpHandler)
+	streamableServer = client.TerraformContextMiddleware(logger)(streamableServer)
 
 	// Handle the /mcp endpoint with the streamable server (with security wrapper)
 	mux.Handle(endpointPath, streamableServer)
