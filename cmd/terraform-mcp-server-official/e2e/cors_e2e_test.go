@@ -292,7 +292,7 @@ func initializeMCPSession(t *testing.T, mcpURL, origin string) string {
 		Jsonrpc: "2.0",
 		Method:  "initialize",
 		Params: InitializeParams{
-			ProtocolVersion: "0.1.0", // Use the latest version
+			ProtocolVersion: "2025-03-26", // Use the latest version
 			ClientInfo: struct {
 				Name    string `json:"name"`
 				Version string `json:"version"`
@@ -314,6 +314,7 @@ func initializeMCPSession(t *testing.T, mcpURL, origin string) string {
 	require.NoError(t, err)
 
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json, text/event-stream")
 	if origin != "" {
 		req.Header.Set("Origin", origin)
 	}
