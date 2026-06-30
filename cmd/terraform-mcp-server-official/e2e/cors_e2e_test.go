@@ -214,7 +214,7 @@ func runCORSTests(t *testing.T, mcpURL, mode, configuredOrigins string) {
 				// For non-OPTIONS requests with a session, we need a valid MCP request
 				callToolReq := map[string]interface{}{
 					"jsonrpc": "2.0",
-					"method":  "callTool",
+					"method":  "tools/call",
 					"params": map[string]interface{}{
 						"name":      "ping", // A dummy tool name just to have something
 						"arguments": map[string]interface{}{},
