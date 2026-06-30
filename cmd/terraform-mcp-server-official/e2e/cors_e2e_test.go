@@ -152,8 +152,8 @@ func runCORSTests(t *testing.T, mcpURL, mode, configuredOrigins string) {
 
 	// Define base test cases that apply to all modes
 	baseTestCases := []testCase{
-		{"GET with allowed origin", "GET", "https://example.com", 200, true},
-		{"GET with no origin", "GET", "", 200, false},
+		{"GET with allowed origin", "POST", "https://example.com", 200, true},
+		{"GET with no origin", "POST", "", 200, false},
 		{"OPTIONS preflight with allowed origin", "OPTIONS", "https://example.com", 200, true},
 	}
 
@@ -165,15 +165,15 @@ func runCORSTests(t *testing.T, mcpURL, mode, configuredOrigins string) {
 	}
 
 	developmentModeTests := []testCase{
-		{"GET with localhost origin", "GET", "http://localhost:3000", 200, true},
-		{"GET with IPv4 localhost", "GET", "http://127.0.0.1:3000", 200, true},
-		{"GET with IPv6 localhost", "GET", "http://[::1]:3000", 200, true},
+		{"GET with localhost origin", "POST", "http://localhost:3000", 200, true},
+		{"GET with IPv4 localhost", "POST", "http://127.0.0.1:3000", 200, true},
+		{"GET with IPv6 localhost", "POST", "http://[::1]:3000", 200, true},
 		{"GET with disallowed origin", "GET", "https://evil.com", 403, false},
 		{"OPTIONS with localhost origin", "OPTIONS", "http://localhost:3000", 200, true},
 	}
 
 	disabledModeTests := []testCase{
-		{"GET with any origin", "GET", "https://any-site.com", 200, true},
+		{"GET with any origin", "POST", "https://any-site.com", 200, true},
 		{"OPTIONS with any origin", "OPTIONS", "https://any-site.com", 200, true},
 	}
 
@@ -226,6 +226,7 @@ func runCORSTests(t *testing.T, mcpURL, mode, configuredOrigins string) {
 
 			req, _ := http.NewRequest(tc.method, mcpURL, bytes.NewBuffer(body))
 			req.Header.Set("Content-Type", "application/json")
+			req.Header.Set("Accept", "application/json, text/event-stream")
 
 			if tc.origin != "" {
 				req.Header.Set("Origin", tc.origin)
