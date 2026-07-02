@@ -48,6 +48,9 @@ automation and interaction capabilities for Infrastructure as Code (IaC) develop
 | `MCP_RATE_LIMIT_GLOBAL` | Global rate limit (format: `rps:burst`) | `10:20` |
 | `MCP_RATE_LIMIT_SESSION` | Per-session rate limit (format: `rps:burst`) | `5:10` |
 | `MCP_ORGANIZATION_ALLOWLIST` | CSV list of HCP Terraform organization names allowed to access the HTTP server | `""` (empty) |
+| `MCP_FORWARD_CLIENT_IP` | Forward the client IP to HCP Terraform / TFE via `X-Forwarded-For`. Set to `true` to enable | `false` |
+| `MCP_REMOTE_IP_METHOD` | How the client IP is sourced when forwarding is enabled: `RemoteAddr` (direct connection only), `X-Real-IP`, or `X-Forwarded-For` | `RemoteAddr` |
+| `MCP_XFF_TRUSTED_HOPS` | Number of trusted proxy hops counted from the right of the `X-Forwarded-For` chain. Only used when `MCP_REMOTE_IP_METHOD=X-Forwarded-For` | `0` |
 | `ENABLE_TF_OPERATIONS` | Enable tools that require explicit approval | `false` |
 | `OTEL_METRICS_ENABLED` | Enable tools and server metrics using otel | `false` |
 | `OTEL_METRICS_SERVICE_VERSION` | Version of the terraform-mcp-server sending metrics, which is used to set metric attributes. It also helps track metrics across different deployments | `latest` |
@@ -578,6 +581,39 @@ export MCP_SESSION_MODE=stateless
 When running the MCP server centrally (StreamableHTTP mode) for multiple users, each user can pass their own Terraform token via HTTP headers for RBAC enforcement. This allows a single server instance to serve multiple users with different permissions.
 
 When `MCP_ORGANIZATION_ALLOWLIST` or `--organization-allowlist` is configured, the allowlist must be a CSV list of HCP Terraform organization names. The server requires `Authorization: Bearer <token>` and rejects requests unless that token can access at least one organization in the CSV allowlist. Organization name matching is case-insensitive. If the configured CSV value parses to zero organization names, the server exits with a malformed organization allowlist error.
+
+## Client IP Forwarding
+
+When running the MCP server centrally behind a proxy or load balancer, you can forward the originating client's IP to HCP Terraform / TFE via the `X-Forwarded-For` header. This is off by default and must be enabled with `MCP_FORWARD_CLIENT_IP=true`.
+
+When enabled, the server sources the client IP according to `MCP_REMOTE_IP_METHOD`:
+
+| Method | Behavior |
+|--------|----------|
+| `RemoteAddr` (default) | Uses only the address of the direct TCP connection. Ignores `X-Forwarded-For` and `X-Real-IP`. |
+| `X-Real-IP` | Uses the `X-Real-IP` header if it is a valid IP, otherwise falls back to `RemoteAddr`. |
+| `X-Forwarded-For` | Uses the `X-Forwarded-For` chain, selecting the entry `MCP_XFF_TRUSTED_HOPS` positions from the right. Falls back to `RemoteAddr` if the value is missing or invalid. |
+
+### Trust model
+
+`X-Forwarded-For` and `X-Real-IP` are set by clients and intermediary proxies, so they can be spoofed unless a trusted proxy in front of the server overwrites them. For this reason the default is `RemoteAddr`, which trusts only the peer the server is directly connected to. Only enable `X-Real-IP` or `X-Forwarded-For` when the server sits behind a proxy you control that sets these headers.
+
+### Trusted hops
+
+When using `X-Forwarded-For`, `MCP_XFF_TRUSTED_HOPS` is the number of proxies you operate between the server and the internet. Hops are counted from the right of the chain, since each proxy appends the address it received the request from and the rightmost entry is set by the proxy closest to the server. The server skips that many trusted entries and takes the next one to the left.
+
+For example, with `MCP_XFF_TRUSTED_HOPS=1` and a header of `200.1.2.3, 10.1.1.10`, the server selects `200.1.2.3`. With `MCP_XFF_TRUSTED_HOPS=2` and `108.0.0.1, 200.1.2.3, 10.1.1.10, 192.168.0.1`, it selects `200.1.2.3`. If the hop count is greater than the number of entries, or the selected entry is not a valid IP, the server falls back to `RemoteAddr`.
+
+Setting the hop count too low will trust a client-supplied value; setting it too high will trust an address further into your own infrastructure. Set it to the exact number of proxies you run.
+
+### Limitations
+
+- The server reads only the first `X-Forwarded-For` header on a request. It is valid for a request to carry multiple `X-Forwarded-For` headers, but Go's standard library returns only the first, and the server does not join them. If your proxy chain emits multiple headers, configure it to emit a single combined `X-Forwarded-For` header.
+- IPv4 and IPv6 addresses are both supported. Values that are not valid IPs are rejected and the server falls back to `RemoteAddr`.
+
+### Migrating from earlier versions
+
+Earlier versions used the leftmost `X-Forwarded-For` value when the header was present, with no configuration. This was insecure, since the leftmost value is the most easily spoofed. The default is now `RemoteAddr`. **If you run the server behind a proxy and rely on `X-Forwarded-For` being forwarded to HCP Terraform / TFE, set `MCP_REMOTE_IP_METHOD=X-Forwarded-For` and `MCP_XFF_TRUSTED_HOPS` to the number of proxies you operate.**
 
 ### Supported Headers
 

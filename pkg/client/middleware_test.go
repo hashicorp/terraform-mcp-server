@@ -1137,33 +1137,121 @@ func TestTerraformContextMiddleware_AllowAddressEnvWhenTokenFromEnv(t *testing.T
 func TestGetClientIP(t *testing.T) {
 	tests := []struct {
 		name       string
-		headers    map[string]string
+		cfg        ClientIPConfig
 		remoteAddr string
+		headers    map[string]string
 		expected   string
 	}{
+		//default method: RemoteAddr (secure)
 		{
-			name:       "X-Forwarded-For single IP",
-			headers:    map[string]string{"X-Forwarded-For": "192.168.1.100"},
-			remoteAddr: "10.0.0.1:12345",
-			expected:   "192.168.1.100",
+			name:       "default RemoteAddr ipv4 with port",
+			cfg:        ClientIPConfig{Method: RemoteIPMethodRemoteAddr},
+			remoteAddr: "203.0.113.5:54321",
+			expected:   "203.0.113.5",
 		},
 		{
-			name:       "X-Forwarded-For multiple IPs takes first",
-			headers:    map[string]string{"X-Forwarded-For": "192.168.1.100, 10.0.0.50"},
-			remoteAddr: "10.0.0.1:12345",
-			expected:   "192.168.1.100",
+			name:       "default RemoteAddr ipv6 with port",
+			cfg:        ClientIPConfig{Method: RemoteIPMethodRemoteAddr},
+			remoteAddr: "[2001:db8::1]:54321",
+			expected:   "2001:db8::1",
 		},
 		{
-			name:       "X-Real-IP fallback",
-			headers:    map[string]string{"X-Real-IP": "192.168.1.200"},
-			remoteAddr: "10.0.0.1:12345",
-			expected:   "192.168.1.200",
+			name:       "default RemoteAddr ipv4 no port",
+			cfg:        ClientIPConfig{Method: RemoteIPMethodRemoteAddr},
+			remoteAddr: "203.0.113.5",
+			expected:   "203.0.113.5",
 		},
 		{
-			name:       "RemoteAddr fallback strips port",
-			headers:    map[string]string{},
-			remoteAddr: "10.0.0.1:12345",
+			name:       "RemoteAddr ignores spoofed XFF header",
+			cfg:        ClientIPConfig{Method: RemoteIPMethodRemoteAddr},
+			remoteAddr: "203.0.113.5:443",
+			headers:    map[string]string{"X-Forwarded-For": "1.2.3.4"},
+			expected:   "203.0.113.5", // header is NOT trusted in default mode
+		},
+		{
+			name:       "RemoteAddr garbage returns empty",
+			cfg:        ClientIPConfig{Method: RemoteIPMethodRemoteAddr},
+			remoteAddr: "not-an-ip",
+			expected:   "",
+		},
+
+		//X-Real-IP method
+		{
+			name:       "X-Real-IP valid ipv4",
+			cfg:        ClientIPConfig{Method: RemoteIPMethodXRealIP},
+			remoteAddr: "10.0.0.1:80",
+			headers:    map[string]string{"X-Real-IP": "198.51.100.7"},
+			expected:   "198.51.100.7",
+		},
+		{
+			name:       "X-Real-IP valid ipv6",
+			cfg:        ClientIPConfig{Method: RemoteIPMethodXRealIP},
+			remoteAddr: "10.0.0.1:80",
+			headers:    map[string]string{"X-Real-IP": "2001:db8::beef"},
+			expected:   "2001:db8::beef",
+		},
+		{
+			name:       "X-Real-IP missing falls back to RemoteAddr",
+			cfg:        ClientIPConfig{Method: RemoteIPMethodXRealIP},
+			remoteAddr: "10.0.0.1:80",
 			expected:   "10.0.0.1",
+		},
+		{
+			name:       "X-Real-IP invalid falls back to RemoteAddr",
+			cfg:        ClientIPConfig{Method: RemoteIPMethodXRealIP},
+			remoteAddr: "10.0.0.1:80",
+			headers:    map[string]string{"X-Real-IP": "garbage"},
+			expected:   "10.0.0.1",
+		},
+
+		//X-Forwarded-For method (hops counted from the right)
+		{
+			name:       "XFF hops=1 two entries (SecOps example)",
+			cfg:        ClientIPConfig{Method: RemoteIPMethodXFF, TrustedHops: 1},
+			remoteAddr: "10.1.1.10:80",
+			headers:    map[string]string{"X-Forwarded-For": "200.1.2.3, 10.1.1.10"},
+			expected:   "200.1.2.3",
+		},
+		{
+			name:       "XFF hops=2 four entries (SecOps example)",
+			cfg:        ClientIPConfig{Method: RemoteIPMethodXFF, TrustedHops: 2},
+			remoteAddr: "192.168.0.1:80",
+			headers:    map[string]string{"X-Forwarded-For": "108.0.0.1, 200.1.2.3, 10.1.1.10, 192.168.0.1"},
+			expected:   "200.1.2.3",
+		},
+		{
+			name:       "XFF ipv6 entry",
+			cfg:        ClientIPConfig{Method: RemoteIPMethodXFF, TrustedHops: 1},
+			remoteAddr: "10.1.1.10:80",
+			headers:    map[string]string{"X-Forwarded-For": "2001:db8::5, 10.1.1.10"},
+			expected:   "2001:db8::5",
+		},
+		{
+			name:       "XFF hops exceeds chain length falls back to RemoteAddr",
+			cfg:        ClientIPConfig{Method: RemoteIPMethodXFF, TrustedHops: 5},
+			remoteAddr: "10.1.1.10:80",
+			headers:    map[string]string{"X-Forwarded-For": "200.1.2.3, 10.1.1.10"},
+			expected:   "10.1.1.10", // out of range -> "" from ipFromXFF -> RemoteAddr fallback
+		},
+		{
+			name:       "XFF hops unset (0) falls back to RemoteAddr",
+			cfg:        ClientIPConfig{Method: RemoteIPMethodXFF, TrustedHops: 0},
+			remoteAddr: "10.1.1.10:80",
+			headers:    map[string]string{"X-Forwarded-For": "200.1.2.3, 10.1.1.10"},
+			expected:   "10.1.1.10",
+		},
+		{
+			name:       "XFF selected entry invalid falls back to RemoteAddr",
+			cfg:        ClientIPConfig{Method: RemoteIPMethodXFF, TrustedHops: 1},
+			remoteAddr: "10.1.1.10:80",
+			headers:    map[string]string{"X-Forwarded-For": "not-an-ip, 10.1.1.10"},
+			expected:   "10.1.1.10",
+		},
+		{
+			name:       "XFF empty header falls back to RemoteAddr",
+			cfg:        ClientIPConfig{Method: RemoteIPMethodXFF, TrustedHops: 1},
+			remoteAddr: "10.1.1.10:80",
+			expected:   "10.1.1.10",
 		},
 	}
 
@@ -1174,8 +1262,34 @@ func TestGetClientIP(t *testing.T) {
 			for k, v := range tc.headers {
 				req.Header.Set(k, v)
 			}
-			result := getClientIP(req)
+			result := getClientIP(req, tc.cfg)
 			assert.Equal(t, tc.expected, result)
+		})
+	}
+}
+
+func TestLoadClientIPConfigFromEnv(t *testing.T) {
+	tests := []struct {
+		name       string
+		methodEnv  string
+		hopsEnv    string
+		wantMethod string
+		wantHops   int
+	}{
+		{"unset defaults to RemoteAddr", "", "", RemoteIPMethodRemoteAddr, 0},
+		{"unrecognized defaults to RemoteAddr", "bogus", "", RemoteIPMethodRemoteAddr, 0},
+		{"X-Real-IP", RemoteIPMethodXRealIP, "", RemoteIPMethodXRealIP, 0},
+		{"XFF with hops", RemoteIPMethodXFF, "2", RemoteIPMethodXFF, 2},
+		{"XFF with invalid hops maps to 0", RemoteIPMethodXFF, "abc", RemoteIPMethodXFF, 0},
+		{"XFF with negative hops maps to 0", RemoteIPMethodXFF, "-3", RemoteIPMethodXFF, 0},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv(RemoteIPMethodEnv, tc.methodEnv)
+			t.Setenv(XFFTrustedHopsEnv, tc.hopsEnv)
+			cfg := LoadClientIPConfigFromEnv()
+			assert.Equal(t, tc.wantMethod, cfg.Method)
+			assert.Equal(t, tc.wantHops, cfg.TrustedHops)
 		})
 	}
 }

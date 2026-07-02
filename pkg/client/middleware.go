@@ -7,8 +7,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 
 	"github.com/hashicorp/go-tfe"
@@ -17,6 +19,20 @@ import (
 )
 
 const OrganizationAllowlistEnv = "MCP_ORGANIZATION_ALLOWLIST"
+
+const (
+	// RemoteIPMethodEnv selects how the client IP is sourced for X-Forwarded-For.
+	// The valid values are: "RemoteAddr" (default), "X-Real-IP", "X-Forwarded-For".
+	RemoteIPMethodEnv = "MCP_REMOTE_IP_METHOD"
+
+	// XFFTrustedHopsEnv sets the number of trusted proxy hops, counted from the
+	// right of the X-Forwarded-For chain. Only used with the X-Forwarded-For method.
+	XFFTrustedHopsEnv = "MCP_XFF_TRUSTED_HOPS"
+
+	RemoteIPMethodRemoteAddr = "RemoteAddr"
+	RemoteIPMethodXRealIP    = "X-Real-IP"
+	RemoteIPMethodXFF        = "X-Forwarded-For"
+)
 
 var ErrMalformedOrganizationAllowlist = errors.New("malformed organization allowlist")
 
@@ -265,6 +281,7 @@ func getTokenFromAuthHeader(r *http.Request) string {
 // This middleware extracts Terraform configuration from HTTP headers, query parameters,
 // or environment variables and adds them to the request context for use by MCP tools
 func TerraformContextMiddleware(logger *log.Logger) func(http.Handler) http.Handler {
+	clientIPCfg := LoadClientIPConfigFromEnv()
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			ctx := r.Context()
@@ -322,9 +339,11 @@ func TerraformContextMiddleware(logger *log.Logger) func(http.Handler) http.Hand
 
 			// Capture client IP for X-Forwarded-For header forwarding
 			if utils.GetEnv(ForwardClientIP, "") == "true" {
-				clientIP := getClientIP(r)
-				ctx = context.WithValue(ctx, contextKey(ClientIPKey), clientIP)
-				logger.Debugf("Client IP captured for forwarding: %s", clientIP)
+				clientIP := getClientIP(r, clientIPCfg)
+				if clientIP != "" {
+					ctx = context.WithValue(ctx, contextKey(ClientIPKey), clientIP)
+					logger.Debugf("Client IP captured for forwarding (method=%s): %s", clientIPCfg.Method, clientIP)
+				}
 			}
 			// Call the next handler with the enriched context
 			next.ServeHTTP(w, r.WithContext(ctx))
@@ -332,22 +351,108 @@ func TerraformContextMiddleware(logger *log.Logger) func(http.Handler) http.Hand
 	}
 }
 
-// getClientIP extracts the client IP from the request
-func getClientIP(r *http.Request) string {
-	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
-		if idx := strings.Index(xff, ","); idx != -1 {
-			return strings.TrimSpace(xff[:idx])
+// ClientIPConfig controls how the client IP is sourced for forwarding.
+type ClientIPConfig struct {
+	// The Method is one of the RemoteIPMethod consts. It defaults to RemoteAddr.
+	Method string
+	// TrustedHops is the number of proxy hops to trust from the right of the
+	// X-Forwarded-For chain. Only used when the selected method is X-Forwarded-For.
+	TrustedHops int
+}
+
+// The LoadClientIPConfigFromEnv reads the client-IP sourcing config from the env.
+// The default is RemoteAddr, which trusts only the direct connection.
+func LoadClientIPConfigFromEnv() ClientIPConfig {
+	method := strings.TrimSpace(os.Getenv(RemoteIPMethodEnv))
+	switch method {
+	case RemoteIPMethodXRealIP, RemoteIPMethodXFF, RemoteIPMethodRemoteAddr:
+	default:
+		method = RemoteIPMethodRemoteAddr
+	}
+
+	hops := 0
+	if raw := strings.TrimSpace(os.Getenv(XFFTrustedHopsEnv)); raw != "" {
+		if n, err := strconv.Atoi(raw); err == nil && n > 0 {
+			hops = n
 		}
-		return strings.TrimSpace(xff)
 	}
 
-	if xri := r.Header.Get("X-Real-IP"); xri != "" {
-		return strings.TrimSpace(xri)
-	}
+	return ClientIPConfig{Method: method, TrustedHops: hops}
+}
 
+// The getClientIP returns the client IP from the request based on the cfg. It returns a
+// validated IP str, or "" if none could be determined.
+//
+// RemoteAddr (the default) trusts only the direct TCP peer. X-Real-IP and
+// X-Forwarded-For are opt-in, since those headers are client-supplied and can be
+// spoofed unless a trusted proxy sets them.
+func getClientIP(r *http.Request, cfg ClientIPConfig) string {
+	switch cfg.Method {
+	case RemoteIPMethodXRealIP:
+		if ip := parseIP(r.Header.Get("X-Real-IP")); ip != "" {
+			return ip
+		}
+		return remoteAddrIP(r)
+
+	case RemoteIPMethodXFF:
+		if ip := ipFromXFF(r.Header.Get("X-Forwarded-For"), cfg.TrustedHops); ip != "" {
+			return ip
+		}
+		return remoteAddrIP(r)
+
+	default: // RemoteIPMethodRemoteAddr
+		return remoteAddrIP(r)
+	}
+}
+
+// remoteAddrIP returns the validated IP from r.RemoteAddr, it handles >  IPv4, IPv6,
+// and addresses with or without a port.
+func remoteAddrIP(r *http.Request) string {
 	addr := r.RemoteAddr
-	if idx := strings.LastIndex(addr, ":"); idx != -1 {
-		return addr[:idx]
+	if addr == "" {
+		return ""
 	}
-	return addr
+	if host, _, err := net.SplitHostPort(addr); err == nil {
+		return parseIP(host)
+	}
+	return parseIP(addr)
+}
+
+// ipFromXFF returns the trusted client IP from an X-Forwarded-For chain.
+//
+// hops is the number of trusted proxies between the server and the client,
+// counted from the right (the rightmost entry is set by the nearest proxy).
+// It skips those hops and returns the next entry to the left, which is the
+// first client-supplied address beyond the trusted proxies.
+// .  example flow on how it works, and what the logic represents >
+//
+//	hops=1, "200.1.2.3, 10.1.1.10"                         -> "200.1.2.3"
+//	hops=2, "108.0.0.1, 200.1.2.3, 10.1.1.10, 192.168.0.1" -> "200.1.2.3"
+//
+// Returns "" if the chain is empty, hops is <= 0, the position is out of range,
+// or the entry is not a valid IP.
+func ipFromXFF(xff string, hops int) string {
+	if xff == "" || hops <= 0 {
+		return ""
+	}
+	parts := strings.Split(xff, ",")
+	// Skip hops trusted proxies from the right, then take the next entry left.
+	// hops=1 -> parts[len-2], hops=2 -> parts[len-3].
+	idx := len(parts) - hops - 1
+	if idx < 0 || idx >= len(parts) {
+		return ""
+	}
+	return parseIP(parts[idx])
+}
+
+func parseIP(s string) string {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return ""
+	}
+	ip := net.ParseIP(s)
+	if ip == nil {
+		return ""
+	}
+	return ip.String()
 }
