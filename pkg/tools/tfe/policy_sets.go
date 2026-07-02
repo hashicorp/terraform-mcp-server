@@ -27,6 +27,52 @@ type MatchingPolicySet struct {
 	Reason      string `json:"reason"`
 }
 
+// PolicySetDetails represents detailed information about a policy set.
+type PolicySetDetails struct {
+	ID                string                  `json:"id"`
+	Name              string                  `json:"name"`
+	Description       string                  `json:"description"`
+	Kind              string                  `json:"kind"`
+	Global            bool                    `json:"global"`
+	Overridable       bool                    `json:"overridable"`
+	PoliciesPath      string                  `json:"policies_path,omitempty"`
+	PolicyToolVersion string                  `json:"policy_tool_version,omitempty"`
+	VCSRepo           *VCSRepoInfo            `json:"vcs_repo,omitempty"`
+	Policies          []PolicyInfo            `json:"policies"`
+	Workspaces        []WorkspaceInfo         `json:"workspaces"`
+	Projects          []ProjectInfo           `json:"projects,omitempty"`
+}
+
+// PolicyInfo represents a policy within a policy set.
+type PolicyInfo struct {
+	ID              string `json:"id"`
+	Name            string `json:"name"`
+	Description     string `json:"description,omitempty"`
+	EnforcementLevel string `json:"enforcement_level"`
+	PolicySetID     string `json:"policy_set_id"`
+	Kind            string `json:"kind"`
+}
+
+// WorkspaceInfo represents basic workspace information.
+type WorkspaceInfo struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+}
+
+// ProjectInfo represents basic project information.
+type ProjectInfo struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+}
+
+// VCSRepoInfo represents VCS repository information.
+type VCSRepoInfo struct {
+	Identifier        string `json:"identifier"`
+	Branch            string `json:"branch,omitempty"`
+	IngressSubmodules bool   `json:"ingress_submodules"`
+	OAuthTokenID      string `json:"oauth_token_id"`
+}
+
 // AttachPolicySetToWorkspaces creates a tool to attach a policy set to workspaces.
 func AttachPolicySetToWorkspaces(logger *log.Logger) server.ServerTool {
 	return server.ServerTool{
@@ -182,3 +228,110 @@ func listWorkspacePolicySetsHandler(ctx context.Context, request mcp.CallToolReq
 		},
 	}, nil
 }
+
+// GetPolicySetDetails creates a tool to get detailed information about a specific policy set.
+func GetPolicySetDetails(logger *log.Logger) server.ServerTool {
+	return server.ServerTool{
+		Tool: mcp.NewTool("get_policy_set_details",
+			mcp.WithDescription("Get detailed information about a specific policy set, including all policies, enforcement levels, workspaces, and configuration."),
+			mcp.WithReadOnlyHintAnnotation(true),
+			mcp.WithString("policy_set_id", mcp.Required(), mcp.Description("The ID of the policy set to get details for (e.g., polset-3yVQZvHzf5j3WRJ1)")),
+		),
+		Handler: func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			return getPolicySetDetailsHandler(ctx, request, logger)
+		},
+	}
+}
+
+func getPolicySetDetailsHandler(ctx context.Context, request mcp.CallToolRequest, logger *log.Logger) (*mcp.CallToolResult, error) {
+	policySetID, err := request.RequireString("policy_set_id")
+	if err != nil {
+		return ToolError(logger, "missing required input: policy_set_id", err)
+	}
+
+	tfeClient, err := client.GetTfeClientFromContext(ctx, logger)
+	if err != nil {
+		return ToolError(logger, "failed to get Terraform client", err)
+	}
+
+	// Read the policy set (v1.103.0 doesn't support include options in Read)
+	policySet, err := tfeClient.PolicySets.Read(ctx, policySetID)
+	if err != nil {
+		return ToolErrorf(logger, "failed to read policy set '%s': %v", policySetID, err)
+	}
+
+	// Build the detailed response
+	overridable := false
+	if policySet.Overridable != nil {
+		overridable = *policySet.Overridable
+	}
+
+	details := PolicySetDetails{
+		ID:                policySet.ID,
+		Name:              policySet.Name,
+		Description:       policySet.Description,
+		Kind:              string(policySet.Kind),
+		Global:            policySet.Global,
+		Overridable:       overridable,
+		PoliciesPath:      policySet.PoliciesPath,
+		PolicyToolVersion: policySet.PolicyToolVersion,
+		Policies:          make([]PolicyInfo, 0),
+		Workspaces:        make([]WorkspaceInfo, 0),
+		Projects:          make([]ProjectInfo, 0),
+	}
+
+	// Add VCS repo information if available
+	if policySet.VCSRepo != nil {
+		details.VCSRepo = &VCSRepoInfo{
+			Identifier:        policySet.VCSRepo.Identifier,
+			Branch:            policySet.VCSRepo.Branch,
+			IngressSubmodules: policySet.VCSRepo.IngressSubmodules,
+			OAuthTokenID:      policySet.VCSRepo.OAuthTokenID,
+		}
+	}
+
+	// Add policies information
+	for _, policy := range policySet.Policies {
+		enforcementLevel := ""
+		if len(policy.Enforce) > 0 {
+			enforcementLevel = string(policy.Enforce[0].Mode)
+		}
+		details.Policies = append(details.Policies, PolicyInfo{
+			ID:              policy.ID,
+			Name:            policy.Name,
+			Description:     policy.Description,
+			EnforcementLevel: enforcementLevel,
+			PolicySetID:     policySetID,
+			Kind:            string(policy.Kind),
+		})
+	}
+
+	// Add workspaces information
+	for _, workspace := range policySet.Workspaces {
+		details.Workspaces = append(details.Workspaces, WorkspaceInfo{
+			ID:   workspace.ID,
+			Name: workspace.Name,
+		})
+	}
+
+	// Add projects information
+	for _, project := range policySet.Projects {
+		details.Projects = append(details.Projects, ProjectInfo{
+			ID:   project.ID,
+			Name: project.Name,
+		})
+	}
+
+	result, err := json.MarshalIndent(details, "", "  ")
+	if err != nil {
+		return ToolError(logger, "failed to marshal policy set details", err)
+	}
+
+	return &mcp.CallToolResult{
+		Content: []mcp.Content{
+			mcp.NewTextContent(string(result)),
+		},
+	}, nil
+}
+
+

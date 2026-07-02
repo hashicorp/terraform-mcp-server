@@ -26,6 +26,13 @@ IMPROVEMENTS
 * Bump golang to 1.26.2 to fix security scan
 
 # 0.5.1
+# Unreleased
+
+FEATURES
+
+* Add TFE support for get_policy_details tool
+
+
 
 HOTFIX
 

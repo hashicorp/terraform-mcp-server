@@ -22,14 +22,17 @@ import (
 func PolicyDetails(logger *log.Logger) server.ServerTool {
 	return server.ServerTool{
 		Tool: mcp.NewTool("get_policy_details",
-			mcp.WithDescription(`Fetches up-to-date documentation for a specific policy from the Terraform registry. You must call 'search_policies' first to obtain the exact terraform_policy_id required to use this tool.`),
-			mcp.WithTitleAnnotation("Fetch detailed Terraform policy documentation using a terraform_policy_id"),
+			mcp.WithDescription(`Fetches detailed policy information from either the public Terraform Registry or TFE/TFC.
+- For public registry policy sets: Use terraform_policy_id from 'search_policies' (e.g., 'policies/hashicorp/CIS-Policy-Set-for-AWS-Terraform/1.0.1')
+- For TFE/TFC individual policies: Use policy_id (e.g., 'pol-u3S5p2Uwk21keu1s')
+The tool automatically detects the ID format and routes to the appropriate backend.`),
+			mcp.WithTitleAnnotation("Fetch detailed Terraform policy documentation from Registry or TFE/TFC"),
 			mcp.WithOpenWorldHintAnnotation(true),
 			mcp.WithReadOnlyHintAnnotation(true),
 			mcp.WithDestructiveHintAnnotation(false),
 			mcp.WithString("terraform_policy_id",
 				mcp.Required(),
-				mcp.Description("Matching terraform_policy_id retrieved from the 'search_policies' tool (e.g., 'policies/hashicorp/CIS-Policy-Set-for-AWS-Terraform/1.0.1')"),
+				mcp.Description("Policy identifier: either terraform_policy_id from 'search_policies' (e.g., 'policies/hashicorp/...') or TFE policy_id (e.g., 'pol-...')"),
 			),
 		),
 		Handler: func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -38,15 +41,60 @@ func PolicyDetails(logger *log.Logger) server.ServerTool {
 	}
 }
 
+// getTFEPolicyDetails fetches individual policy details from TFE/TFC
+func getTFEPolicyDetails(ctx context.Context, policyID string, logger *log.Logger) (*mcp.CallToolResult, error) {
+	tfeClient, err := client.GetTfeClientFromContext(ctx, logger)
+	if err != nil {
+		return ToolError(logger, "failed to get Terraform client - TFE/TFC authentication required for policy IDs starting with 'pol-'", err)
+	}
+
+	// Read the policy from TFE
+	policy, err := tfeClient.Policies.Read(ctx, policyID)
+	if err != nil {
+		return ToolErrorf(logger, "failed to read policy '%s' from TFE/TFC: %v", policyID, err)
+	}
+
+	// Build response with policy details
+	enforcementLevel := string(policy.EnforcementLevel)
+	query := ""
+	if policy.Query != nil {
+		query = *policy.Query
+	}
+
+	var builder strings.Builder
+	builder.WriteString(fmt.Sprintf("## TFE/TFC Policy Details: %s\n\n", policy.Name))
+	builder.WriteString(fmt.Sprintf("**ID**: %s\n", policy.ID))
+	builder.WriteString(fmt.Sprintf("**Name**: %s\n", policy.Name))
+	if policy.Description != "" {
+		builder.WriteString(fmt.Sprintf("**Description**: %s\n", policy.Description))
+	}
+	builder.WriteString(fmt.Sprintf("**Kind**: %s\n", string(policy.Kind)))
+	builder.WriteString(fmt.Sprintf("**Enforcement Level**: %s\n", enforcementLevel))
+	builder.WriteString(fmt.Sprintf("**Policy Set Count**: %d\n", policy.PolicySetCount))
+	if query != "" {
+		builder.WriteString(fmt.Sprintf("**Query**: %s\n", query))
+	}
+	builder.WriteString(fmt.Sprintf("**Updated At**: %s\n", policy.UpdatedAt.Format("2006-01-02T15:04:05Z")))
+
+	return mcp.NewToolResultText(builder.String()), nil
+}
+
 func getPolicyDetailsHandler(ctx context.Context, request mcp.CallToolRequest, logger *log.Logger) (*mcp.CallToolResult, error) {
 	terraformPolicyID, err := request.RequireString("terraform_policy_id")
 	if err != nil {
-		return ToolError(logger, "missing required input: terraform_policy_id - use search_policies first to find valid policy IDs", err)
+		return ToolError(logger, "missing required input: terraform_policy_id", err)
 	}
 	if terraformPolicyID == "" {
-		return ToolError(logger, "terraform_policy_id cannot be empty - use search_policies first to find valid policy IDs", nil)
+		return ToolError(logger, "terraform_policy_id cannot be empty", nil)
 	}
 
+	// Auto-detect ID type: TFE policy IDs start with "pol-", registry IDs start with "policies/"
+	if strings.HasPrefix(terraformPolicyID, "pol-") {
+		// This is a TFE/TFC policy ID - fetch from TFE
+		return getTFEPolicyDetails(ctx, terraformPolicyID, logger)
+	}
+
+	// Default to public registry for policy sets
 	httpClient, err := client.GetHttpClientFromContext(ctx, logger)
 	if err != nil {
 		return ToolError(logger, "failed to get http client for public Terraform registry", err)
