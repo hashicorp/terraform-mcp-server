@@ -30,7 +30,7 @@ automation and interaction capabilities for Infrastructure as Code (IaC) develop
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `TFE_ADDRESS` | HCP Terraform or TFE address | `"https://app.terraform.io"` |
+| `TFE_ADDRESS` | Sets the Terraform Enterprise/HCP Terraform address for API calls. Must include the protocol (e.g., `https://app.terraform.io`). In streamable-http mode this is the only way to set the address; it cannot be supplied by clients via header or query parameter. | Optional |
 | `TFE_TOKEN` | Terraform Enterprise API token | `""` (empty) |
 | `TFE_SKIP_TLS_VERIFY` | Skip HCP Terraform or Terraform Enterprise TLS verification | `false` |
 | `LOG_LEVEL` | Logging level: `trace`, `debug`, `info`, `warn`, `error`, `fatal`, `panic` (overrides `--log-level` flag) | `info` |
@@ -585,7 +585,6 @@ When `MCP_ORGANIZATION_ALLOWLIST` or `--organization-allowlist` is configured, t
 |--------|-------------|
 | `TFE_TOKEN` | Terraform API token |
 | `Authorization: Bearer <token>` | Alternative method using standard Bearer auth |
-| `TFE_ADDRESS` | Override the Terraform address (blocked when server token is set via env) |
 | `TFE_SKIP_TLS_VERIFY` | Skip TLS verification for the request |
 
 ### Example: curl
@@ -606,7 +605,7 @@ curl -X POST http://localhost:8080/mcp \
 
 ### Security Considerations
 
-- **TFE_ADDRESS override is blocked** when the server has `TFE_TOKEN` set via environment variable. This prevents attackers from redirecting requests to a malicious server that could harvest tokens.
+- **TFE_ADDRESS cannot be set by clients.** In streamable-http mode the Terraform address is sourced only from the server-side `TFE_ADDRESS` environment variable (or the default). Requests that attempt to set `TFE_ADDRESS` via HTTP header or query parameter are rejected with a 403. This prevents a client from redirecting requests, and the `Authorization` token, to a malicious server.
 - **Never pass tokens in query parameters** - the server will reject such requests with a 400 error.
 - Always use TLS (`MCP_TLS_CERT_FILE`/`MCP_TLS_KEY_FILE`) when deploying centrally to protect tokens in transit.
 - Configure `MCP_ALLOWED_ORIGINS` to restrict which clients can connect.

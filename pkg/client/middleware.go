@@ -167,8 +167,10 @@ func OrganizationAllowlistMiddleware(allowlist []string, logger *log.Logger) fun
 			}
 
 			if r.Header.Get(TerraformAddress) != "" || r.URL.Query().Get(TerraformAddress) != "" {
-				logger.Warn("Rejecting request: Terraform address override is not allowed when organization allowlist is configured")
-				http.Error(w, "Cannot specify Terraform address when organization allowlist is configured", http.StatusForbidden)
+				if logger != nil {
+					logger.Warn("Rejecting request: Terraform address cannot be specified via header or query parameter")
+				}
+				http.Error(w, "Cannot specify Terraform address via header or query parameter", http.StatusForbidden)
 				return
 			}
 
@@ -263,24 +265,29 @@ func getTokenFromAuthHeader(r *http.Request) string {
 // This middleware extracts Terraform configuration from HTTP headers, query parameters,
 // or environment variables and adds them to the request context for use by MCP tools
 func TerraformContextMiddleware(logger *log.Logger) func(http.Handler) http.Handler {
-	// Check at startup if token is configured via env var
-	tokenFromEnv := utils.GetEnv(TerraformToken, "") != ""
-
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			requiredHeaders := []string{TerraformAddress, TerraformToken, TerraformSkipTLSVerify}
 			ctx := r.Context()
-			for _, header := range requiredHeaders {
-				var headerValue string
 
-				//If TFE_TOKEN is set via env var, reject TFE_ADDRESS from headers.
-				// This will help prevent potential attackers from redirecting requests to a bad server
-				// that could harvest the Authorization header containing the token.
-				if header == TerraformAddress && tokenFromEnv && r.Header.Get(header) != "" {
-					logger.Warn("Rejecting Terraform-Address header: cannot override address when token is set via environment variable")
-					http.Error(w, "Cannot specify Terraform address via header when token is configured server-side", http.StatusForbidden)
-					return
-				}
+			// TFE_ADDRESS is never sourced from the client in streamable-http mode.
+			// Allowing a client to set the address via header or query parameter would
+			// let it redirect requests (and the Authorization token) to an arbitrary
+			// server. We Reject those attempts and source the address via server-side only.
+			if r.Header.Get(TerraformAddress) != "" || r.URL.Query().Get(TerraformAddress) != "" {
+				logger.Warn("Rejecting request: Terraform address cannot be specified via header or query parameter")
+				http.Error(w, "Cannot specify Terraform address via header or query parameter", http.StatusForbidden)
+				return
+			}
+			terraformAddress := utils.GetEnv(TerraformAddress, DefaultTerraformAddress)
+			ctx = context.WithValue(ctx, contextKey(TerraformAddress), terraformAddress)
+			if logger != nil {
+				logger.Debug("Terraform address configured server-side")
+			}
+
+			// The remaining vals may still be sourced from the client.
+			clientHeaders := []string{TerraformToken, TerraformSkipTLSVerify}
+			for _, header := range clientHeaders {
+				var headerValue string
 
 				// Check standard header first
 				headerValue = r.Header.Get(header)
@@ -310,8 +317,6 @@ func TerraformContextMiddleware(logger *log.Logger) func(http.Handler) http.Hand
 				// Log the source of the configuration (without exposing sensitive values)
 				if header == TerraformToken && headerValue != "" {
 					logger.Debug("Terraform token provided via request context")
-				} else if header == TerraformAddress && headerValue != "" {
-					logger.Debug("Terraform address configured via request context")
 				}
 			}
 
