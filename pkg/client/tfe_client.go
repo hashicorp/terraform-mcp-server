@@ -24,6 +24,8 @@ const (
 	DefaultTerraformAddress = "https://app.terraform.io"
 	ForwardClientIP         = "MCP_FORWARD_CLIENT_IP"
 	ClientIPKey             = "CLIENT_IP"
+	SharedSecretEnv         = "TF_MCP_SHARED_SECRET"
+	SharedSecretHeader      = "X-Tf-Mcp-Secret"
 )
 
 var activeTfeClients sync.Map
@@ -70,6 +72,12 @@ func newTfeClient(terraformAddress string, terraformSkipTLSVerify bool, terrafor
 	if clientIP != "" {
 		config.Headers.Set("X-Forwarded-For", clientIP)
 	}
+
+	// Attach the shared secret (if configured) so Atlas can identify requests
+	// from a HashiCorp-hosted deployment. Deploy-time static; never logged.
+	if secret := utils.GetEnv(SharedSecretEnv, ""); secret != "" {
+		config.Headers.Set(SharedSecretHeader, secret)
+	}
 	config.HTTPClient = createHTTPClient(terraformSkipTLSVerify, logger)
 
 	client, err := tfe.NewClient(config)
@@ -79,6 +87,36 @@ func newTfeClient(terraformAddress string, terraformSkipTLSVerify bool, terrafor
 	}
 
 	return client, nil
+}
+
+// the buildTFEConfig func assembles the go-tfe client configuration, including the outbound
+// headers set on every request (User-Agent, optional X-Forwarded-For, and the
+// optional hosted-deployment shared secret).
+//
+// This is split out from newTfeClient so the header logic can be unit-tested (I feel this feature should be tested, so if the header logic gets refactored in the future, we can catch the regression):
+// tfe.NewClient consumes the config and does not expose the headers back, so we can
+// assert against the *tfe.Config this returns instead.
+func buildTFEConfig(terraformAddress string, terraformSkipTLSVerify bool, terraformToken string, clientIP string, logger *log.Logger) *tfe.Config {
+	config := &tfe.Config{
+		Address:           terraformAddress,
+		Token:             terraformToken,
+		RetryServerErrors: true,
+		Headers:           make(http.Header),
+	}
+
+	config.Headers.Set("User-Agent", fmt.Sprintf("terraform-mcp-server/%s", version.GetHumanVersion()))
+	if clientIP != "" {
+		config.Headers.Set("X-Forwarded-For", clientIP)
+	}
+
+	// Attach the shared secret (if configured) so Atlas can identify requests
+	// from a HashiCorp-hosted deployment.
+	if secret := utils.GetEnv(SharedSecretEnv, ""); secret != "" {
+		config.Headers.Set(SharedSecretHeader, secret)
+	}
+
+	config.HTTPClient = createHTTPClient(terraformSkipTLSVerify, logger)
+	return config
 }
 
 // GetTfeClient retrieves the TFE client for the given session

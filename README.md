@@ -32,6 +32,7 @@ automation and interaction capabilities for Infrastructure as Code (IaC) develop
 |----------|-------------|---------|
 | `TFE_ADDRESS` | Sets the Terraform Enterprise/HCP Terraform address for API calls. Must include the protocol (e.g., `https://app.terraform.io`). In streamable-http mode this is the only way to set the address; it cannot be supplied by clients via header or query parameter. | Optional |
 | `TFE_TOKEN` | Terraform Enterprise API token | `""` (empty) |
+| `TF_MCP_SHARED_SECRET` | Shared secret sent as the `X-Tf-Mcp-Secret` header on requests to HCP Terraform / TFE, used to identify requests originating from a hosted MCP deployment. Should only be used over TLS. | `""` (empty) |
 | `TFE_SKIP_TLS_VERIFY` | Skip HCP Terraform or Terraform Enterprise TLS verification | `false` |
 | `LOG_LEVEL` | Logging level: `trace`, `debug`, `info`, `warn`, `error`, `fatal`, `panic` (overrides `--log-level` flag) | `info` |
 | `LOG_FORMAT` | Logging format: `text` or `json` (overrides `--log-format` flag)| `text` |
@@ -644,6 +645,7 @@ curl -X POST http://localhost:8080/mcp \
 ### Security Considerations
 
 - **TFE_ADDRESS cannot be set by clients.** In streamable-http mode the Terraform address is sourced only from the server-side `TFE_ADDRESS` environment variable (or the default). Requests that attempt to set `TFE_ADDRESS` via HTTP header or query parameter are rejected with a 403. This prevents a client from redirecting requests, and the `Authorization` token, to a malicious server.
+- **Hosted deployment identification:** setting `TF_MCP_SHARED_SECRET` sends that value as the `X-Tf-Mcp-Secret` header on every HCP Terraform / TFE request, letting the backend identify requests from a known hosted deployment (e.g. to apply IP allowlists). It is a static secret sent in a header, so only use it over TLS and treat the value as a credential.
 - **Never pass tokens in query parameters** - the server will reject such requests with a 400 error.
 - Always use TLS (`MCP_TLS_CERT_FILE`/`MCP_TLS_KEY_FILE`) when deploying centrally to protect tokens in transit.
 - Configure `MCP_ALLOWED_ORIGINS` to restrict which clients can connect.
