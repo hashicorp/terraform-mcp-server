@@ -26,7 +26,7 @@ func ForceUnlockWorkspace(logger *log.Logger) server.ServerTool {
 			mcp.WithOpenWorldHintAnnotation(true),
 			mcp.WithString("workspace_id",
 				mcp.Required(),
-				mcp.Description("The ID of the workspace to force unlock (e.g. 'ws-abc123def456'). Must be locked by a run, not manually locked by a user."),
+				mcp.Description("The ID of the workspace to force unlock (e.g. 'ws-abc123def456')."),
 			),
 		),
 		Handler: func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
