@@ -371,7 +371,11 @@ func streamableHTTPServerInit(ctx context.Context, hcServer *server.MCPServer, l
 	errC := make(chan error, 1)
 	go func() {
 		logger.Infof("Starting StreamableHTTP server on %s%s", addr, endpointPath)
-		errC <- httpServer.ListenAndServe()
+		if tlsConfig != nil {
+			errC <- httpServer.ListenAndServeTLS(tlsConfig.CertFile, tlsConfig.KeyFile)
+		} else {
+			errC <- httpServer.ListenAndServe()
+		}
 	}()
 
 	// Wait for shutdown signal
