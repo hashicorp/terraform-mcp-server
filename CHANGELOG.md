@@ -1,3 +1,9 @@
+# 1.0.1
+
+SECURITY
+
+* Disable client-supplied `TFE_ADDRESS` in streamable-http mode. Previously a client could override the Terraform address via HTTP header or query parameter, redirecting the server's requests and Authorization bearer token to an arbitrary endpoint. The address must now be configured server-side via the `TFE_ADDRESS` env var. This is a breaking change: clients supplying the address via header or query parameter now receive a 403. [389](https://github.com/hashicorp/terraform-mcp-server/pull/389)
+
 # 1.0.0
 
 FEATURES
