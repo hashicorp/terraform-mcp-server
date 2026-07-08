@@ -24,6 +24,10 @@ FIXES
 
 * Fix JSON marshalling in update_workspace tool [370](https://github.com/hashicorp/terraform-mcp-server/pull/370)
 
+FIXES
+
+* Fix `--tools` alone being falsely flagged as conflicting with `--toolsets` [380](https://github.com/hashicorp/terraform-mcp-server/pull/380)
+
 # 0.5.2
 
 IMPROVEMENTS
