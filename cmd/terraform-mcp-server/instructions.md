@@ -34,7 +34,7 @@ The Terraform MCP server provides tools for generating better Terraform code thr
 
 ### Workspace Management
 - **Discovery**: `search_workspaces` (empty query returns all) → `get_workspace_details`
-- **Operations**: `create_workspace`, `update_workspace`, `delete_workspace_safely`
+- **Operations**: `create_workspace`, `update_workspace`, `delete_workspace_safely`, `force_unlock_workspace`
 - `delete_workspace_safely` only works if workspace has no managed resources
 
 ### Run Execution
@@ -77,6 +77,7 @@ The Terraform MCP server provides tools for generating better Terraform code thr
 - Registry failures: Try private first (if token), fallback to public
 - Run failures: Check `get_run_details`, get_plan_details and logs before retry
 - Variable conflicts: `search_workspace_variables` first to avoid duplicates
+- Run stuck and holds the lock: `action_run` to cancel or discard the run → `force_unlock_workspace` to unlock the workspace
 
 ## Security Notes
 - Never expose TFE_TOKEN or other sensitive values in outputs

@@ -142,6 +142,11 @@ func (r *DynamicToolRegistry) registerTFETools() {
 		tool := r.createDynamicTFETool("delete_workspace_safely", tfeTools.DeleteWorkspaceSafely)
 		r.mcpServer.AddTool(tool.Tool, tool.Handler)
 	}
+	// Only register force_unlock_workspace if TF operations are enabled AND toolset is enabled
+	if isTerraformOperationsEnabled() && toolsets.IsToolEnabled("force_unlock_workspace", r.enabledToolsets) {
+		tool := r.createDynamicTFETool("force_unlock_workspace", tfeTools.ForceUnlockWorkspace)
+		r.mcpServer.AddTool(tool.Tool, tool.Handler)
+	}
 
 	// Registry-private toolset - Private provider tools
 	if toolsets.IsToolEnabled("search_private_providers", r.enabledToolsets) {
