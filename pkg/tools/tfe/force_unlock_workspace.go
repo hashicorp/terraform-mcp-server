@@ -4,8 +4,10 @@
 package tools
 
 import (
+	"fmt"
 	"context"
 	"strings"
+	"encoding/json"
 
 	"github.com/hashicorp/terraform-mcp-server/pkg/client"
 	log "github.com/sirupsen/logrus"
@@ -62,13 +64,19 @@ func forceUnlockWorkspace(ctx context.Context, request mcp.CallToolRequest, logg
 	
 	workspace, err = tfeClient.Workspaces.ForceUnlock(ctx, workspaceID)
 	if err != nil {
-		return ToolErrorf(logger, "failed to force unlock workspace '%s'. This is the reported error: %v", workspaceID, err)
+		return ToolErrorf(logger, "failed to force unlock workspace %q. This is the reported error: %v", workspaceID, err)
 	}
 
-	buf, err := getWorkspaceDetailsForTools(ctx, "force_unlock_workspace", tfeClient, workspace, logger)
+	result := map[string]interface{}{
+		"Success": true,
+		"msg": fmt.Sprintf("Workspace %q is now unlocked", workspaceID),
+	}
+
+	resultJSON, err := json.Marshal(result)
+
 	if err != nil {
-		return ToolError(logger, "failed to get workspace details", err)
+		return ToolError(logger, "failed to marshal result", err)
 	}
 
-	return mcp.NewToolResultText(buf.String()), nil
+	return mcp.NewToolResultText(string(resultJSON)), nil
 }
