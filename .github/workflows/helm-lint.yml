@@ -1,0 +1,41 @@
+# Copyright (c) HashiCorp, Inc.
+# SPDX-License-Identifier: MPL-2.0
+
+name: Helm Chart
+on:
+  push:
+    paths:
+      - 'helm/**'
+  pull_request:
+    paths:
+      - 'helm/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  helm-lint:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out code
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
+
+      - name: Set up Helm
+        uses: azure/setup-helm@b9e51907a09c216f16ebe8536097933489208112 # v4.3.0
+
+      - name: Lint chart
+        run: helm lint helm/terraform-mcp-server
+
+      - name: Template chart (defaults)
+        run: helm template helm/terraform-mcp-server
+
+      - name: Template chart (overrides)
+        run: |
+          helm template helm/terraform-mcp-server \
+            --set mcpServer.tfeAddress=https://tfe.example.com \
+            --set mcpServer.allowedOrigins=https://ide.example.com \
+            --set otel.enabled=true \
+            --set otel.metricsEndpoint=http://collector:4318 \
+            --set ingress.enabled=true
