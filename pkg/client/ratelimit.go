@@ -187,4 +187,5 @@ func (m *RateLimitMiddleware) DeleteSession(sessionID string) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	delete(m.sessionLimiters, sessionID)
+	m.logger.Debugf("Cleaned up sessionLimiters for session: %s", sessionID)
 }
