@@ -3,7 +3,9 @@
 FIXES
 
 * Disable client-supplied `TFE_ADDRESS` in streamable-http mode. Previously a client could override the Terraform address via HTTP header or query parameter, redirecting the server's requests and Authorization bearer token to an arbitrary endpoint. The address must now be configured server-side via the `TFE_ADDRESS` env var. This is a breaking change: clients supplying the address via header or query parameter now receive a 403. [389](https://github.com/hashicorp/terraform-mcp-server/pull/389)
-* Fix http server not serving TLS when configured [391](https://github.com/hashicorp/terraform-mcp-server/pull/391)  
+* Fix http server not serving TLS when configured [391](https://github.com/hashicorp/terraform-mcp-server/pull/391)
+* Make client IP sourcing configurable and fix insecure X-Forwarded-For handling. The server previously trusted the leftmost `X-Forwarded-For` value,had no IPv6 support, and did not validate IPs. Sourcing is now configurable via `MCP_REMOTE_IP_METHOD` (`RemoteAddr`, `X-Real-IP`, `X-Forwarded-For`) and `MCP_XFF_TRUSTED_HOPS`, defaulting to the secure `RemoteAddr`. This is a breaking change: proxy deployments relying on automatic `X-Forwarded-For` forwarding must now set `MCP_REMOTE_IP_METHOD=X-Forwarded-For` and `MCP_XFF_TRUSTED_HOPS`. [388](https://github.com/hashicorp/terraform-mcp-server/pull/388)
+
 
 FEATURES
 
