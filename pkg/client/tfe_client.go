@@ -104,18 +104,20 @@ func GetTfeClientFromContext(ctx context.Context, logger *log.Logger) (*tfe.Clie
 	}
 
 	// Try to get token and address from the current request
-	currentAddress := ctx.Value(contextKey(TerraformAddress)).(string)
+	currentAddress, _ := ctx.Value(contextKey(TerraformAddress)).(string)
 	if currentAddress == "" {
 		currentAddress = utils.GetEnv(TerraformAddress, DefaultTerraformAddress)
 	}
-	currentToken := ctx.Value(contextKey(TerraformToken)).(string)
+	currentToken, _ := ctx.Value(contextKey(TerraformToken)).(string)
 	if currentToken == "" {
 		currentToken = utils.GetEnv(TerraformToken, "")
 	}
 
 	// In a stateless mode the server does not assign any session ID to requests. We need to create new TF clients for every request in that case.
 	if session.SessionID() == "" {
-		return NewTfeClientForToken(currentAddress, parseTerraformSkipTLSVerify(ctx), currentToken, ctx.Value(contextKey(ClientIPKey)).(string), logger)
+		logger.Info("Session ID is empty. Creating a new TF client.")
+		clientIP, _ := ctx.Value(contextKey(ClientIPKey)).(string)
+		return NewTfeClientForToken(currentAddress, parseTerraformSkipTLSVerify(ctx), currentToken, clientIP, logger)
 	}
 
 	// Check if the cached session ID's token+address match the current token+address

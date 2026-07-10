@@ -15,6 +15,10 @@ type contextKey string
 
 // NewSessionHandler initializes clients for the session
 func NewSessionHandler(ctx context.Context, session server.ClientSession, logger *log.Logger) {
+	if _, ok := activeTfeClients.Load(session.SessionID()); ok {
+		return
+	}
+
 	// Create both TFE and HTTP clients for the session
 	tfeClient, err := CreateTfeClientForSession(ctx, session, logger)
 	if err != nil {
@@ -37,7 +41,7 @@ func NewSessionHandler(ctx context.Context, session server.ClientSession, logger
 }
 
 // EndSessionHandler cleans up clients when the session ends
-func EndSessionHandler(_ context.Context, session server.ClientSession, logger *log.Logger) {
+func EndSessionHandler(_ context.Context, session server.ClientSession, rateLimiter *RateLimitMiddleware, logger *log.Logger) {
 	// Unregister from tool registry if it was registered
 	if registryCallback := getToolRegistryCallback(); registryCallback != nil {
 		registryCallback.UnregisterSessionWithTFE(session.SessionID())
@@ -45,6 +49,9 @@ func EndSessionHandler(_ context.Context, session server.ClientSession, logger *
 
 	DeleteTfeClient(session.SessionID())
 	DeleteHttpClient(session.SessionID())
+	if rateLimiter != nil {
+		rateLimiter.DeleteSession(session.SessionID())
+	}
 	logger.Info("Cleaned up clients for session")
 }
 

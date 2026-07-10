@@ -178,3 +178,13 @@ func (m *RateLimitMiddleware) CleanupSessions(activeSessions []string) {
 		}
 	}
 }
+
+// DeleteSession removes the rate limiter for a session when it ends.
+func (m *RateLimitMiddleware) DeleteSession(sessionID string) {
+	if sessionID == "" {
+		return
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	delete(m.sessionLimiters, sessionID)
+}

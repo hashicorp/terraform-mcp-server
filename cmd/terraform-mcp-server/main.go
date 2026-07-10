@@ -45,10 +45,13 @@ func runHTTPServer(logger *log.Logger, host string, port string, endpointPath st
 	hooks.AddOnRegisterSession(func(ctx context.Context, session server.ClientSession) {
 		client.NewSessionHandler(ctx, session, logger)
 	})
+	hcServer, rateLimiter := NewServer(version.Version, logger, enabledToolsets, server.WithHooks(hooks))
+	registerToolsAndResources(hcServer, logger, enabledToolsets)
+
 	hooks.AddOnUnregisterSession(func(ctx context.Context, session server.ClientSession) {
 		// Clean up client info populated in the metrics hooks, for the session
 		sessionClientInfo.Delete(session.SessionID())
-		client.EndSessionHandler(ctx, session, logger)
+		client.EndSessionHandler(ctx, session, rateLimiter, logger)
 	})
 	// When running multiple sessions of the MCP server (load balancing), calling client.NewSessionHandler
 	// in both BeforeListTools and BeforeCallTool ensures that a session that was not initialized during
@@ -68,11 +71,6 @@ func runHTTPServer(logger *log.Logger, host string, port string, endpointPath st
 		}
 	})
 	attachMetricsHooks(hooks, metricsConfig, logger)
-
-	opts := []server.ServerOption{server.WithHooks(hooks)}
-
-	hcServer := NewServer(version.Version, logger, enabledToolsets, opts...)
-	registerToolsAndResources(hcServer, logger, enabledToolsets)
 
 	return streamableHTTPServerInit(ctx, hcServer, logger, host, port, endpointPath, heartbeatInterval, organizationAllowlist)
 }
@@ -152,17 +150,17 @@ func runStdioServer(logger *log.Logger, enabledToolsets []string) error {
 	hooks.AddOnRegisterSession(func(ctx context.Context, session server.ClientSession) {
 		client.NewSessionHandler(ctx, session, logger)
 	})
-	hooks.AddOnUnregisterSession(func(ctx context.Context, session server.ClientSession) {
-		client.EndSessionHandler(ctx, session, logger)
-	})
-
-	hcServer := NewServer(version.Version, logger, enabledToolsets, server.WithHooks(hooks))
+	hcServer, rateLimiter := NewServer(version.Version, logger, enabledToolsets, server.WithHooks(hooks))
 	registerToolsAndResources(hcServer, logger, enabledToolsets)
+
+	hooks.AddOnUnregisterSession(func(ctx context.Context, session server.ClientSession) {
+		client.EndSessionHandler(ctx, session, rateLimiter, logger)
+	})
 
 	return serverInit(ctx, hcServer, logger)
 }
 
-func NewServer(version string, logger *log.Logger, enabledToolsets []string, opts ...server.ServerOption) *server.MCPServer {
+func NewServer(version string, logger *log.Logger, enabledToolsets []string, opts ...server.ServerOption) (*server.MCPServer, *client.RateLimitMiddleware) {
 	// Create rate limiting middleware with environment-based configuration
 	rateLimitConfig := client.LoadRateLimitConfigFromEnv()
 	rateLimitMiddleware := client.NewRateLimitMiddleware(rateLimitConfig, logger)
@@ -183,7 +181,7 @@ func NewServer(version string, logger *log.Logger, enabledToolsets []string, opt
 		version,
 		opts...,
 	)
-	return s
+	return s, rateLimitMiddleware
 }
 
 // parseToolsets parses and validates the toolsets flag value
