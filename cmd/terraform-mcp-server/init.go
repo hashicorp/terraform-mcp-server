@@ -332,6 +332,14 @@ func streamableHTTPServerInit(ctx context.Context, hcServer *server.MCPServer, l
 	mux.Handle(endpointPath, streamableServer)
 	mux.Handle(endpointPath+"/", streamableServer)
 
+	if redirectURL := os.Getenv("MCP_REDIRECT_ROOT_URL"); redirectURL != "" {
+		logger.Infof("Requests to `/` will be redirected to %s", redirectURL)
+		// handle root direct if it's configured
+		mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+			http.Redirect(w, r, redirectURL, http.StatusSeeOther)
+		})
+	}
+
 	// Add health check endpoint
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
