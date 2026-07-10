@@ -10,6 +10,7 @@ FIXES
 FEATURES
 
 * [New Tool] `force_unlock_workspace` Force unlocks a Terraform workspace stuck in a run-held lock. Requires workspace admin permissions and is gated behind `ENABLE_TF_OPERATIONS=true`
+* [Configuration] Add a `MCP_REDIRECT_ROOT_URL` environment variable to allow redirecting `/` of the server when visited in-browser. 
 
 # 1.0.0
 
