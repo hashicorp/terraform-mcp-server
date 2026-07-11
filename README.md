@@ -581,7 +581,7 @@ export MCP_SESSION_MODE=stateless
 
 When running the MCP server centrally (StreamableHTTP mode) for multiple users, each user can pass their own Terraform token via HTTP headers for RBAC enforcement. This allows a single server instance to serve multiple users with different permissions.
 
-When `MCP_ORGANIZATION_ALLOWLIST` or `--organization-allowlist` is configured, the allowlist must be a CSV list of HCP Terraform organization names. The server requires `Authorization: Bearer <token>` and rejects requests unless that token can access at least one organization in the CSV allowlist. Organization name matching is case-insensitive. If the configured CSV value parses to zero organization names, the server exits with a malformed organization allowlist error.
+When `MCP_ORGANIZATION_ALLOWLIST` or `--organization-allowlist` is configured, the allowlist must be a CSV list of HCP Terraform organization names. The server requires `Authorization: Bearer <token>` and rejects requests unless that token can access at least one organization in the CSV allowlist. The bearer token takes precedence if the request also includes a `TFE_TOKEN` header, ensuring the token validated by the allowlist is the token used for Terraform API requests. Organization name matching is case-insensitive. If the configured CSV value parses to zero organization names, the server exits with a malformed organization allowlist error.
 
 ## Client IP Forwarding
 

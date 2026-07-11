@@ -495,6 +495,52 @@ func TestOrganizationAllowlistMiddleware(t *testing.T) {
 	}
 }
 
+func TestOrganizationAllowlistUsesValidatedTokenDownstream(t *testing.T) {
+	logger := log.New()
+	logger.SetLevel(log.ErrorLevel)
+
+	upstreamAuthorization := make(chan string, 1)
+	terraformServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/v2/organizations" {
+			select {
+			case upstreamAuthorization <- r.Header.Get("Authorization"):
+			default:
+			}
+		}
+		w.Header().Set("Content-Type", "application/vnd.api+json")
+		_, err := io.WriteString(w, `{"data":[{"id":"alpha","type":"organizations","attributes":{"name":"alpha"}}]}`)
+		assert.NoError(t, err)
+	}))
+	t.Cleanup(terraformServer.Close)
+	t.Setenv(TerraformAddress, terraformServer.URL)
+
+	var downstreamToken string
+	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		downstreamToken, _ = r.Context().Value(contextKey(TerraformToken)).(string)
+		w.WriteHeader(http.StatusOK)
+	})
+
+	handler := TerraformContextMiddleware(logger)(
+		OrganizationAllowlistMiddleware([]string{"alpha"}, logger)(next),
+	)
+
+	req := httptest.NewRequest(http.MethodPost, "/mcp", nil)
+	req.Header.Set("Authorization", "Bearer allowed-token")
+	req.Header.Set(TerraformToken, "different-token")
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	assert.Equal(t, http.StatusOK, rr.Code)
+	select {
+	case authorization := <-upstreamAuthorization:
+		assert.Equal(t, "Bearer allowed-token", authorization)
+	default:
+		t.Error("expected organization allowlist request")
+	}
+	assert.Equal(t, "allowed-token", downstreamToken)
+}
+
 func TestTokenHasAllowedOrganization(t *testing.T) {
 	tests := []struct {
 		name          string
@@ -623,7 +669,12 @@ func TestGetTokenFromAuthHeader(t *testing.T) {
 		{
 			name:     "Bearer with whitespace token",
 			headers:  map[string]string{"Authorization": "Bearer   "},
-			expected: "  ",
+			expected: "",
+		},
+		{
+			name:     "Bearer token with surrounding whitespace",
+			headers:  map[string]string{"Authorization": "Bearer   my-token  "},
+			expected: "my-token",
 		},
 		{
 			name:     "Bearer lowercase",
@@ -706,7 +757,7 @@ func TestTerraformContextMiddleware(t *testing.T) {
 			},
 		},
 		{
-			name: "standard header takes priority over Authorization Bearer",
+			name: "Authorization Bearer takes priority over standard header",
 			headers: map[string]string{
 				TerraformToken:  "standard-token",
 				"Authorization": "Bearer bearer-token",
@@ -715,7 +766,7 @@ func TestTerraformContextMiddleware(t *testing.T) {
 			envVars:        map[string]string{},
 			expectedStatus: http.StatusOK,
 			expectedContextVals: map[string]string{
-				TerraformToken: "standard-token",
+				TerraformToken: "bearer-token",
 			},
 		},
 		{
