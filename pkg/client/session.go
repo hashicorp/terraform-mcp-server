@@ -41,7 +41,7 @@ func NewSessionHandler(ctx context.Context, session server.ClientSession, logger
 }
 
 // EndSessionHandler cleans up clients when the session ends
-func EndSessionHandler(_ context.Context, session server.ClientSession, logger *log.Logger) {
+func EndSessionHandler(_ context.Context, session server.ClientSession, rateLimiter *RateLimitMiddleware, logger *log.Logger) {
 	// Unregister from tool registry if it was registered
 	if registryCallback := getToolRegistryCallback(); registryCallback != nil {
 		registryCallback.UnregisterSessionWithTFE(session.SessionID())
@@ -49,7 +49,10 @@ func EndSessionHandler(_ context.Context, session server.ClientSession, logger *
 
 	DeleteTfeClient(session.SessionID())
 	DeleteHttpClient(session.SessionID())
-	logger.WithField("session_id", session.SessionID()).Info("Cleaned up clients for session")
+	if rateLimiter != nil {
+		rateLimiter.DeleteSession(session.SessionID())
+	}
+	logger.Info("Cleaned up clients for session")
 }
 
 // ToolRegistryCallback defines the interface for interacting with the tool registry

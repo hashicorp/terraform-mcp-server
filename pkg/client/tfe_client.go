@@ -5,6 +5,7 @@ package client
 
 import (
 	"context"
+	"crypto/sha256"
 	"fmt"
 	"net/http"
 	"sync"
@@ -27,15 +28,23 @@ const (
 
 var activeTfeClients sync.Map
 
+type cachedTfeClient struct {
+	client *tfe.Client
+	token  [32]byte // Store the hash of the token instead of raw value
+}
+
 // NewTfeClient creates a new TFE client for the given session
 func NewTfeClient(sessionId string, terraformAddress string, terraformSkipTLSVerify bool, terraformToken string, clientIP string, logger *log.Logger) (*tfe.Client, error) {
 	client, err := newTfeClient(terraformAddress, terraformSkipTLSVerify, terraformToken, clientIP, logger)
 	if err != nil {
 		return nil, err
 	}
-
-	activeTfeClients.Store(sessionId, client)
-	logger.WithField("session_id", sessionId).Info("Created TFE client")
+	// Store the token and address along with the client per session ID
+	activeTfeClients.Store(sessionId, cachedTfeClient{
+		client: client,
+		token:  sha256.Sum256([]byte(terraformToken)),
+	})
+	logger.Info("Created TFE client")
 	return client, nil
 }
 
@@ -75,7 +84,7 @@ func newTfeClient(terraformAddress string, terraformSkipTLSVerify bool, terrafor
 // GetTfeClient retrieves the TFE client for the given session
 func GetTfeClient(sessionId string) *tfe.Client {
 	if value, ok := activeTfeClients.Load(sessionId); ok {
-		return value.(*tfe.Client)
+		return value.(cachedTfeClient).client
 	}
 	return nil
 }
@@ -92,12 +101,33 @@ func GetTfeClientFromContext(ctx context.Context, logger *log.Logger) (*tfe.Clie
 		return nil, fmt.Errorf("no active session")
 	}
 
-	// Try to get existing client
-	client := GetTfeClient(session.SessionID())
-	if client != nil {
-		return client, nil
+	// Try to get token from the current request
+	currentToken, _ := ctx.Value(contextKey(TerraformToken)).(string)
+	if currentToken == "" {
+		currentToken = utils.GetEnv(TerraformToken, "")
 	}
 
+	// In a stateless mode the server does not assign any session ID to requests. We need to create new TF clients for every request in that case.
+	if session.SessionID() == "" {
+		logger.Info("Session ID is empty. Creating a new TF client.")
+		currentAddress, _ := ctx.Value(contextKey(TerraformAddress)).(string)
+		if currentAddress == "" {
+			currentAddress = utils.GetEnv(TerraformAddress, DefaultTerraformAddress)
+		}
+		clientIP, _ := ctx.Value(contextKey(ClientIPKey)).(string)
+		return NewTfeClientForToken(currentAddress, parseTerraformSkipTLSVerify(ctx), currentToken, clientIP, logger)
+	}
+
+	// Check if the cached session ID's token+address match the current token+address
+	if value, ok := activeTfeClients.Load(session.SessionID()); ok {
+		cachedClient := value.(cachedTfeClient)
+		currentTokenHash := sha256.Sum256([]byte(currentToken))
+		if cachedClient.token == currentTokenHash {
+			return cachedClient.client, nil
+		}
+		// Current request token and address not found in cache. Delete the session ID from the sync map.
+		activeTfeClients.Delete(session.SessionID())
+	}
 	logger.Warnf("TFE client not found, creating a new one")
 	return CreateTfeClientForSession(ctx, session, logger)
 }

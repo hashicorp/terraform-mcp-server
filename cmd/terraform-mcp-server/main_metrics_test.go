@@ -269,7 +269,7 @@ func TestNewServerWithHooksOptionPassesThrough(t *testing.T) {
 	customHooks := &mcpserver.Hooks{}
 	customHooks.AddBeforeCallTool(func(ctx context.Context, id any, message *mcp.CallToolRequest) {})
 
-	srv := NewServer("test-version", metricsTestLogger(), nil, mcpserver.WithHooks(customHooks))
+	srv, _ := NewServer("test-version", metricsTestLogger(), nil, mcpserver.WithHooks(customHooks))
 	hooks := getServerHooksForTest(t, srv)
 
 	require.GreaterOrEqual(t, len(hooks.OnBeforeCallTool), 1)
