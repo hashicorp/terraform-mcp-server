@@ -499,13 +499,10 @@ func TestOrganizationAllowlistUsesValidatedTokenDownstream(t *testing.T) {
 	logger := log.New()
 	logger.SetLevel(log.ErrorLevel)
 
-	upstreamAuthorization := make(chan string, 1)
+	var upstreamAuthorization string
 	terraformServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/api/v2/organizations" {
-			select {
-			case upstreamAuthorization <- r.Header.Get("Authorization"):
-			default:
-			}
+			upstreamAuthorization = r.Header.Get("Authorization")
 		}
 		w.Header().Set("Content-Type", "application/vnd.api+json")
 		_, err := io.WriteString(w, `{"data":[{"id":"alpha","type":"organizations","attributes":{"name":"alpha"}}]}`)
@@ -532,12 +529,7 @@ func TestOrganizationAllowlistUsesValidatedTokenDownstream(t *testing.T) {
 	handler.ServeHTTP(rr, req)
 
 	assert.Equal(t, http.StatusOK, rr.Code)
-	select {
-	case authorization := <-upstreamAuthorization:
-		assert.Equal(t, "Bearer allowed-token", authorization)
-	default:
-		t.Error("expected organization allowlist request")
-	}
+	assert.Equal(t, "Bearer allowed-token", upstreamAuthorization)
 	assert.Equal(t, "allowed-token", downstreamToken)
 }
 
