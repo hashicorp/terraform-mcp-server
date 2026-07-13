@@ -39,6 +39,7 @@ automation and interaction capabilities for Infrastructure as Code (IaC) develop
 | `TRANSPORT_HOST` | Host to bind the HTTP server | `127.0.0.1` |
 | `TRANSPORT_PORT` | HTTP server port | `8080` |
 | `MCP_ENDPOINT` | HTTP server endpoint path | `/mcp` |
+| `MCP_REDIRECT_ROOT_URL` | URL to redirect requests to `/` to | `""` |
 | `MCP_KEEP_ALIVE` | Keep-alive interval for SSE connections (e.g., 30s, 1m). 0 to disable | `0` |
 | `MCP_SESSION_MODE` | Session mode: `stateful` or `stateless` | `stateful` |
 | `MCP_ALLOWED_ORIGINS` | Comma-separated list of allowed origins for CORS | `""` (empty) |
