@@ -1,8 +1,11 @@
 package client
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"io"
+	"strings"
 	"testing"
 	"time"
 
@@ -54,6 +57,31 @@ func TestLoadMetricsConfigFromEnv(t *testing.T) {
 		assert.Equal(t, defaults.ServiceVersion, config.ServiceVersion)
 		assert.False(t, config.Enabled)
 	})
+}
+
+func TestLoadMetricsConfigFromEnvWithLoggerUsesConfiguredFormatter(t *testing.T) {
+	t.Setenv("OTEL_METRICS_ENDPOINT", "collector.internal:4318")
+	t.Setenv("OTEL_METRICS_EXPORT_INTERVAL", "not-a-duration")
+	t.Setenv("OTEL_METRICS_SERVICE_NAME", "custom-mcp")
+	t.Setenv("OTEL_METRICS_SERVICE_VERSION", "1.2.3")
+	t.Setenv("OTEL_METRICS_ENABLED", "true")
+
+	var buf bytes.Buffer
+	logger := log.New()
+	logger.SetOutput(&buf)
+	logger.SetFormatter(&log.JSONFormatter{})
+
+	config := LoadMetricsConfigFromEnvWithLogger(logger)
+
+	assert.True(t, config.Enabled)
+	for _, line := range strings.Split(strings.TrimSpace(buf.String()), "\n") {
+		require.NotEmpty(t, line)
+
+		var entry map[string]any
+		require.NoError(t, json.Unmarshal([]byte(line), &entry), "log line should be JSON: %s", line)
+		require.Contains(t, entry, "level")
+		require.Contains(t, entry, "msg")
+	}
 }
 
 func TestRecordToolCallRecordsMetrics(t *testing.T) {

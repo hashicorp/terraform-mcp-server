@@ -397,7 +397,7 @@ func getOrganizationAllowlist(cmd *cobra.Command) ([]string, error) {
 }
 
 func setupMetrics(logger *log.Logger) (client.MetricsConfig, func()) {
-	metricsConfig := client.LoadMetricsConfigFromEnv()
+	metricsConfig := client.LoadMetricsConfigFromEnvWithLogger(logger)
 	logger.Infof("Metrics enabled: %t endpoint: %s exportInterval: %s", metricsConfig.Enabled, metricsConfig.Endpoint, metricsConfig.ExportInterval)
 	if !metricsConfig.Enabled {
 		return metricsConfig, func() {}
@@ -406,7 +406,7 @@ func setupMetrics(logger *log.Logger) (client.MetricsConfig, func()) {
 	// Context for metrics is for tracking the lifecycle of the metrics setup and shutdown, not tied to individual tool calls.
 	ctxMetrics := context.Background()
 	otel.SetErrorHandler(otel.ErrorHandlerFunc(func(err error) {
-		log.Errorf("OTel Internal Error: %v", err)
+		logger.Errorf("OTel Internal Error: %v", err)
 	}))
 
 	shutdown, err := initMetrics(ctxMetrics, &metricsConfig, logger)

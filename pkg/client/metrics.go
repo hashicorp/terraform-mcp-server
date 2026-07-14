@@ -48,41 +48,49 @@ func DefaultMetricsConfig() MetricsConfig {
 }
 
 func LoadMetricsConfigFromEnv() MetricsConfig {
+	return LoadMetricsConfigFromEnvWithLogger(log.StandardLogger())
+}
+
+func LoadMetricsConfigFromEnvWithLogger(logger *log.Logger) MetricsConfig {
+	if logger == nil {
+		logger = log.StandardLogger()
+	}
+
 	config := DefaultMetricsConfig()
 	if endpoint := os.Getenv("OTEL_METRICS_ENDPOINT"); endpoint != "" {
 		config.Endpoint = endpoint
-		log.Infof("Using env value for OTEL_METRICS_ENDPOINT: %s", endpoint)
+		logger.Infof("Using env value for OTEL_METRICS_ENDPOINT: %s", endpoint)
 	} else {
-		log.Infof("OTEL_METRICS_ENDPOINT not set in env, using default: %s", config.Endpoint)
+		logger.Infof("OTEL_METRICS_ENDPOINT not set in env, using default: %s", config.Endpoint)
 	}
 	if interval := os.Getenv("OTEL_METRICS_EXPORT_INTERVAL"); interval != "" {
 		if dur, err := time.ParseDuration(interval); err == nil {
 			config.ExportInterval = dur
-			log.Infof("Using env value for OTEL_METRICS_EXPORT_INTERVAL: %s", interval)
+			logger.Infof("Using env value for OTEL_METRICS_EXPORT_INTERVAL: %s", interval)
 		} else {
-			log.Warnf("Error parsing OTEL_METRICS_EXPORT_INTERVAL: %v", err)
-			log.Infof("Using default export interval: %s", config.ExportInterval)
+			logger.Warnf("Error parsing OTEL_METRICS_EXPORT_INTERVAL: %v", err)
+			logger.Infof("Using default export interval: %s", config.ExportInterval)
 		}
 	} else {
-		log.Infof("OTEL_METRICS_EXPORT_INTERVAL not set in env, using default: %s", config.ExportInterval)
+		logger.Infof("OTEL_METRICS_EXPORT_INTERVAL not set in env, using default: %s", config.ExportInterval)
 	}
 	if serviceName := os.Getenv("OTEL_METRICS_SERVICE_NAME"); serviceName != "" {
 		config.ServiceName = serviceName
-		log.Infof("Using env value for OTEL_METRICS_SERVICE_NAME: %s", serviceName)
+		logger.Infof("Using env value for OTEL_METRICS_SERVICE_NAME: %s", serviceName)
 	} else {
-		log.Infof("OTEL_METRICS_SERVICE_NAME not set in env, using default: %s", config.ServiceName)
+		logger.Infof("OTEL_METRICS_SERVICE_NAME not set in env, using default: %s", config.ServiceName)
 	}
 	if serviceVersion := os.Getenv("OTEL_METRICS_SERVICE_VERSION"); serviceVersion != "" {
 		config.ServiceVersion = serviceVersion
-		log.Infof("Using env value for OTEL_METRICS_SERVICE_VERSION: %s", serviceVersion)
+		logger.Infof("Using env value for OTEL_METRICS_SERVICE_VERSION: %s", serviceVersion)
 	} else {
-		log.Infof("OTEL_METRICS_SERVICE_VERSION not set in env, using default: %s", config.ServiceVersion)
+		logger.Infof("OTEL_METRICS_SERVICE_VERSION not set in env, using default: %s", config.ServiceVersion)
 	}
 	if enabled := os.Getenv("OTEL_METRICS_ENABLED"); enabled == "true" {
 		config.Enabled = true
-		log.Infof("OTEL_METRICS_ENABLED set to true in env, enabling metrics")
+		logger.Infof("OTEL_METRICS_ENABLED set to true in env, enabling metrics")
 	} else {
-		log.Infof("OTEL_METRICS_ENABLED not set in env, using default: %t", config.Enabled)
+		logger.Infof("OTEL_METRICS_ENABLED not set in env, using default: %t", config.Enabled)
 	}
 	return config
 }
