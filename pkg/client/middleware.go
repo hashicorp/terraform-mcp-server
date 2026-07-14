@@ -272,7 +272,7 @@ func tokenHasAllowedOrganization(ctx context.Context, lister organizationLister,
 func getTokenFromAuthHeader(r *http.Request) string {
 	authHeader := r.Header.Get("Authorization")
 	if strings.HasPrefix(authHeader, "Bearer ") {
-		return strings.TrimPrefix(authHeader, "Bearer ")
+		return strings.TrimSpace(strings.TrimPrefix(authHeader, "Bearer "))
 	}
 	return ""
 }
@@ -306,12 +306,14 @@ func TerraformContextMiddleware(logger *log.Logger) func(http.Handler) http.Hand
 			for _, header := range clientHeaders {
 				var headerValue string
 
-				// Check standard header first
-				headerValue = r.Header.Get(header)
-
-				// For token, also support Authorization: Bearer header as fallback
-				if headerValue == "" && header == TerraformToken {
+				// The allowlist validates the Authorization bearer token, so it must
+				// also be the token used for downstream Terraform API requests.
+				if header == TerraformToken {
 					headerValue = getTokenFromAuthHeader(r)
+				}
+
+				if headerValue == "" {
+					headerValue = r.Header.Get(header)
 				}
 
 				if headerValue == "" {
