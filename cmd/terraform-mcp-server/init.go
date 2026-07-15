@@ -31,7 +31,7 @@ var (
 		Use:     "terraform-mcp-server",
 		Short:   "Terraform MCP Server",
 		Long:    `A Terraform MCP server that handles various tools and resources.`,
-		Version: fmt.Sprintf("Version: %s\nCommit: %s\nBuild Date: %s", version.GetHumanVersion(), version.GitCommit, version.BuildDate),
+		Version: fmt.Sprintf("Version: %s", version.GetHumanVersion()),
 		Run:     runDefaultCommand,
 	}
 
@@ -344,7 +344,7 @@ func streamableHTTPServerInit(ctx context.Context, hcServer *server.MCPServer, l
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		response := fmt.Sprintf(`{"status":"ok","service":"terraform-mcp-server","transport":"streamable-http","endpoint":"%s"}`, endpointPath)
+		response := fmt.Sprintf(`{"status":"ok","service":"terraform-mcp-server","transport":"streamable-http","endpoint":"%s", "version":"%s"}`, endpointPath, version.GetHumanVersion())
 		w.Write([]byte(response))
 	})
 
