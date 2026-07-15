@@ -1,5 +1,9 @@
 # 1.1.1
 
+IMPROVEMENTS
+
+* Add `version` field to the `/health` endpoint response to make it easier to identify which version is deployed at a glance. [410](https://github.com/hashicorp/terraform-mcp-server/pull/410)
+
 FIXES
 
 * Ensure all logs are output in JSON format when `LOG_FORMAT=json` is set in streamable HTTP mode. [402](https://github.com/hashicorp/terraform-mcp-server/pull/402)
