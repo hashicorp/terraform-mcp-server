@@ -1,3 +1,9 @@
+# 1.1.1
+
+FIXES
+
+* Ensure all logs are output in JSON format when `LOG_FORMAT=json` is set in streamable HTTP mode. [402](https://github.com/hashicorp/terraform-mcp-server/pull/402)
+
 # 1.1.0
 
 FIXES
