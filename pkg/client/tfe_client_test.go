@@ -11,6 +11,9 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+// This tests the buildTFEConfig directly due to tfe.NewClient consuming the config and
+// it oesn't give the headers back to assert on. The newTfeClient func calls this, so it covers the prod path.
+
 func TestBuildTFEConfig_SharedSecret(t *testing.T) {
 	logger := log.New()
 	logger.SetOutput(io.Discard)
