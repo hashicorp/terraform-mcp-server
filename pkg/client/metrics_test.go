@@ -29,7 +29,8 @@ func TestLoadMetricsConfigFromEnv(t *testing.T) {
 		t.Setenv("OTEL_METRICS_SERVICE_VERSION", "1.2.3")
 		t.Setenv("OTEL_METRICS_ENABLED", "true")
 
-		config := LoadMetricsConfigFromEnv()
+		logger := testLogger()
+		config := LoadMetricsConfigFromEnv(logger)
 
 		assert.True(t, config.Enabled)
 		assert.Equal(t, "collector.internal:4318", config.Endpoint)
@@ -45,7 +46,8 @@ func TestLoadMetricsConfigFromEnv(t *testing.T) {
 		t.Setenv("OTEL_METRICS_SERVICE_VERSION", "")
 		t.Setenv("OTEL_METRICS_ENABLED", "")
 
-		config := LoadMetricsConfigFromEnv()
+		logger := testLogger()
+		config := LoadMetricsConfigFromEnv(logger)
 		defaults := DefaultMetricsConfig()
 
 		assert.Equal(t, defaults.ExportInterval, config.ExportInterval)
