@@ -58,6 +58,7 @@ automation and interaction capabilities for Infrastructure as Code (IaC) develop
 | `OTEL_METRICS_SERVICE_NAME` | Identifies the source of the metrics (e.g., "terraform-mcp-server") | `terraform-mcp-server` |
 | `OTEL_METRICS_EXPORT_INTERVAL` | Controls the frequency of metric flushes | `2` |
 | `OTEL_METRICS_ENDPOINT` | URL of your OTel Collector or backend | `localhost:4318` |
+| `INSTANA_ENABLED` | Enable Instana instrumentation (metrics and HTTP request tracing) for the streamable-http server. Requires an Instana agent that is reachable by the server. | `false` |
 
 
 ```bash
