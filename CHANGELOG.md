@@ -8,6 +8,10 @@ FIXES
 
 * Ensure all logs are output in JSON format when `LOG_FORMAT=json` is set in streamable HTTP mode. [402](https://github.com/hashicorp/terraform-mcp-server/pull/402)
 
+IMPROVEMENTS
+
+* Add optional Instana instrumentation (metrics and HTTP request tracing) for the streamable-http server, gated behind `INSTANA_ENABLED` [411](https://github.com/hashicorp/terraform-mcp-server/pull/411)
+
 # 1.1.0
 
 FIXES
