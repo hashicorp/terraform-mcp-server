@@ -10,10 +10,6 @@ import (
 )
 
 var (
-	// The git commit that was compiled. These will be filled in by the
-	// compiler.
-	GitCommit string
-
 	// The next version number that will be released. This will be updated after every release
 	// Version must conform to the format expected by github.com/hashicorp/go-version
 	// for tests to work.
@@ -27,9 +23,6 @@ var (
 
 	// https://semver.org/#spec-item-10
 	VersionMetadata = ""
-
-	// The date/time of the build (actually the HEAD commit in git, to preserve stability)
-	BuildDate string = "1970-01-01T00:00:01Z"
 )
 
 // GetHumanVersion composes the parts of the version in a way that's suitable
