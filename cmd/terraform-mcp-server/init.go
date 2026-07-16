@@ -5,6 +5,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	stdlog "log"
@@ -25,6 +26,14 @@ import (
 	"github.com/spf13/viper"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 )
+
+type healthResponse struct {
+	Status    string `json:"status"`
+	Service   string `json:"service"`
+	Transport string `json:"transport"`
+	Endpoint  string `json:"endpoint"`
+	Version   string `json:"version"`
+}
 
 var (
 	rootCmd = &cobra.Command{
@@ -342,10 +351,20 @@ func streamableHTTPServerInit(ctx context.Context, hcServer *server.MCPServer, l
 
 	// Add health check endpoint
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+		response, err := json.Marshal(healthResponse{
+			Status:    "ok",
+			Service:   "terraform-mcp-server",
+			Transport: "streamable-http",
+			Endpoint:  endpointPath,
+			Version:   version.GetHumanVersion(),
+		})
+		if err != nil {
+			logger.Errorf("Failed to marshal health response: %v", err)
+			http.Error(w, "internal server error", http.StatusInternalServerError)
+			return
+		}
 		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		response := fmt.Sprintf(`{"status":"ok","service":"terraform-mcp-server","transport":"streamable-http","endpoint":"%s", "version":"%s"}`, endpointPath, version.GetHumanVersion())
-		w.Write([]byte(response))
+		w.Write(response)
 	})
 
 	addr := fmt.Sprintf("%s:%s", host, port)
