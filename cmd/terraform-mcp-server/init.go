@@ -20,6 +20,7 @@ import (
 	"github.com/hashicorp/terraform-mcp-server/pkg/tools"
 	"github.com/hashicorp/terraform-mcp-server/pkg/toolsets"
 	"github.com/hashicorp/terraform-mcp-server/version"
+	instana "github.com/instana/go-sensor"
 	"github.com/mark3labs/mcp-go/server"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
@@ -279,10 +280,28 @@ func serverInit(ctx context.Context, hcServer *server.MCPServer, logger *log.Log
 	return nil
 }
 
+// setupInstana initializes the Instana collector when INSTANA_ENABLED is set,
+// Once it is initialized, the application metrics such as (CPU,
+// memory, goroutines) will be collected automatically;
+func setupInstana(logger *log.Logger) instana.TracerLogger {
+	if os.Getenv("INSTANA_ENABLED") != "true" {
+		return nil
+	}
+	logger.Info("Instana instrumentation enabled")
+	return instana.InitCollector(&instana.Options{
+		Service: "terraform-mcp-server",
+		Tracer:  instana.DefaultTracerOptions(),
+	})
+}
+
 func streamableHTTPServerInit(ctx context.Context, hcServer *server.MCPServer, logger *log.Logger, host string, port string, endpointPath string, heartbeatInterval time.Duration, organizationAllowlist []string) error {
 	// Ensure endpoint path starts with /
 	endpointPath = path.Join("/", endpointPath)
 	var handler http.Handler
+
+	// Initialize the Instana collector if enabled (nil when disabled).
+	instanaCollector := setupInstana(logger)
+
 	// Create StreamableHTTP server which implements the new streamable-http transport
 	// This is the modern MCP transport that supports both direct HTTP responses and SSE streams
 	opts := []server.StreamableHTTPOption{
@@ -368,11 +387,14 @@ func streamableHTTPServerInit(ctx context.Context, hcServer *server.MCPServer, l
 	})
 
 	addr := fmt.Sprintf("%s:%s", host, port)
+	handler = mux
 	if enableOtelMetrics := os.Getenv("OTEL_METRICS_ENABLED"); enableOtelMetrics == "true" {
 		// Add http server instrumentation for standard server metrics
-		handler = otelhttp.NewHandler(mux, "terraform-mcp-server")
-	} else {
-		handler = mux
+		handler = otelhttp.NewHandler(handler, "terraform-mcp-server")
+	}
+	if instanaCollector != nil {
+		// Wrapping the handler so incoming HTTP requests will be able to be traced by Instana
+		handler = instana.TracingHandlerFunc(instanaCollector, endpointPath, handler.ServeHTTP)
 	}
 
 	httpServer := &http.Server{
