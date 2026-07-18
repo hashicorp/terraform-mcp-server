@@ -116,6 +116,24 @@ func (r *DynamicToolRegistry) registerTFETools() {
 		r.mcpServer.AddTool(tool.Tool, tool.Handler)
 	}
 
+	// Only register create_project if TF operations are enabled AND toolset is enabled
+	if isTerraformOperationsEnabled() && toolsets.IsToolEnabled("create_project", r.enabledToolsets) {
+		tool := r.createDynamicTFETool("create_project", tfeTools.CreateProject)
+		r.mcpServer.AddTool(tool.Tool, tool.Handler)
+	}
+
+	// Only register create_team if TF operations are enabled AND toolset is enabled
+	if isTerraformOperationsEnabled() && toolsets.IsToolEnabled("create_team", r.enabledToolsets) {
+		tool := r.createDynamicTFETool("create_team", tfeTools.CreateTeam)
+		r.mcpServer.AddTool(tool.Tool, tool.Handler)
+	}
+
+	// Only register grant_team_access if TF operations are enabled AND toolset is enabled
+	if isTerraformOperationsEnabled() && toolsets.IsToolEnabled("grant_team_access", r.enabledToolsets) {
+		tool := r.createDynamicTFETool("grant_team_access", tfeTools.GrantTeamAccess)
+		r.mcpServer.AddTool(tool.Tool, tool.Handler)
+	}
+
 	// Terraform toolset - Workspace management tools
 	if toolsets.IsToolEnabled("list_workspaces", r.enabledToolsets) {
 		tool := r.createDynamicTFETool("list_workspaces", tfeTools.ListWorkspaces)
