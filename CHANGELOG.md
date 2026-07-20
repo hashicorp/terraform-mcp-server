@@ -4,6 +4,7 @@ IMPROVEMENTS
 
 * Add `version` field to the `/health` endpoint response to make it easier to identify which version is deployed at a glance. [410](https://github.com/hashicorp/terraform-mcp-server/pull/410)
 * Add optional Instana instrumentation (metrics and HTTP request tracing) for the streamable-http server, gated behind `INSTANA_ENABLED` [411](https://github.com/hashicorp/terraform-mcp-server/pull/411)
+* Add `TF_MCP_SHARED_SECRET` to send an `X-Tf-Mcp-Secret` header on requests to HCP Terraform / TFE, allowing the backend to identify requests from a trusted MCP deployment [392](https://github.com/hashicorp/terraform-mcp-server/pull/392)
 
 FIXES
 
@@ -23,6 +24,9 @@ FEATURES
 
 * [New Tool] `force_unlock_workspace` Force unlocks a Terraform workspace stuck in a run-held lock. Requires workspace admin permissions and is gated behind `ENABLE_TF_OPERATIONS=true`
 * [Configuration] Add a `MCP_REDIRECT_ROOT_URL` environment variable to allow redirecting `/` of the server when visited in-browser. 
+
+IMPROVEMENTS
+
 
 # 1.0.0
 
