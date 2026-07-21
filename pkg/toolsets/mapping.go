@@ -60,6 +60,7 @@ var ToolToToolset = map[string]string{
 	"list_workspace_policy_sets":          Terraform,
 	"force_unlock_workspace":              Terraform,
 	"list_all_state_versions":             Terraform,
+	"get_state_version_with_id":           Terraform,
 }
 
 // GetToolsetForTool returns the toolset name for a given tool name

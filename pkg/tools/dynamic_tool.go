@@ -322,6 +322,11 @@ func (r *DynamicToolRegistry) registerTFETools() {
 		r.mcpServer.AddTool(tool.Tool, tool.Handler)
 	}
 
+	if toolsets.IsToolEnabled("get_state_version_with_id", r.enabledToolsets) {
+		tool := r.createDynamicTFETool("get_state_version_with_id", tfeTools.GetStateVersionWithID)
+		r.mcpServer.AddTool(tool.Tool, tool.Handler)
+	}
+
 	r.tfeToolsRegistered = true
 }
 
