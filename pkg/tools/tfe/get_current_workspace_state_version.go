@@ -14,31 +14,30 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-// GetStateVersionWithID creates a tool to get the state versions for a given State Version ID.
-func GetStateVersionWithID(logger *log.Logger) server.ServerTool {
+// GetCurrentWorkspaceStateVersion creates a tool to get latest available state from the given workspace.
+func GetCurrentWorkspaceStateVersion(logger *log.Logger) server.ServerTool {
 	return server.ServerTool{
 		Tool: mcp.NewTool(
-			"get_state_version_with_id",
-			mcp.WithDescription("Gets State-version for a given State-version ID"),
-			mcp.WithTitleAnnotation("Gets State-Version with SV ID"),
+			"get_current_workspace_state_version",
+			mcp.WithDescription("Gets latest available state from the given workspace ID"),
+			mcp.WithTitleAnnotation("Gets State-Version with Workspace ID"),
 			mcp.WithReadOnlyHintAnnotation(true),
 			mcp.WithDestructiveHintAnnotation(false),
-			mcp.WithString("state-version-id",
+			mcp.WithString("workspace-id",
 				mcp.Required(),
-				mcp.Description("The State-Version id"),
+				mcp.Description("The Workspace id"),
 			),
 		),
 
 		Handler: func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-			return getStateVersionWithIDHandler(ctx, req, logger)
+			return getCurrentWorkspaceStateVersionHandler(ctx, req, logger)
 		},
 	}
 
 }
 
-// getStateVersionWithIDHandler handles tool logics and functionality
-func getStateVersionWithIDHandler(
-	ctx context.Context,
+// getCurrentWorkspaceStateVersionHandler handles tool logics and functionality
+func getCurrentWorkspaceStateVersionHandler(ctx context.Context,
 	request mcp.CallToolRequest,
 	logger *log.Logger) (*mcp.CallToolResult, error) {
 
@@ -56,32 +55,32 @@ func getStateVersionWithIDHandler(
 	}
 
 	// Required params
-	stateVersionID, err := request.RequireString("state-version-id")
+	workspaceID, err := request.RequireString("workspace-id")
 	if err != nil {
-		return ToolError(logger, "missing required input: state-version-id", err)
+		return ToolError(logger, "missing required input: workspace-id", err)
 	}
-	stateVersionID = strings.TrimSpace(stateVersionID)
+	workspaceID = strings.TrimSpace(workspaceID)
 
 	// Check if input empty
-	if stateVersionID == "" {
-		return ToolError(logger, "state-version-id cannot be empty", nil)
+	if workspaceID == "" {
+		return ToolError(logger, "workspace-id cannot be empty", nil)
 	}
 
 	// Get State Version
-	sv, err := tfeClient.StateVersions.Read(ctx, stateVersionID)
+	ws, err := tfeClient.StateVersions.ReadCurrent(ctx, workspaceID)
 
 	// If tool fails
 	if err != nil {
-		return ToolError(logger, "failed to get state version", err)
+		return ToolError(logger, "failed to get workspace's state versions", err)
 	}
 
 	// Serialize -> Marshal JSON
-	svJSON, err := json.Marshal(sv)
+	wsJSON, err := json.Marshal(ws)
 
-	// Failed to Serialize to JSON
 	if err != nil {
 		return ToolError(logger, "failed to serialize state version", err)
 	}
 
-	return mcp.NewToolResultText(string(svJSON)), nil
+	return mcp.NewToolResultText(string(wsJSON)), nil
+
 }

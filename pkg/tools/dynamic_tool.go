@@ -327,6 +327,11 @@ func (r *DynamicToolRegistry) registerTFETools() {
 		r.mcpServer.AddTool(tool.Tool, tool.Handler)
 	}
 
+	if toolsets.IsToolEnabled("get_current_workspace_state_version", r.enabledToolsets) {
+		tool := r.createDynamicTFETool("get_current_workspace_state_version", tfeTools.GetCurrentWorkspaceStateVersion)
+		r.mcpServer.AddTool(tool.Tool, tool.Handler)
+	}
+
 	r.tfeToolsRegistered = true
 }
 
