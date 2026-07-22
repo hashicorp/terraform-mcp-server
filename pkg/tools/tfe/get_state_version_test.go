@@ -71,7 +71,7 @@ func TestGetStateVersionWithID(t *testing.T) {
 		}
 	})
 
-	// Input whitespace trimming
+	// Input whitespace and hash trimming
 	t.Run("input trimming", func(t *testing.T) {
 		tests := []struct {
 			name     string
@@ -98,11 +98,21 @@ func TestGetStateVersionWithID(t *testing.T) {
 				input:    "  sv-with-dashes-inside  ",
 				expected: "sv-with-dashes-inside",
 			},
+			{
+				name:     "leading hash",
+				input:    "#sv-abc123",
+				expected: "sv-abc123",
+			},
+			{
+				name:     "leading hash with spaces",
+				input:    "  #sv-abc123  ",
+				expected: "sv-abc123",
+			},
 		}
 
 		for _, tt := range tests {
 			t.Run(tt.name, func(t *testing.T) {
-				assert.Equal(t, tt.expected, strings.TrimSpace(tt.input))
+				assert.Equal(t, tt.expected, strings.TrimLeft(strings.TrimSpace(tt.input), "#"))
 			})
 		}
 	})
@@ -138,7 +148,7 @@ func TestGetStateVersionWithID(t *testing.T) {
 		assert.Equal(t, sv.StateVersion, unmarshaled.StateVersion)
 	})
 
-	// Empty/whitespace state_version_id falls through to workspace_id branch
+	// Empty/whitespace/hash-only state_version_id falls through to workspace_id branch
 	t.Run("empty or whitespace state_version_id falls through", func(t *testing.T) {
 		tests := []struct {
 			name        string
@@ -156,15 +166,30 @@ func TestGetStateVersionWithID(t *testing.T) {
 				expectEmpty: true,
 			},
 			{
+				name:        "hash only",
+				raw:         "#",
+				expectEmpty: true,
+			},
+			{
+				name:        "hash with surrounding spaces",
+				raw:         "  #  ",
+				expectEmpty: true,
+			},
+			{
 				name:        "valid id not rejected",
 				raw:         "sv-abc123",
+				expectEmpty: false,
+			},
+			{
+				name:        "valid id with leading hash not rejected",
+				raw:         "#sv-abc123",
 				expectEmpty: false,
 			},
 		}
 
 		for _, tt := range tests {
 			t.Run(tt.name, func(t *testing.T) {
-				trimmed := strings.TrimSpace(tt.raw)
+				trimmed := strings.TrimLeft(strings.TrimSpace(tt.raw), "#")
 				isEmpty := trimmed == ""
 				assert.Equal(t, tt.expectEmpty, isEmpty,
 					"guard should fire when trimmed ID is empty")

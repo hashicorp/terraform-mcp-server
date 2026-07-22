@@ -56,10 +56,10 @@ func getStateVersionWithIDHandler(
 
 	// Both params optinoal at schema level
 	stateVersionID, _ := request.RequireString("state_version_id")
-	stateVersionID = strings.TrimSpace(stateVersionID)
+	stateVersionID = strings.TrimLeft(strings.TrimSpace(stateVersionID), "#")
 
 	workspaceID, _ := request.RequireString("workspace_id")
-	workspaceID = strings.TrimSpace(workspaceID)
+	workspaceID = strings.TrimLeft(strings.TrimSpace(workspaceID), "#")
 
 	var sv *tfe.StateVersion
 
