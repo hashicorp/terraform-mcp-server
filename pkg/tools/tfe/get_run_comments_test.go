@@ -59,17 +59,50 @@ func TestGetRunComments(t *testing.T) {
 		assert.Equal(t, "run-abc123", runID)
 	})
 
-	t.Run("whitespace run_id", func(t *testing.T) {
-		request := &MockCallToolRequest{
-			params: map[string]interface{}{
-				"run_id": "  run-xyz  ",
+	t.Run("run_id normalisation", func(t *testing.T) {
+		tests := []struct {
+			name     string
+			input    string
+			expected string
+		}{
+			{
+				name:     "leading and trailing whitespace",
+				input:    "  run-xyz  ",
+				expected: "run-xyz",
+			},
+			{
+				name:     "hash prefix",
+				input:    "#run-Nj2MTonBKmtmceGE",
+				expected: "run-Nj2MTonBKmtmceGE",
+			},
+			{
+				name:     "hash prefix with surrounding whitespace",
+				input:    "  #run-Nj2MTonBKmtmceGE  ",
+				expected: "run-Nj2MTonBKmtmceGE",
+			},
+			{
+				name:     "multiple hash prefixes",
+				input:    "##run-abc123",
+				expected: "run-abc123",
+			},
+			{
+				name:     "clean id unchanged",
+				input:    "run-abc123",
+				expected: "run-abc123",
 			},
 		}
 
-		// The mock returns the raw value; the handler calls strings.TrimSpace on it
-		runID, err := request.RequireString("run_id")
-		assert.NoError(t, err)
-		assert.Equal(t, "run-xyz", strings.TrimSpace(runID))
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				request := &MockCallToolRequest{
+					params: map[string]interface{}{"run_id": tt.input},
+				}
+				runID, err := request.RequireString("run_id")
+				assert.NoError(t, err)
+				// Mirror the handler's normalisation: TrimSpace then strip leading '#'
+				assert.Equal(t, tt.expected, strings.TrimLeft(strings.TrimSpace(runID), "#"))
+			})
+		}
 	})
 }
 

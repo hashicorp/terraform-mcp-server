@@ -53,7 +53,7 @@ func getRunCommentsHandler(ctx context.Context, request mcp.CallToolRequest, log
 	if err != nil {
 		return ToolError(logger, "missing required input: run_id", err)
 	}
-	runID = strings.TrimSpace(runID)
+	runID = strings.TrimLeft(strings.TrimSpace(runID), "#")
 
 	// List Comments
 	comments, err := tfeClient.Comments.List(ctx, runID)
