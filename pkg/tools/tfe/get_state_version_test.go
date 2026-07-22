@@ -23,8 +23,8 @@ func TestGetStateVersionWithID(t *testing.T) {
 	t.Run("tool creation", func(t *testing.T) {
 		tool := GetStateVersion(logger)
 
-		assert.Equal(t, "get_state_version_with_id", tool.Tool.Name)
-		assert.Contains(t, tool.Tool.Annotations.Title, "Gets State-Version with SV ID")
+		assert.Equal(t, "get_state_version", tool.Tool.Name)
+		assert.Contains(t, tool.Tool.Annotations.Title, "Gets StateVersion with state_version_id")
 		assert.NotNil(t, tool.Handler)
 
 		assert.NotNil(t, tool.Tool.Annotations.ReadOnlyHint)
@@ -32,7 +32,8 @@ func TestGetStateVersionWithID(t *testing.T) {
 		assert.NotNil(t, tool.Tool.Annotations.DestructiveHint)
 		assert.False(t, *tool.Tool.Annotations.DestructiveHint)
 
-		assert.Contains(t, tool.Tool.InputSchema.Required, "state-version-id")
+		assert.NotContains(t, tool.Tool.InputSchema.Required, "state_version_id")
+		assert.NotContains(t, tool.Tool.InputSchema.Required, "workspace_id")
 	})
 
 	// Required parameter validation
@@ -44,7 +45,7 @@ func TestGetStateVersionWithID(t *testing.T) {
 		}{
 			{
 				name:        "param present",
-				params:      map[string]interface{}{"state-version-id": "sv-abc123"},
+				params:      map[string]interface{}{"state_version_id": "sv-abc123"},
 				expectError: false,
 			},
 			{
@@ -57,14 +58,14 @@ func TestGetStateVersionWithID(t *testing.T) {
 		for _, tt := range tests {
 			t.Run(tt.name, func(t *testing.T) {
 				request := &MockCallToolRequest{params: tt.params}
-				val, err := request.RequireString("state-version-id")
+				val, err := request.RequireString("state_version_id")
 
 				if tt.expectError {
 					assert.Error(t, err)
-					assert.Contains(t, err.Error(), "state-version-id")
+					assert.Contains(t, err.Error(), "state_version_id")
 				} else {
 					assert.NoError(t, err)
-					assert.Equal(t, tt.params["state-version-id"], val)
+					assert.Equal(t, tt.params["state_version_id"], val)
 				}
 			})
 		}
@@ -137,8 +138,8 @@ func TestGetStateVersionWithID(t *testing.T) {
 		assert.Equal(t, sv.StateVersion, unmarshaled.StateVersion)
 	})
 
-	// Empty/whitespace state-version-id guard logic
-	t.Run("empty or whitespace state-version-id is rejected", func(t *testing.T) {
+	// Empty/whitespace state_version_id falls through to workspace_id branch
+	t.Run("empty or whitespace state_version_id falls through", func(t *testing.T) {
 		tests := []struct {
 			name        string
 			raw         string

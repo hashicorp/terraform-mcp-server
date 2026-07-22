@@ -23,7 +23,7 @@ func TestListAllStateVersions(t *testing.T) {
 	t.Run("tool creation", func(t *testing.T) {
 		tool := ListStateVersions(logger)
 
-		assert.Equal(t, "list_all_state_versions", tool.Tool.Name)
+		assert.Equal(t, "list_state_versions", tool.Tool.Name)
 		assert.Contains(t, tool.Tool.Annotations.Title, "List all States Versions")
 		assert.NotNil(t, tool.Handler)
 
