@@ -12,9 +12,8 @@ FIXES
 
 FEATURES
 
-* [New Tool] `list_all_state_versions` Lists all state versions for a given workspace. Requires `terraform_org_name` and `workspace_name`; supports optional pagination params.
-* [New Tool] `get_state_version_with_id` Fetches a specific state version by its ID. Requires `state-version-id`.
-* [New Tool] `get_current_workspace_state_version` Retrieves the latest available state version for a given workspace. Requires `workspace-id`.
+* [New Tool] `list_state_versions` Lists all state versions for a given workspace. Requires `terraform_org_name` and `workspace_name`; supports optional pagination params.
+* [New Tool] `get_state_version` Retrieves a Terraform state version. If `state_version_id` is provided, retrieves that specific state version. Otherwise, retrieves the latest state version for the specified `workspace_id`. At least one of `state_version_id` or `workspace_id` must be provided.
 
 # 1.1.0
 
