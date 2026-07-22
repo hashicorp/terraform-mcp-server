@@ -15,17 +15,16 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestGetCurrentWorkspaceStateVersion(t *testing.T) {
+func TestGetStateVersionWithID(t *testing.T) {
 	logger := log.New()
 	logger.SetLevel(log.ErrorLevel)
 
 	// Tool definition contract
 	t.Run("tool creation", func(t *testing.T) {
-		tool := GetCurrentWorkspaceStateVersion(logger)
+		tool := GetStateVersion(logger)
 
-		assert.Equal(t, "get_current_workspace_state_version", tool.Tool.Name)
-		assert.Contains(t, tool.Tool.Annotations.Title, "Gets State-Version with Workspace ID")
-		assert.Contains(t, tool.Tool.Description, "latest available state")
+		assert.Equal(t, "get_state_version_with_id", tool.Tool.Name)
+		assert.Contains(t, tool.Tool.Annotations.Title, "Gets State-Version with SV ID")
 		assert.NotNil(t, tool.Handler)
 
 		assert.NotNil(t, tool.Tool.Annotations.ReadOnlyHint)
@@ -33,7 +32,7 @@ func TestGetCurrentWorkspaceStateVersion(t *testing.T) {
 		assert.NotNil(t, tool.Tool.Annotations.DestructiveHint)
 		assert.False(t, *tool.Tool.Annotations.DestructiveHint)
 
-		assert.Contains(t, tool.Tool.InputSchema.Required, "workspace-id")
+		assert.Contains(t, tool.Tool.InputSchema.Required, "state-version-id")
 	})
 
 	// Required parameter validation
@@ -45,7 +44,7 @@ func TestGetCurrentWorkspaceStateVersion(t *testing.T) {
 		}{
 			{
 				name:        "param present",
-				params:      map[string]interface{}{"workspace-id": "ws-abc123"},
+				params:      map[string]interface{}{"state-version-id": "sv-abc123"},
 				expectError: false,
 			},
 			{
@@ -58,14 +57,14 @@ func TestGetCurrentWorkspaceStateVersion(t *testing.T) {
 		for _, tt := range tests {
 			t.Run(tt.name, func(t *testing.T) {
 				request := &MockCallToolRequest{params: tt.params}
-				val, err := request.RequireString("workspace-id")
+				val, err := request.RequireString("state-version-id")
 
 				if tt.expectError {
 					assert.Error(t, err)
-					assert.Contains(t, err.Error(), "workspace-id")
+					assert.Contains(t, err.Error(), "state-version-id")
 				} else {
 					assert.NoError(t, err)
-					assert.Equal(t, tt.params["workspace-id"], val)
+					assert.Equal(t, tt.params["state-version-id"], val)
 				}
 			})
 		}
@@ -80,23 +79,23 @@ func TestGetCurrentWorkspaceStateVersion(t *testing.T) {
 		}{
 			{
 				name:     "no whitespace",
-				input:    "ws-abc123",
-				expected: "ws-abc123",
+				input:    "sv-abc123",
+				expected: "sv-abc123",
 			},
 			{
 				name:     "leading and trailing spaces",
-				input:    "  ws-abc123  ",
-				expected: "ws-abc123",
+				input:    "  sv-abc123  ",
+				expected: "sv-abc123",
 			},
 			{
 				name:     "tabs and spaces",
-				input:    "\t ws-abc123 \t",
-				expected: "ws-abc123",
+				input:    "\t sv-abc123 \t",
+				expected: "sv-abc123",
 			},
 			{
 				name:     "internal text preserved",
-				input:    "  ws-with-dashes-inside  ",
-				expected: "ws-with-dashes-inside",
+				input:    "  sv-with-dashes-inside  ",
+				expected: "sv-with-dashes-inside",
 			},
 		}
 
@@ -138,8 +137,8 @@ func TestGetCurrentWorkspaceStateVersion(t *testing.T) {
 		assert.Equal(t, sv.StateVersion, unmarshaled.StateVersion)
 	})
 
-	// Empty/whitespace workspace-id guard logic
-	t.Run("empty or whitespace workspace-id is rejected", func(t *testing.T) {
+	// Empty/whitespace state-version-id guard logic
+	t.Run("empty or whitespace state-version-id is rejected", func(t *testing.T) {
 		tests := []struct {
 			name        string
 			raw         string
@@ -157,7 +156,7 @@ func TestGetCurrentWorkspaceStateVersion(t *testing.T) {
 			},
 			{
 				name:        "valid id not rejected",
-				raw:         "ws-abc123",
+				raw:         "sv-abc123",
 				expectEmpty: false,
 			},
 		}
@@ -167,7 +166,7 @@ func TestGetCurrentWorkspaceStateVersion(t *testing.T) {
 				trimmed := strings.TrimSpace(tt.raw)
 				isEmpty := trimmed == ""
 				assert.Equal(t, tt.expectEmpty, isEmpty,
-					"guard should fire when trimmed workspace-id is empty")
+					"guard should fire when trimmed ID is empty")
 			})
 		}
 	})

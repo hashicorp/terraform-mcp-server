@@ -17,15 +17,13 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-// ListAllStateVersions creates a tool to get all the state versions for a given workspace.
-func ListAllStateVersions(logger *log.Logger) server.ServerTool {
-	// Returns Server tool
+// ListStateVersions creates a tool to get all the state versions for a given workspace.
+func ListStateVersions(logger *log.Logger) server.ServerTool {
 	return server.ServerTool{
-		// Create new tool
 		Tool: mcp.NewTool(
-			"list_all_state_versions",
-			mcp.WithDescription("List all the state versions for a given workspace."),
-			mcp.WithTitleAnnotation("List all States Versions"),
+			"list_state_versions",
+			mcp.WithDescription("List all the State Versions for a given workspace and org name."),
+			mcp.WithTitleAnnotation(`List all States Versions`),
 			mcp.WithReadOnlyHintAnnotation(true),
 			mcp.WithDestructiveHintAnnotation(false),
 			utils.WithPagination(),
@@ -40,26 +38,22 @@ func ListAllStateVersions(logger *log.Logger) server.ServerTool {
 		),
 
 		Handler: func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-			return listAllStateVersionsHandler(ctx, req, logger)
+			return listStateVersionsHandler(ctx, req, logger)
 		},
 	}
 }
 
-// listAllStateVersionsHandler handles tool logics and functionality
-func listAllStateVersionsHandler(
+// listStateVersionsHandler handles tool logics and functionality
+func listStateVersionsHandler(
 	ctx context.Context,
 	request mcp.CallToolRequest,
 	logger *log.Logger) (*mcp.CallToolResult, error) {
 
-	// init clint object
+	// Init clint object
 	tfeClient, err := client.GetTfeClientFromContext(ctx, logger)
-
-	// Failed to get Terraform client
 	if err != nil {
 		return ToolError(logger, "failed to get Terraform client", err)
 	}
-
-	// client context nill
 	if tfeClient == nil {
 		return ToolError(logger, "failed to get Terraform client - ensure TFE_TOKEN and TFE_ADDRESS are configured", nil)
 	}
@@ -67,20 +61,20 @@ func listAllStateVersionsHandler(
 	// Required params
 	terraformOrgName, err := request.RequireString("terraform_org_name")
 	if err != nil {
-		return ToolError(logger, "missing required input: terraform_org_name", err)
+		return ToolError(logger, "Missing required input: terraform_org_name", err)
 	}
-	terraformOrgName = strings.TrimSpace(terraformOrgName)
-
 	workspaceName, err := request.RequireString("workspace_name")
 	if err != nil {
-		return ToolError(logger, "missing required input: workspace_name", err)
+		return ToolError(logger, "Missing required input: workspace_name", err)
 	}
+	// Clean params
+	terraformOrgName = strings.TrimSpace(terraformOrgName)
 	workspaceName = strings.TrimSpace(workspaceName)
 
 	// Optional pagination params
 	pagination, err := utils.OptionalPaginationParams(request)
 	if err != nil {
-		return ToolError(logger, "invalid pagination parameters", err)
+		return ToolError(logger, "Invalid pagination parameters", err)
 	}
 
 	// List state versions
@@ -92,18 +86,14 @@ func listAllStateVersionsHandler(
 			PageSize:   pagination.PageSize,
 		},
 	})
-
-	// If tool fails
 	if err != nil {
-		return ToolError(logger, "failed to list workspace state versions", err)
+		return ToolError(logger, "Failed to list workspace state versions", err)
 	}
-
-	// Check if no State versions at the moment
 	if len(sv.Items) == 0 {
-		return ToolError(logger, "no sv's to list", err)
+		return ToolError(logger, "Workspace has no StateVersions to list", err)
 	}
 
-	// Format Output as JSON
+	// Format Output
 	svSummaries := make([]*StateVersionsSummary, len(sv.Items))
 	for i, o := range sv.Items {
 		svSummaries[i] = &StateVersionsSummary{
@@ -122,10 +112,8 @@ func listAllStateVersionsHandler(
 		Items:      svSummaries,
 		Pagination: sv.Pagination,
 	})
-
-	// Failed to marshal state versions names
 	if err != nil {
-		return ToolError(logger, "failed to marshal organization names", err)
+		return ToolError(logger, "Failed to marshal organization names", err)
 	}
 
 	return mcp.NewToolResultText(string(svJSON)), nil

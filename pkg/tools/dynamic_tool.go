@@ -317,18 +317,13 @@ func (r *DynamicToolRegistry) registerTFETools() {
 	}
 
 	// Terraform State-Version Toolsets
-	if toolsets.IsToolEnabled("list_all_state_versions", r.enabledToolsets) {
-		tool := r.createDynamicTFETool("list_all_state_versions", tfeTools.ListAllStateVersions)
+	if toolsets.IsToolEnabled("list_state_versions", r.enabledToolsets) {
+		tool := r.createDynamicTFETool("list_state_versions", tfeTools.ListStateVersions)
 		r.mcpServer.AddTool(tool.Tool, tool.Handler)
 	}
 
-	if toolsets.IsToolEnabled("get_state_version_with_id", r.enabledToolsets) {
-		tool := r.createDynamicTFETool("get_state_version_with_id", tfeTools.GetStateVersionWithID)
-		r.mcpServer.AddTool(tool.Tool, tool.Handler)
-	}
-
-	if toolsets.IsToolEnabled("get_current_workspace_state_version", r.enabledToolsets) {
-		tool := r.createDynamicTFETool("get_current_workspace_state_version", tfeTools.GetCurrentWorkspaceStateVersion)
+	if toolsets.IsToolEnabled("get_state_version", r.enabledToolsets) {
+		tool := r.createDynamicTFETool("get_state_version", tfeTools.GetStateVersion)
 		r.mcpServer.AddTool(tool.Tool, tool.Handler)
 	}
 
