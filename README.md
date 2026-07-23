@@ -403,6 +403,10 @@ More about using and adding MCP servers tools in Bob IDE or Shell [Using MCP in 
 </tr>
 </table>
 
+### Kubernetes (Helm)
+
+A Helm chart for deploying the server on Kubernetes is available under [`helm/terraform-mcp-server`](helm/terraform-mcp-server/README.md).
+
 ## Install from source
 
 Use the latest release version:
