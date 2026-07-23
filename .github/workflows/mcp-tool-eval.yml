@@ -1,0 +1,82 @@
+name: MCP Tool Evaluation
+
+on:
+  pull_request:
+    paths:
+      - 'pkg/tools/**'
+      - '.github/workflows/mcp-tool-eval.yml'
+  workflow_dispatch:
+
+jobs:
+  similarity-check:
+    name: Tool Similarity Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+
+      - name: Set up Go
+        uses: actions/setup-go@7a3fe6cf4cb3a834922a1244abfce67bcef6a0c5 # v6.2.0
+        with:
+          go-version-file: go.mod
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@e4db8464a088ece1b920f60402e813ea4de65b8f # v4
+
+      - name: Install mcp-tef CLI
+        run: uv tool install "mcp-tef-cli@git+https://github.com/StacklokLabs/mcp-tef.git#subdirectory=cli"
+
+      - name: Deploy mcp-tef server
+        run: |
+          mtef deploy --insecure
+          sleep 10
+
+      - name: Build and start terraform-mcp-server
+        env:
+          TFE_TOKEN: ${{ secrets.TFE_TOKEN }}
+        run: |
+          go build -o terraform-mcp-server ./cmd/terraform-mcp-server
+          MCP_CORS_MODE=disabled MCP_SESSION_MODE=stateless \
+            ./terraform-mcp-server streamable-http -p 8080 --transport-host 0.0.0.0 &
+          sleep 5
+
+      - name: Run similarity analysis
+        run: |
+          mtef similarity analyze \
+            --url https://localhost:8000 \
+            --server-urls "http://172.17.0.1:8080/mcp:streamable-http" \
+            --threshold 0.95 \
+            --insecure \
+            --format json > similarity-report.json
+
+      - name: Check similarity results
+        run: |
+          FLAGGED=$(jq '.flagged_pairs | length' similarity-report.json)
+          TOTAL=$(jq '.tool_ids | length' similarity-report.json)
+          echo "### Tool Similarity Analysis" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Analyzed **$TOTAL** tools with threshold **0.95**" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          if [ "$FLAGGED" -gt 0 ]; then
+            echo "Found **$FLAGGED** tool pair(s) exceeding similarity threshold" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "| Tool A | Tool B | Similarity |" >> $GITHUB_STEP_SUMMARY
+            echo "|--------|--------|------------|" >> $GITHUB_STEP_SUMMARY
+            jq -r '.flagged_pairs[] | "| \(.tool_a_id | split(":") | last) | \(.tool_b_id | split(":") | last) | \(.similarity_score | . * 100 | floor / 100) |"' similarity-report.json >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "Tools with similarity > 0.95 may confuse LLMs. Consider revising descriptions to be more distinct." >> $GITHUB_STEP_SUMMARY
+            exit 1
+          fi
+          
+          echo "All tool descriptions are sufficiently distinct" >> $GITHUB_STEP_SUMMARY
+
+      - name: Upload similarity report
+        if: always()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        with:
+          name: similarity-report
+          path: similarity-report.json
+
+      - name: Cleanup
+        if: always()
+        run: mtef stop || true
