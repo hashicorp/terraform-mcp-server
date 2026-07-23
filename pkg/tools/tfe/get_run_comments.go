@@ -21,8 +21,8 @@ func GetRunComments(logger *log.Logger) server.ServerTool {
 	return server.ServerTool{
 		Tool: mcp.NewTool(
 			"get_run_comments",
-			mcp.WithDescription(`Fetches comments about a specific Terraform run.`),
-			mcp.WithTitleAnnotation("Get all comments for a given Terraform run."),
+			mcp.WithDescription("Fetches comments about a specific Terraform run."),
+			mcp.WithTitleAnnotation(`Get all comments for a given Terraform run.`),
 			mcp.WithReadOnlyHintAnnotation(true),
 			mcp.WithDestructiveHintAnnotation(false),
 			mcp.WithString("run_id",
@@ -39,29 +39,25 @@ func GetRunComments(logger *log.Logger) server.ServerTool {
 // getRunCommentsHandler handles tool logics and functionality
 func getRunCommentsHandler(ctx context.Context, request mcp.CallToolRequest, logger *log.Logger) (*mcp.CallToolResult, error) {
 
-	// init clint object
 	tfeClient, err := client.GetTfeClientFromContext(ctx, logger)
 	if err != nil {
-		return ToolError(logger, "failed to get Terraform client", err)
+		return ToolError(logger, "Failed to get Terraform client", err)
 	}
 	if tfeClient == nil {
-		return ToolError(logger, "failed to get Terraform client - ensure TFE_TOKEN and TFE_ADDRESS are configured", nil)
+		return ToolError(logger, "Failed to get Terraform client - ensure TFE_TOKEN and TFE_ADDRESS are configured", nil)
 	}
 
-	// Required Params
 	runID, err := request.RequireString("run_id")
 	if err != nil {
-		return ToolError(logger, "missing required input: run_id", err)
+		return ToolError(logger, "Missing required input: run_id", err)
 	}
 	runID = strings.TrimLeft(strings.TrimSpace(runID), "#")
 
-	// List Comments
 	comments, err := tfeClient.Comments.List(ctx, runID)
 	if err != nil {
-		return ToolError(logger, "failed to list run comments", err)
+		return ToolError(logger, "Failed to list run comments", err)
 	}
 
-	//Comment Summaries
 	commentSummaries := make([]*CommentsSummary, len(comments.Items))
 	for i, o := range comments.Items {
 		commentSummaries[i] = &CommentsSummary{
@@ -70,12 +66,11 @@ func getRunCommentsHandler(ctx context.Context, request mcp.CallToolRequest, log
 		}
 	}
 
-	// Marshal JSON
 	commentsJSON, err := json.Marshal(&CommentsSummaryList{
 		Items: commentSummaries,
 	})
 	if err != nil {
-		return ToolError(logger, "failed to serialize state version", err)
+		return ToolError(logger, "Failed to serialize state version", err)
 	}
 
 	return mcp.NewToolResultText(string(commentsJSON)), nil
