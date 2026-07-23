@@ -10,7 +10,6 @@ import (
 
 	log "github.com/sirupsen/logrus"
 
-	"github.com/hashicorp/go-tfe"
 	"github.com/hashicorp/terraform-mcp-server/pkg/client"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
@@ -21,13 +20,13 @@ func GetRunComments(logger *log.Logger) server.ServerTool {
 	return server.ServerTool{
 		Tool: mcp.NewTool(
 			"get_run_comments",
-			mcp.WithDescription("Fetches comments about a specific Terraform run."),
-			mcp.WithTitleAnnotation(`Get all comments for a given Terraform run.`),
+			mcp.WithDescription("Retrieves all comments associated with a Terraform run."),
+			mcp.WithTitleAnnotation(`Get Terraform run comments`),
 			mcp.WithReadOnlyHintAnnotation(true),
 			mcp.WithDestructiveHintAnnotation(false),
 			mcp.WithString("run_id",
 				mcp.Required(),
-				mcp.Description("The ID of the run to get comments for"),
+				mcp.Description("The ID of the Terraform run."),
 			),
 		),
 		Handler: func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -82,8 +81,7 @@ type CommentsSummary struct {
 	Body string `json:"body"`
 }
 
-// CommentsSummaryList contains the list of Comments summaries and pagination details
+// CommentsSummaryList contains the list of Comments summaries
 type CommentsSummaryList struct {
 	Items []*CommentsSummary `json:"items"`
-	*tfe.Pagination
 }
