@@ -5,7 +5,6 @@ package tools
 
 import (
 	"encoding/json"
-	"strings"
 	"testing"
 	"time"
 
@@ -15,7 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestListAllStateVersions(t *testing.T) {
+func TestListStateVersions(t *testing.T) {
 	logger := log.New()
 	logger.SetLevel(log.ErrorLevel)
 
@@ -99,42 +98,6 @@ func TestListAllStateVersions(t *testing.T) {
 					assert.NoError(t, wsErr)
 					assert.Equal(t, tt.params["workspace_name"], wsName)
 				}
-			})
-		}
-	})
-
-	// Input whitespace trimming
-	t.Run("input trimming", func(t *testing.T) {
-		tests := []struct {
-			name     string
-			input    string
-			expected string
-		}{
-			{
-				name:     "no whitespace",
-				input:    "my-org",
-				expected: "my-org",
-			},
-			{
-				name:     "leading and trailing spaces",
-				input:    "  my-org  ",
-				expected: "my-org",
-			},
-			{
-				name:     "tabs and spaces",
-				input:    "\t my-workspace \t",
-				expected: "my-workspace",
-			},
-			{
-				name:     "only internal text preserved",
-				input:    "  org-with-spaces-inside  ",
-				expected: "org-with-spaces-inside",
-			},
-		}
-
-		for _, tt := range tests {
-			t.Run(tt.name, func(t *testing.T) {
-				assert.Equal(t, tt.expected, strings.TrimSpace(tt.input))
 			})
 		}
 	})

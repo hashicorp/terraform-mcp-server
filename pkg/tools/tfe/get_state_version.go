@@ -20,7 +20,7 @@ func GetStateVersion(logger *log.Logger) server.ServerTool {
 	return server.ServerTool{
 		Tool: mcp.NewTool(
 			"get_state_version",
-			mcp.WithDescription("Retrieves a Terraform state version. If state_version_id is provided, retrieves that specific state version. Otherwise, retrieves the latest state version for the specified workspace. At least one of state_version_id or workspace_id must be provided."),
+			mcp.WithDescription("Retrieves a Terraform state version. If state_version_id is provided, retrieves that specific state version. Otherwise, retrieves the latest state version for the specified workspace. One of state_version_id or workspace_id must be provided"),
 			mcp.WithTitleAnnotation(`Gets StateVersion with state_version_id`),
 			mcp.WithReadOnlyHintAnnotation(true),
 			mcp.WithDestructiveHintAnnotation(false),
@@ -32,8 +32,8 @@ func GetStateVersion(logger *log.Logger) server.ServerTool {
 			),
 		),
 
-		Handler: func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-			return getStateVersionWithIDHandler(ctx, req, logger)
+		Handler: func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			return getStateVersionWithIDHandler(ctx, request, logger)
 		},
 	}
 
@@ -45,7 +45,6 @@ func getStateVersionWithIDHandler(
 	request mcp.CallToolRequest,
 	logger *log.Logger) (*mcp.CallToolResult, error) {
 
-	// Init clint object
 	tfeClient, err := client.GetTfeClientFromContext(ctx, logger)
 	if err != nil {
 		return ToolError(logger, "Failed to get Terraform client", err)
@@ -54,35 +53,26 @@ func getStateVersionWithIDHandler(
 		return ToolError(logger, "Failed to get Terraform client - ensure TFE_TOKEN and TFE_ADDRESS are configured", nil)
 	}
 
-	// Both params optinoal at schema level
-	stateVersionID, _ := request.RequireString("state_version_id")
+	stateVersionID := request.GetString("state_version_id", "")
 	stateVersionID = strings.TrimLeft(strings.TrimSpace(stateVersionID), "#")
 
-	workspaceID, _ := request.RequireString("workspace_id")
+	workspaceID := request.GetString("workspace_id", "")
 	workspaceID = strings.TrimLeft(strings.TrimSpace(workspaceID), "#")
 
 	var sv *tfe.StateVersion
 
+	if stateVersionID == "" && workspaceID == "" {
+		return ToolError(logger, "One of state_version_id or workspace_id must be provided", nil)
+	}
 	if stateVersionID != "" {
-		// Case 1: state_version_id provided
 		sv, err = tfeClient.StateVersions.Read(ctx, stateVersionID)
-		if err != nil {
-			return ToolError(logger, "Failed to get state version", err)
-		}
-
-	} else if workspaceID != "" {
-		// Case 2: workspace_id provided
-		sv, err = tfeClient.StateVersions.ReadCurrent(ctx, workspaceID)
-		if err != nil {
-			return ToolError(logger, "Failed to get current state version for workspace", err)
-		}
-
 	} else {
-		// Case 3: Neither provided
-		return ToolError(logger, "At least one of state_version_id or workspace_id must be provided", nil)
+		sv, err = tfeClient.StateVersions.ReadCurrent(ctx, workspaceID)
+	}
+	if err != nil {
+		return ToolError(logger, "Failed to get state version", err)
 	}
 
-	// Marshal JSON
 	svJSON, err := json.Marshal(sv)
 	if err != nil {
 		return ToolError(logger, "Failed to serialize state version", err)

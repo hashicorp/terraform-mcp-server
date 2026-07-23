@@ -37,8 +37,8 @@ func ListStateVersions(logger *log.Logger) server.ServerTool {
 			),
 		),
 
-		Handler: func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-			return listStateVersionsHandler(ctx, req, logger)
+		Handler: func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			return listStateVersionsHandler(ctx, request, logger)
 		},
 	}
 }
@@ -49,16 +49,14 @@ func listStateVersionsHandler(
 	request mcp.CallToolRequest,
 	logger *log.Logger) (*mcp.CallToolResult, error) {
 
-	// Init clint object
 	tfeClient, err := client.GetTfeClientFromContext(ctx, logger)
 	if err != nil {
-		return ToolError(logger, "failed to get Terraform client", err)
+		return ToolError(logger, "Failed to get Terraform client", err)
 	}
 	if tfeClient == nil {
-		return ToolError(logger, "failed to get Terraform client - ensure TFE_TOKEN and TFE_ADDRESS are configured", nil)
+		return ToolError(logger, "Failed to get Terraform client - ensure TFE_TOKEN and TFE_ADDRESS are configured", nil)
 	}
 
-	// Required params
 	terraformOrgName, err := request.RequireString("terraform_org_name")
 	if err != nil {
 		return ToolError(logger, "Missing required input: terraform_org_name", err)
@@ -67,17 +65,14 @@ func listStateVersionsHandler(
 	if err != nil {
 		return ToolError(logger, "Missing required input: workspace_name", err)
 	}
-	// Clean params
 	terraformOrgName = strings.TrimSpace(terraformOrgName)
 	workspaceName = strings.TrimSpace(workspaceName)
 
-	// Optional pagination params
 	pagination, err := utils.OptionalPaginationParams(request)
 	if err != nil {
 		return ToolError(logger, "Invalid pagination parameters", err)
 	}
 
-	// List state versions
 	sv, err := tfeClient.StateVersions.List(ctx, &tfe.StateVersionListOptions{
 		Organization: terraformOrgName,
 		Workspace:    workspaceName,
@@ -93,7 +88,6 @@ func listStateVersionsHandler(
 		return ToolError(logger, "Workspace has no StateVersions to list", err)
 	}
 
-	// Format Output
 	svSummaries := make([]*StateVersionsSummary, len(sv.Items))
 	for i, o := range sv.Items {
 		svSummaries[i] = &StateVersionsSummary{
@@ -107,7 +101,6 @@ func listStateVersionsHandler(
 		}
 	}
 
-	// Marshal JSON
 	svJSON, err := json.Marshal(&StateVersionsSummaryList{
 		Items:      svSummaries,
 		Pagination: sv.Pagination,

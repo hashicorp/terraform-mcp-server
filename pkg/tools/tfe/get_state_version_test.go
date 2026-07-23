@@ -15,7 +15,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestGetStateVersionWithID(t *testing.T) {
+func TestGetStateVersion(t *testing.T) {
 	logger := log.New()
 	logger.SetLevel(log.ErrorLevel)
 
@@ -67,52 +67,6 @@ func TestGetStateVersionWithID(t *testing.T) {
 					assert.NoError(t, err)
 					assert.Equal(t, tt.params["state_version_id"], val)
 				}
-			})
-		}
-	})
-
-	// Input whitespace and hash trimming
-	t.Run("input trimming", func(t *testing.T) {
-		tests := []struct {
-			name     string
-			input    string
-			expected string
-		}{
-			{
-				name:     "no whitespace",
-				input:    "sv-abc123",
-				expected: "sv-abc123",
-			},
-			{
-				name:     "leading and trailing spaces",
-				input:    "  sv-abc123  ",
-				expected: "sv-abc123",
-			},
-			{
-				name:     "tabs and spaces",
-				input:    "\t sv-abc123 \t",
-				expected: "sv-abc123",
-			},
-			{
-				name:     "internal text preserved",
-				input:    "  sv-with-dashes-inside  ",
-				expected: "sv-with-dashes-inside",
-			},
-			{
-				name:     "leading hash",
-				input:    "#sv-abc123",
-				expected: "sv-abc123",
-			},
-			{
-				name:     "leading hash with spaces",
-				input:    "  #sv-abc123  ",
-				expected: "sv-abc123",
-			},
-		}
-
-		for _, tt := range tests {
-			t.Run(tt.name, func(t *testing.T) {
-				assert.Equal(t, tt.expected, strings.TrimLeft(strings.TrimSpace(tt.input), "#"))
 			})
 		}
 	})
