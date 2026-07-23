@@ -21,7 +21,7 @@ func GetRunComments(logger *log.Logger) server.ServerTool {
 		Tool: mcp.NewTool(
 			"get_run_comments",
 			mcp.WithDescription("Retrieves all comments associated with a Terraform run."),
-			mcp.WithTitleAnnotation(`Get Terraform run comments`),
+			mcp.WithTitleAnnotation(`Get all comments for a given Terraform run.`),
 			mcp.WithReadOnlyHintAnnotation(true),
 			mcp.WithDestructiveHintAnnotation(false),
 			mcp.WithString("run_id",
