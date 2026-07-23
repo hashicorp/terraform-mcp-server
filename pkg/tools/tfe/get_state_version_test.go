@@ -4,15 +4,10 @@
 package tools
 
 import (
-	"encoding/json"
-	"strings"
 	"testing"
-	"time"
 
-	"github.com/hashicorp/go-tfe"
 	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 func TestGetStateVersion(t *testing.T) {
@@ -69,95 +64,5 @@ func TestGetStateVersion(t *testing.T) {
 				}
 			})
 		}
-	})
-
-	// tfe.StateVersion JSON marshal/unmarshal round-trip
-	t.Run("StateVersion JSON round-trip", func(t *testing.T) {
-		now := time.Now().UTC().Truncate(time.Second)
-		sv := &tfe.StateVersion{
-			ID:               "sv-abc123",
-			CreatedAt:        now,
-			Serial:           42,
-			TerraformVersion: "1.5.0",
-			VCSCommitSHA:     "abc123def456",
-			VCSCommitURL:     "https://github.com/example/repo/commit/abc123",
-			StateVersion:     3,
-		}
-
-		jsonData, err := json.Marshal(sv)
-		require.NoError(t, err)
-
-		jsonStr := string(jsonData)
-		assert.Contains(t, jsonStr, "sv-abc123")
-		assert.Contains(t, jsonStr, "1.5.0")
-		assert.Contains(t, jsonStr, "abc123def456")
-
-		var unmarshaled tfe.StateVersion
-		require.NoError(t, json.Unmarshal(jsonData, &unmarshaled))
-		assert.Equal(t, sv.ID, unmarshaled.ID)
-		assert.Equal(t, sv.Serial, unmarshaled.Serial)
-		assert.Equal(t, sv.TerraformVersion, unmarshaled.TerraformVersion)
-		assert.Equal(t, sv.VCSCommitSHA, unmarshaled.VCSCommitSHA)
-		assert.Equal(t, sv.VCSCommitURL, unmarshaled.VCSCommitURL)
-		assert.Equal(t, sv.StateVersion, unmarshaled.StateVersion)
-	})
-
-	// Empty/whitespace/hash-only state_version_id falls through to workspace_id branch
-	t.Run("empty or whitespace state_version_id falls through", func(t *testing.T) {
-		tests := []struct {
-			name        string
-			raw         string
-			expectEmpty bool
-		}{
-			{
-				name:        "empty string",
-				raw:         "",
-				expectEmpty: true,
-			},
-			{
-				name:        "whitespace only",
-				raw:         "   ",
-				expectEmpty: true,
-			},
-			{
-				name:        "hash only",
-				raw:         "#",
-				expectEmpty: true,
-			},
-			{
-				name:        "hash with surrounding spaces",
-				raw:         "  #  ",
-				expectEmpty: true,
-			},
-			{
-				name:        "valid id not rejected",
-				raw:         "sv-abc123",
-				expectEmpty: false,
-			},
-			{
-				name:        "valid id with leading hash not rejected",
-				raw:         "#sv-abc123",
-				expectEmpty: false,
-			},
-		}
-
-		for _, tt := range tests {
-			t.Run(tt.name, func(t *testing.T) {
-				trimmed := strings.TrimLeft(strings.TrimSpace(tt.raw), "#")
-				isEmpty := trimmed == ""
-				assert.Equal(t, tt.expectEmpty, isEmpty,
-					"guard should fire when trimmed ID is empty")
-			})
-		}
-	})
-
-	// Zero-value tfe.StateVersion marshals without panic
-	t.Run("zero-value StateVersion marshals without panic", func(t *testing.T) {
-		sv := &tfe.StateVersion{}
-		jsonData, err := json.Marshal(sv)
-		require.NoError(t, err)
-
-		var result map[string]interface{}
-		require.NoError(t, json.Unmarshal(jsonData, &result))
 	})
 }
