@@ -38,6 +38,7 @@ IMPROVEMENTS
 FEATURES
 
 * [New Tool] `get_sentinel_mock` Export and download Sentinel mock bundle data for a Terraform plan
+* [New Tool] `get_module_examples` and `get_module_submodules` retrieve Terraform module examples and submodules separately from root module details [344](https://github.com/hashicorp/terraform-mcp-server/pull/344)
 
 IMPROVEMENTS
 
