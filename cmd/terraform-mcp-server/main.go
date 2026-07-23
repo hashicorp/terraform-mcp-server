@@ -254,9 +254,14 @@ func getToolsetsFromCmd(cmd *cobra.Command, logger *log.Logger) []string {
 	return parseToolsets(toolsetsFlag, logger)
 }
 
-// runDefaultCommand handles the default behavior when no subcommand is provided
+// runDefaultCommand handles the default behavior when no subcommand is provided.
+// If TRANSPORT_MODE (or related transport env vars) selects streamable-HTTP mode,
+// the HTTP server is started; otherwise the server defaults to stdio.
+//
+// The env-var-driven HTTP path lives here (rather than in main()) so cobra's
+// Execute() always runs first and the --tools / --toolsets persistent flags are
+// parsed from the command line before getToolsetsFromCmd reads them. See #376.
 func runDefaultCommand(cmd *cobra.Command, _ []string) {
-	// Default to stdio mode when no subcommand is provided
 	logFile, err := cmd.PersistentFlags().GetString("log-file")
 	if err != nil {
 		stdlog.Fatal("Failed to get log file:", err)
@@ -271,19 +276,6 @@ func runDefaultCommand(cmd *cobra.Command, _ []string) {
 	// Get toolsets from the command that was passed in
 	enabledToolsets := getToolsetsFromCmd(cmd, logger)
 
-	if err := runStdioServer(logger, enabledToolsets); err != nil {
-		stdlog.Fatal("failed to run stdio server:", err)
-	}
-}
-
-func main() {
-	logFile, _ := rootCmd.PersistentFlags().GetString("log-file")
-	logLevel := getLogLevel(rootCmd)
-	logFormat := getLogFormat(rootCmd)
-	logger, err := initLogger(logFile, logLevel, logFormat)
-	if err != nil {
-		stdlog.Fatal("Failed to initialize logger:", err)
-	}
 	if shouldUseStreamableHTTPMode() {
 		logger.Info("Starting in Streamable HTTP mode based on environment configuration")
 
@@ -292,8 +284,7 @@ func main() {
 
 		port := getHTTPPort()
 		host := getHTTPHost()
-		endpointPath := getEndpointPath(nil)
-		enabledToolsets := getToolsetsFromCmd(rootCmd, logger)
+		endpointPath := getEndpointPath(cmd)
 		heartbeatInterval := getHeartbeatInterval()
 		organizationAllowlist, err := getOrganizationAllowlist(rootCmd)
 		if err != nil {
@@ -305,7 +296,12 @@ func main() {
 		return
 	}
 
-	// Fall back to normal CLI behavior
+	if err := runStdioServer(logger, enabledToolsets); err != nil {
+		stdlog.Fatal("failed to run stdio server:", err)
+	}
+}
+
+func main() {
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Println(err)
 		os.Exit(1)

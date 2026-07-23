@@ -56,6 +56,10 @@ FIXES
 
 * Fix `--tools` alone being falsely flagged as conflicting with `--toolsets` [380](https://github.com/hashicorp/terraform-mcp-server/pull/380)
 
+FIXES
+
+* `--tools` and `--toolsets` CLI flags were silently ignored when streamable-HTTP mode was selected via the `TRANSPORT_MODE` env var, because the env-var fast path in `main()` bypassed cobra's `Execute()` and therefore skipped persistent-flag parsing. The HTTP-mode detection now runs inside `runDefaultCommand` so the flags are always parsed before they are read. [376](https://github.com/hashicorp/terraform-mcp-server/issues/376)
+
 # 0.5.2
 
 IMPROVEMENTS
