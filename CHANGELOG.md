@@ -1,5 +1,9 @@
 # 1.1.1
 
+FIXES
+
+* Use absolute URIs with `terraform://` scheme for resource identifiers to comply with MCP specification [#274](https://github.com/hashicorp/terraform-mcp-server/pull/274)
+
 IMPROVEMENTS
 
 * Add `version` field to the `/health` endpoint response to make it easier to identify which version is deployed at a glance. [410](https://github.com/hashicorp/terraform-mcp-server/pull/410)
