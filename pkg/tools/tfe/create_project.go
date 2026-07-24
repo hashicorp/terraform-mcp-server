@@ -19,7 +19,7 @@ import (
 func CreateProject(logger *log.Logger) server.ServerTool {
 	return server.ServerTool{
 		Tool: mcp.NewTool("create_project",
-			mcp.WithDescription(`Creates a new Terraform project in the specified organization. Projects are used to group and organize workspaces within an organization.`),
+			mcp.WithDescription(`Creates a new Terraform project in the specified organization. Call list_terraform_orgs first, then use ask_followup_question with each org name as a suggestion button so the user can select one without typing. Then ask the user for the project name and if they'd like to add an optional description — wait for their answer before proceeding.`),
 			mcp.WithTitleAnnotation("Create a new Terraform project"),
 			mcp.WithOpenWorldHintAnnotation(true),
 			mcp.WithReadOnlyHintAnnotation(false),
