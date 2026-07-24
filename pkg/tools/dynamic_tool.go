@@ -143,6 +143,12 @@ func (r *DynamicToolRegistry) registerTFETools() {
 		r.mcpServer.AddTool(tool.Tool, tool.Handler)
 	}
 
+	// Only register delete_project if TF operations are enabled AND toolset is enabled
+	if isTerraformOperationsEnabled() && toolsets.IsToolEnabled("delete_project", r.enabledToolsets) {
+		tool := r.createDynamicTFETool("delete_project", tfeTools.DeleteProject)
+		r.mcpServer.AddTool(tool.Tool, tool.Handler)
+	}
+
 	// Only register delete_workspace_safely if TF operations are enabled AND toolset is enabled
 	if isTerraformOperationsEnabled() && toolsets.IsToolEnabled("delete_workspace_safely", r.enabledToolsets) {
 		tool := r.createDynamicTFETool("delete_workspace_safely", tfeTools.DeleteWorkspaceSafely)

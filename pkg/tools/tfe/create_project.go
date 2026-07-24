@@ -6,6 +6,7 @@ package tools
 import (
 	"context"
 	"encoding/json"
+	"strings"
 
 	"github.com/hashicorp/go-tfe"
 	"github.com/hashicorp/terraform-mcp-server/pkg/client"
@@ -51,11 +52,13 @@ func createProjectHandler(ctx context.Context, request mcp.CallToolRequest, logg
 	if err != nil {
 		return ToolError(logger, "missing required input: terraform_org_name", err)
 	}
+	terraformOrgName = strings.TrimSpace(terraformOrgName)
 
 	projectName, err := request.RequireString("project_name")
 	if err != nil {
 		return ToolError(logger, "missing required input: project_name", err)
 	}
+	projectName = strings.TrimSpace(projectName)
 
 	description := request.GetString("description", "")
 
