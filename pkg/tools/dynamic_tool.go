@@ -148,6 +148,12 @@ func (r *DynamicToolRegistry) registerTFETools() {
 		r.mcpServer.AddTool(tool.Tool, tool.Handler)
 	}
 
+	// Only register delete_team if TF operations are enable AND toolset is enable
+	if isTerraformOperationsEnabled() && toolsets.IsToolEnabled("delete_team", r.enabledToolsets) {
+		tool := r.createDynamicTFETool("delete_team", tfeTools.DeleteTeam)
+		r.mcpServer.AddTool(tool.Tool, tool.Handler)
+	}
+
 	// Registry-private toolset - Private provider tools
 	if toolsets.IsToolEnabled("search_private_providers", r.enabledToolsets) {
 		tool := r.createDynamicTFETool("search_private_providers", tfeTools.SearchPrivateProviders)
@@ -326,6 +332,8 @@ func (r *DynamicToolRegistry) registerTFETools() {
 		tool := r.createDynamicTFETool("get_state_version", tfeTools.GetStateVersion)
 		r.mcpServer.AddTool(tool.Tool, tool.Handler)
 	}
+
+	// Terraform Delete Teams - Toolset
 
 	r.tfeToolsRegistered = true
 }
