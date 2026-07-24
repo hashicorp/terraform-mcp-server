@@ -327,6 +327,12 @@ func (r *DynamicToolRegistry) registerTFETools() {
 		r.mcpServer.AddTool(tool.Tool, tool.Handler)
 	}
 
+	// Terraform Toolset - Comments
+	if toolsets.IsToolEnabled("get_run_comments", r.enabledToolsets) {
+		tool := r.createDynamicTFETool("get_run_comments", tfeTools.GetRunComments)
+		r.mcpServer.AddTool(tool.Tool, tool.Handler)
+	}
+
 	r.tfeToolsRegistered = true
 }
 
