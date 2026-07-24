@@ -6,7 +6,6 @@ package tools
 import (
 	"context"
 	"encoding/json"
-	"strings"
 
 	"github.com/hashicorp/go-tfe"
 	"github.com/hashicorp/terraform-mcp-server/pkg/client"
@@ -31,10 +30,14 @@ func CreateProject(logger *log.Logger) server.ServerTool {
 			),
 			mcp.WithString("project_name",
 				mcp.Required(),
-				mcp.Description("The name of the project to create"),
+				mcp.Description("The project name. Must be 3-40 characters, contain only letters, numbers, spaces, hyphens, and underscores, and not start or end with a space."),
+				mcp.MinLength(3),
+				mcp.MaxLength(40),
+				mcp.Pattern(`^[A-Za-z0-9_-][A-Za-z0-9_-]*[A-Za-z0-9_-]$`),
 			),
 			mcp.WithString("description",
-				mcp.Description("Optional description for the project"),
+				mcp.Description("Optional project description. Must be no more than 256 characters"),
+				mcp.MaxLength(256),
 			),
 		),
 		Handler: func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -48,19 +51,20 @@ func createProjectHandler(ctx context.Context, request mcp.CallToolRequest, logg
 	if err != nil {
 		return ToolError(logger, "missing required input: terraform_org_name", err)
 	}
-	terraformOrgName = strings.TrimSpace(terraformOrgName)
 
 	projectName, err := request.RequireString("project_name")
 	if err != nil {
 		return ToolError(logger, "missing required input: project_name", err)
 	}
-	projectName = strings.TrimSpace(projectName)
 
 	description := request.GetString("description", "")
 
 	tfeClient, err := client.GetTfeClientFromContext(ctx, logger)
 	if err != nil {
-		return ToolError(logger, "failed to get Terraform client - ensure TFE_TOKEN and TFE_ADDRESS are configured", err)
+		return ToolError(logger, "failed to get Terraform client", err)
+	}
+	if tfeClient == nil {
+		return ToolError(logger, "failed to get Terraform client - ensure TFE_TOKEN and TFE_ADDRESS are configured", nil)
 	}
 
 	options := tfe.ProjectCreateOptions{
@@ -76,22 +80,13 @@ func createProjectHandler(ctx context.Context, request mcp.CallToolRequest, logg
 		return ToolErrorf(logger, "failed to create project '%s' in org '%s': %v", projectName, terraformOrgName, err)
 	}
 
-	result := struct {
-		ID           string `json:"id"`
-		Name         string `json:"name"`
-		Description  string `json:"description,omitempty"`
-		Organization string `json:"organization"`
-	}{
-		ID:           project.ID,
-		Name:         project.Name,
-		Description:  project.Description,
-		Organization: terraformOrgName,
-	}
-
-	resultJSON, err := json.Marshal(result)
+	projectJSON, err := json.Marshal(&ProjectSummary{
+		ID:   project.ID,
+		Name: project.Name,
+	})
 	if err != nil {
-		return ToolError(logger, "failed to marshal project result", err)
+		return ToolError(logger, "failed to marshal created project summary", err)
 	}
 
-	return mcp.NewToolResultText(string(resultJSON)), nil
+	return mcp.NewToolResultText(string(projectJSON)), nil
 }
