@@ -14,6 +14,7 @@ FEATURES
 
 * [New Tool] `list_state_versions` Lists all state versions for a given workspace. Requires `terraform_org_name` and `workspace_name`; supports optional pagination params.
 * [New Tool] `get_state_version` Retrieves a Terraform state version. If `state_version_id` is provided, retrieves that specific state version. Otherwise, retrieves the latest state version for the specified `workspace_id`. One of `state_version_id` or `workspace_id` must be provided.
+* [New Tool] `add_team_member` Adds one or more members to a Terraform team. Requires `team_id`; accepts `username` (comma-separated, accepted-invite users only) and/or `organization_membership_ids` (comma-separated, works for pending and accepted invites). Both inputs can be provided in a single call — each is submitted as a separate API request and partial results are reported independently.
 
 # 1.1.0
 
