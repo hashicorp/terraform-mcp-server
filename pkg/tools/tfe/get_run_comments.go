@@ -38,6 +38,12 @@ func GetRunComments(logger *log.Logger) server.ServerTool {
 // getRunCommentsHandler handles tool logics and functionality
 func getRunCommentsHandler(ctx context.Context, request mcp.CallToolRequest, logger *log.Logger) (*mcp.CallToolResult, error) {
 
+	runID, err := request.RequireString("run_id")
+	if err != nil {
+		return ToolError(logger, "Missing required input: run_id", err)
+	}
+	runID = strings.TrimLeft(strings.TrimSpace(runID), "#")
+
 	tfeClient, err := client.GetTfeClientFromContext(ctx, logger)
 	if err != nil {
 		return ToolError(logger, "Failed to get Terraform client", err)
@@ -45,12 +51,6 @@ func getRunCommentsHandler(ctx context.Context, request mcp.CallToolRequest, log
 	if tfeClient == nil {
 		return ToolError(logger, "Failed to get Terraform client - ensure TFE_TOKEN and TFE_ADDRESS are configured", nil)
 	}
-
-	runID, err := request.RequireString("run_id")
-	if err != nil {
-		return ToolError(logger, "Missing required input: run_id", err)
-	}
-	runID = strings.TrimLeft(strings.TrimSpace(runID), "#")
 
 	comments, err := tfeClient.Comments.List(ctx, runID)
 	if err != nil {
@@ -69,7 +69,7 @@ func getRunCommentsHandler(ctx context.Context, request mcp.CallToolRequest, log
 		Items: commentSummaries,
 	})
 	if err != nil {
-		return ToolError(logger, "Failed to serialize state version", err)
+		return ToolError(logger, "Failed to serialize comments", err)
 	}
 
 	return mcp.NewToolResultText(string(commentsJSON)), nil
