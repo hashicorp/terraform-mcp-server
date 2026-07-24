@@ -14,6 +14,8 @@ FEATURES
 
 * [New Tool] `list_state_versions` Lists all state versions for a given workspace. Requires `terraform_org_name` and `workspace_name`; supports optional pagination params.
 * [New Tool] `get_state_version` Retrieves a Terraform state version. If `state_version_id` is provided, retrieves that specific state version. Otherwise, retrieves the latest state version for the specified `workspace_id`. One of `state_version_id` or `workspace_id` must be provided.
+* [New Tool] `create_project` Creates a new Terraform project in the specified organization. Requires `terraform_org_name` and `project_name`.
+* [New Tool] `delete_project` Deletes a Terraform project by ID. Requires `project_id`. TFC/TFE will refuse to delete a project that still contains workspaces or stacks.
 
 # 1.1.0
 
