@@ -14,7 +14,7 @@ import (
 
 func TestDeleteTeam(t *testing.T) {
 	logger := log.New()
-	logger.SetLevel(log.ErrorLevel) // Reduce noise in tests
+	logger.SetLevel(log.ErrorLevel)
 
 	t.Run("tool creation", func(t *testing.T) {
 		tool := DeleteTeam(logger)
