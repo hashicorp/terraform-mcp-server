@@ -4,7 +4,6 @@
 package tools
 
 import (
-	"encoding/json"
 	"strings"
 	"testing"
 
@@ -99,30 +98,4 @@ func TestDeleteTeam(t *testing.T) {
 		}
 	})
 
-	t.Run("team deletion result structure", func(t *testing.T) {
-		type TeamDeletionResult struct {
-			Success bool   `json:"success"`
-			Message string `json:"message"`
-			TeamID  string `json:"team_id"`
-		}
-
-		result := TeamDeletionResult{
-			Success: true,
-			Message: `team "my-platform-team" (team-abc123def456) deleted successfully`,
-			TeamID:  "team-abc123def456",
-		}
-
-		jsonData, err := json.Marshal(result)
-		assert.NoError(t, err)
-		assert.Contains(t, string(jsonData), "team-abc123def456")
-		assert.Contains(t, string(jsonData), "deleted successfully")
-		assert.Contains(t, string(jsonData), `"success":true`)
-
-		var unmarshaled TeamDeletionResult
-		err = json.Unmarshal(jsonData, &unmarshaled)
-		assert.NoError(t, err)
-		assert.Equal(t, result.Success, unmarshaled.Success)
-		assert.Equal(t, result.TeamID, unmarshaled.TeamID)
-		assert.Equal(t, result.Message, unmarshaled.Message)
-	})
 }

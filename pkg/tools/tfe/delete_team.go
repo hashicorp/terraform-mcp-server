@@ -41,6 +41,12 @@ func DeleteTeam(logger *log.Logger) server.ServerTool {
 // deleteTeamHandler handles tool logics and functionality
 func deleteTeamHandler(ctx context.Context, request mcp.CallToolRequest, logger *log.Logger) (*mcp.CallToolResult, error) {
 
+	teamID, err := request.RequireString("team_id")
+	if err != nil {
+		return ToolError(logger, "Missing required input: team_id", err)
+	}
+	teamID = strings.TrimSpace(teamID)
+
 	tfeClient, err := client.GetTfeClientFromContext(ctx, logger)
 	if err != nil {
 		return ToolError(logger, "Failed to get Terraform client", err)
@@ -48,12 +54,6 @@ func deleteTeamHandler(ctx context.Context, request mcp.CallToolRequest, logger 
 	if tfeClient == nil {
 		return ToolError(logger, "Failed to get Terraform client - ensure TFE_TOKEN and TFE_ADDRESS are configured", nil)
 	}
-
-	teamID, err := request.RequireString("team_id")
-	if err != nil {
-		return ToolError(logger, "Missing required input: team_id", err)
-	}
-	teamID = strings.TrimSpace(teamID)
 
 	team, err := tfeClient.Teams.Read(ctx, teamID)
 	if err != nil {
