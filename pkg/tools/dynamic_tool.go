@@ -322,6 +322,17 @@ func (r *DynamicToolRegistry) registerTFETools() {
 		r.mcpServer.AddTool(tool.Tool, tool.Handler)
 	}
 
+	// Terraform State-Version Toolsets
+	if toolsets.IsToolEnabled("list_state_versions", r.enabledToolsets) {
+		tool := r.createDynamicTFETool("list_state_versions", tfeTools.ListStateVersions)
+		r.mcpServer.AddTool(tool.Tool, tool.Handler)
+	}
+
+	if toolsets.IsToolEnabled("get_state_version", r.enabledToolsets) {
+		tool := r.createDynamicTFETool("get_state_version", tfeTools.GetStateVersion)
+		r.mcpServer.AddTool(tool.Tool, tool.Handler)
+	}
+
 	r.tfeToolsRegistered = true
 }
 

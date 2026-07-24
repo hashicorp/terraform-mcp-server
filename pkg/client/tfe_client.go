@@ -24,6 +24,8 @@ const (
 	DefaultTerraformAddress = "https://app.terraform.io"
 	ForwardClientIP         = "MCP_FORWARD_CLIENT_IP"
 	ClientIPKey             = "CLIENT_IP"
+	SharedSecretEnv         = "TF_MCP_SHARED_SECRET"
+	SharedSecretHeader      = "X-Tf-Mcp-Secret"
 )
 
 var activeTfeClients sync.Map
@@ -59,6 +61,25 @@ func newTfeClient(terraformAddress string, terraformSkipTLSVerify bool, terrafor
 		return nil, utils.LogAndReturnError(logger, "required input: no Terraform token provided", nil)
 	}
 
+	config := buildTFEConfig(terraformAddress, terraformSkipTLSVerify, terraformToken, clientIP, logger)
+
+	client, err := tfe.NewClient(config)
+	if err != nil {
+		logger.Warnf("Failed to create a Terraform Cloud/Enterprise client: %v", err)
+		return nil, utils.LogAndReturnError(logger, "creating TFE client", err)
+	}
+
+	return client, nil
+}
+
+// buildTFEConfig assembles the go-tfe client configuration, including the outbound
+// headers set on every request (User-Agent, optional X-Forwarded-For, and the
+// optional shared secret).
+//
+// It is split out from newTfeClient so the header logic can be unit-tested: tfe.NewClient
+// consumes the config and does not expose the headers back, so the tests assert against
+// the *tfe.Config returned here instead.
+func buildTFEConfig(terraformAddress string, terraformSkipTLSVerify bool, terraformToken string, clientIP string, logger *log.Logger) *tfe.Config {
 	config := &tfe.Config{
 		Address:           terraformAddress,
 		Token:             terraformToken,
@@ -70,15 +91,15 @@ func newTfeClient(terraformAddress string, terraformSkipTLSVerify bool, terrafor
 	if clientIP != "" {
 		config.Headers.Set("X-Forwarded-For", clientIP)
 	}
-	config.HTTPClient = createHTTPClient(terraformSkipTLSVerify, logger)
 
-	client, err := tfe.NewClient(config)
-	if err != nil {
-		logger.Warnf("Failed to create a Terraform Cloud/Enterprise client: %v", err)
-		return nil, utils.LogAndReturnError(logger, "creating TFE client", err)
+	// Attach the shared secret (if configured) so the backend (HCP Terraform / TFE)
+	// can identify requests from a trusted MCP deployment.
+	if secret := utils.GetEnv(SharedSecretEnv, ""); secret != "" {
+		config.Headers.Set(SharedSecretHeader, secret)
 	}
 
-	return client, nil
+	config.HTTPClient = createHTTPClient(terraformSkipTLSVerify, logger)
+	return config
 }
 
 // GetTfeClient retrieves the TFE client for the given session
