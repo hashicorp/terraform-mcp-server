@@ -148,6 +148,12 @@ func (r *DynamicToolRegistry) registerTFETools() {
 		r.mcpServer.AddTool(tool.Tool, tool.Handler)
 	}
 
+	// Only register add_team_member if TF operations are enabled AND toolset is enabled
+	if isTerraformOperationsEnabled() && toolsets.IsToolEnabled("add_team_member", r.enabledToolsets) {
+		tool := r.createDynamicTFETool("add_team_member", tfeTools.AddTeamMemeber)
+		r.mcpServer.AddTool(tool.Tool, tool.Handler)
+	}
+
 	// Registry-private toolset - Private provider tools
 	if toolsets.IsToolEnabled("search_private_providers", r.enabledToolsets) {
 		tool := r.createDynamicTFETool("search_private_providers", tfeTools.SearchPrivateProviders)
