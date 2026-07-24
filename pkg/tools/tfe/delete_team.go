@@ -67,18 +67,14 @@ func deleteTeamHandler(ctx context.Context, request mcp.CallToolRequest, logger 
 
 	result := map[string]interface{}{
 		"success": true,
-		"message": fmt.Sprintf("team %q (%s) deleted successfully", team.Name, team.ID),
+		"message": fmt.Sprintf("Team %q (%s) deleted successfully", team.Name, team.ID),
 		"team_id": team.ID,
 	}
 
 	resultJSON, err := json.Marshal(result)
 	if err != nil {
-		return ToolError(logger, "failed to marshal result", err)
+		return ToolError(logger, "Failed to marshal result", err)
 	}
-
-	// logger.Infof("team %s (%s) deleted successfully", team.Name, team.ID)
-
-	// return mcp.NewToolResultText(fmt.Sprintf("team %q (%s) with %d member(s) deleted successfully", team.Name, team.ID, team.UserCount)), nil
 
 	return mcp.NewToolResultText(string(resultJSON)), nil
 }
