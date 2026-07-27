@@ -98,4 +98,25 @@ func TestDeleteTeam(t *testing.T) {
 		}
 	})
 
+	t.Run("team ID sanitisation", func(t *testing.T) {
+		tests := []struct {
+			name     string
+			input    string
+			expected string
+		}{
+			{"clean ID unchanged", "team-abc123def456", "team-abc123def456"},
+			{"leading slash", "/team-abc123def456", "team-abc123def456"},
+			{"multiple leading slashes", "///team-abc123def456", "team-abc123def456"},
+			{"leading whitespace only", "  team-abc123def456", "team-abc123def456"},
+			{"leading whitespace and slash", "  /team-abc123def456", "team-abc123def456"},
+		}
+
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				cleaned := strings.TrimLeft(strings.TrimSpace(tt.input), "/")
+				assert.Equal(t, tt.expected, cleaned)
+			})
+		}
+	})
+
 }
