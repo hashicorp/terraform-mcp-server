@@ -20,7 +20,7 @@ import (
 func DeleteProject(logger *log.Logger) server.ServerTool {
 	return server.ServerTool{
 		Tool: mcp.NewTool("delete_project",
-			mcp.WithDescription(`Deletes a Terraform project by ID. This is a destructive operation. The request will fail if the project still contains workspaces or stacks.`),
+			mcp.WithDescription(`Deletes a Terraform project by ID. This is a destructive operation. The request will fail if the project still contains workspaces or stacks. If the project ID isn't already known, call list_terraform_projects first to look it up rather than asking the user to find it themselves.`),
 			mcp.WithTitleAnnotation("Delete a Terraform project by ID"),
 			mcp.WithReadOnlyHintAnnotation(false),
 			mcp.WithOpenWorldHintAnnotation(true),
@@ -50,8 +50,8 @@ func deleteProjectHandler(ctx context.Context, request mcp.CallToolRequest, logg
 
 	err = tfeClient.Projects.Delete(ctx, projectID)
 	if err != nil {
-		return ToolErrorf(logger, "failed to delete project '%s': %v", projectID, err)
+		return ToolErrorf(logger, "failed to delete project '%q': %v", projectID, err)
 	}
 
-	return mcp.NewToolResultText(fmt.Sprintf("project %s deleted", projectID)), nil
+	return mcp.NewToolResultText(fmt.Sprintf("project %q deleted", projectID)), nil
 }

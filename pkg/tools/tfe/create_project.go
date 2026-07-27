@@ -20,14 +20,14 @@ import (
 func CreateProject(logger *log.Logger) server.ServerTool {
 	return server.ServerTool{
 		Tool: mcp.NewTool("create_project",
-			mcp.WithDescription(`Creates a new Terraform project in the specified organization. Call list_terraform_orgs first, then use ask_followup_question with each org name as a suggestion button so the user can select one without typing. Then ask the user for the project name and if they'd like to add an optional description — wait for their answer before proceeding.`),
+			mcp.WithDescription(`Creates a new Terraform project in the specified organization. If the org name isn't already known, call list_terraform_orgs first to look it up.`),
 			mcp.WithTitleAnnotation("Create a new Terraform project"),
 			mcp.WithOpenWorldHintAnnotation(true),
 			mcp.WithReadOnlyHintAnnotation(false),
 			mcp.WithDestructiveHintAnnotation(false),
 			mcp.WithString("terraform_org_name",
 				mcp.Required(),
-				mcp.Description("The name of the Terraform Cloud/Enterprise organization to create the project in"),
+				mcp.Description(terraformOrgNameDescription+"to create the project in"),
 			),
 			mcp.WithString("project_name",
 				mcp.Required(),
@@ -39,6 +39,9 @@ func CreateProject(logger *log.Logger) server.ServerTool {
 			mcp.WithString("description",
 				mcp.Description("Optional project description. Must be no more than 256 characters"),
 				mcp.MaxLength(256),
+			),
+			mcp.WithString("default_execution_mode",
+				mcp.Description("Optional default execution mode for workspaces in the project: 'local', 'agent', or 'remote'. If not set, workspaces inherit the organization's default execution mode."),
 			),
 		),
 		Handler: func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -62,6 +65,8 @@ func createProjectHandler(ctx context.Context, request mcp.CallToolRequest, logg
 
 	description := request.GetString("description", "")
 
+	defaultExecutionMode := request.GetString("default_execution_mode", "")
+
 	tfeClient, err := client.GetTfeClientFromContext(ctx, logger)
 	if err != nil {
 		return ToolError(logger, "failed to get Terraform client", err)
@@ -78,15 +83,25 @@ func createProjectHandler(ctx context.Context, request mcp.CallToolRequest, logg
 		options.Description = &description
 	}
 
-	project, err := tfeClient.Projects.Create(ctx, terraformOrgName, options)
-	if err != nil {
-		return ToolErrorf(logger, "failed to create project '%s' in org '%s': %v", projectName, terraformOrgName, err)
+	if defaultExecutionMode != "" {
+		switch strings.ToLower(defaultExecutionMode) {
+		case "local":
+			options.DefaultExecutionMode = tfe.String("local")
+		case "agent":
+			options.DefaultExecutionMode = tfe.String("agent")
+		case "remote":
+			options.DefaultExecutionMode = tfe.String("remote")
+		default:
+			return ToolErrorf(logger, "invalid default_execution_mode %q - must be 'local', 'agent', 'remote'", defaultExecutionMode)
+		}
 	}
 
-	projectJSON, err := json.Marshal(&ProjectSummary{
-		ID:   project.ID,
-		Name: project.Name,
-	})
+	project, err := tfeClient.Projects.Create(ctx, terraformOrgName, options)
+	if err != nil {
+		return ToolErrorf(logger, "failed to create project '%q' in org '%q': %v", projectName, terraformOrgName, err)
+	}
+
+	projectJSON, err := json.Marshal(&ProjectSummary{project.ID, project.Name})
 	if err != nil {
 		return ToolError(logger, "failed to marshal created project summary", err)
 	}

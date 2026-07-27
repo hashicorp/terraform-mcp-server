@@ -41,6 +41,11 @@ func TestCreateProject(t *testing.T) {
 		_, hasDescription := tool.Tool.InputSchema.Properties["description"]
 		assert.True(t, hasDescription)
 		assert.NotContains(t, tool.Tool.InputSchema.Required, "description")
+
+		// default_execution_mode is optional: present in properties but not in required
+		_, hasExecMode := tool.Tool.InputSchema.Properties["default_execution_mode"]
+		assert.True(t, hasExecMode)
+		assert.NotContains(t, tool.Tool.InputSchema.Required, "default_execution_mode")
 	})
 
 	t.Run("parameter validation", func(t *testing.T) {
@@ -166,6 +171,36 @@ func TestCreateProject(t *testing.T) {
 				tooLong := len(tt.input) > 256
 				assert.Equal(t, tt.expectError, tooLong,
 					"description of length %d: expected error=%v", len(tt.input), tt.expectError)
+			})
+		}
+	})
+
+	t.Run("default_execution_mode validation", func(t *testing.T) {
+		tests := []struct {
+			name        string
+			input       string
+			expectError bool
+		}{
+			{name: "empty (optional)", input: "", expectError: false},
+			{name: "local", input: "local", expectError: false},
+			{name: "agent", input: "agent", expectError: false},
+			{name: "remote", input: "remote", expectError: false},
+			{name: "invalid value", input: "cloud", expectError: true},
+		}
+
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				var validationErr bool
+				if tt.input != "" {
+					switch strings.ToLower(tt.input) {
+					case "local", "agent", "remote":
+						// valid
+					default:
+						validationErr = true
+					}
+				}
+				assert.Equal(t, tt.expectError, validationErr,
+					"input %q: expected error=%v", tt.input, tt.expectError)
 			})
 		}
 	})
