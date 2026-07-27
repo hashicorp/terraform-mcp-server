@@ -6,6 +6,7 @@ package tools
 import (
 	"context"
 	"encoding/json"
+	"slices"
 	"strings"
 
 	"github.com/hashicorp/go-tfe"
@@ -31,10 +32,10 @@ func CreateProject(logger *log.Logger) server.ServerTool {
 			),
 			mcp.WithString("project_name",
 				mcp.Required(),
-				mcp.Description("The project name. Must be 3-40 characters, contain only letters, numbers, spaces, hyphens, and underscores, and not start or end with a space."),
+				mcp.Description("The project name. Must be 3-40 characters and may contain letters, numbers, spaces, hyphens, and underscores. It cannot start or end with a space."),
 				mcp.MinLength(3),
 				mcp.MaxLength(40),
-				mcp.Pattern(`^[A-Za-z0-9_-][A-Za-z0-9_-]*[A-Za-z0-9_-]$`),
+				mcp.Pattern(`^[A-Za-z0-9_-][A-Za-z0-9 _-]*[A-Za-z0-9_-]$`),
 			),
 			mcp.WithString("description",
 				mcp.Description("Optional project description. Must be no more than 256 characters"),
@@ -84,14 +85,7 @@ func createProjectHandler(ctx context.Context, request mcp.CallToolRequest, logg
 	}
 
 	if defaultExecutionMode != "" {
-		switch strings.ToLower(defaultExecutionMode) {
-		case "local":
-			options.DefaultExecutionMode = tfe.String("local")
-		case "agent":
-			options.DefaultExecutionMode = tfe.String("agent")
-		case "remote":
-			options.DefaultExecutionMode = tfe.String("remote")
-		default:
+		if !slices.Contains([]string{"local", "agent", "remote"}, strings.ToLower(defaultExecutionMode)) {
 			return ToolErrorf(logger, "invalid default_execution_mode %q - must be 'local', 'agent', 'remote'", defaultExecutionMode)
 		}
 	}

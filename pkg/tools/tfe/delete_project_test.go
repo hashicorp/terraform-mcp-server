@@ -35,29 +35,31 @@ func TestDeleteProject(t *testing.T) {
 		tests := []struct {
 			name        string
 			params      map[string]interface{}
-			expectError bool
+			expectIDErr bool
 		}{
 			{
-				name: "valid project_id",
+				name: "project_id present",
 				params: map[string]interface{}{
 					"project_id": "prj-abc123def456",
 				},
-				expectError: false,
+				expectIDErr: false,
 			},
 			{
 				name:        "missing project_id",
 				params:      map[string]interface{}{},
-				expectError: true,
+				expectIDErr: true,
 			},
 		}
 
 		for _, tt := range tests {
 			t.Run(tt.name, func(t *testing.T) {
 				request := &MockCallToolRequest{params: tt.params}
+
 				projectID, err := request.RequireString("project_id")
 
-				if tt.expectError {
+				if tt.expectIDErr {
 					assert.Error(t, err)
+					assert.Contains(t, err.Error(), "project_id")
 				} else {
 					assert.NoError(t, err)
 					assert.Equal(t, tt.params["project_id"], projectID)
