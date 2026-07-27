@@ -50,7 +50,7 @@ func deleteProjectHandler(ctx context.Context, request mcp.CallToolRequest, logg
 
 	err = tfeClient.Projects.Delete(ctx, projectID)
 	if err != nil {
-		return ToolErrorf(logger, "failed to delete project '%q': %v", projectID, err)
+		return ToolErrorf(logger, "failed to delete project %q: %v", projectID, err)
 	}
 
 	return mcp.NewToolResultText(fmt.Sprintf("project %q deleted", projectID)), nil

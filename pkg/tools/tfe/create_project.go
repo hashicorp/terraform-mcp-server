@@ -20,7 +20,7 @@ import (
 func CreateProject(logger *log.Logger) server.ServerTool {
 	return server.ServerTool{
 		Tool: mcp.NewTool("create_project",
-			mcp.WithDescription(`Creates a new Terraform project in the specified organization. If the org name isn't already known, call list_terraform_orgs first to look it up.`),
+			mcp.WithDescription(`Creates a new Terraform project in the specified organization.`),
 			mcp.WithTitleAnnotation("Create a new Terraform project"),
 			mcp.WithOpenWorldHintAnnotation(true),
 			mcp.WithReadOnlyHintAnnotation(false),
@@ -98,7 +98,7 @@ func createProjectHandler(ctx context.Context, request mcp.CallToolRequest, logg
 
 	project, err := tfeClient.Projects.Create(ctx, terraformOrgName, options)
 	if err != nil {
-		return ToolErrorf(logger, "failed to create project '%q' in org '%q': %v", projectName, terraformOrgName, err)
+		return ToolErrorf(logger, "failed to create project %q in org %q: %v", projectName, terraformOrgName, err)
 	}
 
 	projectJSON, err := json.Marshal(&ProjectSummary{project.ID, project.Name})
