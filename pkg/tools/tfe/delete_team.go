@@ -22,7 +22,7 @@ func DeleteTeam(logger *log.Logger) server.ServerTool {
 	return server.ServerTool{
 		Tool: mcp.NewTool(
 			"delete_team",
-			mcp.WithDescription("Permanently deletes a Terraform team by its team_id.  If you don't have the team_id, look it up first via the organization's Teams URL page from the HCP Terraform/TFE UI."),
+			mcp.WithDescription("Permanently deletes a Terraform team by its team_id. This also removes all team memberships and any workspace or project access granted through the team. Organization users and workspaces are not deleted."),
 			mcp.WithTitleAnnotation(`Deletes a Terraform Team by team_id`),
 			mcp.WithReadOnlyHintAnnotation(false),
 			mcp.WithOpenWorldHintAnnotation(true),
@@ -62,7 +62,7 @@ func deleteTeamHandler(ctx context.Context, request mcp.CallToolRequest, logger 
 
 	err = tfeClient.Teams.Delete(ctx, teamID)
 	if err != nil {
-		return ToolErrorf(logger, "Failed to delete team '%s'", teamID)
+		return ToolErrorf(logger, "Failed to delete team %q", teamID)
 	}
 
 	result := map[string]interface{}{
