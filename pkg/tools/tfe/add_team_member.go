@@ -16,8 +16,8 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-// AddTeamMemeber creates a tool to add a new member to your Terraform team.
-func AddTeamMemeber(logger *log.Logger) server.ServerTool {
+// AddTeamMember creates a tool to add a new member to your Terraform team.
+func AddTeamMember(logger *log.Logger) server.ServerTool {
 	return server.ServerTool{
 		Tool: mcp.NewTool(
 			"add_team_member",
