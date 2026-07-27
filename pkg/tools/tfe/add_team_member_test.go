@@ -17,7 +17,7 @@ func TestAddTeamMember(t *testing.T) {
 	logger.SetLevel(log.ErrorLevel)
 
 	t.Run("tool creation", func(t *testing.T) {
-		tool := AddTeamMemeber(logger)
+		tool := AddTeamMember(logger)
 
 		assert.Equal(t, "add_team_member", tool.Tool.Name)
 		assert.NotNil(t, tool.Handler)

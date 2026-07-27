@@ -183,7 +183,7 @@ func (r *DynamicToolRegistry) registerTFETools() {
 
 	// Only register add_team_member if TF operations are enabled AND toolset is enabled
 	if isTerraformOperationsEnabled() && toolsets.IsToolEnabled("add_team_member", r.enabledToolsets) {
-		tool := r.createDynamicTFETool("add_team_member", tfeTools.AddTeamMemeber)
+		tool := r.createDynamicTFETool("add_team_member", tfeTools.AddTeamMember)
 		r.mcpServer.AddTool(tool.Tool, tool.Handler)
 	}
 
