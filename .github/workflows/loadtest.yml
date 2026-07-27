@@ -30,7 +30,7 @@ jobs:
 
       - name: Start server
         run: |
-          ./terraform-mcp-server http -p 8080 &
+          ./terraform-mcp-server http -p 8080 --insecure-no-tls &
           sleep 3
           curl -sf http://localhost:8080/health || exit 1
 
