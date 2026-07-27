@@ -16,8 +16,6 @@ import (
 )
 
 // DeleteTeam creates a tool to delete a Terraform team by ID
-// Team ID can be found at:
-// https://app.terraform.io/app/your-organization/settings/teams/team-xxxxxxxx
 func DeleteTeam(logger *log.Logger) server.ServerTool {
 	return server.ServerTool{
 		Tool: mcp.NewTool(
