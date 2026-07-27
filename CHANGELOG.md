@@ -16,6 +16,10 @@ FEATURES
 * [New Tool] `get_state_version` Retrieves a Terraform state version. If `state_version_id` is provided, retrieves that specific state version. Otherwise, retrieves the latest state version for the specified `workspace_id`. One of `state_version_id` or `workspace_id` must be provided.
 * [New Tool] `get_run_comments` Lists all discussion comments associated with a given Terraform run. Requires `run_id`.
 
+BREAKING CHANGES
+
+* The StreamableHTTP server no longer skips the TLS requirement when binding to localhost or `0.0.0.0`. TLS is now required unless you explicitly opt out with the `--insecure-no-tls` flag (or `INSECURE_NO_TLS=true`). Deployments that previously relied on the localhost/`0.0.0.0` bypass must now opt out explicitly.
+
 # 1.1.0
 
 FIXES
