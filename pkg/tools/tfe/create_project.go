@@ -28,7 +28,7 @@ func CreateProject(logger *log.Logger) server.ServerTool {
 			mcp.WithDestructiveHintAnnotation(false),
 			mcp.WithString("terraform_org_name",
 				mcp.Required(),
-				mcp.Description(terraformOrgNameDescription+"to create the project in"),
+				mcp.Description(terraformOrgNameDescription+" to create the project in"),
 			),
 			mcp.WithString("project_name",
 				mcp.Required(),
