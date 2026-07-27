@@ -55,7 +55,7 @@ func addTeamMemberHandler(ctx context.Context, request mcp.CallToolRequest, logg
 	username := request.GetString("username", "")
 	organizationMembershipID := request.GetString("organization_membership_ids", "")
 
-	teamID = strings.TrimSpace(teamID)
+	teamID = strings.TrimLeft(strings.TrimSpace(teamID), "/")
 	username = strings.TrimSpace((username))
 	organizationMembershipID = strings.TrimSpace(organizationMembershipID)
 
