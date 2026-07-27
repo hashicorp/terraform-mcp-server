@@ -1,5 +1,7 @@
 # <img src="public/images/Terraform-LogoMark_onDark.svg" width="30" align="left" style="margin-right: 12px;"/> Terraform MCP Server
 
+[![MCP Toplist](https://mcptoplist.com/badge/io.github.hashicorp%2Fterraform-mcp-server.svg)](https://mcptoplist.com/server/io.github.hashicorp%2Fterraform-mcp-server)
+
 The Terraform MCP Server is a [Model Context Protocol (MCP)](https://modelcontextprotocol.io/introduction)
 server that provides seamless integration with Terraform Registry APIs, enabling advanced
 automation and interaction capabilities for Infrastructure as Code (IaC) development.
