@@ -28,7 +28,7 @@ It retrieves a list of private modules that match the search criteria. This tool
 			mcp.WithDestructiveHintAnnotation(false),
 			mcp.WithString("terraform_org_name",
 				mcp.Required(),
-				mcp.Description("The Terraform Cloud/Enterprise organization name to search within"),
+				mcp.Description(terraformOrgNameDescription+" to search for private modules in"),
 			),
 			mcp.WithString("search_query",
 				mcp.Description("Optional search query to filter modules by name or namespace. If not provided, all modules will be returned"),

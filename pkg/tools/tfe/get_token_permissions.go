@@ -23,7 +23,7 @@ func GetTokenPermissions(logger *log.Logger) server.ServerTool {
 			mcp.WithDestructiveHintAnnotation(false),
 			mcp.WithString("terraform_org_name",
 				mcp.Required(),
-				mcp.Description("The Terraform Cloud/Enterprise organization name"),
+				mcp.Description(terraformOrgNameDescription),
 			),
 		),
 		Handler: func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {

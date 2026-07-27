@@ -28,7 +28,7 @@ func UpdateWorkspace(logger *log.Logger) server.ServerTool {
 			mcp.WithDestructiveHintAnnotation(false),
 			mcp.WithString("terraform_org_name",
 				mcp.Required(),
-				mcp.Description("The Terraform Cloud/Enterprise organization name"),
+				mcp.Description(terraformOrgNameDescription),
 			),
 			mcp.WithString("workspace_name",
 				mcp.Required(),

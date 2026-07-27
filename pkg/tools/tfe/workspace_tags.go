@@ -23,7 +23,7 @@ func CreateWorkspaceTags(logger *log.Logger) server.ServerTool {
 			mcp.WithDescription("Add tags to a Terraform workspace."),
 			mcp.WithString("terraform_org_name",
 				mcp.Required(),
-				mcp.Description("Organization name"),
+				mcp.Description(terraformOrgNameDescription),
 			),
 			mcp.WithString("workspace_name",
 				mcp.Required(),

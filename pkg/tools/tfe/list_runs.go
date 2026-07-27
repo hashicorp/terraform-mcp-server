@@ -27,7 +27,7 @@ func ListRuns(logger *log.Logger) server.ServerTool {
 			mcp.WithDestructiveHintAnnotation(false),
 			mcp.WithString("terraform_org_name",
 				mcp.Required(),
-				mcp.Description("Lists the runs in Terraform Cloud/Enterprise organization based on filters if no workspace is specified"),
+				mcp.Description(terraformOrgNameDescription+" in which to list runs based on the provided filters when no workspace is specified"),
 			),
 			mcp.WithString("workspace_name",
 				mcp.Description("If specified, lists the runs in the given workspace instead of the organization based on filters"),

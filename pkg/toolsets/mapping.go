@@ -26,6 +26,8 @@ var ToolToToolset = map[string]string{
 	// Terraform tools (TFE/TFC workspaces, runs, variables, etc.)
 	"list_terraform_orgs":                 Terraform,
 	"list_terraform_projects":             Terraform,
+	"create_project":                      Terraform,
+	"delete_project":                      Terraform,
 	"list_workspaces":                     Terraform,
 	"get_workspace_details":               Terraform,
 	"create_workspace":                    Terraform,
