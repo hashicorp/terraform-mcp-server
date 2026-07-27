@@ -43,7 +43,7 @@ func deleteTeamHandler(ctx context.Context, request mcp.CallToolRequest, logger 
 	if err != nil {
 		return ToolError(logger, "Missing required input: team_id", err)
 	}
-	teamID = strings.TrimSpace(teamID)
+	teamID = strings.TrimLeft(strings.TrimSpace(teamID), "/")
 
 	tfeClient, err := client.GetTfeClientFromContext(ctx, logger)
 	if err != nil {
