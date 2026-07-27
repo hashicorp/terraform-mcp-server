@@ -348,6 +348,12 @@ func (r *DynamicToolRegistry) registerTFETools() {
 		r.mcpServer.AddTool(tool.Tool, tool.Handler)
 	}
 
+	// Terraform Toolsets - Teams
+	if toolsets.IsToolEnabled("list_teams", r.enabledToolsets) {
+		tool := r.createDynamicTFETool("list_teams", tfeTools.ListTeams)
+		r.mcpServer.AddTool(tool.Tool, tool.Handler)
+	}
+
 	r.tfeToolsRegistered = true
 }
 
