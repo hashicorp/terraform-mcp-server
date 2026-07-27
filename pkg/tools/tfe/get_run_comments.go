@@ -20,13 +20,13 @@ func GetRunComments(logger *log.Logger) server.ServerTool {
 	return server.ServerTool{
 		Tool: mcp.NewTool(
 			"get_run_comments",
-			mcp.WithDescription("Retrieves all comments associated with a Terraform run."),
+			mcp.WithDescription("Lists all user-submitted comments on a specific Terraform run. Use this tool when you need to review feedback, approvals, or notes that collaborators have left on a run. Returns each comment's ID and body text. To get the run's status, plan, and apply details instead, use get_run_details."),
 			mcp.WithTitleAnnotation(`Get all comments for a given Terraform run.`),
 			mcp.WithReadOnlyHintAnnotation(true),
 			mcp.WithDestructiveHintAnnotation(false),
 			mcp.WithString("run_id",
 				mcp.Required(),
-				mcp.Description("The ID of the Terraform run."),
+				mcp.Description("The ID of the Terraform run to retrieve comments for (format: run-<alphanumeric>, e.g. run-Nj2MTonBKmtmceGE."),
 			),
 		),
 		Handler: func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
