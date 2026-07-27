@@ -21,20 +21,20 @@ func AddTeamMemeber(logger *log.Logger) server.ServerTool {
 	return server.ServerTool{
 		Tool: mcp.NewTool(
 			"add_team_member",
-			mcp.WithDescription("Adds member’s to a team. This is a write operation"),
-			mcp.WithTitleAnnotation(`Adds member’s to a team`),
+			mcp.WithDescription("Adds one or more members to a Terraform Cloud/Enterprise team. Members can be identified by username (accepted invites only) or by organization membership ID (accepted and pending invites). Both can be provided in a single call."),
+			mcp.WithTitleAnnotation(`Add members to a Terraform team`),
 			mcp.WithOpenWorldHintAnnotation(true),
 			mcp.WithReadOnlyHintAnnotation(false),
 			mcp.WithDestructiveHintAnnotation(false),
 			mcp.WithString("team_id",
 				mcp.Required(),
-				mcp.Description("The Teams's id (e.g., 'team-abc123def456')"),
+				mcp.Description("The ID of the Terraform Cloud/Enterprise team to add members to (e.g., 'team-abc123def456')"),
 			),
 			mcp.WithString("username",
-				mcp.Description("Optional: Comma-separated list of usernames to add (e.g., 'alice' or 'alice, bob'). Only works for users who have accepted the organization invite."),
+				mcp.Description("Comma-separated list of usernames to add (e.g., 'alice' or 'alice, bob'). Only works for users who have accepted the organization invite."),
 			),
 			mcp.WithString("organization_membership_ids",
-				mcp.Description("Optional: Comma-separated list of organization membership IDs to add (e.g., 'ou-abc123' or 'ou-abc123, ou-def456'). Works for both accepted and pending organization invites. Prefer this over 'username' when the invitee has not yet accepted."),
+				mcp.Description("Comma-separated list of organization membership IDs to add (e.g., 'ou-abc123' or 'ou-abc123, ou-def456'). Works for both accepted and pending organization invites. Prefer this over 'username' when the invitee has not yet accepted."),
 			),
 		),
 
@@ -74,16 +74,16 @@ func addTeamMemberHandler(ctx context.Context, request mcp.CallToolRequest, logg
 		}
 	}
 
+	if len(usernames) == 0 && len(organizationMembershipIDs) == 0 {
+		return ToolError(logger, "At least one of 'username' or 'organization_membership_ids' must be provided", nil)
+	}
+
 	tfeClient, err := client.GetTfeClientFromContext(ctx, logger)
 	if err != nil {
 		return ToolError(logger, "Failed to get Terraform client", err)
 	}
 	if tfeClient == nil {
 		return ToolError(logger, "Failed to get Terraform client - ensure TFE_TOKEN and TFE_ADDRESS are configured", nil)
-	}
-
-	if len(usernames) == 0 && len(organizationMembershipIDs) == 0 {
-		return ToolError(logger, "At least one of 'username' or 'organization_membership_ids' must be provided", nil)
 	}
 
 	result := &AddMemberSummary{}
