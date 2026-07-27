@@ -17,6 +17,9 @@ import (
 	"github.com/mark3labs/mcp-go/server"
 )
 
+var validExecutionModes = []string{"local", "agent", "remote"}
+var validExecutionModesStr = strings.Join(validExecutionModes, ", ")
+
 // CreateProject creates a tool to create a new Terraform project.
 func CreateProject(logger *log.Logger) server.ServerTool {
 	return server.ServerTool{
@@ -42,7 +45,7 @@ func CreateProject(logger *log.Logger) server.ServerTool {
 				mcp.MaxLength(256),
 			),
 			mcp.WithString("default_execution_mode",
-				mcp.Description("Optional default execution mode for workspaces in the project: 'local', 'agent', or 'remote'. If not set, workspaces inherit the organization's default execution mode."),
+				mcp.Description("Optional default execution mode for workspaces in the project: "+validExecutionModesStr+". If not set, workspaces inherit the organization's default execution mode."),
 			),
 		),
 		Handler: func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -85,9 +88,11 @@ func createProjectHandler(ctx context.Context, request mcp.CallToolRequest, logg
 	}
 
 	if defaultExecutionMode != "" {
-		if !slices.Contains([]string{"local", "agent", "remote"}, strings.ToLower(defaultExecutionMode)) {
-			return ToolErrorf(logger, "invalid default_execution_mode %q - must be 'local', 'agent', 'remote'", defaultExecutionMode)
+		mode := strings.ToLower(defaultExecutionMode)
+		if !slices.Contains(validExecutionModes, mode) {
+			return ToolErrorf(logger, "invalid default_execution_mode %q - must be one of: %s", defaultExecutionMode, validExecutionModesStr)
 		}
+		options.DefaultExecutionMode = tfe.String(mode)
 	}
 
 	project, err := tfeClient.Projects.Create(ctx, terraformOrgName, options)
