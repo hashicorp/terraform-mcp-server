@@ -23,7 +23,7 @@ func ListWorkspaceVariables(logger *log.Logger) server.ServerTool {
 	return server.ServerTool{
 		Tool: mcp.NewTool("list_workspace_variables",
 			mcp.WithDescription("List all variables in a Terraform workspace. Returns all variables if query is empty."),
-			mcp.WithString("terraform_org_name", mcp.Required(), mcp.Description("Organization name")),
+			mcp.WithString("terraform_org_name", mcp.Required(), mcp.Description(terraformOrgNameDescription)),
 			mcp.WithString("workspace_name", mcp.Required(), mcp.Description("Workspace name")),
 			utils.WithPagination(),
 		),

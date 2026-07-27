@@ -85,7 +85,7 @@ func ListWorkspacePolicySets(logger *log.Logger) server.ServerTool {
 		Tool: mcp.NewTool("list_workspace_policy_sets",
 			mcp.WithDescription("Read all policy sets attached to a workspace. Returns both directly attached policy sets and global policy sets that apply to all workspaces."),
 			mcp.WithReadOnlyHintAnnotation(true),
-			mcp.WithString("terraform_org_name", mcp.Required(), mcp.Description("Organization name")),
+			mcp.WithString("terraform_org_name", mcp.Required(), mcp.Description(terraformOrgNameDescription)),
 			mcp.WithString("workspace_id", mcp.Required(), mcp.Description("The workspace ID to get policy sets for (e.g., ws-2HRvNs49EWPjDqT1)")),
 		),
 		Handler: func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {

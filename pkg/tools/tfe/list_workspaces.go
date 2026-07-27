@@ -30,7 +30,7 @@ func ListWorkspaces(logger *log.Logger) server.ServerTool {
 			utils.WithPagination(),
 			mcp.WithString("terraform_org_name",
 				mcp.Required(),
-				mcp.Description("The Terraform organization name"),
+				mcp.Description(terraformOrgNameDescription),
 			),
 			mcp.WithString("search_query",
 				mcp.Description("Optional search query to filter workspaces by name"),

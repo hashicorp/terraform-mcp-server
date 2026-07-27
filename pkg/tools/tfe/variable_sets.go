@@ -24,7 +24,7 @@ func ListVariableSets(logger *log.Logger) server.ServerTool {
 	return server.ServerTool{
 		Tool: mcp.NewTool("list_variable_sets",
 			mcp.WithDescription("List all variable sets in an organization. Returns all if query is empty."),
-			mcp.WithString("terraform_org_name", mcp.Required(), mcp.Description("Organization name")),
+			mcp.WithString("terraform_org_name", mcp.Required(), mcp.Description(terraformOrgNameDescription)),
 			mcp.WithString("query", mcp.Description("Optional filter query for variable set names")),
 			utils.WithPagination(),
 		),

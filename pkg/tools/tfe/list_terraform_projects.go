@@ -25,7 +25,7 @@ func ListTerraformProjects(logger *log.Logger) server.ServerTool {
 			mcp.WithDestructiveHintAnnotation(false),
 			mcp.WithString("terraform_org_name",
 				mcp.Required(),
-				mcp.Description("The name of the Terraform organization to list projects for."),
+				mcp.Description(terraformOrgNameDescription+" to list projects for"),
 			),
 			utils.WithPagination(),
 		),

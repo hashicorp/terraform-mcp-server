@@ -28,7 +28,7 @@ It retrieves a list of private providers that match the search criteria. This to
 			mcp.WithDestructiveHintAnnotation(false),
 			mcp.WithString("terraform_org_name",
 				mcp.Required(),
-				mcp.Description("The Terraform Cloud/Enterprise organization name to search within"),
+				mcp.Description(terraformOrgNameDescription+" to search for private providers in"),
 			),
 			mcp.WithString("search_query",
 				mcp.Description("Optional search query to filter providers by name or namespace. If not provided, all providers will be returned"),
