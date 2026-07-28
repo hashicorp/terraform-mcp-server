@@ -74,14 +74,14 @@ func createNoCodeWorkspaceHandler(ctx context.Context, request mcp.CallToolReque
 		return ToolError(logger, err.Error(), nil)
 	}
 
-	elicitationProperties, requestedVars := buildElicitationSchema(moduleMetadata, noCodeModule)
+	elicitationProperties, requestedVars, requiredVars := buildElicitationSchema(moduleMetadata, noCodeModule)
 
-	result, err := requestVariableValues(ctx, mcpServer, params.noCodeModuleID, elicitationProperties, requestedVars)
+	result, err := requestVariableValues(ctx, mcpServer, params.noCodeModuleID, elicitationProperties, requiredVars)
 	if err != nil {
 		return ToolError(logger, err.Error(), nil)
 	}
 
-	variables, err := processElicitationResponse(result, requestedVars, elicitationProperties)
+	variables, err := processElicitationResponse(result, requestedVars, requiredVars, elicitationProperties)
 	if err != nil {
 		return ToolError(logger, err.Error(), nil)
 	}
@@ -168,17 +168,21 @@ func fetchModuleData(ctx context.Context, tfeClient *tfe.Client, projectID, noCo
 	return project, noCodeModule, &moduleMetadata, nil
 }
 
-func buildElicitationSchema(moduleMetadata *client.ModuleMetadata, noCodeModule *tfe.RegistryNoCodeModule) (map[string]any, []string) {
+func buildElicitationSchema(moduleMetadata *client.ModuleMetadata, noCodeModule *tfe.RegistryNoCodeModule) (map[string]any, []string, []string) {
 	elicitationProperties := make(map[string]any)
 	requestedVars := make([]string, 0, len(moduleMetadata.Data.Attributes.InputVariables))
+	requiredVars := make([]string, 0, len(moduleMetadata.Data.Attributes.InputVariables))
 
 	for _, inputVar := range moduleMetadata.Data.Attributes.InputVariables {
 		property := buildPropertySchema(inputVar, noCodeModule)
 		elicitationProperties[inputVar.Name] = property
 		requestedVars = append(requestedVars, inputVar.Name)
+		if inputVar.Required {
+			requiredVars = append(requiredVars, inputVar.Name)
+		}
 	}
 
-	return elicitationProperties, requestedVars
+	return elicitationProperties, requestedVars, requiredVars
 }
 
 func buildPropertySchema(inputVar struct {
@@ -278,27 +282,44 @@ func requestVariableValues(ctx context.Context, mcpServer *server.MCPServer, mod
 	return result, nil
 }
 
-func processElicitationResponse(result *mcp.ElicitationResult, requestedVars []string, elicitationProperties map[string]any) ([]*tfe.Variable, error) {
+func processElicitationResponse(result *mcp.ElicitationResult, requestedVars, requiredVars []string, elicitationProperties map[string]any) ([]*tfe.Variable, error) {
 	switch result.Action {
 	case mcp.ElicitationResponseActionDecline:
 		return nil, fmt.Errorf("workspace creation declined by user")
 	case mcp.ElicitationResponseActionCancel:
 		return nil, fmt.Errorf("workspace creation cancelled by user")
 	case mcp.ElicitationResponseActionAccept:
-		return extractVariablesFromResponse(result.Content, requestedVars, elicitationProperties)
+		return extractVariablesFromResponse(result.Content, requestedVars, requiredVars, elicitationProperties)
 	default:
 		return nil, fmt.Errorf("unexpected elicitation response action: %s", result.Action)
 	}
 }
 
-func extractVariablesFromResponse(content any, requestedVars []string, elicitationProperties map[string]any) ([]*tfe.Variable, error) {
+func extractVariablesFromResponse(content any, requestedVars, requiredVars []string, elicitationProperties map[string]any) ([]*tfe.Variable, error) {
 	data, ok := content.(map[string]any)
 	if !ok {
 		return nil, fmt.Errorf("elicitation response content is not a map, got %T", content)
 	}
 
+	required := make(map[string]struct{}, len(requiredVars))
+	for _, varName := range requiredVars {
+		required[varName] = struct{}{}
+	}
+
 	variables := make([]*tfe.Variable, 0, len(requestedVars))
 	for _, varName := range requestedVars {
+		valueRaw, exists := data[varName]
+		_, isRequired := required[varName]
+		if !exists {
+			if isRequired {
+				return nil, fmt.Errorf("required variable '%s' is missing from response", varName)
+			}
+			continue
+		}
+		if strValue, ok := valueRaw.(string); ok && strValue == "" && !isRequired {
+			continue
+		}
+
 		variable, err := createVariable(varName, data, elicitationProperties)
 		if err != nil {
 			return nil, err
