@@ -49,7 +49,7 @@ func newTestingSession(t *testing.T) *mcp.ClientSession {
 	}
 
 	if tfeToken == "" {
-		t.Fatal("You need to supply TFE_TOKEN to run these tests")
+		t.Skip("You need to supply TFE_TOKEN to run these tests")
 	}
 
 	httpClient := &http.Client{
