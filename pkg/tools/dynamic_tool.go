@@ -191,6 +191,12 @@ func (r *DynamicToolRegistry) registerTFETools() {
 		r.mcpServer.AddTool(tool.Tool, tool.Handler)
 	}
 
+	// Only register grant_team_access if TF operations are enabled AND toolset is enabled
+	if isTerraformOperationsEnabled() && toolsets.IsToolEnabled("grant_team_access", r.enabledToolsets) {
+		tool := r.createDynamicTFETool("grant_team_access", tfeTools.GrantTeamAccess)
+		r.mcpServer.AddTool(tool.Tool, tool.Handler)
+	}
+
 	// Registry-private toolset - Private provider tools
 	if toolsets.IsToolEnabled("search_private_providers", r.enabledToolsets) {
 		tool := r.createDynamicTFETool("search_private_providers", tfeTools.SearchPrivateProviders)
@@ -373,12 +379,6 @@ func (r *DynamicToolRegistry) registerTFETools() {
 	// Terraform Toolset - Comments
 	if toolsets.IsToolEnabled("get_run_comments", r.enabledToolsets) {
 		tool := r.createDynamicTFETool("get_run_comments", tfeTools.GetRunComments)
-		r.mcpServer.AddTool(tool.Tool, tool.Handler)
-	}
-
-	// Terraform Access Toolset - Access Levels
-	if toolsets.IsToolEnabled("grant_team_access", r.enabledToolsets) {
-		tool := r.createDynamicTFETool("grant_team_access", tfeTools.GrantTeamAccess)
 		r.mcpServer.AddTool(tool.Tool, tool.Handler)
 	}
 
