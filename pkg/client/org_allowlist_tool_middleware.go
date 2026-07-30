@@ -28,7 +28,7 @@ func OrganizationAllowlistToolMiddleware(allowlist []string, logger *log.Logger)
 	return func(nextToolHandler server.ToolHandlerFunc) server.ToolHandlerFunc {
 		return func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			// if tool doesn't have orgNameArgument, skipped without need to check
-			organizationName := request.GetString(orgNameArgument, "")
+			organizationName := strings.TrimSpace(request.GetString(orgNameArgument, ""))
 			if organizationName == "" {
 				return nextToolHandler(ctx, request)
 			}
