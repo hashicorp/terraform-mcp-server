@@ -45,7 +45,15 @@ func runHTTPServer(logger *log.Logger, host string, port string, endpointPath st
 	hooks.AddOnRegisterSession(func(ctx context.Context, session server.ClientSession) {
 		client.NewSessionHandler(ctx, session, logger)
 	})
-	hcServer, rateLimiter := NewServer(version.Version, logger, enabledToolsets, server.WithHooks(hooks))
+	hcServer, rateLimiter := NewServer(
+		version.Version,
+		logger,
+		enabledToolsets,
+		server.WithHooks(hooks),
+		server.WithToolHandlerMiddleware(
+			client.OrganizationAllowlistToolMiddleware(organizationAllowlist, logger),
+		),
+	)
 	registerToolsAndResources(hcServer, logger, enabledToolsets)
 
 	hooks.AddOnUnregisterSession(func(ctx context.Context, session server.ClientSession) {

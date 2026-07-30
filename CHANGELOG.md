@@ -2,8 +2,12 @@
 
 FEATURES
 
-* [New Tool] `create_project` Creates a new Terraform project in the specified organization. Requires `terraform_org_name` and `project_name`.
-* [New Tool] `delete_project` Deletes a Terraform project by ID. Requires `project_id`. TFC/TFE will refuse to delete a project that still contains workspaces or stacks.
+* [New Tool] `create_project` Creates a new Terraform project in the specified organization. Requires `terraform_org_name` and `project_name`. [420](https://github.com/hashicorp/terraform-mcp-server/pull/420)
+* [New Tool] `delete_project` Deletes a Terraform project by ID. Requires `project_id`. TFC/TFE will refuse to delete a project that still contains workspaces or stacks. [420](https://github.com/hashicorp/terraform-mcp-server/pull/420)
+
+IMPROVEMENTS
+
+* Extend the existing HTTP-layer `OrganizationAllowlistMiddleware` with a new MCP tool-layer `OrganizationAllowlistToolMiddleware` that rejects tool calls whose `terraform_org_name` argument is not in the allowlist configured via `MCP_ORGANIZATION_ALLOWLIST`.
 
 # 1.1.1
 
