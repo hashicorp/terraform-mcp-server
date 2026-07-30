@@ -348,6 +348,12 @@ func (r *DynamicToolRegistry) registerTFETools() {
 		r.mcpServer.AddTool(tool.Tool, tool.Handler)
 	}
 
+	// Terraform Toolset - Project
+	if toolsets.IsToolEnabled("get_project", r.enabledToolsets) {
+		tool := r.createDynamicTFETool("get_project", tfeTools.GetProject)
+		r.mcpServer.AddTool(tool.Tool, tool.Handler)
+	}
+
 	r.tfeToolsRegistered = true
 }
 

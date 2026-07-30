@@ -1,3 +1,9 @@
+# 1.3.0
+
+FEATURES
+
+* [New Tool] `get_project` Fetches detailed information about a Terraform project by its ID. Requires `project_id`.
+
 # 1.2.0
 
 FEATURES
