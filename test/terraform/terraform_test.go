@@ -89,3 +89,21 @@ func getTextContent(result *mcp.CallToolResult) string {
 
 	return b.String()
 }
+
+func callTool(t *testing.T, s *mcp.ClientSession, toolName string, arguments map[string]any) (*mcp.CallToolResult, string) {
+	result, err := s.CallTool(t.Context(), &mcp.CallToolParams{
+		Name:      toolName,
+		Arguments: arguments,
+	})
+	if err != nil {
+		t.Fatalf("Failed to call tool %q: %v", toolName, err)
+	}
+
+	textContent := getTextContent(result)
+	if result.IsError {
+		t.Logf("Tool call %q was an error: %v", toolName, textContent)
+	} else {
+		t.Logf("Tool call success: %q: %#v", toolName, arguments)
+	}
+	return result, textContent
+}
