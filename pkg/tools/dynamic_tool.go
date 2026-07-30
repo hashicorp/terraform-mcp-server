@@ -375,6 +375,13 @@ func (r *DynamicToolRegistry) registerTFETools() {
 		tool := r.createDynamicTFETool("get_run_comments", tfeTools.GetRunComments)
 		r.mcpServer.AddTool(tool.Tool, tool.Handler)
 	}
+
+	// Terraform Access Toolset - Access Levels
+	if toolsets.IsToolEnabled("grant_team_access", r.enabledToolsets) {
+		tool := r.createDynamicTFETool("grant_team_access", tfeTools.GrantTeamAccess)
+		r.mcpServer.AddTool(tool.Tool, tool.Handler)
+	}
+
 	r.tfeToolsRegistered = true
 }
 

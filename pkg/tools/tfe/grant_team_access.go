@@ -21,24 +21,28 @@ func GrantTeamAccess(logger *log.Logger) server.ServerTool {
 	return server.ServerTool{
 		Tool: mcp.NewTool(
 			"grant_team_access",
-			mcp.WithDescription("Grant a team access to a workspace or project"),
-			mcp.WithTitleAnnotation("Grant team access"),
+			mcp.WithDescription(`Grants a team permission to access a workspace or a project in Terraform Cloud/Enterprise.
+			Provide either workspace_id (for workspace-level access) or project_id (for project-level access) — not both.
+			Returns the created access grant including its ID, team ID, target resource ID, and access level.`),
+			mcp.WithTitleAnnotation("Grant team access to a workspace or project"),
 			mcp.WithOpenWorldHintAnnotation(true),
 			mcp.WithReadOnlyHintAnnotation(false),
 			mcp.WithDestructiveHintAnnotation(false),
 			mcp.WithString("team_id",
 				mcp.Required(),
-				mcp.Description(`The ID of the Terraform Cloud/Enterprise team to grant access to (e.g., 'team-abc123def456')`),
+				mcp.Description(`The ID of the team to grant access. Team IDs begin with 'team-' (e.g., 'team-abc123def456').`),
 			),
 			mcp.WithString("access_level",
 				mcp.Required(),
-				mcp.Description(`The access level to grant access for (e.g. "admin", "read", "write", "plan", "custom")`),
+				mcp.Description(`The permission level to grant the team.
+				For workspace access (workspace_id): "read" (view only), "plan" (can queue plans), "write" (apply runs), "admin" (full control), "custom" (fine-grained permissions).
+				For project access (project_id): "read", "write", "maintain" (manage workspaces), "admin" (full control), "custom". Note: "plan" is only valid for workspaces; "maintain" is only valid for projects.`),
 			),
 			mcp.WithString("workspace_id",
-				mcp.Description(`The ID of the Terraform Cloud/Enterprise workspace to grant access to (e.g., "ws-abc123def456")`),
+				mcp.Description(`The ID of the workspace to grant the team access to. Workspace IDs begin with 'ws-' (e.g., 'ws-abc123def456'). Mutually exclusive with project_id — provide one or the other, not both.`),
 			),
 			mcp.WithString("project_id",
-				mcp.Description(`The ID of the Terraform Cloud/Enterprise project to grant access to (e.g., "prj-abc123def456")`),
+				mcp.Description(`The ID of the project to grant the team access to. Project IDs begin with 'prj-' (e.g., 'prj-abc123def456'). Mutually exclusive with workspace_id — provide one or the other, not both.`),
 			),
 		),
 		Handler: func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -71,12 +75,10 @@ func grantTeamAccessHandler(ctx context.Context, request mcp.CallToolRequest, lo
 	projectID = strings.TrimSpace(projectID)
 	accessLevel = strings.ToLower(strings.TrimSpace(accessLevel))
 
-	// At least one must be provided, not neither
 	if workspaceID == "" && projectID == "" {
 		return ToolError(logger, "One of workspace_id or project_id must be provided", nil)
 	}
 
-	// Only one must be provided, not both
 	if workspaceID != "" && projectID != "" {
 		return ToolError(logger, "Only one of workspace_id or project_id may be provided, not both", nil)
 	}
@@ -137,7 +139,7 @@ func grantTeamAccessHandler(ctx context.Context, request mcp.CallToolRequest, lo
 		Team:    &tfe.Team{ID: teamID},
 	})
 	if err != nil {
-		return ToolErrorf(logger, "Failed to grant team project access to project %q: %v", workspaceID, err)
+		return ToolErrorf(logger, "Failed to grant team project access to project %q: %v", projectID, err)
 	}
 
 	summaryJSON, err := json.Marshal(TeamProjectAccessSummary{
