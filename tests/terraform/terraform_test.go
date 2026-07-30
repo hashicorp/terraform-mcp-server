@@ -6,6 +6,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
@@ -53,13 +54,17 @@ func newTestingSession(t *testing.T) *mcp.ClientSession {
 	}
 
 	httpClient := &http.Client{
+		Timeout: 30 * time.Second,
 		Transport: &authTransport{
 			token:        tfeToken,
 			roundtripper: http.DefaultTransport,
 		},
 	}
 
-	session, err := testingClient.Connect(context.Background(), &mcp.StreamableClientTransport{
+	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+	defer cancel()
+
+	session, err := testingClient.Connect(ctx, &mcp.StreamableClientTransport{
 		Endpoint:   mcpEndpoint,
 		HTTPClient: httpClient,
 	}, nil)
