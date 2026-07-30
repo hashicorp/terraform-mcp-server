@@ -41,7 +41,7 @@ func getProjectHandler(ctx context.Context, request mcp.CallToolRequest, logger 
 
 	projectID, err := request.RequireString("project_id")
 	if err != nil {
-		return ToolError(logger, "missing required input: project_id", err)
+		return ToolError(logger, "Missing required input: project_id", err)
 	}
 	projectID = strings.TrimSpace(projectID)
 
@@ -55,7 +55,7 @@ func getProjectHandler(ctx context.Context, request mcp.CallToolRequest, logger 
 
 	project, err := tfeClient.Projects.Read(ctx, projectID)
 	if err != nil {
-		return ToolErrorf(logger, "failed to read project %q: %v", projectID, err)
+		return ToolErrorf(logger, "Failed to read project %q: %v", projectID, err)
 	}
 
 	summary := &GetProjectSummary{
