@@ -32,7 +32,7 @@ func (t *authTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 func init() {
 	mcpEndpoint = os.Getenv("TF_MCP_ENDPOINT")
 	if mcpEndpoint == "" {
-		mcpEndpoint = "https://dev.mcp.terraform.io/mcp"
+		mcpEndpoint = "http://localhost:8080/mcp"
 	}
 
 	tfeToken = os.Getenv("TFE_TOKEN")
