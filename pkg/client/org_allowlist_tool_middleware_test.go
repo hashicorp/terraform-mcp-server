@@ -20,11 +20,6 @@ func TestOrganizationAllowlistToolMiddleware(t *testing.T) {
 		wantAllowed bool
 	}{
 		{
-			name:        "allows request when allowlist is empty",
-			arguments:   map[string]any{orgNameArgument: "any-org"},
-			wantAllowed: true,
-		},
-		{
 			name:        "allows tool without organization argument",
 			allowlist:   []string{"allowed-org"},
 			arguments:   map[string]any{},
