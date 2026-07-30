@@ -3,6 +3,7 @@
 FEATURES
 
 * [New Tool] `list_teams` Lists all teams within a given Terraform Cloud organization. Requires `terraform_org_name`. Optionally filter by exact team names (`team_names`), or substring search (`search_query`). Supports pagination.
+* [New Tool] `get_project` Fetches detailed information about a Terraform project by its ID. Requires `project_id`.
 
 # 1.2.0
 
