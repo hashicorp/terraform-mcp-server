@@ -34,6 +34,6 @@ jobs:
       - name: Run unit tests
         env:
           TF_MCP_ENDPOINT: http://localhost:8080/mcp
-          TFE_TOKEN: "{{ secrets.TFE_TOKEN_TESTING }}"
+          TFE_TOKEN: ${{ secrets.TFE_TOKEN_TESTING }}
         run: |
           make test-hcpt
