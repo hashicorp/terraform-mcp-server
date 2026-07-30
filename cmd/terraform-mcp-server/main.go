@@ -45,7 +45,24 @@ func runHTTPServer(logger *log.Logger, host string, port string, endpointPath st
 	hooks.AddOnRegisterSession(func(ctx context.Context, session server.ClientSession) {
 		client.NewSessionHandler(ctx, session, logger)
 	})
-	hcServer, rateLimiter := NewServer(version.Version, logger, enabledToolsets, server.WithHooks(hooks))
+
+	serverOpts := []server.ServerOption{
+		server.WithHooks(hooks),
+	}
+
+	// Only register the middleware when an organization allowlist is configured
+	if len(organizationAllowlist) > 0 {
+		serverOpts = append(serverOpts, server.WithToolHandlerMiddleware(
+			client.OrganizationAllowlistToolMiddleware(organizationAllowlist, logger),
+		))
+	}
+	hcServer, rateLimiter := NewServer(
+		version.Version,
+		logger,
+		enabledToolsets,
+		serverOpts...,
+	)
+
 	registerToolsAndResources(hcServer, logger, enabledToolsets)
 
 	hooks.AddOnUnregisterSession(func(ctx context.Context, session server.ClientSession) {
