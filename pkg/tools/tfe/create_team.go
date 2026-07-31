@@ -24,6 +24,7 @@ type TeamSummary struct {
 	ID         string `json:"team_id"`
 	Name       string `json:"team_name"`
 	Visibility string `json:"visibility"`
+	UserCount  int    `json:"user_count,omitempty"`
 }
 
 // CreateTeam creates a tool to create a new team in a Terraform Cloud/Enterprise organization.
@@ -44,7 +45,7 @@ func CreateTeam(logger *log.Logger) server.ServerTool {
 				mcp.Description("The unique name of the team to create in the Terraform organization"),
 			),
 			mcp.WithString("visibility",
-				mcp.Description("Optional team visibility: "+validTeamVisibilitiesStr+`. Defaults to "secret" if not set.`),
+				mcp.Description("Optional team visibility: "+validTeamVisibilitiesStr+`. If omitted, the API defaults to "secret".`),
 			),
 		),
 		Handler: func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -92,7 +93,12 @@ func createTeamHandler(ctx context.Context, request mcp.CallToolRequest, logger 
 		return ToolErrorf(logger, "failed to create team %q in org %q: %v", teamName, terraformOrgName, err)
 	}
 
-	teamJSON, err := json.Marshal(&TeamSummary{team.ID, team.Name, team.Visibility})
+	teamJSON, err := json.Marshal(&TeamSummary{
+		team.ID,
+		team.Name,
+		team.Visibility,
+		team.UserCount,
+	})
 	if err != nil {
 		return ToolError(logger, "failed to marshal created team summary", err)
 	}
