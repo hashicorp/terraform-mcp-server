@@ -11,6 +11,8 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
+const toolCallTimeout = 30 * time.Second
+
 var (
 	mcpEndpoint string
 	tfeToken    string
@@ -50,14 +52,14 @@ func newTestingSession(t *testing.T) *mcp.ClientSession {
 	}
 
 	httpClient := &http.Client{
-		Timeout: 30 * time.Second,
+		Timeout: toolCallTimeout,
 		Transport: &authTransport{
 			token:        tfeToken,
 			roundtripper: http.DefaultTransport,
 		},
 	}
 
-	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), toolCallTimeout)
 	defer cancel()
 
 	session, err := testingClient.Connect(ctx, &mcp.StreamableClientTransport{
