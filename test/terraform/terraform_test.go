@@ -31,10 +31,6 @@ func (t *authTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 
 func init() {
 	mcpEndpoint = os.Getenv("TF_MCP_ENDPOINT")
-	if mcpEndpoint == "" {
-		mcpEndpoint = "http://localhost:8080/mcp"
-	}
-
 	tfeToken = os.Getenv("TFE_TOKEN")
 
 	testingClient = mcp.NewClient(&mcp.Implementation{
@@ -45,7 +41,7 @@ func init() {
 
 func newTestingSession(t *testing.T) *mcp.ClientSession {
 	if mcpEndpoint == "" {
-		mcpEndpoint = "https://dev.mcp.terraform.io/mcp"
+		mcpEndpoint = "http://localhost:8080/mcp"
 		t.Logf("TF_MCP_ENDPOINT was not specified, using: %q", mcpEndpoint)
 	}
 

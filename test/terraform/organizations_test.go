@@ -8,7 +8,7 @@ import (
 	"github.com/tidwall/gjson"
 )
 
-func TestListOrganziations(t *testing.T) {
+func TestListOrganizations(t *testing.T) {
 	s := newTestingSession(t)
 	defer s.Close()
 
