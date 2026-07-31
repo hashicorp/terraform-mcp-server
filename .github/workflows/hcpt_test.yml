@@ -1,0 +1,39 @@
+# Copyright (c) HashiCorp, Inc.
+# SPDX-License-Identifier: MPL-2.0
+
+name: HCPT Test 
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out code
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
+
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+        with:
+          go-version-file: "go.mod"
+
+      - name: Build server
+        run: |
+          make build
+
+      - name: Start server
+        run: |
+          nohup ./bin/terraform-mcp-server streamable-http --transport-host 0.0.0.0 --transport-port 8080 2>&1 &
+
+      - name: Run tests against HCPT
+        env:
+          TF_MCP_ENDPOINT: http://localhost:8080/mcp
+          TFE_TOKEN: ${{ secrets.TFE_TOKEN_TESTING }}
+        run: |
+          make test-hcpt

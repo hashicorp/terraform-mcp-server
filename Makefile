@@ -11,7 +11,7 @@ TARGET_DIR ?= $(CURDIR)/dist
 # Build flags
 LDFLAGS=-ldflags="-s -w"
 
-.PHONY: all build crt-build test test-e2e test-security clean deps docker-build run-http run-http-secure docker-run-http test-http cleanup-test-containers update-server-json-version help
+.PHONY: all build crt-build test test-e2e test-security clean deps docker-build run-http run-http-secure docker-run-http test-http test-hcpt cleanup-test-containers update-server-json-version help
 
 # Default target
 all: build
@@ -37,6 +37,10 @@ test:
 # Run e2e tests
 test-e2e:
 	@trap '$(MAKE) cleanup-test-containers' EXIT; $(GO) test -v --tags e2e ./e2e
+
+# Run hcpt tests
+test-hcpt:
+	$(GO) test -v ./test/terraform/...
 
 # Clean build artifacts
 clean:
