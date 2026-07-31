@@ -5,6 +5,9 @@ FEATURES
 * [New Tool] `create_project` Creates a new Terraform project in the specified organization. Requires `terraform_org_name` and `project_name`.
 * [New Tool] `delete_project` Deletes a Terraform project by ID. Requires `project_id`. TFC/TFE will refuse to delete a project that still contains workspaces or stacks.
 
+IMPROVEMENTS
+* Add per-tool-call Instana tracing so individual MCP tool calls appear as traces, not just the HTTP request [436](https://github.com/hashicorp/terraform-mcp-server/pull/436)
+
 # 1.1.1
 
 IMPROVEMENTS
