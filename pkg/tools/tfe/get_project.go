@@ -58,7 +58,7 @@ func getProjectHandler(ctx context.Context, request mcp.CallToolRequest, logger 
 		return ToolErrorf(logger, "Failed to read project %q: %v", projectID, err)
 	}
 
-	summary := &GetProjectSummary{
+	summary := &ProjectDetails{
 		ID:                   project.ID,
 		Name:                 project.Name,
 		Description:          project.Description,
@@ -82,8 +82,8 @@ func getProjectHandler(ctx context.Context, request mcp.CallToolRequest, logger 
 	return mcp.NewToolResultText(string(projectJSON)), nil
 }
 
-// GetProjectSummary is the response shape returned by the get_project tool.
-type GetProjectSummary struct {
+// ProjectDetails is the response shape returned by the get_project tool.
+type ProjectDetails struct {
 	ID                          string `json:"project_id"`
 	Name                        string `json:"project_name"`
 	Description                 string `json:"description,omitempty"`
