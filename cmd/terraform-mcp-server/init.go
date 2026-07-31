@@ -394,7 +394,7 @@ func streamableHTTPServerInit(ctx context.Context, hcServer *server.MCPServer, l
 	}
 	if instanaCollector != nil {
 		// Wrapping the handler so incoming HTTP requests will be able to be traced by Instana
-		handler = instana.TracingHandlerFunc(instanaCollector, endpointPath, handler.ServeHTTP)
+		handler = instana.TracingHandlerFunc(instanaCollector, "", handler.ServeHTTP)
 	}
 
 	httpServer := &http.Server{
