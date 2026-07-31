@@ -13,7 +13,6 @@ import (
 	"strings"
 
 	"github.com/hashicorp/go-tfe"
-	"github.com/mark3labs/mcp-go/mcp"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -135,10 +134,4 @@ func MakeCustomGetRequestRaw(ctx context.Context, client *tfe.Client, path strin
 	}
 
 	return body, nil
-}
-
-// GetTrimmedString wrapper: function around request.GetString() that also calls TrimSpace()
-func GetTrimmedString(request mcp.CallToolRequest, name, defaultValue string) string {
-	value := request.GetString(name, defaultValue)
-	return strings.TrimSpace(value)
 }

@@ -52,8 +52,8 @@ func listTeamsHandler(ctx context.Context, request mcp.CallToolRequest, logger *
 		return ToolError(logger, "Missing required input: terraform_org_name", err)
 	}
 	terraformOrgName = strings.TrimSpace(terraformOrgName)
-	teamName := utils.GetTrimmedString(request, "team_names", "")
-	searchQuery := utils.GetTrimmedString(request, "search_query", "")
+	teamName := GetTrimmedString(request, "team_names", "")
+	searchQuery := GetTrimmedString(request, "search_query", "")
 
 	var teamNames []string
 	if teamName != "" {
