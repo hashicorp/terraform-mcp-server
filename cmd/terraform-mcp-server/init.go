@@ -109,11 +109,16 @@ var (
 			if err != nil {
 				stdlog.Fatal(err)
 			}
+
+			insecureNoTLS, err := cmd.Flags().GetBool("insecure-no-tls")
+			if err != nil {
+				stdlog.Fatal("Failed to get insecure-no-tls flag:", err)
+			}
 			logger.Printf("Starting StreamableHTTP server with host: %s, port: %s, endpoint: %s, heartbeatInterval: %v, enabledToolsets: %v, organizationAllowlistConfigured: %t, organizationAllowlistCount: %d", host, port, endpointPath, heartbeatInterval, enabledToolsets, len(organizationAllowlist) > 0, len(organizationAllowlist))
 			metricsConfig, shutdownMetrics := setupMetrics(logger)
 			defer shutdownMetrics()
 
-			if err := runHTTPServer(logger, host, port, endpointPath, heartbeatInterval, enabledToolsets, metricsConfig, organizationAllowlist); err != nil {
+			if err := runHTTPServer(logger, host, port, endpointPath, heartbeatInterval, enabledToolsets, metricsConfig, organizationAllowlist, insecureNoTLS); err != nil {
 				stdlog.Fatal("failed to run streamableHTTP server:", err)
 			}
 		},
@@ -147,6 +152,7 @@ func init() {
 	streamableHTTPCmd.Flags().Duration("heartbeat-interval", 0, "Heartbeat interval for HTTP connections (e.g., 30s). 0 to disable")
 	streamableHTTPCmd.Flags().String("mcp-endpoint", "/mcp", "Path for streamable HTTP endpoint")
 	streamableHTTPCmd.Flags().String("organization-allowlist", "", "Comma-separated list of HCP Terraform organization names allowed to access the HTTP server")
+	streamableHTTPCmd.Flags().Bool("insecure-no-tls", false, "Allow the server to start without TLS. Not recommended for production use.")
 
 	// Add the same flags to the alias command for backward compatibility
 	httpCmdAlias.Flags().String("transport-host", "127.0.0.1", "Host to bind to")
@@ -154,6 +160,7 @@ func init() {
 	httpCmdAlias.Flags().String("mcp-endpoint", "/mcp", "Path for streamable HTTP endpoint")
 	httpCmdAlias.Flags().Duration("heartbeat-interval", 0, "Heartbeat interval for HTTP connections (e.g., 30s). 0 to disable")
 	httpCmdAlias.Flags().String("organization-allowlist", "", "Comma-separated list of HCP Terraform organization names allowed to access the HTTP server")
+	httpCmdAlias.Flags().Bool("insecure-no-tls", false, "Allow the server to start without TLS. Not recommended for production use.")
 
 	rootCmd.AddCommand(stdioCmd)
 	rootCmd.AddCommand(streamableHTTPCmd)
@@ -294,8 +301,7 @@ func setupInstana(logger *log.Logger) instana.TracerLogger {
 	})
 }
 
-func streamableHTTPServerInit(ctx context.Context, hcServer *server.MCPServer, logger *log.Logger, host string, port string, endpointPath string, heartbeatInterval time.Duration, organizationAllowlist []string) error {
-	// Ensure endpoint path starts with /
+func streamableHTTPServerInit(ctx context.Context, hcServer *server.MCPServer, logger *log.Logger, host string, port string, endpointPath string, heartbeatInterval time.Duration, organizationAllowlist []string, insecureNoTLS bool) error {
 	endpointPath = path.Join("/", endpointPath)
 	var handler http.Handler
 
@@ -410,10 +416,10 @@ func streamableHTTPServerInit(ctx context.Context, hcServer *server.MCPServer, l
 		httpServer.TLSConfig = tlsConfig.Config
 		logger.Infof("TLS enabled with certificate: %s", tlsConfig.CertFile)
 	} else {
-		if !client.IsLocalHost(host) {
-			return fmt.Errorf("TLS is required for non-localhost binding (%s). Set MCP_TLS_CERT_FILE and MCP_TLS_KEY_FILE environment variables", host)
+		if !insecureNoTLS {
+			return fmt.Errorf("TLS is required for the StreamableHTTP server. Set MCP_TLS_CERT_FILE and MCP_TLS_KEY_FILE, or pass --insecure-no-tls to explicitly opt out")
 		}
-		logger.Warnf("TLS is disabled on StreamableHTTP server; this is not recommended for production")
+		logger.Warnf("TLS is disabled on StreamableHTTP server (--insecure-no-tls); this is not recommended for production")
 	}
 
 	// Start server in goroutine

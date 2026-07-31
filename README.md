@@ -45,8 +45,9 @@ automation and interaction capabilities for Infrastructure as Code (IaC) develop
 | `MCP_SESSION_MODE` | Session mode: `stateful` or `stateless` | `stateful` |
 | `MCP_ALLOWED_ORIGINS` | Comma-separated list of allowed origins for CORS | `""` (empty) |
 | `MCP_CORS_MODE` | CORS mode: `strict`, `development`, or `disabled` | `strict` |
-| `MCP_TLS_CERT_FILE` | Path to TLS cert file, required for non-localhost deployment (e.g. `/path/to/cert.pem`) | `""` (empty) |
-| `MCP_TLS_KEY_FILE` |  Path to TLS key file, required for non-localhost deployment (e.g. `/path/to/key.pem`)| `""` (empty) |
+| `MCP_TLS_CERT_FILE` | Path to TLS cert file (e.g. `/path/to/cert.pem`). TLS is required unless `INSECURE_NO_TLS` is set. | `""` (empty) |
+| `MCP_TLS_KEY_FILE` | Path to TLS key file (e.g. `/path/to/key.pem`). TLS is required unless `INSECURE_NO_TLS` is set. | `""` (empty) |
+| `INSECURE_NO_TLS` | Allow the StreamableHTTP server to start without TLS. Only use when TLS is terminated upstream (e.g. a reverse proxy or load balancer). Not recommended for production. | `false` |
 | `MCP_RATE_LIMIT_GLOBAL` | Global rate limit (format: `rps:burst`) | `10:20` |
 | `MCP_RATE_LIMIT_SESSION` | Per-session rate limit (format: `rps:burst`) | `5:10` |
 | `MCP_ORGANIZATION_ALLOWLIST` | CSV list of HCP Terraform organization names allowed to access the HTTP server | `""` (empty) |
@@ -67,8 +68,7 @@ automation and interaction capabilities for Infrastructure as Code (IaC) develop
 terraform-mcp-server stdio [--log-file /path/to/log] [--log-level info] [--log-format text] [--toolsets <toolsets>] [--tools <tools>]
 
 # StreamableHTTP mode
-terraform-mcp-server streamable-http [--transport-port 8080] [--transport-host 127.0.0.1] [--mcp-endpoint /mcp] [--organization-allowlist <orgs-csv>] [--log-file /path/to/log] [--log-level info] [--log-format text] [--toolsets <toolsets>] [--tools <tools>]
-```
+terraform-mcp-server streamable-http [--transport-port 8080] [--transport-host 127.0.0.1] [--mcp-endpoint /mcp] [--organization-allowlist <orgs-csv>] [--insecure-no-tls] [--log-file /path/to/log] [--log-level info] [--log-format text] [--toolsets <toolsets>] [--tools <tools>]
 
 ## Instructions
 
@@ -328,7 +328,7 @@ claude mcp add terraform -s user -t stdio -- docker run -i --rm hashicorp/terraf
 
 ```sh
 # Run server (example)
-docker run -p 8080:8080 --rm -e TRANSPORT_MODE=streamable-http -e TRANSPORT_HOST=0.0.0.0 hashicorp/terraform-mcp-server
+docker run -p 8080:8080 --rm -e TRANSPORT_MODE=streamable-http -e TRANSPORT_HOST=0.0.0.0 -e INSECURE_NO_TLS=true hashicorp/terraform-mcp-server
 
 # Add to Claude Code
 claude mcp add --transport http terraform http://localhost:8080/mcp
@@ -479,14 +479,14 @@ make docker-build
 docker run -i --rm terraform-mcp-server:dev
 
 # Run in streamable-http mode
-docker run -p 8080:8080 --rm -e TRANSPORT_MODE=streamable-http -e TRANSPORT_HOST=0.0.0.0 terraform-mcp-server:dev
+docker run -p 8080:8080 --rm -e TRANSPORT_MODE=streamable-http -e TRANSPORT_HOST=0.0.0.0 -e INSECURE_NO_TLS=true terraform-mcp-server:dev
 
 # Filter tools (optional)
 docker run -i --rm terraform-mcp-server:dev --toolsets=registry,terraform
 docker run -i --rm terraform-mcp-server:dev --tools=search_providers,get_provider_details
 ```
 
-> **Note:** When running in Docker, you should set `TRANSPORT_HOST=0.0.0.0` to allow connections from outside the container.
+> **Note:** When running in Docker, set `TRANSPORT_HOST=0.0.0.0` to allow connections from outside the container. Since the server requires TLS by default, also set `INSECURE_NO_TLS=true` if you're terminating TLS elsewhere (or provide `MCP_TLS_CERT_FILE`/`MCP_TLS_KEY_FILE`).
 
 4. (Optional) Test connection in http mode
 

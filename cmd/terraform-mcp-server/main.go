@@ -36,7 +36,7 @@ import (
 var instructions string
 var sessionClientInfo sync.Map // map[string]client.ClientInfo
 
-func runHTTPServer(logger *log.Logger, host string, port string, endpointPath string, heartbeatInterval time.Duration, enabledToolsets []string, metricsConfig client.MetricsConfig, organizationAllowlist []string) error {
+func runHTTPServer(logger *log.Logger, host string, port string, endpointPath string, heartbeatInterval time.Duration, enabledToolsets []string, metricsConfig client.MetricsConfig, organizationAllowlist []string, insecureNoTLS bool) error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
@@ -89,7 +89,7 @@ func runHTTPServer(logger *log.Logger, host string, port string, endpointPath st
 	})
 	attachMetricsHooks(hooks, metricsConfig, logger)
 
-	return streamableHTTPServerInit(ctx, hcServer, logger, host, port, endpointPath, heartbeatInterval, organizationAllowlist)
+	return streamableHTTPServerInit(ctx, hcServer, logger, host, port, endpointPath, heartbeatInterval, organizationAllowlist, insecureNoTLS)
 }
 
 func attachMetricsHooks(hooks *server.Hooks, metricsConfig client.MetricsConfig, logger *log.Logger) {
@@ -316,7 +316,8 @@ func main() {
 		if err != nil {
 			stdlog.Fatal(err)
 		}
-		if err := runHTTPServer(logger, host, port, endpointPath, heartbeatInterval, enabledToolsets, metricsConfig, organizationAllowlist); err != nil {
+		insecureNoTLS := strings.ToLower(os.Getenv("INSECURE_NO_TLS")) == "true"
+		if err := runHTTPServer(logger, host, port, endpointPath, heartbeatInterval, enabledToolsets, metricsConfig, organizationAllowlist, insecureNoTLS); err != nil {
 			stdlog.Fatal("failed to run StreamableHTTP server:", err)
 		}
 		return
