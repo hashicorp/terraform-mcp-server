@@ -4,12 +4,10 @@
 package tools
 
 import (
-	"strings"
 	"testing"
 
 	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 func TestAddTeamMember(t *testing.T) {
@@ -108,66 +106,6 @@ func TestAddTeamMember(t *testing.T) {
 			t.Run(tt.name, func(t *testing.T) {
 				isValid := len(tt.usernames) > 0 || len(tt.membershipIDs) > 0
 				assert.Equal(t, tt.expectValid, isValid)
-			})
-		}
-	})
-
-	t.Run("comma-separated input parsing", func(t *testing.T) {
-		tests := []struct {
-			name     string
-			input    string
-			expected []string
-		}{
-			{
-				name:     "single value",
-				input:    "alice",
-				expected: []string{"alice"},
-			},
-			{
-				name:     "multiple values no spaces",
-				input:    "alice,bob",
-				expected: []string{"alice", "bob"},
-			},
-			{
-				name:     "multiple values with spaces",
-				input:    "alice, bob, carol",
-				expected: []string{"alice", "bob", "carol"},
-			},
-			{
-				name:     "leading and trailing whitespace on whole string",
-				input:    "  alice, bob  ",
-				expected: []string{"alice", "bob"},
-			},
-			{
-				name:     "empty string",
-				input:    "",
-				expected: nil,
-			},
-			{
-				name:     "whitespace only",
-				input:    "   ",
-				expected: nil,
-			},
-		}
-
-		for _, tt := range tests {
-			t.Run(tt.name, func(t *testing.T) {
-				raw := strings.TrimSpace(tt.input)
-				var result []string
-				if raw != "" {
-					parts := strings.Split(raw, ",")
-					for i, p := range parts {
-						parts[i] = strings.TrimSpace(p)
-					}
-					result = parts
-				}
-
-				if tt.expected == nil {
-					assert.Nil(t, result)
-				} else {
-					require.Len(t, result, len(tt.expected))
-					assert.Equal(t, tt.expected, result)
-				}
 			})
 		}
 	})
