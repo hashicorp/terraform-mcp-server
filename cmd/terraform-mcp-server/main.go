@@ -83,10 +83,6 @@ func runHTTPServer(logger *log.Logger, host string, port string, endpointPath st
 
 }
 
-// toolCallSpans tracks in-flight spans by request id so we can start one in
-// BeforeCallTool and close out the matching span in AfterCallTool.
-var toolCallSpans sync.Map
-
 // attachInstanaTracingHooks adds a span for each tool call. The http handler is
 // already traced but with streamable-http the tool calls all go over one long
 // lived connection, so we don't actually get a span per call that way. So we add
@@ -95,6 +91,10 @@ func attachInstanaTracingHooks(hooks *server.Hooks, collector instana.TracerLogg
 	if collector == nil {
 		return
 	}
+
+	// keep the spans here by request id so we can start one in Before and
+	// close the same one out in After
+	var toolCallSpans sync.Map
 
 	hooks.AddBeforeCallTool(func(ctx context.Context, id any, message *mcp.CallToolRequest) {
 		opts := []ot.StartSpanOption{
