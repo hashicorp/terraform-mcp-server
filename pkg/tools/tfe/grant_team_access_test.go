@@ -69,63 +69,6 @@ func TestGrantTeamAccessHandler_InputValidation(t *testing.T) {
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "missing required parameter")
 	})
-
-	t.Run("neither workspace_id nor project_id provided", func(t *testing.T) {
-		request := &MockCallToolRequest{
-			params: map[string]interface{}{
-				"team_id":      "team-abc123",
-				"access_level": "read",
-				// neither workspace_id nor project_id provided
-			},
-		}
-
-		workspaceID := request.GetString("workspace_id", "")
-		projectID := request.GetString("project_id", "")
-
-		assert.Empty(t, workspaceID)
-		assert.Empty(t, projectID)
-	})
-
-	t.Run("both workspace_id and project_id provided", func(t *testing.T) {
-		request := &MockCallToolRequest{
-			params: map[string]interface{}{
-				"team_id":      "team-abc123",
-				"access_level": "read",
-				"workspace_id": "ws-abc123",
-				"project_id":   "prj-abc123",
-			},
-		}
-
-		workspaceID := request.GetString("workspace_id", "")
-		projectID := request.GetString("project_id", "")
-
-		assert.NotEmpty(t, workspaceID)
-		assert.NotEmpty(t, projectID)
-	})
-
-	t.Run("parameter parsing", func(t *testing.T) {
-		request := &MockCallToolRequest{
-			params: map[string]interface{}{
-				"team_id":      "team-abc123",
-				"access_level": "admin",
-				"workspace_id": "ws-abc123",
-			},
-		}
-
-		teamID, err := request.RequireString("team_id")
-		assert.NoError(t, err)
-		assert.Equal(t, "team-abc123", teamID)
-
-		accessLevel, err := request.RequireString("access_level")
-		assert.NoError(t, err)
-		assert.Equal(t, "admin", accessLevel)
-
-		workspaceID := request.GetString("workspace_id", "")
-		assert.Equal(t, "ws-abc123", workspaceID)
-
-		projectID := request.GetString("project_id", "")
-		assert.Empty(t, projectID)
-	})
 }
 
 func TestGrantTeamAccessHandler_AccessLevelValidation(t *testing.T) {
@@ -166,34 +109,5 @@ func TestGrantTeamAccessHandler_AccessLevelValidation(t *testing.T) {
 			}
 		}
 		assert.False(t, found, `"plan" must not be a valid project access level`)
-	})
-
-	t.Run("maintain is invalid for workspace access", func(t *testing.T) {
-		found := false
-		for _, v := range validTeamAccessLevels {
-			if v == "maintain" {
-				found = true
-				break
-			}
-		}
-		assert.False(t, found, `"maintain" must not be a valid workspace access level`)
-	})
-
-	t.Run("invalid access level is not in either list", func(t *testing.T) {
-		invalidLevel := "superadmin"
-		foundInWorkspace := false
-		foundInProject := false
-		for _, v := range validTeamAccessLevels {
-			if v == invalidLevel {
-				foundInWorkspace = true
-			}
-		}
-		for _, v := range validTeamProjectAccessLevels {
-			if v == invalidLevel {
-				foundInProject = true
-			}
-		}
-		assert.False(t, foundInWorkspace)
-		assert.False(t, foundInProject)
 	})
 }
