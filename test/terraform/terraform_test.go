@@ -28,6 +28,8 @@ var (
 	testingClient *mcp.Client
 )
 
+const ToolCallTimeout = 30 * time.Second
+
 type authTransport struct {
 	token        string
 	roundtripper http.RoundTripper
@@ -70,15 +72,19 @@ func newTestingSession(t *testing.T) *mcp.ClientSession {
 		t.Skip("You need to supply TFE_TOKEN to run these tests")
 	}
 
+	if tfeOrgName == "" {
+		t.Skip("You need to supply TFE_ORG_NAME to run these tests")
+	}
+
 	httpClient := &http.Client{
-		Timeout: toolCallTimeout,
+		Timeout: ToolCallTimeout,
 		Transport: &authTransport{
 			token:        tfeToken,
 			roundtripper: http.DefaultTransport,
 		},
 	}
 
-	ctx, cancel := context.WithTimeout(t.Context(), toolCallTimeout)
+	ctx, cancel := context.WithTimeout(t.Context(), ToolCallTimeout)
 	defer cancel()
 
 	session, err := testingClient.Connect(ctx, &mcp.StreamableClientTransport{
@@ -143,7 +149,7 @@ func callTool(t *testing.T, s *mcp.ClientSession, toolName string, arguments map
 	if result.IsError {
 		t.Logf("Tool call %q was an error: %v", toolName, textContent)
 	} else {
-		t.Logf("Tool call success: %q: %#v", toolName, arguments)
+		t.Logf("Tool call success: %q: %v", toolName, arguments)
 	}
 	return result, textContent
 }
