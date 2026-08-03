@@ -4,7 +4,6 @@
 package tools
 
 import (
-	"strings"
 	"testing"
 
 	log "github.com/sirupsen/logrus"
@@ -74,49 +73,4 @@ func TestDeleteTeam(t *testing.T) {
 			})
 		}
 	})
-
-	t.Run("team ID format validation", func(t *testing.T) {
-		tests := []struct {
-			name        string
-			teamID      string
-			expectValid bool
-		}{
-			{"valid team ID", "team-abc123def456", true},
-			{"valid short team ID", "team-abc123", true},
-			{"invalid format - no prefix", "abc123def456", false},
-			{"invalid format - wrong prefix", "workspace-abc123", false},
-			{"empty team ID", "", false},
-			{"only prefix", "team-", false},
-		}
-
-		for _, tt := range tests {
-			t.Run(tt.name, func(t *testing.T) {
-				// Simple validation: team ID should start with "team-" and have content after
-				isValid := strings.HasPrefix(tt.teamID, "team-") && len(tt.teamID) > 5
-				assert.Equal(t, tt.expectValid, isValid)
-			})
-		}
-	})
-
-	t.Run("team ID sanitisation", func(t *testing.T) {
-		tests := []struct {
-			name     string
-			input    string
-			expected string
-		}{
-			{"clean ID unchanged", "team-abc123def456", "team-abc123def456"},
-			{"leading slash", "/team-abc123def456", "team-abc123def456"},
-			{"multiple leading slashes", "///team-abc123def456", "team-abc123def456"},
-			{"leading whitespace only", "  team-abc123def456", "team-abc123def456"},
-			{"leading whitespace and slash", "  /team-abc123def456", "team-abc123def456"},
-		}
-
-		for _, tt := range tests {
-			t.Run(tt.name, func(t *testing.T) {
-				cleaned := strings.TrimLeft(strings.TrimSpace(tt.input), "/")
-				assert.Equal(t, tt.expected, cleaned)
-			})
-		}
-	})
-
 }
