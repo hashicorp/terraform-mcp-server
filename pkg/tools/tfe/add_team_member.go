@@ -5,7 +5,6 @@ package tools
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -21,7 +20,7 @@ func AddTeamMember(logger *log.Logger) server.ServerTool {
 	return server.ServerTool{
 		Tool: mcp.NewTool(
 			"add_team_member",
-			mcp.WithDescription("Adds one or more members to a Terraform Cloud/Enterprise team. Members can be identified by username (accepted invites only) or by organization membership ID (accepted and pending invites). Both can be provided in a single call."),
+			mcp.WithDescription("Adds a single member to a Terraform Cloud/Enterprise team. Provide either a username (accepted invites only) or an organization membership ID (accepted and pending invites), not both."),
 			mcp.WithTitleAnnotation(`Add members to a Terraform team`),
 			mcp.WithOpenWorldHintAnnotation(true),
 			mcp.WithReadOnlyHintAnnotation(false),
@@ -31,10 +30,10 @@ func AddTeamMember(logger *log.Logger) server.ServerTool {
 				mcp.Description("The ID of the Terraform Cloud/Enterprise team to add members to (e.g., 'team-abc123def456')"),
 			),
 			mcp.WithString("username",
-				mcp.Description("Comma-separated list of usernames to add (e.g., 'alice' or 'alice, bob'). Only works for users who have accepted the organization invite."),
+				mcp.Description("Username of the member to add. Only works for users who have accepted the organization invite."),
 			),
-			mcp.WithString("organization_membership_ids",
-				mcp.Description("Comma-separated list of organization membership IDs to add (e.g., 'ou-abc123' or 'ou-abc123, ou-def456'). Works for both accepted and pending organization invites. Prefer this over 'username' when the invitee has not yet accepted."),
+			mcp.WithString("organization_membership_id",
+				mcp.Description("Organization membership ID of the member to add (e.g., 'ou-abc123'). Works for both accepted and pending organization invites. Prefer this over 'username' when the invitee has not yet accepted."),
 			),
 		),
 
@@ -53,29 +52,17 @@ func addTeamMemberHandler(ctx context.Context, request mcp.CallToolRequest, logg
 		return ToolError(logger, "Missing required input: team_id", err)
 	}
 	username := request.GetString("username", "")
-	organizationMembershipID := request.GetString("organization_membership_ids", "")
+	orgMembershipID := request.GetString("organization_membership_id", "")
 
-	teamID = strings.TrimLeft(strings.TrimSpace(teamID), "/")
+	teamID = strings.TrimSpace(teamID)
 	username = strings.TrimSpace((username))
-	organizationMembershipID = strings.TrimSpace(organizationMembershipID)
+	orgMembershipID = strings.TrimSpace(orgMembershipID)
 
-	var usernames []string
-	if username != "" {
-		usernames = strings.Split(username, ",")
-		for i, u := range usernames {
-			usernames[i] = strings.TrimSpace(u)
-		}
+	if username == "" && orgMembershipID == "" {
+		return ToolError(logger, "One of 'username' or 'organization_membership_id' must be provided", nil)
 	}
-	var organizationMembershipIDs []string
-	if organizationMembershipID != "" {
-		organizationMembershipIDs = strings.Split(organizationMembershipID, ",")
-		for i, id := range organizationMembershipIDs {
-			organizationMembershipIDs[i] = strings.TrimSpace(id)
-		}
-	}
-
-	if len(usernames) == 0 && len(organizationMembershipIDs) == 0 {
-		return ToolError(logger, "At least one of 'username' or 'organization_membership_ids' must be provided", nil)
+	if username != "" && orgMembershipID != "" {
+		return ToolError(logger, "Provide only one of 'username' or 'organization_membership_id', not both", nil)
 	}
 
 	tfeClient, err := client.GetTfeClientFromContext(ctx, logger)
@@ -86,41 +73,19 @@ func addTeamMemberHandler(ctx context.Context, request mcp.CallToolRequest, logg
 		return ToolError(logger, "Failed to get Terraform client - ensure TFE_TOKEN and TFE_ADDRESS are configured", nil)
 	}
 
-	result := &AddMemberSummary{}
-
-	if len(usernames) > 0 {
+	if username != "" {
 		if err := tfeClient.TeamMembers.Add(ctx, teamID, tfe.TeamMemberAddOptions{
-			Usernames: usernames,
+			Usernames: []string{username},
 		}); err != nil {
-			result.Errors = append(result.Errors, fmt.Sprintf("Failed to add by username: %v", err))
-		} else {
-			result.AddedByUsername = usernames
+			return ToolError(logger, fmt.Sprintf("Failed to add member %q to team %q", username, teamID), err)
+		}
+	} else {
+		if err := tfeClient.TeamMembers.Add(ctx, teamID, tfe.TeamMemberAddOptions{
+			OrganizationMembershipIDs: []string{orgMembershipID},
+		}); err != nil {
+			return ToolError(logger, fmt.Sprintf("Failed to add membership ID %q to team %q", orgMembershipID, teamID), err)
 		}
 	}
 
-	if len(organizationMembershipIDs) > 0 {
-		if err := tfeClient.TeamMembers.Add(ctx, teamID, tfe.TeamMemberAddOptions{
-			OrganizationMembershipIDs: organizationMembershipIDs,
-		}); err != nil {
-			result.Errors = append(result.Errors, fmt.Sprintf("Failed to add by membership ID: %v", err))
-		} else {
-			result.AddedByMembershipID = organizationMembershipIDs
-		}
-	}
-
-	result.Success = len(result.Errors) == 0
-
-	resultJSON, err := json.Marshal(result)
-	if err != nil {
-		return ToolError(logger, "Failed to marshal result", err)
-	}
-	return mcp.NewToolResultText(string(resultJSON)), nil
-}
-
-// AddMemberSummary is a truncated summary of Added Members details for listing
-type AddMemberSummary struct {
-	Success             bool     `json:"success"`
-	AddedByUsername     []string `json:"added_by_username,omitempty"`
-	AddedByMembershipID []string `json:"added_by_membership_id,omitempty"`
-	Errors              []string `json:"errors,omitempty"`
+	return mcp.NewToolResultText(fmt.Sprintf("Successfully added member to team %q", teamID)), nil
 }
