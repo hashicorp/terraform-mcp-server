@@ -287,9 +287,13 @@ func setupInstana(logger *log.Logger) instana.TracerLogger {
 	if os.Getenv("INSTANA_ENABLED") != "true" {
 		return nil
 	}
+	serviceName := "terraform-mcp-server"
+	if n := os.Getenv("INSTANA_SERVICE_NAME"); n != "" {
+		serviceName = n
+	}
 	logger.Info("Instana instrumentation enabled")
 	return instana.InitCollector(&instana.Options{
-		Service: "terraform-mcp-server",
+		Service: serviceName,
 		Tracer:  instana.DefaultTracerOptions(),
 	})
 }
