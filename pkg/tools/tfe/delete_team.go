@@ -5,7 +5,6 @@ package tools
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -20,8 +19,8 @@ func DeleteTeam(logger *log.Logger) server.ServerTool {
 	return server.ServerTool{
 		Tool: mcp.NewTool(
 			"delete_team",
-			mcp.WithDescription("Permanently deletes a Terraform team by its team_id. This also removes all team memberships and any workspace or project access granted through the team. Organization users and workspaces are not deleted."),
-			mcp.WithTitleAnnotation(`Deletes a Terraform Team by team_id`),
+			mcp.WithDescription(`Permanently deletes a Terraform team by its "team_id". This also removes all team memberships and any workspace or project access granted through the team. Organization users and workspaces are not deleted.`),
+			mcp.WithTitleAnnotation(`Deletes a Terraform Team by "team_id"`),
 			mcp.WithReadOnlyHintAnnotation(false),
 			mcp.WithOpenWorldHintAnnotation(true),
 			mcp.WithDestructiveHintAnnotation(true),
@@ -43,7 +42,7 @@ func deleteTeamHandler(ctx context.Context, request mcp.CallToolRequest, logger 
 	if err != nil {
 		return ToolError(logger, "Missing required input: team_id", err)
 	}
-	teamID = strings.TrimLeft(strings.TrimSpace(teamID), "/")
+	teamID = strings.TrimSpace(teamID)
 
 	tfeClient, err := client.GetTfeClientFromContext(ctx, logger)
 	if err != nil {
@@ -53,26 +52,10 @@ func deleteTeamHandler(ctx context.Context, request mcp.CallToolRequest, logger 
 		return ToolError(logger, "Failed to get Terraform client - ensure TFE_TOKEN and TFE_ADDRESS are configured", nil)
 	}
 
-	team, err := tfeClient.Teams.Read(ctx, teamID)
-	if err != nil {
-		return ToolErrorf(logger, "Team not found: %s", teamID)
-	}
-
 	err = tfeClient.Teams.Delete(ctx, teamID)
 	if err != nil {
 		return ToolErrorf(logger, "Failed to delete team %q", teamID)
 	}
 
-	result := map[string]interface{}{
-		"success": true,
-		"message": fmt.Sprintf("Team %q (%s) deleted successfully", team.Name, team.ID),
-		"team_id": team.ID,
-	}
-
-	resultJSON, err := json.Marshal(result)
-	if err != nil {
-		return ToolError(logger, "Failed to marshal result", err)
-	}
-
-	return mcp.NewToolResultText(string(resultJSON)), nil
+	return mcp.NewToolResultText(fmt.Sprintf("Team %q deleted", teamID)), nil
 }
