@@ -70,7 +70,7 @@ func grantTeamAccessHandler(ctx context.Context, request mcp.CallToolRequest, lo
 	workspaceID := request.GetString("workspace_id", "")
 	projectID := request.GetString("project_id", "")
 
-	teamID = strings.TrimLeft(strings.TrimSpace(teamID), "/")
+	teamID = strings.TrimSpace(teamID)
 	workspaceID = strings.TrimSpace(workspaceID)
 	projectID = strings.TrimSpace(projectID)
 	accessLevel = strings.ToLower(strings.TrimSpace(accessLevel))
