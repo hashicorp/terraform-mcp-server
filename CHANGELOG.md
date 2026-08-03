@@ -9,6 +9,9 @@ IMPROVEMENTS
 
 * Extend the existing HTTP-layer `OrganizationAllowlistMiddleware` with a new MCP tool-layer `OrganizationAllowlistToolMiddleware` that rejects tool calls whose `terraform_org_name` argument is not in the allowlist configured via `MCP_ORGANIZATION_ALLOWLIST`. [430](https://github.com/hashicorp/terraform-mcp-server/pull/430)
 
+IMPROVEMENTS
+* Add per-tool-call Instana tracing so individual MCP tool calls appear as traces, not just the HTTP request [436](https://github.com/hashicorp/terraform-mcp-server/pull/436)
+
 # 1.1.1
 
 IMPROVEMENTS

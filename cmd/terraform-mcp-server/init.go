@@ -294,13 +294,9 @@ func setupInstana(logger *log.Logger) instana.TracerLogger {
 	})
 }
 
-func streamableHTTPServerInit(ctx context.Context, hcServer *server.MCPServer, logger *log.Logger, host string, port string, endpointPath string, heartbeatInterval time.Duration, organizationAllowlist []string) error {
-	// Ensure endpoint path starts with /
+func streamableHTTPServerInit(ctx context.Context, hcServer *server.MCPServer, logger *log.Logger, host string, port string, endpointPath string, heartbeatInterval time.Duration, organizationAllowlist []string, instanaCollector instana.TracerLogger) error {
 	endpointPath = path.Join("/", endpointPath)
 	var handler http.Handler
-
-	// Initialize the Instana collector if enabled (nil when disabled).
-	instanaCollector := setupInstana(logger)
 
 	// Create StreamableHTTP server which implements the new streamable-http transport
 	// This is the modern MCP transport that supports both direct HTTP responses and SSE streams
