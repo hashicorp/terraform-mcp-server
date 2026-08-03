@@ -28,7 +28,7 @@ var (
 	testingClient *mcp.Client
 )
 
-const ToolCallTimeout = 30 * time.Second
+const toolCallTimeout = 30 * time.Second
 
 type authTransport struct {
 	token        string
@@ -77,14 +77,14 @@ func newTestingSession(t *testing.T) *mcp.ClientSession {
 	}
 
 	httpClient := &http.Client{
-		Timeout: ToolCallTimeout,
+		Timeout: toolCallTimeout,
 		Transport: &authTransport{
 			token:        tfeToken,
 			roundtripper: http.DefaultTransport,
 		},
 	}
 
-	ctx, cancel := context.WithTimeout(t.Context(), ToolCallTimeout)
+	ctx, cancel := context.WithTimeout(t.Context(), toolCallTimeout)
 	defer cancel()
 
 	session, err := testingClient.Connect(ctx, &mcp.StreamableClientTransport{
