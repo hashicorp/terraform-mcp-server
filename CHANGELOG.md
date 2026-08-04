@@ -13,6 +13,7 @@ FEATURES
 FIXES
 
 * `get_apply_logs` now checks the apply status before attempting to stream logs. If the apply is not yet in a terminal state (`finished`, `errored`, `canceled`), the tool returns an informative message instead of timing out.
+* [New Tool] `delete_team` Permanently deletes a Terraform team by its `team_id`. Requires `team_id` (e.g. `team-abc123def456`). This is a destructive operation and must set `ENABLE_TF_OPERATIONS=true`.
 
 # 1.2.0
 
@@ -24,7 +25,6 @@ FEATURES
 * [New Tool] `create_project` Creates a new Terraform project in the specified organization. Requires `terraform_org_name` and `project_name`. [420](https://github.com/hashicorp/terraform-mcp-server/pull/420)
 * [New Tool] `delete_project` Deletes a Terraform project by ID. Requires `project_id`. TFC/TFE will refuse to delete a project that still contains workspaces or stacks. [420](https://github.com/hashicorp/terraform-mcp-server/pull/420)
 * [New Tool] `create_team` Creates a new team in a Terraform Cloud/Enterprise organization. Requires `terraform_org_name` and `team_name`; optional `visibility` ("secret" or "organization"). [427](https://github.com/hashicorp/terraform-mcp-server/pull/427)
-* [New Tool] `delete_team` Permanently deletes a Terraform team by its `team_id`. Requires `team_id` (e.g. `team-abc123def456`). This is a destructive operation and must set `ENABLE_TF_OPERATIONS=true`.
 
 IMPROVEMENTS
 
