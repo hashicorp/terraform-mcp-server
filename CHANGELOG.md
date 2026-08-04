@@ -2,17 +2,15 @@
 
 FEATURES
 
+* [New Tool] `list_state_versions` Lists all state versions for a given workspace. Requires `terraform_org_name` and `workspace_name`; supports optional pagination params.
+* [New Tool] `get_state_version` Retrieves a Terraform state version. If `state_version_id` is provided, retrieves that specific state version. Otherwise, retrieves the latest state version for the specified `workspace_id`. One of `state_version_id` or `workspace_id` must be provided.
+* [New Tool] `get_run_comments` Lists all discussion comments associated with a given Terraform run. Requires `run_id`.
 * [New Tool] `create_project` Creates a new Terraform project in the specified organization. Requires `terraform_org_name` and `project_name`. [420](https://github.com/hashicorp/terraform-mcp-server/pull/420)
 * [New Tool] `delete_project` Deletes a Terraform project by ID. Requires `project_id`. TFC/TFE will refuse to delete a project that still contains workspaces or stacks. [420](https://github.com/hashicorp/terraform-mcp-server/pull/420)
 
 IMPROVEMENTS
 
 * Extend the existing HTTP-layer `OrganizationAllowlistMiddleware` with a new MCP tool-layer `OrganizationAllowlistToolMiddleware` that rejects tool calls whose `terraform_org_name` argument is not in the allowlist configured via `MCP_ORGANIZATION_ALLOWLIST`. [430](https://github.com/hashicorp/terraform-mcp-server/pull/430)
-
-# 1.1.1
-
-IMPROVEMENTS
-
 * Add `version` field to the `/health` endpoint response to make it easier to identify which version is deployed at a glance. [410](https://github.com/hashicorp/terraform-mcp-server/pull/410)
 * Add optional Instana instrumentation (metrics and HTTP request tracing) for the streamable-http server, gated behind `INSTANA_ENABLED` [411](https://github.com/hashicorp/terraform-mcp-server/pull/411)
 * Add `TF_MCP_SHARED_SECRET` to send an `X-Tf-Mcp-Secret` header on requests to HCP Terraform / TFE, allowing the backend to identify requests from a trusted MCP deployment [392](https://github.com/hashicorp/terraform-mcp-server/pull/392)
@@ -20,12 +18,6 @@ IMPROVEMENTS
 FIXES
 
 * Ensure all logs are output in JSON format when `LOG_FORMAT=json` is set in streamable HTTP mode. [402](https://github.com/hashicorp/terraform-mcp-server/pull/402)
-
-FEATURES
-
-* [New Tool] `list_state_versions` Lists all state versions for a given workspace. Requires `terraform_org_name` and `workspace_name`; supports optional pagination params.
-* [New Tool] `get_state_version` Retrieves a Terraform state version. If `state_version_id` is provided, retrieves that specific state version. Otherwise, retrieves the latest state version for the specified `workspace_id`. One of `state_version_id` or `workspace_id` must be provided.
-* [New Tool] `get_run_comments` Lists all discussion comments associated with a given Terraform run. Requires `run_id`.
 
 # 1.1.0
 
