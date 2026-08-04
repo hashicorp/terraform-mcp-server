@@ -28,8 +28,6 @@ var (
 	testingClient *mcp.Client
 )
 
-const toolCallTimeout = 30 * time.Second
-
 type authTransport struct {
 	token        string
 	roundtripper http.RoundTripper
@@ -70,10 +68,6 @@ func newTestingSession(t *testing.T) *mcp.ClientSession {
 
 	if tfeToken == "" {
 		t.Skip("You need to supply TFE_TOKEN to run these tests")
-	}
-
-	if tfeOrgName == "" {
-		t.Skip("You need to supply TFE_ORG_NAME to run these tests")
 	}
 
 	httpClient := &http.Client{
