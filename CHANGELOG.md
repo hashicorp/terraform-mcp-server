@@ -17,8 +17,6 @@ FEATURES
 * [New Tool] `get_run_comments` Lists all discussion comments associated with a given Terraform run. Requires `run_id`.
 * [New Tool] `create_project` Creates a new Terraform project in the specified organization. Requires `terraform_org_name` and `project_name`. [420](https://github.com/hashicorp/terraform-mcp-server/pull/420)
 * [New Tool] `delete_project` Deletes a Terraform project by ID. Requires `project_id`. TFC/TFE will refuse to delete a project that still contains workspaces or stacks. [420](https://github.com/hashicorp/terraform-mcp-server/pull/420)
-* [New Tool] `create_team` Creates a new team in a Terraform Cloud/Enterprise organization. Requires `terraform_org_name` and `team_name`; optional `visibility` ("secret" or "organization"). [427](https://github.com/hashicorp/terraform-mcp-server/pull/427)
-* [New Tool] `add_team_member` Adds one or more members to a Terraform team. Requires `team_id`; accepts `username` (comma-separated, accepted-invite users only) and/or `organization_membership_ids` (comma-separated, works for pending and accepted invites). Both inputs can be provided in a single call — each is submitted as a separate API request and partial results are reported independently.
 
 IMPROVEMENTS
 
