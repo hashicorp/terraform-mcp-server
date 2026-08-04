@@ -2,6 +2,7 @@
 
 FEATURES
 
+* [New Tool] `list_teams` Lists all teams within a given Terraform Cloud organization. Requires `terraform_org_name`. Optionally filter by exact team names (`team_names`), or substring search (`search_query`). Supports pagination.
 * [New Tool] `grant_team_access` Grants a team access to a workspace or project by ID. Requires `team_id`, `access_level`, and either `workspace_id` or `project_id` (mutually exclusive). Valid access levels for workspaces: `admin`, `read`, `write`, `plan`, `custom`. Valid access levels for projects: `admin`, `read`, `write`, `maintain`, `custom`.
 
 # 1.2.0
@@ -17,11 +18,6 @@ FEATURES
 IMPROVEMENTS
 
 * Extend the existing HTTP-layer `OrganizationAllowlistMiddleware` with a new MCP tool-layer `OrganizationAllowlistToolMiddleware` that rejects tool calls whose `terraform_org_name` argument is not in the allowlist configured via `MCP_ORGANIZATION_ALLOWLIST`. [430](https://github.com/hashicorp/terraform-mcp-server/pull/430)
-
-# 1.1.1
-
-IMPROVEMENTS
-
 * Add `version` field to the `/health` endpoint response to make it easier to identify which version is deployed at a glance. [410](https://github.com/hashicorp/terraform-mcp-server/pull/410)
 * Add optional Instana instrumentation (metrics and HTTP request tracing) for the streamable-http server, gated behind `INSTANA_ENABLED` [411](https://github.com/hashicorp/terraform-mcp-server/pull/411)
 * Add `TF_MCP_SHARED_SECRET` to send an `X-Tf-Mcp-Secret` header on requests to HCP Terraform / TFE, allowing the backend to identify requests from a trusted MCP deployment [392](https://github.com/hashicorp/terraform-mcp-server/pull/392)
