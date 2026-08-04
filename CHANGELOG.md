@@ -1,3 +1,9 @@
+# 1.3.0
+
+FEATURES
+
+* [New Tool] `add_team_member` Adds one or more members to a Terraform team. Requires `team_id`; accepts `username` (comma-separated, accepted-invite users only) and/or `organization_membership_ids` (comma-separated, works for pending and accepted invites). Both inputs can be provided in a single call — each is submitted as a separate API request and partial results are reported independently.
+
 # 1.2.0
 
 FEATURES
