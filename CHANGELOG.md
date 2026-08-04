@@ -2,7 +2,6 @@
 
 FEATURES
 
-* [New Tool] `list_teams` Lists all teams within a given Terraform Cloud organization. Requires `terraform_org_name`. Optionally filter by exact team names (`team_names`), or substring search (`search_query`). Supports pagination.
 * [New Tool] `grant_team_access` Grants a team access to a workspace or project by ID. Requires `team_id`, `access_level`, and either `workspace_id` or `project_id` (mutually exclusive). Valid access levels for workspaces: `admin`, `read`, `write`, `plan`, `custom`. Valid access levels for projects: `admin`, `read`, `write`, `maintain`, `custom`.
 
 # 1.2.0
