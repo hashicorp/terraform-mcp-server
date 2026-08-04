@@ -68,6 +68,7 @@ func TestListAndGetProject(t *testing.T) {
 }
 
 func TestCreateAndDeleteProject(t *testing.T) {
+	requireTfOperations(t)
 	s := newTestingSession(t)
 	defer s.Close()
 
