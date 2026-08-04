@@ -10,6 +10,7 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"net/http"
 	"os"
 	"os/signal"
 	"sync"
@@ -18,6 +19,17 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
+
+type authTransport struct {
+	token        string
+	roundtripper http.RoundTripper
+}
+
+func (t *authTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	req = req.Clone(req.Context())
+	req.Header.Set("Authorization", "Bearer "+t.token)
+	return t.roundtripper.RoundTrip(req)
+}
 
 var (
 	duration = flag.Duration("duration", 1*time.Minute, "duration of the load test")
@@ -59,6 +71,20 @@ func main() {
 	ctx, stop := signal.NotifyContext(ctx, os.Interrupt)
 	defer stop()
 
+	httpClient := http.DefaultClient
+
+	if tfeToken := os.Getenv("TFE_TOKEN"); tfeToken != "" {
+		httpClient = &http.Client{
+			Transport: &authTransport{
+				token:        tfeToken,
+				roundtripper: http.DefaultTransport,
+			},
+		}
+		log.Print("loadtest: using bearer authentication from TFE_TOKEN")
+	} else {
+		log.Print("loadtest: TFE_TOKEN not set; running without authentication")
+	}
+
 	var (
 		start   = time.Now()
 		success atomic.Int64
@@ -74,7 +100,7 @@ func main() {
 			defer wg.Done()
 
 			client := mcp.NewClient(&mcp.Implementation{Name: "loadtest", Version: "v1.0.0"}, nil)
-			session, err := client.Connect(ctx, &mcp.StreamableClientTransport{Endpoint: endpoint}, nil)
+			session, err := client.Connect(ctx, &mcp.StreamableClientTransport{Endpoint: endpoint, HTTPClient: httpClient}, nil)
 			if err != nil {
 				log.Printf("connect error: %v", err)
 				return
