@@ -1,3 +1,9 @@
+# 1.2.1
+
+IMPROVEMENTS
+
+* Set `service.instance.id` on the OTel metrics resource, plus `k8s.pod.uid` when running in K8s, so telemetry from separate instances is no longer attributed to a single entity attributed to a single entity [448](https://github.com/hashicorp/terraform-mcp-server/pull/448)
+
 # 1.2.0
 
 FEATURES
