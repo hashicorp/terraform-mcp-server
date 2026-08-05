@@ -40,7 +40,8 @@ jobs:
           token: ${{ secrets.REMOTE_DEPLOY_TOKEN }} 
           repository: hashicorp/terraform-mcp-server-remote 
           event-type: deploy-dev 
-          client-payload: {
-              "image_repository": "${{ env.IMAGE_REPOSITORY }}",
-              "image_tag": "${{ steps.version.outputs.product-version }}-${{ env.COMMIT_SHA }}"
-            }
+          client-payload: >-
+                {
+                  "image_repository": "${{ env.IMAGE_REPOSITORY }}",
+                  "image_tag": "${{ steps.version.outputs.product-version }}-${{ env.COMMIT_SHA }}"
+                }
