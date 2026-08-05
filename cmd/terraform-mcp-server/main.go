@@ -445,10 +445,19 @@ func initMetrics(ctx context.Context, config *client.MetricsConfig, logger *log.
 	}
 	// Create the MeterProvider with a PeriodicReader
 	// The reader flushes metrics to the exporter periodically
-	resourceAttrs := resource.NewSchemaless(
+
+	// without service.instance.id every replica sends the exact same resource and
+	// the backend folds them into one entity. k8s.pod.uid is the separate attribute
+	// that links that entity back to the pod, only added when we're in k8s.
+	resourceOpts := []attribute.KeyValue{
 		attribute.String("service.name", config.ServiceName),
 		attribute.String("service.version", config.ServiceVersion),
-	)
+		attribute.String("service.instance.id", config.ServiceInstanceID),
+	}
+	if config.K8sPodUID != "" {
+		resourceOpts = append(resourceOpts, attribute.String("k8s.pod.uid", config.K8sPodUID))
+	}
+	resourceAttrs := resource.NewSchemaless(resourceOpts...)
 	config.MeterProvider = sdkmetric.NewMeterProvider(
 		sdkmetric.WithReader(sdkmetric.NewPeriodicReader(exporter, sdkmetric.WithInterval(config.ExportInterval))),
 		sdkmetric.WithResource(resourceAttrs),
