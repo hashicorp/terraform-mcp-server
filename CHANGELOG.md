@@ -5,6 +5,10 @@ FEATURES
 * [New Tool] `list_teams` Lists all teams within a given Terraform Cloud organization. Requires `terraform_org_name`. Optionally filter by exact team names (`team_names`), or substring search (`search_query`). Supports pagination.
 * [New Tool] `get_team` Fetches full details for a single team by ID, including members, organization access permissions, and SSO settings. Requires `team_id`. [441](https://github.com/hashicorp/terraform-mcp-server/pull/441)
 
+IMPROVEMENTS
+
+* Set `service.instance.id` on the OTel metrics resource, plus `k8s.pod.uid` when running in K8s, so telemetry from separate instances is no longer attributed to a single entity [448](https://github.com/hashicorp/terraform-mcp-server/pull/448)
+
 # 1.2.0
 
 FEATURES
