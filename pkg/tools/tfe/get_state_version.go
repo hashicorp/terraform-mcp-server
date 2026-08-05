@@ -4,11 +4,12 @@
 package tools
 
 import (
+	"bytes"
 	"context"
-	"encoding/json"
 	"strings"
 
 	"github.com/hashicorp/go-tfe"
+	"github.com/hashicorp/jsonapi"
 	"github.com/hashicorp/terraform-mcp-server/pkg/client"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
@@ -73,10 +74,11 @@ func getStateVersionWithIDHandler(
 		return ToolError(logger, "Failed to get state version", err)
 	}
 
-	svJSON, err := json.Marshal(sv)
+	buf := bytes.NewBuffer(nil)
+	err = jsonapi.MarshalPayloadWithoutIncluded(buf, sv)
 	if err != nil {
-		return ToolError(logger, "Failed to serialize state version", err)
+		return ToolError(logger, "failed to marshal state version", err)
 	}
 
-	return mcp.NewToolResultText(string(svJSON)), nil
+	return mcp.NewToolResultText(buf.String()), nil
 }
