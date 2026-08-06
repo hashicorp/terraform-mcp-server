@@ -52,7 +52,7 @@ func TestCreateTeam(t *testing.T) {
 
 	// Verify against the TFE API directly
 	createdTeam, err := client.Teams.Read(t.Context(), teamID)
-	require.NoError(t, err, "Team reported as created should be readable via the TFE API")
+	require.NoError(t, err, "Team reported as created but produced an error when reading")
 	assert.Equal(t, teamName, createdTeam.Name, "Created team name does not match requested name")
 	assert.Equal(t, visibility, createdTeam.Visibility)
 	assert.Zero(t, createdTeam.UserCount)
