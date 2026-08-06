@@ -116,6 +116,22 @@ func (r *DynamicToolRegistry) registerTFETools() {
 		r.mcpServer.AddTool(tool.Tool, tool.Handler)
 	}
 
+	if toolsets.IsToolEnabled("create_project", r.enabledToolsets) {
+		tool := r.createDynamicTFETool("create_project", tfeTools.CreateProject)
+		r.mcpServer.AddTool(tool.Tool, tool.Handler)
+	}
+
+	if isTerraformOperationsEnabled() && toolsets.IsToolEnabled("delete_project", r.enabledToolsets) {
+		tool := r.createDynamicTFETool("delete_project", tfeTools.DeleteProject)
+		r.mcpServer.AddTool(tool.Tool, tool.Handler)
+	}
+
+	// Terraform toolset - Team tools
+	if toolsets.IsToolEnabled("create_team", r.enabledToolsets) {
+		tool := r.createDynamicTFETool("create_team", tfeTools.CreateTeam)
+		r.mcpServer.AddTool(tool.Tool, tool.Handler)
+	}
+
 	// Terraform toolset - Workspace management tools
 	if toolsets.IsToolEnabled("list_workspaces", r.enabledToolsets) {
 		tool := r.createDynamicTFETool("list_workspaces", tfeTools.ListWorkspaces)
@@ -137,24 +153,11 @@ func (r *DynamicToolRegistry) registerTFETools() {
 		r.mcpServer.AddTool(tool.Tool, tool.Handler)
 	}
 
-	// Only register create_project if TF operations are enabled AND toolset is enabled
-	if isTerraformOperationsEnabled() && toolsets.IsToolEnabled("create_project", r.enabledToolsets) {
-		tool := r.createDynamicTFETool("create_project", tfeTools.CreateProject)
-		r.mcpServer.AddTool(tool.Tool, tool.Handler)
-	}
-
-	// Only register delete_project if TF operations are enabled AND toolset is enabled
-	if isTerraformOperationsEnabled() && toolsets.IsToolEnabled("delete_project", r.enabledToolsets) {
-		tool := r.createDynamicTFETool("delete_project", tfeTools.DeleteProject)
-		r.mcpServer.AddTool(tool.Tool, tool.Handler)
-	}
-
-	// Only register delete_workspace_safely if TF operations are enabled AND toolset is enabled
 	if isTerraformOperationsEnabled() && toolsets.IsToolEnabled("delete_workspace_safely", r.enabledToolsets) {
 		tool := r.createDynamicTFETool("delete_workspace_safely", tfeTools.DeleteWorkspaceSafely)
 		r.mcpServer.AddTool(tool.Tool, tool.Handler)
 	}
-	// Only register force_unlock_workspace if TF operations are enabled AND toolset is enabled
+
 	if isTerraformOperationsEnabled() && toolsets.IsToolEnabled("force_unlock_workspace", r.enabledToolsets) {
 		tool := r.createDynamicTFETool("force_unlock_workspace", tfeTools.ForceUnlockWorkspace)
 		r.mcpServer.AddTool(tool.Tool, tool.Handler)

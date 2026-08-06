@@ -23,11 +23,16 @@ var ToolToToolset = map[string]string{
 	"search_private_providers":     RegistryPrivate,
 	"get_private_provider_details": RegistryPrivate,
 
-	// Terraform tools (TFE/TFC workspaces, runs, variables, etc.)
-	"list_terraform_orgs":                 Terraform,
-	"list_terraform_projects":             Terraform,
-	"create_project":                      Terraform,
-	"delete_project":                      Terraform,
+	// Terraform tools - Organization and Project
+	"list_terraform_orgs":     Terraform,
+	"list_terraform_projects": Terraform,
+	"create_project":          Terraform,
+	"delete_project":          Terraform,
+
+	// Terraform tools - Team
+	"create_team": Terraform,
+
+	// Terraform tools - Workspace management
 	"list_workspaces":                     Terraform,
 	"get_workspace_details":               Terraform,
 	"create_workspace":                    Terraform,
