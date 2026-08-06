@@ -37,7 +37,6 @@ func ListTeams(logger *log.Logger) server.ServerTool {
 				mcp.Description(`Substring search query to filter teams by name. Returns all teams whose name contains the query string. Example: "platform"`),
 			),
 		),
-
 		Handler: func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			return listTeamsHandler(ctx, request, logger)
 		},
@@ -46,7 +45,6 @@ func ListTeams(logger *log.Logger) server.ServerTool {
 
 // listTeamsHandler handles tool logics and functionality
 func listTeamsHandler(ctx context.Context, request mcp.CallToolRequest, logger *log.Logger) (*mcp.CallToolResult, error) {
-
 	terraformOrgName, err := request.RequireString("terraform_org_name")
 	if err != nil {
 		return ToolError(logger, "Missing required input: terraform_org_name", err)
@@ -92,9 +90,9 @@ func listTeamsHandler(ctx context.Context, request mcp.CallToolRequest, logger *
 		return ToolErrorf(logger, "No teams to list in organization %q", terraformOrgName)
 	}
 
-	teamSummaries := make([]*TeamsSummary, len(teams.Items))
+	teamSummaries := make([]*TeamSummary, len(teams.Items))
 	for i, t := range teams.Items {
-		teamSummaries[i] = &TeamsSummary{
+		teamSummaries[i] = &TeamSummary{
 			ID:         t.ID,
 			Name:       t.Name,
 			Visibility: t.Visibility,
@@ -102,20 +100,18 @@ func listTeamsHandler(ctx context.Context, request mcp.CallToolRequest, logger *
 		}
 	}
 
-	teamsJSON, err := json.Marshal(&TeamsSummaryList{
+	teamsJSON, err := json.Marshal(&TeamSummaryList{
 		Items:      teamSummaries,
 		Pagination: teams.Pagination,
 	})
 	if err != nil {
 		return ToolError(logger, "Failed to marshal teams", err)
 	}
-
 	return mcp.NewToolResultText(string(teamsJSON)), nil
-
 }
 
 // TeamsSummary is a truncated summary of Teams details for listing
-type TeamsSummary struct {
+type TeamSummary struct {
 	ID         string `json:"id"`
 	Name       string `json:"name"`
 	Visibility string `json:"visibility"`
@@ -123,7 +119,7 @@ type TeamsSummary struct {
 }
 
 // TeamsSummaryList is a list of Team summaries with pagination
-type TeamsSummaryList struct {
-	Items []*TeamsSummary `json:"items"`
+type TeamSummaryList struct {
+	Items []*TeamSummary `json:"items"`
 	*tfe.Pagination
 }

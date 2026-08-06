@@ -6,7 +6,6 @@ package tools
 import (
 	"testing"
 
-	"github.com/hashicorp/go-tfe"
 	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 )
@@ -31,36 +30,6 @@ func TestListTeams(t *testing.T) {
 		// Check that terraform_org_name is a required parameter
 		assert.Contains(t, tool.Tool.InputSchema.Required, "terraform_org_name")
 	})
-
-	t.Run("successful team list", func(t *testing.T) {
-		// Build mock teams
-		mockTeams := []*tfe.Team{
-			{
-				ID:         "team-abc123",
-				Name:       "owners",
-				Visibility: "secret",
-				UserCount:  3,
-			},
-			{
-				ID:         "team-def456",
-				Name:       "developers",
-				Visibility: "organization",
-				UserCount:  10,
-			},
-		}
-
-		mockTeamList := &tfe.TeamList{
-			Items: mockTeams,
-		}
-
-		// Verify mock structure
-		assert.Len(t, mockTeamList.Items, 2)
-		assert.Equal(t, "team-abc123", mockTeamList.Items[0].ID)
-		assert.Equal(t, "owners", mockTeamList.Items[0].Name)
-		assert.Equal(t, "team-def456", mockTeamList.Items[1].ID)
-		assert.Equal(t, "developers", mockTeamList.Items[1].Name)
-	})
-
 	t.Run("missing required parameter", func(t *testing.T) {
 		request := &MockCallToolRequest{
 			params: map[string]interface{}{
