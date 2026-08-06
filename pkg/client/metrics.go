@@ -5,6 +5,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/hashicorp/terraform-mcp-server/version"
 	"github.com/mark3labs/mcp-go/mcp"
 	log "github.com/sirupsen/logrus"
 	"go.opentelemetry.io/otel/attribute"
@@ -40,7 +41,7 @@ func DefaultMetricsConfig() MetricsConfig {
 		Endpoint:             "localhost:4318",
 		ExportInterval:       2 * time.Second,
 		ServiceName:          "terraform-mcp-server",
-		ServiceVersion:       "latest",
+		ServiceVersion:       version.GetHumanVersion(),
 		MeterProvider:        nil,
 		Attributes:           []attribute.KeyValue{},
 		EnableRuntimeMetrics: true,
