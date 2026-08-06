@@ -41,10 +41,12 @@ func GetStateVersion(logger *log.Logger) server.ServerTool {
 }
 
 // getStateVersionWithIDHandler handles tool logics and functionality
-func getStateVersionWithIDHandler(
-	ctx context.Context,
-	request mcp.CallToolRequest,
-	logger *log.Logger) (*mcp.CallToolResult, error) {
+func getStateVersionWithIDHandler(ctx context.Context, request mcp.CallToolRequest, logger *log.Logger) (*mcp.CallToolResult, error) {
+	stateVersionID := request.GetString("state_version_id", "")
+	workspaceID := request.GetString("workspace_id", "")
+
+	stateVersionID = strings.TrimLeft(strings.TrimSpace(stateVersionID), "#")
+	workspaceID = strings.TrimLeft(strings.TrimSpace(workspaceID), "#")
 
 	tfeClient, err := client.GetTfeClientFromContext(ctx, logger)
 	if err != nil {
@@ -53,12 +55,6 @@ func getStateVersionWithIDHandler(
 	if tfeClient == nil {
 		return ToolError(logger, "Failed to get Terraform client - ensure TFE_TOKEN and TFE_ADDRESS are configured", nil)
 	}
-
-	stateVersionID := request.GetString("state_version_id", "")
-	stateVersionID = strings.TrimLeft(strings.TrimSpace(stateVersionID), "#")
-
-	workspaceID := request.GetString("workspace_id", "")
-	workspaceID = strings.TrimLeft(strings.TrimSpace(workspaceID), "#")
 
 	var sv *tfe.StateVersion
 
