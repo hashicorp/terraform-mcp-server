@@ -110,7 +110,7 @@ func listTeamsHandler(ctx context.Context, request mcp.CallToolRequest, logger *
 	return mcp.NewToolResultText(string(teamsJSON)), nil
 }
 
-// TeamsSummary is a truncated summary of Teams details for listing
+// TeamSummary is a truncated summary of Teams details for listing
 type TeamSummary struct {
 	ID         string `json:"id"`
 	Name       string `json:"name"`
@@ -118,7 +118,7 @@ type TeamSummary struct {
 	UserCount  int    `json:"users-count"`
 }
 
-// TeamsSummaryList is a list of Team summaries with pagination
+// TeamSummaryList is a list of Team summaries with pagination
 type TeamSummaryList struct {
 	Items []*TeamSummary `json:"items"`
 	*tfe.Pagination
