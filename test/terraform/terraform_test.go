@@ -2,6 +2,7 @@ package terraform
 
 import (
 	"context"
+	"math/rand"
 	"net/http"
 	"os"
 	"strings"
@@ -12,7 +13,11 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-const toolCallTimeout = 30 * time.Second
+const (
+	toolCallTimeout  = 30 * time.Second
+	alphaNum         = "abcdefghijklmnopqrstuvwxyz0123456789"
+	randomNameLength = 8
+)
 
 var (
 	mcpEndpoint string
@@ -32,6 +37,15 @@ func (t *authTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	req = req.Clone(req.Context())
 	req.Header.Set("Authorization", "Bearer "+t.token)
 	return t.roundtripper.RoundTrip(req)
+}
+
+func randomName(prefix string) string {
+	suffix := make([]byte, randomNameLength)
+	for i := range suffix {
+		suffix[i] = alphaNum[rand.Intn(len(alphaNum))]
+	}
+
+	return prefix + string(suffix)
 }
 
 func init() {
