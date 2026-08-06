@@ -70,9 +70,9 @@ func newTestingSession(t *testing.T) *mcp.ClientSession {
 		t.Skip("You need to supply TFE_TOKEN to run these tests")
 	}
 
-	if TfeOrgName == "" {
-		TfeOrgName = "terraform-ai-ecosystem-testing"
-		t.Logf("TFE_ORG_NAME was not specified, using: %q", TfeOrgName)
+	if tfeOrgName == "" {
+		tfeOrgName = "terraform-ai-ecosystem-testing"
+		t.Logf("TFE_ORG_NAME was not specified, using: %q", tfeOrgName)
 	}
 
 	httpClient := &http.Client{

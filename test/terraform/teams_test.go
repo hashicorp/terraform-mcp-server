@@ -15,7 +15,7 @@ func TestListTeams(t *testing.T) {
 		defer s.Close()
 
 		result, resultText := callTool(t, s, "list_teams", map[string]any{
-			"terraform_org_name": TfeOrgName,
+			"terraform_org_name": tfeOrgName,
 		})
 
 		require.False(t, result.IsError, "Tool call result should not be an error")
@@ -34,7 +34,7 @@ func TestListTeams(t *testing.T) {
 		defer s.Close()
 
 		result, resultText := callTool(t, s, "list_teams", map[string]any{
-			"terraform_org_name": TfeOrgName,
+			"terraform_org_name": tfeOrgName,
 			"team_names":         "owners",
 		})
 
@@ -50,7 +50,7 @@ func TestListTeams(t *testing.T) {
 		defer s.Close()
 
 		result, resultText := callTool(t, s, "list_teams", map[string]any{
-			"terraform_org_name": TfeOrgName,
+			"terraform_org_name": tfeOrgName,
 			"search_query":       "owners",
 		})
 
