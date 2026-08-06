@@ -1,14 +1,26 @@
 package terraform
 
 import (
-	"fmt"
+	"math/rand"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tidwall/gjson"
 )
+
+const alphaNum = "abcdefghijklmnopqrstuvwxyz012346789"
+
+func randomTeamName() string {
+	const suffixLength = 8
+
+	suffix := make([]byte, suffixLength)
+	for i := range suffix {
+		suffix[i] = alphaNum[rand.Intn(len(alphaNum))]
+	}
+
+	return "mcp-test-team-" + string(suffix)
+}
 
 func TestCreateTeam(t *testing.T) {
 
@@ -20,7 +32,7 @@ func TestCreateTeam(t *testing.T) {
 	defer s.Close()
 
 	client := tfeClient(t)
-	teamName := fmt.Sprintf("mcp-test-team-%d", time.Now().Unix())
+	teamName := randomTeamName()
 	visibility := "organization"
 
 	// Skip if the organization does not support team management.
