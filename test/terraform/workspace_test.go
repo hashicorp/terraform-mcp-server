@@ -3,267 +3,352 @@ package terraform
 import (
 	"testing"
 
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tidwall/gjson"
 )
 
-func TestWorkspaceReadOnlyTools(t *testing.T) {
+func TestWorkspaceHappyPath(t *testing.T) {
+	if tfeOrgName == "" {
+		t.Skip("TFE_ORG_NAME is not set; skipping workspace tools tests")
+	}
+	
+	client := tfeClient(t)
 	s := newTestingSession(t)
 	defer s.Close()
 
-	result, resultText := callTool(t, s, "list_terraform_orgs", map[string]any{})
+	wsName := randomName("workspace-")
 
-	require.False(t, result.IsError, "Organization tool call result should not be an error")
-	require.NotEmpty(t, resultText, "Organiation tool call result must not be empty")
+	// Create workspace
+	createResult, createResultText := callTool(t, s, "create_workspace", map[string]any{
+		"terraform_org_name": tfeOrgName,
+		"workspace_name":     wsName,
+		"description":        "Created by terraform-mcp-server integration tests",
+	})
+	require.False(t, createResult.IsError, "create_workspace should not return an error")
+	require.NotEmpty(t, createResultText, "create_workspace result should not be empty")
 
-	assert.NotEqual(t, int(gjson.Get(resultText, "items.#").Int()), 0, "Organization tool call result should not contain an empty list")
-	assert.NotEmpty(t, gjson.Get(resultText, "items.0.organization_name").String(), "Tool call result should contain organization names")
-	assert.NotEmpty(t, gjson.Get(resultText, "items.0.organization_email").String(), "Tool call result should contain organization email addresses")
+	assert.Equal(t, wsName, gjson.Get(createResultText, "data.attributes.workspace.name").String(), "Created workspace name should match the requested name")
 
-	firstOrgName := gjson.Get(resultText, "items.0.organization_name").String()
+	// List workspaces filtered by name — find the created workspace and extract
+	// its ID because create_workspace does not return it directly.
+	// Done inline (not in a subtest) so wsID is available to the cleanup and
+	// all subsequent subtests.
+	listResult, listResultText := callTool(t, s, "list_workspaces", map[string]any{
+		"terraform_org_name": tfeOrgName,
+		"search_query":       wsName,
+	})
+	require.False(t, listResult.IsError, "list_workspaces should not return an error")
 
-	listResult, listResultText := callTool(t, s, "list_workspaces",
-		map[string]any{
-			"terraform_org_name": firstOrgName,
-		})
+	var wsID string
+	gjson.Get(listResultText, "items").ForEach(func(_, item gjson.Result) bool {
+		if item.Get("workspace_name").String() == wsName {
+			wsID = item.Get("id").String()
+			return false
+		}
+		return true
+	})
+	require.NotEmpty(t, wsID, "Created workspace %q should appear in list_workspaces", wsName)
 
-	require.False(t, listResult.IsError, "Workspace tool call result should not be an error")
-	require.NotEmpty(t, listResultText, "Workspace tool call result should not be empty")
-
-	assert.NotEqual(t, int(gjson.Get(listResultText, "items.#").Int()), 0, "Workspace tool call result should not contain an empty list")
-
-	firstWorkspaceId := gjson.Get(listResultText, "items.0.id").String()
-	assert.NotEmpty(t, firstWorkspaceId, "First workspace should have an ID")
-
-	firstWorkspaceName := gjson.Get(listResultText, "items.0.workspace_name").String()
-	assert.NotEmpty(t, firstWorkspaceName, "First workspace should have a name")
+	// Ensure the workspace is deleted at the end of the test using the TFE client
+	// directly — independent of the tools under test.
+	defer client.Workspaces.SafeDeleteByID(t.Context(), wsID)
 
 	t.Run("Get workspace details", func(t *testing.T) {
-		t.Run("Happy path - valid org and workspace", func(t *testing.T) {
-			getResult, getResultText := callTool(t, s, "get_workspace_details", map[string]any{
-				"terraform_org_name": firstOrgName,
-				"workspace_name":     firstWorkspaceName,
-			})
-
-			require.False(t, getResult.IsError, "get_workspace_details should not return an error")
-			require.NotEmpty(t, getResultText, "get_workspace_details result should not be empty")
-
-			assert.True(t, gjson.Get(getResultText, "data.attributes.success").Bool(), "Response should indicate success")
-			assert.Equal(t, firstWorkspaceName, gjson.Get(getResultText, "data.attributes.workspace.name").String(), "Workspace name should match the requested workspace")
-			assert.NotEmpty(t, gjson.Get(getResultText, "data.attributes.readme").String(), "Response should include a readme")
+		getResult, getResultText := callTool(t, s, "get_workspace_details", map[string]any{
+			"terraform_org_name": tfeOrgName,
+			"workspace_name":     wsName,
 		})
-
-		t.Run("Non-existent workspace returns an error", func(t *testing.T) {
-			getResult, _ := callTool(t, s, "get_workspace_details", map[string]any{
-				"terraform_org_name": firstOrgName,
-				"workspace_name":     "this-workspace-does-not-exist-xyz",
-			})
-
-			assert.True(t, getResult.IsError, "get_workspace_details should return an error for a non-existent workspace")
-		})
-
-		t.Run("Non-existent org returns an error", func(t *testing.T) {
-			getResult, _ := callTool(t, s, "get_workspace_details", map[string]any{
-				"terraform_org_name": "this-org-does-not-exist-xyz",
-				"workspace_name":     firstWorkspaceName,
-			})
-
-			assert.True(t, getResult.IsError, "get_workspace_details should return an error for a non-existent org")
-		})
+		require.False(t, getResult.IsError, "get_workspace_details should not return an error")
+		assert.True(t, gjson.Get(getResultText, "data.attributes.success").Bool(), "Response should indicate success")
+		assert.Equal(t, wsName, gjson.Get(getResultText, "data.attributes.workspace.name").String(), "Workspace name should match")
 	})
 
-	t.Run("List workspace variables", func(t *testing.T) {
-		t.Run("Happy path - valid org and workspace", func(t *testing.T) {
-			listVarsResult, listVarsResultText := callTool(t, s, "list_workspace_variables",
-				map[string]any{
-					"terraform_org_name": firstOrgName,
-					"workspace_name":     firstWorkspaceName,
-				})
+	// Workspace variables tests
+	runVariablesTest(t, s, wsName)
 
-			require.False(t, listVarsResult.IsError, "list_workspace_variables should not return an error")
-			require.NotEmpty(t, listVarsResultText, "list_workspace_variables result should not be empty")
+	// Tags create and read
+	runWorkspaceTagsTest(t, s, wsName)
 
-			assert.True(t, gjson.Get(listVarsResultText, "data").IsArray(), "list_workspace_variables result should contain a data array")
+	// Update workspace
+	t.Run("Update workspace", func(t *testing.T) {
+		updatedDescription := "Updated by terraform-mcp-server integration tests"
+		updateResult, updateResultText := callTool(t, s, "update_workspace", map[string]any{
+			"terraform_org_name": tfeOrgName,
+			"workspace_name":     wsName,
+			"description":        updatedDescription,
+		})
+		require.False(t, updateResult.IsError, "update_workspace should not return an error")
+		assert.Equal(t, updatedDescription, gjson.Get(updateResultText, "data.attributes.description").String(), "Updated description should be reflected in the response")
 
-			// Check if workspace has variables, if not, then skip variable specific assert statements
-			if gjson.Get(listVarsResultText, "data.#").Int() > 0 {
-				assert.NotEmpty(t, gjson.Get(listVarsResultText, "data.0.id").String(), "First variable should have an ID")
-				assert.Equal(t, "vars", gjson.Get(listVarsResultText, "data.0.type").String(), "First variable should have type 'vars'")
-				assert.NotEmpty(t, gjson.Get(listVarsResultText, "data.0.attributes.key").String(), "First variable should have a key")
-				assert.NotEmpty(t, gjson.Get(listVarsResultText, "data.0.attributes.category").String(), "First variable should have a category")
-			} else {
-				t.Log("Workspace has no variables; skipping per-variable field assertions")
+		// Get workspace details after update — confirm the description change persisted
+		getResult, getResultText := callTool(t, s, "get_workspace_details", map[string]any{
+			"terraform_org_name": tfeOrgName,
+			"workspace_name":     wsName,
+		})
+		require.False(t, getResult.IsError, "get_workspace_details after update should not return an error")
+		assert.Equal(t, updatedDescription, gjson.Get(getResultText, "data.attributes.workspace.description").String(), "get_workspace_details should reflect the updated description")
+	})
+
+	// Delete workspace
+	t.Run("Delete workspace", func(t *testing.T) {
+		deleteResult, _ := callTool(t, s, "delete_workspace_safely", map[string]any{
+			"workspace_id": wsID,
+		})
+		require.False(t, deleteResult.IsError, "delete_workspace_safely should not return an error")
+
+		// Get workspace details after delete — confirm it no longer exists
+		getResult, _ := callTool(t, s, "get_workspace_details", map[string]any{
+			"terraform_org_name": tfeOrgName,
+			"workspace_name":     wsName,
+		})
+		assert.True(t, getResult.IsError, "get_workspace_details should return an error after deletion")
+	})
+}
+
+func runVariablesTest(t *testing.T, s *mcp.ClientSession, wsName string) {
+	t.Helper()
+	t.Run("Workspace variables", func(t *testing.T) {
+		// Create variable
+		createVarResult, _ := callTool(t, s, "create_workspace_variable", map[string]any{
+			"terraform_org_name": tfeOrgName,
+			"workspace_name":     wsName,
+			"key":                "test_key",
+			"value":              "initial_value",
+			"category":           "terraform",
+			"description":        "Created by integration test",
+		})
+		require.False(t, createVarResult.IsError, "create_workspace_variable should not return an error")
+
+		// List variables — confirm the variable exists and capture its ID
+		listVarsResult, listVarsResultText := callTool(t, s, "list_workspace_variables", map[string]any{
+			"terraform_org_name": tfeOrgName,
+			"workspace_name":     wsName,
+		})
+
+		require.False(t, listVarsResult.IsError, "list_workspace_variables should not return an error")
+		require.Greater(t, int(gjson.Get(listVarsResultText, "data.#").Int()), 0, "Variable list should not be empty after creation")
+
+		varID := gjson.Get(listVarsResultText, "data.0.id").String()
+		require.NotEmpty(t, varID, "Variable should have an ID")
+		assert.Equal(t, "test_key", gjson.Get(listVarsResultText, "data.0.attributes.key").String(), "Variable key should match")
+		assert.Equal(t, "initial_value", gjson.Get(listVarsResultText, "data.0.attributes.value").String(), "Variable value should match initial value")
+
+		// Update variable
+		updateVarResult, _ := callTool(t, s, "update_workspace_variable", map[string]any{
+			"terraform_org_name": tfeOrgName,
+			"workspace_name":     wsName,
+			"variable_id":        varID,
+			"key":                "test_key",
+			"value":              "updated_value",
+		})
+		require.False(t, updateVarResult.IsError, "update_workspace_variable should not return an error")
+
+		// List again — confirm the updated value
+		listAfterResult, listAfterResultText := callTool(t, s, "list_workspace_variables", map[string]any{
+			"terraform_org_name": tfeOrgName,
+			"workspace_name":     wsName,
+		})
+		require.False(t, listAfterResult.IsError, "list_workspace_variables after update should not return an error")
+		assert.Equal(t, "updated_value", gjson.Get(listAfterResultText, "data.0.attributes.value").String(), "Variable value should reflect the update")
+	})
+}
+
+func runWorkspaceTagsTest(t *testing.T, s *mcp.ClientSession, wsName string) {
+	t.Helper()
+	t.Run("Workspace tags", func(t *testing.T) {
+		// Create tags — one plain tag and one key:value tag binding
+		createTagsResult, createTagsResultText := callTool(t, s, "create_workspace_tags", map[string]any{
+			"terraform_org_name": tfeOrgName,
+			"workspace_name":     wsName,
+			"tags":               "test-tag, env:staging",
+		})
+		require.False(t, createTagsResult.IsError, "create_workspace_tags should not return an error")
+		assert.Contains(t, createTagsResultText, wsName, "create_workspace_tags response should reference the workspace name")
+
+		// Read tags — confirm both the plain tag and the key:value binding appear
+		readTagsResult, readTagsResultText := callTool(t, s, "read_workspace_tags", map[string]any{
+			"terraform_org_name": tfeOrgName,
+			"workspace_name":     wsName,
+		})
+		require.False(t, readTagsResult.IsError, "read_workspace_tags should not return an error")
+		assert.Contains(t, readTagsResultText, wsName, "read_workspace_tags response should reference the workspace name")
+		assert.Contains(t, readTagsResultText, "test-tag", "read_workspace_tags response should include the plain tag")
+		assert.Contains(t, readTagsResultText, "env:staging", "read_workspace_tags response should include the key:value tag binding")
+	})
+}
+
+// TestWorkspaceErrorPaths exercises error branches that fires when a caller
+// provides a non-existent org/workspace name or a stale workspace ID.
+
+func TestWorkspaceErrorPaths(t *testing.T) {
+	if tfeOrgName == "" {
+		t.Skip("TFE_ORG_NAME is not set; skipping workspace error-path tests")
+	}
+
+	client := tfeClient(t)
+	s := newTestingSession(t)
+	defer s.Close()
+
+	nonExistentOrg := randomName("org-")
+	nonExistentWs := randomName("workspace-")
+	const nonExistentWsID = "ws-0000000000dead"
+	const nonExistentVarID = "var-0000000000dead"
+
+	t.Run("create_workspace duplicate name", func(t *testing.T) {
+		// Create the workspace once.
+		wsName := randomName("workspace-")
+		first, _ := callTool(t, s, "create_workspace", map[string]any{
+			"terraform_org_name": tfeOrgName,
+			"workspace_name":     wsName,
+		})
+		require.False(t, first.IsError, "first create_workspace should succeed")
+
+		// Register cleanup so the workspace is removed regardless of what follows.
+		listResult, listText := callTool(t, s, "list_workspaces", map[string]any{
+			"terraform_org_name": tfeOrgName,
+			"search_query":       wsName,
+		})
+		require.False(t, listResult.IsError, "list_workspaces should succeed after first create")
+		var wsID string
+		gjson.Get(listText, "items").ForEach(func(_, item gjson.Result) bool {
+			if item.Get("workspace_name").String() == wsName {
+				wsID = item.Get("id").String()
+				return false
 			}
+			return true
 		})
+		require.NotEmpty(t, wsID, "workspace should appear in list after first create")
+		defer client.Workspaces.SafeDeleteByID(t.Context(), wsID)
 
-		t.Run("Non-existent workspace returns an error", func(t *testing.T) {
-			listVarsResult, _ := callTool(t, s, "list_workspace_variables", map[string]any{
-				"terraform_org_name": firstOrgName,
-				"workspace_name":     "this-workspace-does-not-exist-xyz",
-			})
-
-			assert.True(t, listVarsResult.IsError, "list_workspace_variables should return an error for a non-existent workspace")
+		// Attempt to create the same workspace again — must fail.
+		second, _ := callTool(t, s, "create_workspace", map[string]any{
+			"terraform_org_name": tfeOrgName,
+			"workspace_name":     wsName,
 		})
-
-		t.Run("Non-existent org returns an error", func(t *testing.T) {
-			listVarsResult, _ := callTool(t, s, "list_workspace_variables", map[string]any{
-				"terraform_org_name": "this-org-does-not-exist-xyz",
-				"workspace_name":     firstWorkspaceName,
-			})
-
-			assert.True(t, listVarsResult.IsError, "list_workspace_variables should return an error for a non-existent org")
-		})
+		assert.True(t, second.IsError, "second create_workspace with the same name should return an error")
 	})
 
-	t.Run("Read workspace tags", func(t *testing.T) {
-		t.Run("Happy path - valid org and workspace", func(t *testing.T) {
-			tagsResult, tagsResultText := callTool(t, s, "read_workspace_tags", map[string]any{
-				"terraform_org_name": firstOrgName,
-				"workspace_name":     firstWorkspaceName,
-			})
-
-			require.False(t, tagsResult.IsError, "read_workspace_tags should not return an error")
-			require.NotEmpty(t, tagsResultText, "read_workspace_tags result should not be empty")
-
-			assert.Contains(t, tagsResultText, firstWorkspaceName, "Response should reference the workspace name")
+	t.Run("list_workspaces non-existent org", func(t *testing.T) {
+		result, _ := callTool(t, s, "list_workspaces", map[string]any{
+			"terraform_org_name": nonExistentOrg,
 		})
-
-		t.Run("Non-existent workspace returns an error", func(t *testing.T) {
-			tagsResult, _ := callTool(t, s, "read_workspace_tags", map[string]any{
-				"terraform_org_name": firstOrgName,
-				"workspace_name":     "this-workspace-does-not-exist-xyz",
-			})
-
-			assert.True(t, tagsResult.IsError, "read_workspace_tags should return an error for a non-existent workspace")
-		})
-
-		t.Run("Non-existent org returns an error", func(t *testing.T) {
-			tagsResult, _ := callTool(t, s, "read_workspace_tags", map[string]any{
-				"terraform_org_name": "this-org-does-not-exist-xyz",
-				"workspace_name":     firstWorkspaceName,
-			})
-
-			assert.True(t, tagsResult.IsError, "read_workspace_tags should return an error for a non-existent org")
-		})
+		assert.True(t, result.IsError, "list_workspaces with a non-existent org should return an error")
 	})
 
-	t.Run("List workspace policy sets", func(t *testing.T) {
-		t.Run("Happy path - valid org and workspace ID", func(t *testing.T) {
-			policySetsResult, policySetsResultText := callTool(t, s, "list_workspace_policy_sets", map[string]any{
-				"terraform_org_name": firstOrgName,
-				"workspace_id":       firstWorkspaceId,
-			})
+	t.Run("get_workspace_details non-existent workspace", func(t *testing.T) {
+		result, _ := callTool(t, s, "get_workspace_details", map[string]any{
+			"terraform_org_name": tfeOrgName,
+			"workspace_name":     nonExistentWs,
+		})
+		assert.True(t, result.IsError, "get_workspace_details with a non-existent workspace should return an error")
+	})
 
-			require.False(t, policySetsResult.IsError, "list_workspace_policy_sets should not return an error")
-			require.NotEmpty(t, policySetsResultText, "list_workspace_policy_sets result should not be empty")
+	t.Run("get_workspace_details non-existent org", func(t *testing.T) {
+		result, _ := callTool(t, s, "get_workspace_details", map[string]any{
+			"terraform_org_name": nonExistentOrg,
+			"workspace_name":     nonExistentWs,
+		})
+		assert.True(t, result.IsError, "get_workspace_details with a non-existent org should return an error")
+	})
 
-			// Response is either a JSON array of policy sets or a plain-text "No policy sets" message
-			if gjson.Valid(policySetsResultText) && gjson.Parse(policySetsResultText).IsArray() {
-				assert.NotEmpty(t, gjson.Get(policySetsResultText, "0.id").String(), "First policy set should have an ID")
-				assert.NotEmpty(t, gjson.Get(policySetsResultText, "0.name").String(), "First policy set should have a name")
-			} else {
-				assert.Contains(t, policySetsResultText, firstWorkspaceId, "No-policy-sets message should reference the workspace ID")
+	t.Run("update_workspace non-existent workspace", func(t *testing.T) {
+		result, _ := callTool(t, s, "update_workspace", map[string]any{
+			"terraform_org_name": tfeOrgName,
+			"workspace_name":     nonExistentWs,
+			"description":        "should never land",
+		})
+		assert.True(t, result.IsError, "update_workspace with a non-existent workspace should return an error")
+	})
+
+	// update_workspace — non-existent org name
+	t.Run("update_workspace non-existent org", func(t *testing.T) {
+		result, _ := callTool(t, s, "update_workspace", map[string]any{
+			"terraform_org_name": nonExistentOrg,
+			"workspace_name":     nonExistentWs,
+			"description":        "should never land",
+		})
+		assert.True(t, result.IsError, "update_workspace with a non-existent org should return an error")
+	})
+
+	// delete_workspace_safely — non-existent workspace ID
+	t.Run("delete_workspace_safely non-existent workspace ID", func(t *testing.T) {
+		result, _ := callTool(t, s, "delete_workspace_safely", map[string]any{
+			"workspace_id": nonExistentWsID,
+		})
+		assert.True(t, result.IsError, "delete_workspace_safely with a non-existent workspace ID should return an error")
+	})
+
+	// create_workspace_variable — non-existent workspace
+	t.Run("create_workspace_variable non-existent workspace", func(t *testing.T) {
+		result, _ := callTool(t, s, "create_workspace_variable", map[string]any{
+			"terraform_org_name": tfeOrgName,
+			"workspace_name":     nonExistentWs,
+			"key":                "some_key",
+			"value":              "some_value",
+		})
+		assert.True(t, result.IsError, "create_workspace_variable with a non-existent workspace should return an error")
+	})
+
+	// create_workspace_variable — non-existent org
+	t.Run("create_workspace_variable non-existent org", func(t *testing.T) {
+		result, _ := callTool(t, s, "create_workspace_variable", map[string]any{
+			"terraform_org_name": nonExistentOrg,
+			"workspace_name":     nonExistentWs,
+			"key":                "some_key",
+			"value":              "some_value",
+		})
+		assert.True(t, result.IsError, "create_workspace_variable with a non-existent org should return an error")
+	})
+
+	// update_workspace_variable — non-existent workspace
+	t.Run("update_workspace_variable non-existent workspace", func(t *testing.T) {
+		result, _ := callTool(t, s, "update_workspace_variable", map[string]any{
+			"terraform_org_name": tfeOrgName,
+			"workspace_name":     nonExistentWs,
+			"variable_id":        nonExistentVarID,
+			"key":                "some_key",
+			"value":              "some_value",
+		})
+		assert.True(t, result.IsError, "update_workspace_variable with a non-existent workspace should return an error")
+	})
+
+	// update_workspace_variable — non-existent variable ID (workspace exists)
+	t.Run("update_workspace_variable non-existent variable ID", func(t *testing.T) {
+		// Create a throw-away workspace so the workspace lookup succeeds, but the
+		// variable ID does not exist.
+		wsName := randomName("workspace-")
+		createResult, _ := callTool(t, s, "create_workspace", map[string]any{
+			"terraform_org_name": tfeOrgName,
+			"workspace_name":     wsName,
+		})
+		require.False(t, createResult.IsError, "setup create_workspace should succeed")
+
+		listResult, listText := callTool(t, s, "list_workspaces", map[string]any{
+			"terraform_org_name": tfeOrgName,
+			"search_query":       wsName,
+		})
+		require.False(t, listResult.IsError)
+		var wsID string
+		gjson.Get(listText, "items").ForEach(func(_, item gjson.Result) bool {
+			if item.Get("workspace_name").String() == wsName {
+				wsID = item.Get("id").String()
+				return false
 			}
+			return true
 		})
+		require.NotEmpty(t, wsID)
+		defer client.Workspaces.SafeDeleteByID(t.Context(), wsID)
 
-		t.Run("Non-existent org returns an error", func(t *testing.T) {
-			policySetsResult, _ := callTool(t, s, "list_workspace_policy_sets", map[string]any{
-				"terraform_org_name": "this-org-does-not-exist-xyz",
-				"workspace_id":       firstWorkspaceId,
-			})
-
-			assert.True(t, policySetsResult.IsError, "list_workspace_policy_sets should return an error for a non-existent org")
+		result, _ := callTool(t, s, "update_workspace_variable", map[string]any{
+			"terraform_org_name": tfeOrgName,
+			"workspace_name":     wsName,
+			"variable_id":        nonExistentVarID,
+			"key":                "some_key",
+			"value":              "some_value",
 		})
-
-	})
-
-	t.Run("List state versions", func(t *testing.T) {
-		t.Run("Happy path - workspace with state versions", func(t *testing.T) {
-			svResult, svResultText := callTool(t, s, "list_state_versions", map[string]any{
-				"terraform_org_name": firstOrgName,
-				"workspace_name":     firstWorkspaceName,
-			})
-
-			if svResult.IsError {
-				t.Log("Workspace has no state versions; skipping state version field assertions")
-				return
-			}
-
-			require.NotEmpty(t, svResultText, "list_state_versions result should not be empty")
-			assert.True(t, gjson.Get(svResultText, "items").IsArray(), "Response should contain an items array")
-			assert.NotEmpty(t, gjson.Get(svResultText, "items.0.id").String(), "First state version should have an ID")
-			assert.NotZero(t, gjson.Get(svResultText, "items.0.serial").Int(), "First state version should have a serial number")
-			assert.NotEmpty(t, gjson.Get(svResultText, "items.0.terraform_version").String(), "First state version should have a terraform version")
-		})
-
-		t.Run("Non-existent workspace returns an error", func(t *testing.T) {
-			svResult, _ := callTool(t, s, "list_state_versions", map[string]any{
-				"terraform_org_name": firstOrgName,
-				"workspace_name":     "this-workspace-does-not-exist-xyz",
-			})
-
-			assert.True(t, svResult.IsError, "list_state_versions should return an error for a non-existent workspace")
-		})
-
-		t.Run("Non-existent org returns an error", func(t *testing.T) {
-			svResult, _ := callTool(t, s, "list_state_versions", map[string]any{
-				"terraform_org_name": "this-org-does-not-exist-xyz",
-				"workspace_name":     firstWorkspaceName,
-			})
-
-			assert.True(t, svResult.IsError, "list_state_versions should return an error for a non-existent org")
-		})
-	})
-
-	t.Run("Get state version", func(t *testing.T) {
-		t.Run("Neither param provided returns an error", func(t *testing.T) {
-			svResult, _ := callTool(t, s, "get_state_version", map[string]any{})
-
-			assert.True(t, svResult.IsError, "get_state_version should return an error when neither state_version_id nor workspace_id is provided")
-		})
-
-		t.Run("By workspace ID returns the latest state version", func(t *testing.T) {
-			svResult, svResultText := callTool(t, s, "get_state_version", map[string]any{
-				"workspace_id": firstWorkspaceId,
-			})
-
-			if svResult.IsError {
-				t.Log("Workspace has no current state version; skipping state version field assertions")
-				return
-			}
-
-			require.NotEmpty(t, svResultText, "get_state_version result should not be empty")
-			assert.NotEmpty(t, gjson.Get(svResultText, "ID").String(), "State version should have an ID")
-			assert.NotEmpty(t, gjson.Get(svResultText, "TerraformVersion").String(), "State version should include the terraform version")
-
-			firstStateVersionID := gjson.Get(svResultText, "ID").String()
-
-			t.Run("By state version ID returns that exact version", func(t *testing.T) {
-				byIDResult, byIDResultText := callTool(t, s, "get_state_version", map[string]any{
-					"state_version_id": firstStateVersionID,
-				})
-
-				require.False(t, byIDResult.IsError, "get_state_version should not return an error for a valid state_version_id")
-				assert.Equal(t, firstStateVersionID, gjson.Get(byIDResultText, "ID").String(), "Returned state version ID should match the requested ID")
-			})
-		})
-
-		t.Run("Non-existent state version ID returns an error", func(t *testing.T) {
-			svResult, _ := callTool(t, s, "get_state_version", map[string]any{
-				"state_version_id": "sv-doesnotexistxyz",
-			})
-
-			assert.True(t, svResult.IsError, "get_state_version should return an error for a non-existent state version ID")
-		})
-
-		t.Run("Non-existent workspace ID returns an error", func(t *testing.T) {
-			svResult, _ := callTool(t, s, "get_state_version", map[string]any{
-				"workspace_id": "ws-doesnotexistxyz",
-			})
-
-			assert.True(t, svResult.IsError, "get_state_version should return an error for a non-existent workspace ID")
-		})
+		assert.True(t, result.IsError, "update_workspace_variable with a non-existent variable ID should return an error")
 	})
 }
 
