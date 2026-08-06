@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/hashicorp/go-tfe"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -16,6 +17,8 @@ const toolCallTimeout = 30 * time.Second
 var (
 	mcpEndpoint string
 	tfeToken    string
+	tfeAddress  string
+	tfeOrgName  string
 
 	testingClient *mcp.Client
 )
@@ -34,6 +37,8 @@ func (t *authTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 func init() {
 	mcpEndpoint = os.Getenv("TF_MCP_ENDPOINT")
 	tfeToken = os.Getenv("TFE_TOKEN")
+	tfeAddress = os.Getenv("TFE_ADDRESS")
+	tfeOrgName = os.Getenv("TFE_ORG_NAME")
 
 	testingClient = mcp.NewClient(&mcp.Implementation{
 		Name:    "terraform-mcp-server-test-harness",
@@ -71,6 +76,29 @@ func newTestingSession(t *testing.T) *mcp.ClientSession {
 	}
 
 	return session
+}
+
+// newTFEClient creates a client that bypasses the MCP server and communicates
+// directly with the TFE API. It can verify create, update, and delete tool calls
+// against the actual API.
+func tfeClient(t *testing.T) *tfe.Client {
+	if tfeToken == "" {
+		t.Skip("You need to supply TFE_TOKEN to run these tests")
+	}
+
+	address := tfeAddress
+	if address == "" {
+		address = "https://app.terraform.io"
+	}
+
+	client, err := tfe.NewClient(&tfe.Config{
+		Address: address,
+		Token:   tfeToken,
+	})
+	if err != nil {
+		t.Fatalf("Failed to create direct TFE client: %v", err)
+	}
+	return client
 }
 
 func getTextContent(result *mcp.CallToolResult) string {
