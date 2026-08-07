@@ -4,10 +4,11 @@
 package tools
 
 import (
+	"bytes"
 	"context"
-	"encoding/json"
 	"strings"
 
+	"github.com/google/jsonapi"
 	"github.com/hashicorp/terraform-mcp-server/pkg/client"
 	log "github.com/sirupsen/logrus"
 
@@ -55,10 +56,10 @@ func getTeamHandler(ctx context.Context, request mcp.CallToolRequest, logger *lo
 		return ToolErrorf(logger, "failed to read team %q: %v", teamID, err)
 	}
 
-	teamJSON, err := json.Marshal(team)
-	if err != nil {
+	buf := bytes.NewBuffer(nil)
+	if err := jsonapi.MarshalPayloadWithoutIncluded(buf, team); err != nil {
 		return ToolError(logger, "failed to marshal team details", err)
 	}
 
-	return mcp.NewToolResultText(string(teamJSON)), nil
+	return mcp.NewToolResultText(buf.String()), nil
 }

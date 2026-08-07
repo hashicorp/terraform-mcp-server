@@ -11,6 +11,9 @@ import (
 
 	"github.com/hashicorp/go-tfe"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"github.com/tidwall/gjson"
 )
 
 const (
@@ -150,4 +153,35 @@ func callTool(t *testing.T, s *mcp.ClientSession, toolName string, arguments map
 		t.Logf("Tool call success: %q: %v", toolName, arguments)
 	}
 	return result, textContent
+}
+
+func TestGetTeam(t *testing.T) {
+	client := tfeClient(t)
+	entitlements, err := client.Organizations.ReadEntitlements(t.Context(), tfeOrgName)
+	require.NoError(t, err, "Failed to read entitlements for organization %q", tfeOrgName)
+	if !entitlements.Teams {
+		t.Skipf("Organization %q does not have the Teams entitlement", tfeOrgName)
+	}
+
+	// Get a real team ID to look up (the owners team always exists)
+	teams, err := client.Teams.List(t.Context(), tfeOrgName, nil)
+	require.NoError(t, err)
+	require.NotEmpty(t, teams.Items, "Expected at least one team in the organization")
+	teamID := teams.Items[0].ID
+
+	s := newTestingSession(t)
+	defer s.Close()
+
+	result, resultText := callTool(t, s, "get_team", map[string]any{
+		"team_id": teamID,
+	})
+
+	require.False(t, result.IsError, "Tool call result should not be an error")
+	require.NotEmpty(t, resultText, "Tool call result must not be empty")
+
+	// MarshalPayloadWithoutIncluded returns a JSON:API envelope, not a flat object.
+	assert.Equal(t, teamID, gjson.Get(resultText, "data.id").String(), "Response should contain the requested team ID")
+	assert.NotEmpty(t, gjson.Get(resultText, "data.attributes.name").String(), "Response should contain the team name")
+	assert.NotEmpty(t, gjson.Get(resultText, "data.attributes.visibility").String(), "Response should contain the team visibility")
+	assert.True(t, gjson.Get(resultText, "data.attributes.users-count").Exists(), "Response should contain the user count field")
 }

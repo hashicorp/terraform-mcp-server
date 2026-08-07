@@ -32,6 +32,7 @@ var ToolToToolset = map[string]string{
 	// Terraform tools - Team
 	"create_team": Terraform,
 	"list_teams":  Terraform,
+	"get_team": Terraform,
 
 	// Terraform tools - Workspace management
 	"list_workspaces":                     Terraform,
