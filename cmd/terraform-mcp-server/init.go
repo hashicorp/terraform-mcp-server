@@ -16,12 +16,14 @@ import (
 	"time"
 
 	"github.com/hashicorp/terraform-mcp-server/pkg/client"
+	mcpofficial "github.com/hashicorp/terraform-mcp-server/pkg/mcp-official"
 	"github.com/hashicorp/terraform-mcp-server/pkg/resources"
 	"github.com/hashicorp/terraform-mcp-server/pkg/tools"
 	"github.com/hashicorp/terraform-mcp-server/pkg/toolsets"
 	"github.com/hashicorp/terraform-mcp-server/version"
 	instana "github.com/instana/go-sensor"
 	"github.com/mark3labs/mcp-go/server"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -298,7 +300,7 @@ func setupInstana(logger *log.Logger) instana.TracerLogger {
 	})
 }
 
-func streamableHTTPServerInit(ctx context.Context, hcServer *server.MCPServer, logger *log.Logger, host string, port string, endpointPath string, heartbeatInterval time.Duration, organizationAllowlist []string) error {
+func streamableHTTPServerInit(ctx context.Context, hcServer *server.MCPServer, logger *log.Logger, host string, port string, endpointPath string, heartbeatInterval time.Duration, organizationAllowlist []string, enabledToolsets []string) error {
 	// Ensure endpoint path starts with /
 	endpointPath = path.Join("/", endpointPath)
 	var handler http.Handler
@@ -363,6 +365,12 @@ func streamableHTTPServerInit(ctx context.Context, hcServer *server.MCPServer, l
 	// Handle the /mcp endpoint with the streamable server (with security wrapper)
 	mux.Handle(endpointPath, streamableServer)
 	mux.Handle(endpointPath+"/", streamableServer)
+
+	// Create the official go-sdk streamable server
+	officialStreamableServer := getOfficialStreamableServer(ctx, heartbeatInterval, isStateless, tlsConfig, corsConfig, logger, organizationAllowlist, enabledToolsets)
+	// Handle the /mcp endpoint with the official go-sdk streamable server (with security wrapper)
+	mux.Handle(endpointPath+"/official", officialStreamableServer)
+	mux.Handle(endpointPath+"/official/", officialStreamableServer)
 
 	if redirectURL := os.Getenv("MCP_REDIRECT_ROOT_URL"); redirectURL != "" {
 		logger.Infof("Requests to `/` will be redirected to %s", redirectURL)
@@ -445,4 +453,24 @@ func streamableHTTPServerInit(ctx context.Context, hcServer *server.MCPServer, l
 	}
 
 	return nil
+}
+
+func getOfficialStreamableServer(ctx context.Context, heartbeatInterval time.Duration, isStateless bool, tlsConfig *client.TLSConfig, corsConfig client.CORSConfig, logger *log.Logger, organizationAllowlist []string, enabledToolsets []string) http.Handler {
+	hcServer := mcpofficial.NewServer(heartbeatInterval, logger, enabledToolsets)
+
+	opts := &mcp.StreamableHTTPOptions{
+		Stateless:             isStateless,
+		CrossOriginProtection: nil, // disables the SDK's built-in cross-origin protection entirely.
+	}
+
+	// Create the base MCP handler
+	mcpHandler := mcp.NewStreamableHTTPHandler(func(r *http.Request) *mcp.Server {
+		return hcServer
+	}, opts)
+
+	// Create a security wrappers around the streamable server
+	streamableServer := client.OrganizationAllowlistMiddleware(organizationAllowlist, logger)(mcpHandler)
+	streamableServer = client.TerraformContextMiddleware(logger)(streamableServer)
+	streamableServer = client.NewSecurityHandler(streamableServer, corsConfig.AllowedOrigins, corsConfig.Mode, logger)
+	return streamableServer
 }
