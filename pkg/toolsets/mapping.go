@@ -31,6 +31,7 @@ var ToolToToolset = map[string]string{
 
 	// Terraform tools - Team
 	"create_team": Terraform,
+	"list_teams":  Terraform,
 
 	// Terraform tools - Workspace management
 	"list_workspaces":                     Terraform,
@@ -69,7 +70,6 @@ var ToolToToolset = map[string]string{
 	"list_state_versions":                 Terraform,
 	"get_state_version":                   Terraform,
 	"get_run_comments":                    Terraform,
-	"list_teams":                          Terraform,
 }
 
 // GetToolsetForTool returns the toolset name for a given tool name

@@ -39,15 +39,6 @@ func (t *authTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	return t.roundtripper.RoundTrip(req)
 }
 
-func randomName(prefix string) string {
-	suffix := make([]byte, randomNameLength)
-	for i := range suffix {
-		suffix[i] = alphaNum[rand.Intn(len(alphaNum))]
-	}
-
-	return prefix + string(suffix)
-}
-
 func init() {
 	mcpEndpoint = os.Getenv("TF_MCP_ENDPOINT")
 	tfeToken = os.Getenv("TFE_TOKEN")
@@ -120,6 +111,15 @@ func tfeClient(t *testing.T) *tfe.Client {
 	return client
 }
 
+func randomName(prefix string) string {
+	suffix := make([]byte, randomNameLength)
+	for i := range suffix {
+		suffix[i] = alphaNum[rand.Intn(len(alphaNum))]
+	}
+
+	return prefix + string(suffix)
+}
+
 func getTextContent(result *mcp.CallToolResult) string {
 	if result == nil {
 		return ""
@@ -131,7 +131,6 @@ func getTextContent(result *mcp.CallToolResult) string {
 			b.WriteString(cc.Text)
 		}
 	}
-
 	return b.String()
 }
 

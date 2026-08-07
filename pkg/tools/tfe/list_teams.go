@@ -90,9 +90,9 @@ func listTeamsHandler(ctx context.Context, request mcp.CallToolRequest, logger *
 		return ToolErrorf(logger, "No teams to list in organization %q", terraformOrgName)
 	}
 
-	teamSummaries := make([]*TeamSummary, len(teams.Items))
+	teamSummaries := make([]*TeamDetails, len(teams.Items))
 	for i, t := range teams.Items {
-		teamSummaries[i] = &TeamSummary{
+		teamSummaries[i] = &TeamDetails{
 			ID:         t.ID,
 			Name:       t.Name,
 			Visibility: t.Visibility,
@@ -100,7 +100,7 @@ func listTeamsHandler(ctx context.Context, request mcp.CallToolRequest, logger *
 		}
 	}
 
-	teamsJSON, err := json.Marshal(&TeamSummaryList{
+	teamsJSON, err := json.Marshal(&TeamDetailsList{
 		Items:      teamSummaries,
 		Pagination: teams.Pagination,
 	})
@@ -110,16 +110,16 @@ func listTeamsHandler(ctx context.Context, request mcp.CallToolRequest, logger *
 	return mcp.NewToolResultText(string(teamsJSON)), nil
 }
 
-// TeamSummary is a truncated summary of Teams details for listing
-type TeamSummary struct {
+// TeamDetails is a truncated summary of Teams details for listing
+type TeamDetails struct {
 	ID         string `json:"id"`
 	Name       string `json:"name"`
 	Visibility string `json:"visibility"`
 	UserCount  int    `json:"users-count"`
 }
 
-// TeamSummaryList is a list of Team summaries with pagination
-type TeamSummaryList struct {
-	Items []*TeamSummary `json:"items"`
+// TeamDetailsList is a list of Team summaries with pagination
+type TeamDetailsList struct {
+	Items []*TeamDetails `json:"items"`
 	*tfe.Pagination
 }
