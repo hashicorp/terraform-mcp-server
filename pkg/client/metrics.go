@@ -18,8 +18,8 @@ type MetricsConfig struct {
 	ExportInterval        time.Duration            // Controls the frequency of metric flushes
 	ServiceName           string                   // ServiceName identifies the source of the metrics (e.g., "terraform-mcp-server")
 	ServiceVersion        string                   // ServiceVersion helps track metrics across different deployments
-	ServiceInstanceID     string                   // ServiceInstanceID uniquely identifies this running instance, so replicas don't collapse into one entity
-	K8sPodUID             string                   // K8sPodUID links the instance to its Kubernetes pod. Empty when not running in Kubernetes
+	ServiceInstanceID     string                   // ServiceInstanceID uniquely identifies this replica, so they don't collapse into one entity
+	InstanceIDIsPodUID    bool                     // InstanceIDIsPodUID is true when we're in k8s and the id came from the env, so it's a real pod UID
 	MeterProvider         *sdkmetric.MeterProvider // MeterProvider is the OTel provider used to create instruments
 	Attributes            []attribute.KeyValue     // Attributes are global labels applied to every metric emitted
 	EnableRuntimeMetrics  bool                     // EnableRuntimeMetrics toggles the collection of Go runtime stats (GC, Memory)
@@ -37,12 +37,17 @@ type ClientInfo struct {
 }
 
 // defaultServiceInstanceID falls back to the hostname so stdio and local runs still
-// get a distinct id when nothing is set in the environment.
+// get a distinct id when nothing's set in the env.
 func defaultServiceInstanceID() string {
 	if hostname, err := os.Hostname(); err == nil && hostname != "" {
 		return hostname
 	}
 	return "unknown"
+}
+
+// runningInKubernetes tells us if we're in a pod. kube sets this in every pod.
+func runningInKubernetes() bool {
+	return os.Getenv("KUBERNETES_SERVICE_HOST") != ""
 }
 
 func DefaultMetricsConfig() MetricsConfig {
@@ -53,7 +58,7 @@ func DefaultMetricsConfig() MetricsConfig {
 		ServiceName:          "terraform-mcp-server",
 		ServiceVersion:       "latest",
 		ServiceInstanceID:    defaultServiceInstanceID(),
-		K8sPodUID:            "",
+		InstanceIDIsPodUID:   false,
 		MeterProvider:        nil,
 		Attributes:           []attribute.KeyValue{},
 		EnableRuntimeMetrics: true,
@@ -91,19 +96,14 @@ func LoadMetricsConfigFromEnv(logger *log.Logger) MetricsConfig {
 	} else {
 		logger.Infof("OTEL_METRICS_SERVICE_VERSION not set in env, using default: %s", config.ServiceVersion)
 	}
-	if instanceID := os.Getenv("OTEL_SERVICE_INSTANCE_ID"); instanceID != "" {
+	if instanceID := os.Getenv("OTEL_INSTANCE_ID"); instanceID != "" {
 		config.ServiceInstanceID = instanceID
-		logger.Infof("Using env value for OTEL_SERVICE_INSTANCE_ID: %s", instanceID)
+		// only a real pod uid if we're in a pod and something explicitly handed us
+		// the id. the hostname fallback is a pod name, not a uid.
+		config.InstanceIDIsPodUID = runningInKubernetes()
+		logger.Infof("Using env value for OTEL_INSTANCE_ID: %s", instanceID)
 	} else {
-		logger.Infof("OTEL_SERVICE_INSTANCE_ID not set in env, using default: %s", config.ServiceInstanceID)
-	}
-	// only set in k8s. left empty everywhere else so we're not sticking a
-	// k8s.pod.uid on a process that isn't in a pod.
-	if podUID := os.Getenv("OTEL_K8S_POD_UID"); podUID != "" {
-		config.K8sPodUID = podUID
-		logger.Infof("Using env value for OTEL_K8S_POD_UID: %s", podUID)
-	} else {
-		logger.Infof("OTEL_K8S_POD_UID not set in env, k8s.pod.uid will be omitted")
+		logger.Infof("OTEL_INSTANCE_ID not set in env, using default: %s", config.ServiceInstanceID)
 	}
 	if enabled := os.Getenv("OTEL_METRICS_ENABLED"); enabled == "true" {
 		config.Enabled = true
