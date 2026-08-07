@@ -23,8 +23,10 @@ var ToolToToolset = map[string]string{
 	"search_private_providers":     RegistryPrivate,
 	"get_private_provider_details": RegistryPrivate,
 
-	// Terraform tools - Organization and Project
-	"list_terraform_orgs":     Terraform,
+	// Terraform tools - Organization
+	"list_terraform_orgs": Terraform,
+
+	// Terraform tools - Project
 	"list_terraform_projects": Terraform,
 	"create_project":          Terraform,
 	"delete_project":          Terraform,
