@@ -448,14 +448,15 @@ func initMetrics(ctx context.Context, config *client.MetricsConfig, logger *log.
 
 	// without service.instance.id every replica sends the exact same resource and
 	// the backend folds them into one entity. k8s.pod.uid is the separate attribute
-	// that links that entity back to the pod, only added when we're in k8s.
+	// that links that entity back to the pod, only set when we're in k8s and the id
+	// was handed to us, so we know it's a real pod uid and not a hostname.
 	resourceOpts := []attribute.KeyValue{
 		attribute.String("service.name", config.ServiceName),
 		attribute.String("service.version", config.ServiceVersion),
 		attribute.String("service.instance.id", config.ServiceInstanceID),
 	}
-	if config.K8sPodUID != "" {
-		resourceOpts = append(resourceOpts, attribute.String("k8s.pod.uid", config.K8sPodUID))
+	if config.InstanceIDIsPodUID {
+		resourceOpts = append(resourceOpts, attribute.String("k8s.pod.uid", config.ServiceInstanceID))
 	}
 	resourceAttrs := resource.NewSchemaless(resourceOpts...)
 	config.MeterProvider = sdkmetric.NewMeterProvider(
