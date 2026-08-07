@@ -105,24 +105,9 @@ func (r *DynamicToolRegistry) registerTFETools() {
 
 	r.logger.Info("Registering TFE tools - first session with valid TFE client detected")
 
-	// Terraform toolset - Organization and Project tools
+	// Terraform toolset - Organization
 	if toolsets.IsToolEnabled("list_terraform_orgs", r.enabledToolsets) {
 		tool := r.createDynamicTFETool("list_terraform_orgs", tfeTools.ListTerraformOrgs)
-		r.mcpServer.AddTool(tool.Tool, tool.Handler)
-	}
-
-	if toolsets.IsToolEnabled("list_terraform_projects", r.enabledToolsets) {
-		tool := r.createDynamicTFETool("list_terraform_projects", tfeTools.ListTerraformProjects)
-		r.mcpServer.AddTool(tool.Tool, tool.Handler)
-	}
-
-	if toolsets.IsToolEnabled("create_project", r.enabledToolsets) {
-		tool := r.createDynamicTFETool("create_project", tfeTools.CreateProject)
-		r.mcpServer.AddTool(tool.Tool, tool.Handler)
-	}
-
-	if isTerraformOperationsEnabled() && toolsets.IsToolEnabled("delete_project", r.enabledToolsets) {
-		tool := r.createDynamicTFETool("delete_project", tfeTools.DeleteProject)
 		r.mcpServer.AddTool(tool.Tool, tool.Handler)
 	}
 
@@ -166,6 +151,16 @@ func (r *DynamicToolRegistry) registerTFETools() {
 	// Terraform toolset - Project management tools
 	if toolsets.IsToolEnabled("create_project", r.enabledToolsets) {
 		tool := r.createDynamicTFETool("create_project", tfeTools.CreateProject)
+		r.mcpServer.AddTool(tool.Tool, tool.Handler)
+	}
+
+	if toolsets.IsToolEnabled("list_terraform_projects", r.enabledToolsets) {
+		tool := r.createDynamicTFETool("list_terraform_projects", tfeTools.ListTerraformProjects)
+		r.mcpServer.AddTool(tool.Tool, tool.Handler)
+	}
+
+	if toolsets.IsToolEnabled("get_project", r.enabledToolsets) {
+		tool := r.createDynamicTFETool("get_project", tfeTools.GetProject)
 		r.mcpServer.AddTool(tool.Tool, tool.Handler)
 	}
 
@@ -370,13 +365,6 @@ func (r *DynamicToolRegistry) registerTFETools() {
 		tool := r.createDynamicTFETool("get_run_comments", tfeTools.GetRunComments)
 		r.mcpServer.AddTool(tool.Tool, tool.Handler)
 	}
-
-	// Terraform Toolset - Project
-	if toolsets.IsToolEnabled("get_project", r.enabledToolsets) {
-		tool := r.createDynamicTFETool("get_project", tfeTools.GetProject)
-		r.mcpServer.AddTool(tool.Tool, tool.Handler)
-	}
-
 	r.tfeToolsRegistered = true
 }
 

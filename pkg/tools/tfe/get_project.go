@@ -19,7 +19,7 @@ func GetProject(logger *log.Logger) server.ServerTool {
 	return server.ServerTool{
 		Tool: mcp.NewTool(
 			"get_project",
-			mcp.WithDescription(`Fetches detailed information about a Terraform project by its ID. If the project ID isn't already known, call list_terraform_projects first.`),
+			mcp.WithDescription(`Fetches detailed information about a Terraform project by its ID. If the project ID isn't already known, call "list_terraform_projects" first.`),
 			mcp.WithTitleAnnotation("Get a Terraform project by ID"),
 			mcp.WithOpenWorldHintAnnotation(true),
 			mcp.WithReadOnlyHintAnnotation(true),
@@ -33,12 +33,10 @@ func GetProject(logger *log.Logger) server.ServerTool {
 			return getProjectHandler(ctx, request, logger)
 		},
 	}
-
 }
 
 // getProjectHandler handles tool logics and functionality
 func getProjectHandler(ctx context.Context, request mcp.CallToolRequest, logger *log.Logger) (*mcp.CallToolResult, error) {
-
 	projectID, err := request.RequireString("project_id")
 	if err != nil {
 		return ToolError(logger, "Missing required input: project_id", err)
@@ -78,7 +76,6 @@ func getProjectHandler(ctx context.Context, request mcp.CallToolRequest, logger 
 	if err != nil {
 		return ToolError(logger, "Failed to serialize project", err)
 	}
-
 	return mcp.NewToolResultText(string(projectJSON)), nil
 }
 
