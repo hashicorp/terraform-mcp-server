@@ -3,6 +3,7 @@ package mcpofficial
 import (
 	"time"
 
+	"github.com/hashicorp/terraform-mcp-server/version"
 	log "github.com/sirupsen/logrus"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -19,7 +20,7 @@ func NewServer(heartbeatInterval time.Duration, logger *log.Logger, enabledTools
 	svr := mcp.NewServer(
 		&mcp.Implementation{
 			Name:    "terraform-mcp-official",
-			Version: "1.0.0",
+			Version: version.Version,
 		},
 		svrOptions,
 	)
