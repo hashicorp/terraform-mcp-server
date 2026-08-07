@@ -132,6 +132,11 @@ func (r *DynamicToolRegistry) registerTFETools() {
 		r.mcpServer.AddTool(tool.Tool, tool.Handler)
 	}
 
+	if toolsets.IsToolEnabled("list_teams", r.enabledToolsets) {
+		tool := r.createDynamicTFETool("list_teams", tfeTools.ListTeams)
+		r.mcpServer.AddTool(tool.Tool, tool.Handler)
+	}
+
 	// Terraform toolset - Workspace management tools
 	if toolsets.IsToolEnabled("list_workspaces", r.enabledToolsets) {
 		tool := r.createDynamicTFETool("list_workspaces", tfeTools.ListWorkspaces)
@@ -347,7 +352,6 @@ func (r *DynamicToolRegistry) registerTFETools() {
 		tool := r.createDynamicTFETool("get_run_comments", tfeTools.GetRunComments)
 		r.mcpServer.AddTool(tool.Tool, tool.Handler)
 	}
-
 	r.tfeToolsRegistered = true
 }
 

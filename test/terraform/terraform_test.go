@@ -39,15 +39,6 @@ func (t *authTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	return t.roundtripper.RoundTrip(req)
 }
 
-func randomName(prefix string) string {
-	suffix := make([]byte, randomNameLength)
-	for i := range suffix {
-		suffix[i] = alphaNum[rand.Intn(len(alphaNum))]
-	}
-
-	return prefix + string(suffix)
-}
-
 func init() {
 	mcpEndpoint = os.Getenv("TF_MCP_ENDPOINT")
 	tfeToken = os.Getenv("TFE_TOKEN")
@@ -68,6 +59,11 @@ func newTestingSession(t *testing.T) *mcp.ClientSession {
 
 	if tfeToken == "" {
 		t.Skip("You need to supply TFE_TOKEN to run these tests")
+	}
+
+	if tfeOrgName == "" {
+		tfeOrgName = "terraform-ai-ecosystem-testing"
+		t.Logf("TFE_ORG_NAME was not specified, using: %q", tfeOrgName)
 	}
 
 	httpClient := &http.Client{
@@ -115,6 +111,15 @@ func tfeClient(t *testing.T) *tfe.Client {
 	return client
 }
 
+func randomName(prefix string) string {
+	suffix := make([]byte, randomNameLength)
+	for i := range suffix {
+		suffix[i] = alphaNum[rand.Intn(len(alphaNum))]
+	}
+
+	return prefix + string(suffix)
+}
+
 func getTextContent(result *mcp.CallToolResult) string {
 	if result == nil {
 		return ""
@@ -126,7 +131,6 @@ func getTextContent(result *mcp.CallToolResult) string {
 			b.WriteString(cc.Text)
 		}
 	}
-
 	return b.String()
 }
 
@@ -143,7 +147,7 @@ func callTool(t *testing.T, s *mcp.ClientSession, toolName string, arguments map
 	if result.IsError {
 		t.Logf("Tool call %q was an error: %v", toolName, textContent)
 	} else {
-		t.Logf("Tool call success: %q: %#v", toolName, arguments)
+		t.Logf("Tool call success: %q: %v", toolName, arguments)
 	}
 	return result, textContent
 }
