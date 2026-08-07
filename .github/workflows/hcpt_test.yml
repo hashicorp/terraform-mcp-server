@@ -28,6 +28,8 @@ jobs:
           make build
 
       - name: Start server
+        env:
+          ENABLE_TF_OPERATIONS: true
         run: |
           nohup ./bin/terraform-mcp-server streamable-http --transport-host 0.0.0.0 --transport-port 8080 2>&1 &
 
