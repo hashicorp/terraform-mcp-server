@@ -88,9 +88,10 @@ func getWorkspaceDetailsForTools(ctx context.Context, toolType string, tfeClient
 	}
 
 	result := &client.WorkspaceToolResponse{
-		Success:   true,
-		Type:      toolType,
-		Workspace: workspace,
+		Success:     true,
+		Type:        toolType,
+		WorkspaceID: workspace.ID,
+		Workspace:   workspace,
 	}
 
 	if includeDetails {
@@ -113,11 +114,12 @@ func getWorkspaceDetailsForTools(ctx context.Context, toolType string, tfeClient
 		}
 
 		result = &client.WorkspaceToolResponse{
-			Success:   true,
-			Type:      toolType,
-			Workspace: workspace,
-			Variables: variables.Items,
-			Readme:    readme,
+			Success:     true,
+			Type:        toolType,
+			WorkspaceID: workspace.ID,
+			Workspace:   workspace,
+			Variables:   variables.Items,
+			Readme:      readme,
 		}
 	}
 

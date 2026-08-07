@@ -31,25 +31,8 @@ func TestWorkspaceHappyPath(t *testing.T) {
 
 	assert.Equal(t, wsName, gjson.Get(createResultText, "data.attributes.workspace.name").String(), "Created workspace name should match the requested name")
 
-	// List workspaces filtered by name — find the created workspace and extract
-	// its ID because create_workspace does not return it directly.
-	// Done inline (not in a subtest) so wsID is available to the cleanup and
-	// all subsequent subtests.
-	listResult, listResultText := callTool(t, s, "list_workspaces", map[string]any{
-		"terraform_org_name": tfeOrgName,
-		"search_query":       wsName,
-	})
-	require.False(t, listResult.IsError, "list_workspaces should not return an error")
-
-	var wsID string
-	gjson.Get(listResultText, "items").ForEach(func(_, item gjson.Result) bool {
-		if item.Get("workspace_name").String() == wsName {
-			wsID = item.Get("id").String()
-			return false
-		}
-		return true
-	})
-	require.NotEmpty(t, wsID, "Created workspace %q should appear in list_workspaces", wsName)
+	wsID := gjson.Get(createResultText, "data.attributes.workspace_id").String()
+	require.NotEmpty(t, wsID, "create_workspace should return a workspace_id")
 
 	// Ensure the workspace is deleted at the end of the test using the TFE client
 	// directly — independent of the tools under test.
@@ -63,6 +46,7 @@ func TestWorkspaceHappyPath(t *testing.T) {
 		require.False(t, getResult.IsError, "get_workspace_details should not return an error")
 		assert.True(t, gjson.Get(getResultText, "data.attributes.success").Bool(), "Response should indicate success")
 		assert.Equal(t, wsName, gjson.Get(getResultText, "data.attributes.workspace.name").String(), "Workspace name should match")
+		assert.Equal(t, wsID, gjson.Get(getResultText, "data.attributes.workspace_id").String(), "get_workspace_details should return the workspace ID")
 	})
 
 	// Workspace variables tests
@@ -199,26 +183,14 @@ func TestWorkspaceErrorPaths(t *testing.T) {
 	t.Run("create_workspace duplicate name", func(t *testing.T) {
 		// Create the workspace once.
 		wsName := randomName("workspace-")
-		first, _ := callTool(t, s, "create_workspace", map[string]any{
+		first, firstText := callTool(t, s, "create_workspace", map[string]any{
 			"terraform_org_name": tfeOrgName,
 			"workspace_name":     wsName,
 		})
 		require.False(t, first.IsError, "first create_workspace should succeed")
 
-		// Register cleanup so the workspace is removed regardless of what follows.
-		listResult, listText := callTool(t, s, "list_workspaces", map[string]any{
-			"terraform_org_name": tfeOrgName,
-			"search_query":       wsName,
-		})
-		require.False(t, listResult.IsError, "list_workspaces should succeed after first create")
-		var wsID string
-		gjson.Get(listText, "items").ForEach(func(_, item gjson.Result) bool {
-			if item.Get("workspace_name").String() == wsName {
-				wsID = item.Get("id").String()
-				return false
-			}
-			return true
-		})
+		// Register cleanup using the workspace ID returned directly by create_workspace.
+		wsID := gjson.Get(firstText, "data.attributes.workspace_id").String()
 		require.NotEmpty(t, wsID, "workspace should appear in list after first create")
 		defer client.Workspaces.SafeDeleteByID(t.Context(), wsID)
 
@@ -319,25 +291,13 @@ func TestWorkspaceErrorPaths(t *testing.T) {
 		// Create a throw-away workspace so the workspace lookup succeeds, but the
 		// variable ID does not exist.
 		wsName := randomName("workspace-")
-		createResult, _ := callTool(t, s, "create_workspace", map[string]any{
+		createResult, createText := callTool(t, s, "create_workspace", map[string]any{
 			"terraform_org_name": tfeOrgName,
 			"workspace_name":     wsName,
 		})
 		require.False(t, createResult.IsError, "setup create_workspace should succeed")
 
-		listResult, listText := callTool(t, s, "list_workspaces", map[string]any{
-			"terraform_org_name": tfeOrgName,
-			"search_query":       wsName,
-		})
-		require.False(t, listResult.IsError)
-		var wsID string
-		gjson.Get(listText, "items").ForEach(func(_, item gjson.Result) bool {
-			if item.Get("workspace_name").String() == wsName {
-				wsID = item.Get("id").String()
-				return false
-			}
-			return true
-		})
+		wsID := gjson.Get(createText, "data.attributes.workspace_id").String()
 		require.NotEmpty(t, wsID)
 		defer client.Workspaces.SafeDeleteByID(t.Context(), wsID)
 
