@@ -61,6 +61,7 @@ automation and interaction capabilities for Infrastructure as Code (IaC) develop
 | `OTEL_METRICS_ENDPOINT` | URL of your OTel Collector or backend | `localhost:4318` |
 | `INSTANA_ENABLED` | Enable Instana instrumentation (metrics and HTTP request tracing) for the streamable-http server. Requires an Instana agent that is reachable by the server. | `false` |
 | `INSTANA_SERVICE_NAME` | If Instana instrumentation is enabled, the service name to use for the MCP server | `terraform-mcp-server` |
+| `TF_X_OFFICIAL_SDK_ENABLED` | Enable the server with the official mcp go-sdk | `false` |
 
 ```bash
 # Stdio mode

@@ -8,7 +8,6 @@ import (
 
 	"github.com/hashicorp/go-tfe"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
-	log "github.com/sirupsen/logrus"
 )
 
 type WorkspaceSummary struct {
@@ -25,7 +24,7 @@ type WorkspaceSummaryList struct {
 	Items []*WorkspaceSummary `json:"items"`
 }
 
-type SearchArgs struct {
+type ListWorkspacesArguments struct {
 	// Required field
 	TerraformOrgName string `json:"terraform_org_name" jsonschema:"The Terraform organization name"`
 
@@ -52,7 +51,7 @@ func ListWorkpsaceTool() *mcp.Tool {
 	}
 }
 
-func ListWorkspaceFunc(ctx context.Context, request *mcp.CallToolRequest, input SearchArgs) (*mcp.CallToolResult, *WorkspaceSummaryList, error) {
+func ListWorkspaceFunc(ctx context.Context, request *mcp.CallToolRequest, input ListWorkspacesArguments) (*mcp.CallToolResult, *WorkspaceSummaryList, error) {
 	terraformOrgName := strings.TrimSpace(input.TerraformOrgName)
 	projectID := input.ProjectID
 	searchQuery := input.SearchQuery
@@ -76,22 +75,9 @@ func ListWorkspaceFunc(ctx context.Context, request *mcp.CallToolRequest, input 
 		}
 	}
 
-	session := request.Session
-	if session == nil {
-		return nil, nil, fmt.Errorf("no active session")
-	}
-	var client *tfe.Client
-	if value, ok := activeTfeClients.Load(session.ID()); ok {
-		// Try to get existing client
-		client = value.(*tfe.Client)
-	}
-	var err error
-	if client == nil {
-		log.Printf("TFE client not found, creating a new one")
-		client, err = CreateTfeClientForSession(ctx, session.ID())
-		if err != nil {
-			return nil, nil, err
-		}
+	client, err := GetTfeClient(ctx)
+	if err != nil {
+		return nil, nil, err
 	}
 
 	workspaces, err := client.Workspaces.List(ctx, terraformOrgName, &tfe.WorkspaceListOptions{

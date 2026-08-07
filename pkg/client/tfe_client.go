@@ -98,7 +98,7 @@ func buildTFEConfig(terraformAddress string, terraformSkipTLSVerify bool, terraf
 		config.Headers.Set(SharedSecretHeader, secret)
 	}
 
-	config.HTTPClient = createHTTPClient(terraformSkipTLSVerify, logger)
+	config.HTTPClient = CreateHTTPClient(terraformSkipTLSVerify, logger)
 	return config
 }
 

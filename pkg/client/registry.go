@@ -23,8 +23,8 @@ import (
 
 const DefaultPublicRegistryURL = "https://registry.terraform.io"
 
-// createHTTPClient initializes a retryable HTTP client
-func createHTTPClient(insecureSkipVerify bool, logger *log.Logger) *http.Client {
+// CreateHTTPClient initializes a retryable HTTP client
+func CreateHTTPClient(insecureSkipVerify bool, logger *log.Logger) *http.Client {
 	retryClient := retryablehttp.NewClient()
 	retryClient.Logger = logger
 

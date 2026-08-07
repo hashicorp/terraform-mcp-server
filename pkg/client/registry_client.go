@@ -19,7 +19,7 @@ var (
 
 // NewHttpClient creates a new HTTP client for the given session
 func NewHttpClient(sessionId string, terraformSkipTLSVerify bool, logger *log.Logger) *http.Client {
-	client := createHTTPClient(terraformSkipTLSVerify, logger)
+	client := CreateHTTPClient(terraformSkipTLSVerify, logger)
 	activeHttpClients.Store(sessionId, client)
 	logger.Info("Created HTTP client")
 	return client

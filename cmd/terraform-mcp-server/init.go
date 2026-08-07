@@ -367,10 +367,12 @@ func streamableHTTPServerInit(ctx context.Context, hcServer *server.MCPServer, l
 	mux.Handle(endpointPath+"/", streamableServer)
 
 	// Create the official go-sdk streamable server
-	officialStreamableServer := getOfficialStreamableServer(ctx, heartbeatInterval, isStateless, tlsConfig, corsConfig, logger, organizationAllowlist, enabledToolsets)
-	// Handle the /mcp endpoint with the official go-sdk streamable server (with security wrapper)
-	mux.Handle(endpointPath+"/official", officialStreamableServer)
-	mux.Handle(endpointPath+"/official/", officialStreamableServer)
+	if enableOfficialSDK := os.Getenv("TF_X_OFFICIAL_SDK_ENABLED"); enableOfficialSDK == "true" {
+		officialStreamableServer := getOfficialStreamableServer(ctx, heartbeatInterval, isStateless, tlsConfig, corsConfig, logger, organizationAllowlist, enabledToolsets)
+		// Handle the /mcp endpoint with the official go-sdk streamable server (with security wrapper)
+		mux.Handle(endpointPath+"/official", officialStreamableServer)
+		mux.Handle(endpointPath+"/official/", officialStreamableServer)
+	}
 
 	if redirectURL := os.Getenv("MCP_REDIRECT_ROOT_URL"); redirectURL != "" {
 		logger.Infof("Requests to `/` will be redirected to %s", redirectURL)
@@ -456,6 +458,7 @@ func streamableHTTPServerInit(ctx context.Context, hcServer *server.MCPServer, l
 }
 
 func getOfficialStreamableServer(ctx context.Context, heartbeatInterval time.Duration, isStateless bool, tlsConfig *client.TLSConfig, corsConfig client.CORSConfig, logger *log.Logger, organizationAllowlist []string, enabledToolsets []string) http.Handler {
+	logger.Infof("Creating a go-sdk StreamableHTTP server...")
 	hcServer := mcpofficial.NewServer(heartbeatInterval, logger, enabledToolsets)
 
 	opts := &mcp.StreamableHTTPOptions{
