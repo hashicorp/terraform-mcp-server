@@ -8,7 +8,7 @@ import (
 	"context"
 	"strings"
 
-	"github.com/google/jsonapi"
+	"github.com/hashicorp/jsonapi"
 	"github.com/hashicorp/terraform-mcp-server/pkg/client"
 	log "github.com/sirupsen/logrus"
 
