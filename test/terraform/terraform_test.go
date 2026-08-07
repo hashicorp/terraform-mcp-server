@@ -111,7 +111,8 @@ func tfeClient(t *testing.T) *tfe.Client {
 		t.Fatalf("Failed to create direct TFE client: %v", err)
 	}
 	return client
-	
+}
+
 func requireTfOperations(t *testing.T) {
 	t.Helper()
 	if enableTfOperations != "true" {
