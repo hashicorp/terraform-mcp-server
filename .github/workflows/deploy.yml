@@ -1,0 +1,47 @@
+# Copyright (c) HashiCorp, Inc.
+# SPDX-License-Identifier: MPL-2.0
+
+name: deploy
+
+on:
+  workflow_run:
+    workflows: [build]
+    types: [completed]
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  dispatch_dev:
+    name: deploy build to remote dev
+    if: github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push'
+    runs-on: ubuntu-latest
+
+    env:
+      IMAGE_REPOSITORY: hashicorppreview/terraform-mcp-server
+      COMMIT_SHA: ${{ github.event.workflow_run.head_sha }}
+
+    steps:
+      - name: Check out built commit
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+        with:
+          ref: ${{ env.COMMIT_SHA }}
+
+      - name: Determine product version
+        id: version
+        uses: hashicorp/actions-set-product-version@v2
+        with:
+          checkout: false
+
+      - name: Send deploy-dev event
+        uses: peter-evans/repository-dispatch@28959ce8df70de7be546dd1250a005dd32156697 # v4.0.1
+        with: 
+          token: ${{ secrets.REMOTE_DEPLOY_TOKEN }} 
+          repository: hashicorp/terraform-mcp-server-remote 
+          event-type: deploy-dev 
+          client-payload: >-
+                {
+                  "image_repository": "${{ env.IMAGE_REPOSITORY }}",
+                  "image_tag": "${{ steps.version.outputs.product-version }}-${{ env.COMMIT_SHA }}"
+                }
