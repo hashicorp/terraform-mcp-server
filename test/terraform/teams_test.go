@@ -68,11 +68,6 @@ func TestListTeams(t *testing.T) {
 }
 
 func TestCreateTeam(t *testing.T) {
-
-	if tfeOrgName == "" {
-		t.Skip("You need to supply TFE_ORG_NAME to run this test")
-	}
-
 	s := newTestingSession(t)
 	defer s.Close()
 
