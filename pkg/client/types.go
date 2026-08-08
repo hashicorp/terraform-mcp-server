@@ -440,11 +440,12 @@ type TerraformPolicyDetails struct {
 }
 
 type WorkspaceToolResponse struct {
-	Type      string          `jsonapi:"primary,tool"`
-	Success   bool            `jsonapi:"attr,success"`
-	Workspace *tfe.Workspace  `jsonapi:"attr,workspace,omitempty"`
-	Variables []*tfe.Variable `jsonapi:"polyrelation,variables,omitempty"`
-	Readme    string          `jsonapi:"attr,readme,omitempty"`
+	Type        string          `jsonapi:"primary,tool"`
+	Success     bool            `jsonapi:"attr,success"`
+	WorkspaceID string          `jsonapi:"attr,workspace_id,omitempty"`
+	Workspace   *tfe.Workspace  `jsonapi:"attr,workspace,omitempty"`
+	Variables   []*tfe.Variable `jsonapi:"polyrelation,variables,omitempty"`
+	Readme      string          `jsonapi:"attr,readme,omitempty"`
 }
 
 type ModuleMetadata struct {
