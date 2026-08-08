@@ -8,6 +8,6 @@ import (
 
 func RegisterTools(svr *mcp.Server, logger *log.Logger, enabledToolsets []string) {
 	if toolsets.IsToolEnabled("list_workspaces", enabledToolsets) {
-		mcp.AddTool(svr, ListWorkpsaceTool(), ListWorkspaceFunc)
+		mcp.AddTool(svr, ListWorkpsacesTool(), ListWorkspacesFunc)
 	}
 }
