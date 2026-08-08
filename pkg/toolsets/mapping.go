@@ -13,6 +13,8 @@ var ToolToToolset = map[string]string{
 	"get_provider_capabilities":   Registry,
 	"search_modules":              Registry,
 	"get_module_details":          Registry,
+	"get_module_examples":         Registry,
+	"get_module_submodules":       Registry,
 	"get_latest_module_version":   Registry,
 	"search_policies":             Registry,
 	"get_policy_details":          Registry,
