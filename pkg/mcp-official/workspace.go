@@ -8,6 +8,7 @@ import (
 
 	"github.com/hashicorp/go-tfe"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+	log "github.com/sirupsen/logrus"
 )
 
 type WorkspaceSummary struct {
@@ -36,7 +37,7 @@ type ListWorkspacesArguments struct {
 	WildcardName string `json:"wildcard_name,omitempty" jsonschema:"Wildcard pattern"`
 }
 
-func ListWorkpsaceTool() *mcp.Tool {
+func ListWorkpsacesTool() *mcp.Tool {
 	trueVal := true
 	falseVal := false
 	return &mcp.Tool{
@@ -51,7 +52,8 @@ func ListWorkpsaceTool() *mcp.Tool {
 	}
 }
 
-func ListWorkspaceFunc(ctx context.Context, request *mcp.CallToolRequest, input ListWorkspacesArguments) (*mcp.CallToolResult, *WorkspaceSummaryList, error) {
+func ListWorkspacesFunc(ctx context.Context, request *mcp.CallToolRequest, input ListWorkspacesArguments) (*mcp.CallToolResult, *WorkspaceSummaryList, error) {
+	log.Info("ListWorkspaces for official mcp go-dk called..")
 	terraformOrgName := strings.TrimSpace(input.TerraformOrgName)
 	projectID := input.ProjectID
 	searchQuery := input.SearchQuery

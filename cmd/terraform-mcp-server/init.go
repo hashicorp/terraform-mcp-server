@@ -368,6 +368,7 @@ func streamableHTTPServerInit(ctx context.Context, hcServer *server.MCPServer, l
 
 	// Create the official go-sdk streamable server
 	if enableOfficialSDK := os.Getenv("TF_X_OFFICIAL_SDK_ENABLED"); enableOfficialSDK == "true" {
+		logger.Infof("TF_X_OFFICIAL_SDK_ENABLED set to true in env, enabling the official mcp go-sdk server")
 		officialStreamableServer := getOfficialStreamableServer(ctx, heartbeatInterval, isStateless, tlsConfig, corsConfig, logger, organizationAllowlist, enabledToolsets)
 		// Handle the /mcp endpoint with the official go-sdk streamable server (with security wrapper)
 		mux.Handle(endpointPath+"/official", officialStreamableServer)
