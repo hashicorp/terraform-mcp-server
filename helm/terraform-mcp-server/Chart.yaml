@@ -1,0 +1,18 @@
+apiVersion: v2
+name: terraform-mcp-server
+description: A Helm chart for running the Terraform MCP Server on Kubernetes
+type: application
+
+# Chart version. Increment on any change to the chart or its templates,
+# following Semantic Versioning (https://semver.org/).
+version: 0.3.0
+
+# The version of terraform-mcp-server this chart deploys.
+appVersion: "1.0.0"
+
+home: https://github.com/hashicorp/terraform-mcp-server
+sources:
+  - https://github.com/hashicorp/terraform-mcp-server
+maintainers:
+  - name: HashiCorp
+    url: https://github.com/hashicorp/terraform-mcp-server
