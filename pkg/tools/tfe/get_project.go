@@ -56,7 +56,7 @@ func getProjectHandler(ctx context.Context, request mcp.CallToolRequest, logger 
 		return ToolErrorf(logger, "Failed to read project %q: %v", projectID, err)
 	}
 
-	summary := &ProjectDetails{
+	details := &ProjectDetails{
 		ID:                   project.ID,
 		Name:                 project.Name,
 		Description:          project.Description,
@@ -64,15 +64,19 @@ func getProjectHandler(ctx context.Context, request mcp.CallToolRequest, logger 
 		IsUnified:            project.IsUnified,
 	}
 	if project.Organization != nil {
-		summary.OrganizationName = project.Organization.Name
+		details.OrganizationName = project.Organization.Name
+	}
+	if project.DefaultAgentPool != nil {
+		details.DefaultAgentPoolID = project.DefaultAgentPool.ID
+		details.DefaultAgentPoolName = project.DefaultAgentPool.Name
 	}
 	if project.AutoDestroyActivityDuration.IsSpecified() && !project.AutoDestroyActivityDuration.IsNull() {
 		if v, err := project.AutoDestroyActivityDuration.Get(); err == nil {
-			summary.AutoDestroyActivityDuration = v
+			details.AutoDestroyActivityDuration = v
 		}
 	}
 
-	projectJSON, err := json.Marshal(summary)
+	projectJSON, err := json.Marshal(details)
 	if err != nil {
 		return ToolError(logger, "Failed to serialize project", err)
 	}
@@ -88,4 +92,6 @@ type ProjectDetails struct {
 	IsUnified                   bool   `json:"is_unified"`
 	AutoDestroyActivityDuration string `json:"auto_destroy_activity_duration,omitempty"`
 	OrganizationName            string `json:"organization_name,omitempty"`
+	DefaultAgentPoolID          string `json:"default_agent_pool_id,omitempty"`
+	DefaultAgentPoolName        string `json:"default_agent_pool_name,omitempty"`
 }
