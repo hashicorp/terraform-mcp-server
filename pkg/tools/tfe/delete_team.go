@@ -37,7 +37,6 @@ func DeleteTeam(logger *log.Logger) server.ServerTool {
 
 // deleteTeamHandler handles tool logics and functionality
 func deleteTeamHandler(ctx context.Context, request mcp.CallToolRequest, logger *log.Logger) (*mcp.CallToolResult, error) {
-
 	teamID, err := request.RequireString("team_id")
 	if err != nil {
 		return ToolError(logger, "Missing required input: team_id", err)

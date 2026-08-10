@@ -79,7 +79,6 @@ var ToolToToolset = map[string]string{
 	"list_state_versions":                 Terraform,
 	"get_state_version":                   Terraform,
 	"get_run_comments":                    Terraform,
-	"delete_team":                         Terraform,
 }
 
 // GetToolsetForTool returns the toolset name for a given tool name
