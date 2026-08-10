@@ -310,7 +310,7 @@ func streamableHTTPServerInit(ctx context.Context, hcServer *server.MCPServer, l
 	// This is the modern MCP transport that supports both direct HTTP responses and SSE streams
 	opts := []server.StreamableHTTPOption{
 		server.WithEndpointPath(endpointPath), // Default MCP endpoint path
-		server.WithLogger(logger),
+		server.WithStreamableHTTPLogger(newSlogLogger(logger)),
 	}
 
 	// Load TLS configuration
