@@ -30,7 +30,7 @@ jobs:
 
       - name: Determine product version
         id: version
-        uses: hashicorp/actions-set-product-version@v2
+        uses: hashicorp/actions-set-product-version@d9be602dfa87e201c79a3937c038f19391c9a430 # v2.0.2
         with:
           checkout: false
 
