@@ -20,10 +20,12 @@ const (
 )
 
 var (
-	mcpEndpoint string
-	tfeToken    string
-	tfeAddress  string
-	tfeOrgName  string
+	mcpEndpoint  string
+	tfeToken     string
+	tfeAddress   string
+	tfeOrgName   string
+	tfeUsername  string
+	tfeUserEmail string
 
 	testingClient      *mcp.Client
 	enableTfOperations string
@@ -46,6 +48,8 @@ func init() {
 	tfeAddress = os.Getenv("TFE_ADDRESS")
 	tfeOrgName = os.Getenv("TFE_ORG_NAME")
 	enableTfOperations = os.Getenv("ENABLE_TF_OPERATIONS")
+	tfeUsername = os.Getenv("TFE_USERNAME")
+	tfeUserEmail = os.Getenv("TFE_USER_EMAIL")
 
 	testingClient = mcp.NewClient(&mcp.Implementation{
 		Name:    "terraform-mcp-server-test-harness",
@@ -66,6 +70,16 @@ func newTestingSession(t *testing.T) *mcp.ClientSession {
 	if tfeOrgName == "" {
 		tfeOrgName = "terraform-ai-ecosystem-testing"
 		t.Logf("TFE_ORG_NAME was not specified, using: %q", tfeOrgName)
+	}
+
+	if tfeUsername == "" {
+		tfeUsername = "doormat-at-hashicorp_com"
+		t.Logf("TFE_USERNAME was not specified, using: %q", tfeUsername)
+	}
+
+	if tfeUserEmail == "" {
+		tfeUserEmail = "doormat@hashicorp.com"
+		t.Logf("TFE_USER_EMAIL was not specified, using: %q", tfeUserEmail)
 	}
 
 	httpClient := &http.Client{

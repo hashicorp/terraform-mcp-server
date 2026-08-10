@@ -67,18 +67,18 @@ func addTeamMemberHandler(ctx context.Context, request mcp.CallToolRequest, logg
 		return ToolError(logger, "Failed to get Terraform client - ensure TFE_TOKEN and TFE_ADDRESS are configured", nil)
 	}
 
+	options := tfe.TeamMemberAddOptions{}
+	var memberID string
 	if username != "" {
-		if err := tfeClient.TeamMembers.Add(ctx, teamID, tfe.TeamMemberAddOptions{
-			Usernames: []string{username},
-		}); err != nil {
-			return ToolError(logger, fmt.Sprintf("Failed to add member %q to team %q", username, teamID), err)
-		}
+		options.Usernames = []string{username}
+		memberID = username
 	} else {
-		if err := tfeClient.TeamMembers.Add(ctx, teamID, tfe.TeamMemberAddOptions{
-			OrganizationMembershipIDs: []string{orgMembershipID},
-		}); err != nil {
-			return ToolError(logger, fmt.Sprintf("Failed to add membership ID %q to team %q", orgMembershipID, teamID), err)
-		}
+		options.OrganizationMembershipIDs = []string{orgMembershipID}
+		memberID = orgMembershipID
+	}
+
+	if err := tfeClient.TeamMembers.Add(ctx, teamID, options); err != nil {
+		return ToolError(logger, fmt.Sprintf("Failed to add member %q to team %q", memberID, teamID), err)
 	}
 	return mcp.NewToolResultText(fmt.Sprintf("Successfully added member to team %q", teamID)), nil
 }

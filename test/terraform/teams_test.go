@@ -160,10 +160,10 @@ func TestAddTeamMember(t *testing.T) {
 
 	// Look up doormat-at-hashicorp_com's organization membership ID so we can test both paths.
 	memberships, err := client.OrganizationMemberships.List(t.Context(), tfeOrgName, &tfe.OrganizationMembershipListOptions{
-		Emails: []string{"doormat@hashicorp.com"},
+		Emails: []string{tfeUserEmail},
 	})
 	require.NoError(t, err, "Failed to list organization memberships")
-	require.NotEmpty(t, memberships.Items, "Expected doormat-at-hashicorp_com to be a member of the organization")
+	require.NotEmpty(t, memberships.Items, "Expected %v to be a member of the organization", tfeUsername)
 	orgMembershipID := memberships.Items[0].ID
 
 	t.Run("add member by username", func(t *testing.T) {
@@ -172,7 +172,7 @@ func TestAddTeamMember(t *testing.T) {
 
 		result, resultText := callTool(t, s, "add_team_member", map[string]any{
 			"team_id":  team.ID,
-			"username": "doormat-at-hashicorp_com",
+			"username": tfeUsername,
 		})
 
 		require.False(t, result.IsError, "add_team_member returned an error: %s", resultText)
@@ -183,16 +183,16 @@ func TestAddTeamMember(t *testing.T) {
 		require.NoError(t, err, "Failed to list team members after add")
 		var found bool
 		for _, m := range members {
-			if m.Username == "doormat-at-hashicorp_com" {
+			if m.Username == tfeUsername {
 				found = true
 				break
 			}
 		}
-		assert.True(t, found, "doormat-at-hashicorp_com should be a member of the team after add_team_member")
+		assert.True(t, found, tfeUsername+" should be a member of the team after add_team_member")
 
-		// Remove doormat-at-hashicorp_com so the membership-ID sub-test starts from a clean state.
+		// Remove the member so the membership-ID sub-test starts from a clean state.
 		_ = client.TeamMembers.Remove(t.Context(), team.ID, tfe.TeamMemberRemoveOptions{
-			Usernames: []string{"doormat-at-hashicorp_com"},
+			Usernames: []string{tfeUsername},
 		})
 	})
 
@@ -213,12 +213,12 @@ func TestAddTeamMember(t *testing.T) {
 		require.NoError(t, err, "Failed to list team members after add")
 		var found bool
 		for _, m := range members {
-			if m.Username == "doormat-at-hashicorp_com" {
+			if m.Username == tfeUsername {
 				found = true
 				break
 			}
 		}
-		assert.True(t, found, "doormat-at-hashicorp_com should be a member of the team after add by membership ID")
+		assert.True(t, found, tfeUsername+" should be a member of the team after add by membership ID")
 	})
 
 	t.Run("errors when neither username nor membership ID is provided", func(t *testing.T) {
@@ -239,7 +239,7 @@ func TestAddTeamMember(t *testing.T) {
 
 		result, resultText := callTool(t, s, "add_team_member", map[string]any{
 			"team_id":                    team.ID,
-			"username":                   "doormat-at-hashicorp_com",
+			"username":                   tfeUsername,
 			"organization_membership_id": orgMembershipID,
 		})
 
