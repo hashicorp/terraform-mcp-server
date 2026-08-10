@@ -21,7 +21,7 @@ func AddTeamMember(logger *log.Logger) server.ServerTool {
 		Tool: mcp.NewTool(
 			"add_team_member",
 			mcp.WithDescription("Adds a single member to a Terraform Cloud/Enterprise team. Provide either a username (accepted invites only) or an organization membership ID (accepted and pending invites), not both."),
-			mcp.WithTitleAnnotation(`Add members to a Terraform team`),
+			mcp.WithTitleAnnotation(`Add member to a Terraform team`),
 			mcp.WithOpenWorldHintAnnotation(true),
 			mcp.WithReadOnlyHintAnnotation(false),
 			mcp.WithDestructiveHintAnnotation(false),
@@ -36,27 +36,21 @@ func AddTeamMember(logger *log.Logger) server.ServerTool {
 				mcp.Description("Organization membership ID of the member to add (e.g., 'ou-abc123'). Works for both accepted and pending organization invites. Prefer this over 'username' when the invitee has not yet accepted."),
 			),
 		),
-
 		Handler: func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			return addTeamMemberHandler(ctx, request, logger)
-
 		},
 	}
 }
 
 // addTeamMemberHandler handles tool logics and functionality
 func addTeamMemberHandler(ctx context.Context, request mcp.CallToolRequest, logger *log.Logger) (*mcp.CallToolResult, error) {
-
 	teamID, err := request.RequireString("team_id")
 	if err != nil {
 		return ToolError(logger, "Missing required input: team_id", err)
 	}
-	username := request.GetString("username", "")
-	orgMembershipID := request.GetString("organization_membership_id", "")
-
+	username := GetTrimmedString(request, "username", "")
+	orgMembershipID := GetTrimmedString(request, "organization_membership_id", "")
 	teamID = strings.TrimSpace(teamID)
-	username = strings.TrimSpace((username))
-	orgMembershipID = strings.TrimSpace(orgMembershipID)
 
 	if username == "" && orgMembershipID == "" {
 		return ToolError(logger, "One of 'username' or 'organization_membership_id' must be provided", nil)
@@ -86,6 +80,5 @@ func addTeamMemberHandler(ctx context.Context, request mcp.CallToolRequest, logg
 			return ToolError(logger, fmt.Sprintf("Failed to add membership ID %q to team %q", orgMembershipID, teamID), err)
 		}
 	}
-
 	return mcp.NewToolResultText(fmt.Sprintf("Successfully added member to team %q", teamID)), nil
 }
