@@ -24,7 +24,7 @@ var ToolToToolset = map[string]string{
 	"get_private_provider_details": RegistryPrivate,
 
 	// Terraform Tools - User
-	"whoami":              Terraform,
+	"whoami": Terraform,
 
 	// Terraform tools - Organization
 	"list_terraform_orgs": Terraform,
@@ -78,7 +78,6 @@ var ToolToToolset = map[string]string{
 	"list_state_versions":                 Terraform,
 	"get_state_version":                   Terraform,
 	"get_run_comments":                    Terraform,
-	"grant_team_access":                   Terraform,
 }
 
 // GetToolsetForTool returns the toolset name for a given tool name

@@ -58,7 +58,6 @@ var validTeamProjectAccessLevelsStr = strings.Join(validTeamProjectAccessLevels,
 
 // grantTeamAccessHandler handles tool logics and functionality
 func grantTeamAccessHandler(ctx context.Context, request mcp.CallToolRequest, logger *log.Logger) (*mcp.CallToolResult, error) {
-
 	teamID, err := request.RequireString("team_id")
 	if err != nil {
 		return ToolError(logger, "Missing required input: team_id", err)
@@ -67,12 +66,9 @@ func grantTeamAccessHandler(ctx context.Context, request mcp.CallToolRequest, lo
 	if err != nil {
 		return ToolError(logger, "Missing required input: access_level", err)
 	}
-	workspaceID := request.GetString("workspace_id", "")
-	projectID := request.GetString("project_id", "")
-
+	workspaceID := GetTrimmedString(request, "workspace_id", "")
+	projectID := GetTrimmedString(request, "project_id", "")
 	teamID = strings.TrimSpace(teamID)
-	workspaceID = strings.TrimSpace(workspaceID)
-	projectID = strings.TrimSpace(projectID)
 	accessLevel = strings.ToLower(strings.TrimSpace(accessLevel))
 
 	if workspaceID == "" && projectID == "" {
@@ -92,7 +88,6 @@ func grantTeamAccessHandler(ctx context.Context, request mcp.CallToolRequest, lo
 	}
 
 	if workspaceID != "" {
-
 		if !slices.Contains(validTeamAccessLevels, accessLevel) {
 			return ToolErrorf(logger, "Invalid Team access level %q - must be one of: %s", accessLevel, validTeamAccessLevelsStr)
 		}
@@ -115,7 +110,6 @@ func grantTeamAccessHandler(ctx context.Context, request mcp.CallToolRequest, lo
 		if err != nil {
 			return ToolError(logger, "failed to serialize summary", err)
 		}
-
 		return mcp.NewToolResultText(string(summaryJSON)), nil
 	}
 
@@ -141,7 +135,6 @@ func grantTeamAccessHandler(ctx context.Context, request mcp.CallToolRequest, lo
 	if err != nil {
 		return ToolError(logger, "failed to serialize summary", err)
 	}
-
 	return mcp.NewToolResultText(string(summaryJSON)), nil
 }
 
