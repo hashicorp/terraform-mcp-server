@@ -188,6 +188,7 @@ func NewServer(version string, logger *log.Logger, enabledToolsets []string, opt
 		server.WithResourceCapabilities(true, true),
 		server.WithInstructions(instructions),
 		server.WithToolHandlerMiddleware(rateLimitMiddleware.Middleware()),
+		server.WithToolHandlerMiddleware(client.ToolLoggingMiddleware(logger)),
 		server.WithElicitation(),
 	}
 	opts = append(defaultOpts, opts...)
