@@ -13,7 +13,6 @@ FIXES
 
 * `get_apply_logs` now checks the apply status before attempting to stream logs. If the apply is not yet in a terminal state (`finished`, `errored`, `canceled`), the tool returns an informative message instead of timing out.
 * [New Tool] `grant_team_access` Grants a team access to a workspace or project by ID. Requires `team_id`, `access_level`, and either `workspace_id` or `project_id` (mutually exclusive). Valid access levels for workspaces: `admin`, `read`, `write`, `plan`, `custom`. Valid access levels for projects: `admin`, `read`, `write`, `maintain`, `custom`.
-* [New Tool] `create_team` Creates a new team in a Terraform Cloud/Enterprise organization. Requires `terraform_org_name` and `team_name`; optional `visibility` ("secret" or "organization"). [427](https://github.com/hashicorp/terraform-mcp-server/pull/427)
 
 # 1.2.0
 

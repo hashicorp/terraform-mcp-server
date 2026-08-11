@@ -108,7 +108,7 @@ func grantTeamAccessHandler(ctx context.Context, request mcp.CallToolRequest, lo
 			Access:      string(ta.Access),
 		})
 		if err != nil {
-			return ToolError(logger, "failed to serialize summary", err)
+			return ToolError(logger, "Failed to serialize summary", err)
 		}
 		return mcp.NewToolResultText(string(summaryJSON)), nil
 	}
@@ -133,7 +133,7 @@ func grantTeamAccessHandler(ctx context.Context, request mcp.CallToolRequest, lo
 		Access:    string(tpa.Access),
 	})
 	if err != nil {
-		return ToolError(logger, "failed to serialize summary", err)
+		return ToolError(logger, "Failed to serialize summary", err)
 	}
 	return mcp.NewToolResultText(string(summaryJSON)), nil
 }
