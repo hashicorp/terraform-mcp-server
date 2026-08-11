@@ -24,7 +24,6 @@ func NewServer(heartbeatInterval time.Duration, logger *log.Logger, enabledTools
 		},
 		svrOptions,
 	)
-	logger.Info("Official mcp go-sdk server instance started at 127.0.0.1:8080/mcp/official..")
 	RegisterTools(svr, logger, enabledToolsets)
 	return svr
 }

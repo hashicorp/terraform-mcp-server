@@ -7,10 +7,6 @@ FEATURES
 * [New Tool] `get_project` Fetches detailed information about a Terraform project by its ID. Requires `project_id`.
 * [New Tool] `create_team` Creates a new team in a Terraform Cloud/Enterprise organization. Requires `terraform_org_name` and `team_name`; optional `visibility` ("secret" or "organization"). [427](https://github.com/hashicorp/terraform-mcp-server/pull/427)
 
-IMPROVEMENTS
-
-* Migrate code to use the official mcp go-sdk
-
 # 1.2.0
 
 FEATURES
