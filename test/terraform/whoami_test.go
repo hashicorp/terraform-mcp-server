@@ -21,4 +21,6 @@ func TestWhoAmI(t *testing.T) {
 	require.NotEmpty(t, resultText, "whoami should return a non-empty response")
 
 	assert.NotEmpty(t, gjson.Get(resultText, "username").String(), "response should contain a non-empty username")
+	assert.NotEmpty(t, gjson.Get(resultText, "email").String(), "response should contain a non-empty email")
+	assert.NotEmpty(t, gjson.Get(resultText, "is_service_account").String(), "response should contain a non-empty is_service_account flag")
 }

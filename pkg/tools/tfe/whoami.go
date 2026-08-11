@@ -28,6 +28,13 @@ func WhoAmI(logger *log.Logger) server.ServerTool {
 	}
 }
 
+// accountDetails is the response shape returned by the whoami tool.
+type accountDetails struct {
+	Username         string `json:"username"`
+	Email            string `json:"email"`
+	IsServiceAccount bool   `json:"is_service_account"`
+}
+
 func whoAmIHandler(ctx context.Context, _ mcp.CallToolRequest, logger *log.Logger) (*mcp.CallToolResult, error) {
 	tfeClient, err := client.GetTfeClientFromContext(ctx, logger)
 	if err != nil {
@@ -39,10 +46,10 @@ func whoAmIHandler(ctx context.Context, _ mcp.CallToolRequest, logger *log.Logge
 		return ToolError(logger, "failed to read account details", err)
 	}
 
-	result := map[string]any{
-		"username":           user.Username,
-		"email":              user.Email,
-		"is_service_account": user.IsServiceAccount,
+	result := accountDetails{
+		Username:         user.Username,
+		Email:            user.Email,
+		IsServiceAccount: user.IsServiceAccount,
 	}
 
 	buf, err := json.Marshal(result)
