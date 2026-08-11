@@ -38,5 +38,6 @@ jobs:
           TF_MCP_ENDPOINT: http://localhost:8080/mcp
           TFE_TOKEN: ${{ secrets.TFE_TOKEN_TESTING }}
           TFE_ORG_NAME: ${{ vars.TEST_TF_ORG_NAME }}
+          ENABLE_TF_OPERATIONS: true
         run: |
           make test-hcpt

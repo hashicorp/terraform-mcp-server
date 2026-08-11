@@ -59,17 +59,14 @@ func createProjectHandler(ctx context.Context, request mcp.CallToolRequest, logg
 	if err != nil {
 		return ToolError(logger, "missing required input: terraform_org_name", err)
 	}
-	terraformOrgName = strings.TrimSpace(terraformOrgName)
-
 	projectName, err := request.RequireString("project_name")
 	if err != nil {
 		return ToolError(logger, "missing required input: project_name", err)
 	}
+	description := GetTrimmedString(request, "description", "")
+	defaultExecutionMode := GetTrimmedString(request, "default_execution_mode", "")
+	terraformOrgName = strings.TrimSpace(terraformOrgName)
 	projectName = strings.TrimSpace(projectName)
-
-	description := request.GetString("description", "")
-
-	defaultExecutionMode := request.GetString("default_execution_mode", "")
 
 	tfeClient, err := client.GetTfeClientFromContext(ctx, logger)
 	if err != nil {
