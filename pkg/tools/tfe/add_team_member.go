@@ -76,7 +76,6 @@ func addTeamMemberHandler(ctx context.Context, request mcp.CallToolRequest, logg
 		options.OrganizationMembershipIDs = []string{orgMembershipID}
 		memberID = orgMembershipID
 	}
-
 	if err := tfeClient.TeamMembers.Add(ctx, teamID, options); err != nil {
 		return ToolError(logger, fmt.Sprintf("Failed to add member %q to team %q", memberID, teamID), err)
 	}

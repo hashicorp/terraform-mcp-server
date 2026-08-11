@@ -1,6 +1,7 @@
 package terraform
 
 import (
+	"slices"
 	"testing"
 
 	"github.com/hashicorp/go-tfe"
@@ -10,14 +11,8 @@ import (
 )
 
 func TestListTeams(t *testing.T) {
-
-	// Guard: skip if the organization does not support team management.
 	client := tfeClient(t)
-	entitlements, err := client.Organizations.ReadEntitlements(t.Context(), tfeOrgName)
-	require.NoError(t, err, "Failed to read entitlements for organization %q", tfeOrgName)
-	if !entitlements.Teams {
-		t.Skipf("Organization %q does not have the Teams entitlement", tfeOrgName)
-	}
+	requireTeamsEntitlement(t, client)
 
 	t.Run("list all teams", func(t *testing.T) {
 		s := newTestingSession(t)
@@ -73,16 +68,9 @@ func TestCreateTeam(t *testing.T) {
 	defer s.Close()
 
 	client := tfeClient(t)
+	requireTeamsEntitlement(t, client)
 	teamName := randomName("team-")
 	visibility := "organization"
-
-	// Guard: skip if the organization does not support team management.
-	entitlements, err := client.Organizations.ReadEntitlements(t.Context(), tfeOrgName)
-	require.NoError(t, err, "Failed to read entitlements for organization %q", tfeOrgName)
-
-	if !entitlements.Teams {
-		t.Skipf("Organization %q does not have the Teams entitlement", tfeOrgName)
-	}
 
 	result, resultText := callTool(t, s, "create_team", map[string]any{
 		"terraform_org_name": tfeOrgName,
@@ -113,11 +101,7 @@ func TestCreateTeam(t *testing.T) {
 
 func TestGetTeam(t *testing.T) {
 	client := tfeClient(t)
-	entitlements, err := client.Organizations.ReadEntitlements(t.Context(), tfeOrgName)
-	require.NoError(t, err, "Failed to read entitlements for organization %q", tfeOrgName)
-	if !entitlements.Teams {
-		t.Skipf("Organization %q does not have the Teams entitlement", tfeOrgName)
-	}
+	requireTeamsEntitlement(t, client)
 
 	// Get a real team ID to look up (the owners team always exists)
 	teams, err := client.Teams.List(t.Context(), tfeOrgName, nil)
@@ -144,13 +128,7 @@ func TestGetTeam(t *testing.T) {
 
 func TestAddTeamMember(t *testing.T) {
 	client := tfeClient(t)
-
-	// Guard: skip if the organization does not support team management.
-	entitlements, err := client.Organizations.ReadEntitlements(t.Context(), tfeOrgName)
-	require.NoError(t, err, "Failed to read entitlements for organization %q", tfeOrgName)
-	if !entitlements.Teams {
-		t.Skipf("Organization %q does not have the Teams entitlement", tfeOrgName)
-	}
+	requireTeamsEntitlement(t, client)
 
 	team, err := client.Teams.Create(t.Context(), tfeOrgName, tfe.TeamCreateOptions{
 		Name: tfe.String(randomName("team-")),
@@ -158,7 +136,7 @@ func TestAddTeamMember(t *testing.T) {
 	require.NoError(t, err, "Failed to create test team")
 	defer client.Teams.Delete(t.Context(), team.ID)
 
-	// Look up doormat-at-hashicorp_com's organization membership ID so we can test both paths.
+	// Look up users's organization membership ID so we can test both paths.
 	memberships, err := client.OrganizationMemberships.List(t.Context(), tfeOrgName, &tfe.OrganizationMembershipListOptions{
 		Emails: []string{tfeUserEmail},
 	})
@@ -181,13 +159,9 @@ func TestAddTeamMember(t *testing.T) {
 		// Verify via the TFE API directly.
 		members, err := client.TeamMembers.List(t.Context(), team.ID)
 		require.NoError(t, err, "Failed to list team members after add")
-		var found bool
-		for _, m := range members {
-			if m.Username == tfeUsername {
-				found = true
-				break
-			}
-		}
+		found := slices.ContainsFunc(members, func(m *tfe.User) bool {
+			return m.Username == tfeUsername
+		})
 		assert.True(t, found, tfeUsername+" should be a member of the team after add_team_member")
 
 		// Remove the member so the membership-ID sub-test starts from a clean state.
@@ -211,13 +185,9 @@ func TestAddTeamMember(t *testing.T) {
 		// Verify via the TFE API directly.
 		members, err := client.TeamMembers.List(t.Context(), team.ID)
 		require.NoError(t, err, "Failed to list team members after add")
-		var found bool
-		for _, m := range members {
-			if m.Username == tfeUsername {
-				found = true
-				break
-			}
-		}
+		found := slices.ContainsFunc(members, func(m *tfe.User) bool {
+			return m.Username == tfeUsername
+		})
 		assert.True(t, found, tfeUsername+" should be a member of the team after add by membership ID")
 	})
 

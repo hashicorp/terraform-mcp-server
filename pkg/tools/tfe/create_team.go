@@ -67,7 +67,7 @@ func createTeamHandler(ctx context.Context, request mcp.CallToolRequest, logger 
 	}
 	teamName = strings.TrimSpace(teamName)
 
-	visibility := strings.ToLower(strings.TrimSpace(request.GetString("visibility", "")))
+	visibility := strings.ToLower(GetTrimmedString(request, "visibility", ""))
 	if visibility != "" && !slices.Contains(validTeamVisibilities, visibility) {
 		return ToolErrorf(logger, "invalid visibility %q - must be one of: %s", visibility, validTeamVisibilitiesStr)
 	}

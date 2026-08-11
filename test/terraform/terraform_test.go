@@ -11,6 +11,7 @@ import (
 
 	"github.com/hashicorp/go-tfe"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+	"github.com/stretchr/testify/require"
 )
 
 const (
@@ -47,9 +48,9 @@ func init() {
 	tfeToken = os.Getenv("TFE_TOKEN")
 	tfeAddress = os.Getenv("TFE_ADDRESS")
 	tfeOrgName = os.Getenv("TFE_ORG_NAME")
-	enableTfOperations = os.Getenv("ENABLE_TF_OPERATIONS")
 	tfeUsername = os.Getenv("TFE_USERNAME")
 	tfeUserEmail = os.Getenv("TFE_USER_EMAIL")
+	enableTfOperations = os.Getenv("ENABLE_TF_OPERATIONS")
 
 	testingClient = mcp.NewClient(&mcp.Implementation{
 		Name:    "terraform-mcp-server-test-harness",
@@ -73,13 +74,11 @@ func newTestingSession(t *testing.T) *mcp.ClientSession {
 	}
 
 	if tfeUsername == "" {
-		tfeUsername = "doormat-at-hashicorp_com"
-		t.Logf("TFE_USERNAME was not specified, using: %q", tfeUsername)
+		t.Skip("You need to supply TFE_USERNAME to run these tests")
 	}
 
 	if tfeUserEmail == "" {
-		tfeUserEmail = "doormat@hashicorp.com"
-		t.Logf("TFE_USER_EMAIL was not specified, using: %q", tfeUserEmail)
+		t.Skip("You need to supply TFE_USER_EMAIL to run these tests")
 	}
 
 	httpClient := &http.Client{
@@ -131,6 +130,15 @@ func requireTfOperations(t *testing.T) {
 	t.Helper()
 	if enableTfOperations != "true" {
 		t.Skip("skipping: ENABLE_TF_OPERATIONS is not set to true")
+	}
+}
+
+func requireTeamsEntitlement(t *testing.T, client *tfe.Client) {
+	t.Helper()
+	entitlements, err := client.Organizations.ReadEntitlements(t.Context(), tfeOrgName)
+	require.NoError(t, err, "Failed to read entitlements for organization %q", tfeOrgName)
+	if !entitlements.Teams {
+		t.Skipf("Organization %q does not have the Teams entitlement", tfeOrgName)
 	}
 }
 

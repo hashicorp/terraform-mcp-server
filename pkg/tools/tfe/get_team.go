@@ -60,6 +60,5 @@ func getTeamHandler(ctx context.Context, request mcp.CallToolRequest, logger *lo
 	if err := jsonapi.MarshalPayloadWithoutIncluded(buf, team); err != nil {
 		return ToolError(logger, "failed to marshal team details", err)
 	}
-
 	return mcp.NewToolResultText(buf.String()), nil
 }
