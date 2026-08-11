@@ -23,6 +23,9 @@ var ToolToToolset = map[string]string{
 	"search_private_providers":     RegistryPrivate,
 	"get_private_provider_details": RegistryPrivate,
 
+	// Terraform Tools - User
+	"whoami":              Terraform,
+
 	// Terraform tools - Organization
 	"list_terraform_orgs": Terraform,
 
