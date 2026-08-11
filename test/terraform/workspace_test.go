@@ -10,10 +10,7 @@ import (
 )
 
 func TestWorkspaceHappyPath(t *testing.T) {
-	if tfeOrgName == "" {
-		t.Skip("TFE_ORG_NAME is not set; skipping workspace tools tests")
-	}
-	
+	requireTfOperations(t)
 	client := tfeClient(t)
 	s := newTestingSession(t)
 	defer s.Close()
@@ -167,10 +164,7 @@ func runWorkspaceTagsTest(t *testing.T, s *mcp.ClientSession, wsName string) {
 // provides a non-existent org/workspace name or a stale workspace ID.
 
 func TestWorkspaceErrorPaths(t *testing.T) {
-	if tfeOrgName == "" {
-		t.Skip("TFE_ORG_NAME is not set; skipping workspace error-path tests")
-	}
-
+	requireTfOperations(t)
 	client := tfeClient(t)
 	s := newTestingSession(t)
 	defer s.Close()
@@ -311,4 +305,3 @@ func TestWorkspaceErrorPaths(t *testing.T) {
 		assert.True(t, result.IsError, "update_workspace_variable with a non-existent variable ID should return an error")
 	})
 }
-

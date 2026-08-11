@@ -25,7 +25,8 @@ var (
 	tfeAddress  string
 	tfeOrgName  string
 
-	testingClient *mcp.Client
+	testingClient      *mcp.Client
+	enableTfOperations string
 )
 
 type authTransport struct {
@@ -44,6 +45,7 @@ func init() {
 	tfeToken = os.Getenv("TFE_TOKEN")
 	tfeAddress = os.Getenv("TFE_ADDRESS")
 	tfeOrgName = os.Getenv("TFE_ORG_NAME")
+	enableTfOperations = os.Getenv("ENABLE_TF_OPERATIONS")
 
 	testingClient = mcp.NewClient(&mcp.Implementation{
 		Name:    "terraform-mcp-server-test-harness",
@@ -109,6 +111,13 @@ func tfeClient(t *testing.T) *tfe.Client {
 		t.Fatalf("Failed to create direct TFE client: %v", err)
 	}
 	return client
+}
+
+func requireTfOperations(t *testing.T) {
+	t.Helper()
+	if enableTfOperations != "true" {
+		t.Skip("skipping: ENABLE_TF_OPERATIONS is not set to true")
+	}
 }
 
 func randomName(prefix string) string {
