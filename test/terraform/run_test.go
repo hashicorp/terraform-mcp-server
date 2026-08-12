@@ -6,6 +6,7 @@ import (
 	"compress/gzip"
 	"context"
 	_ "embed"
+	"fmt"
 	"io"
 	"testing"
 	"time"
