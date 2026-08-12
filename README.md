@@ -4,6 +4,78 @@ The Terraform MCP Server is a [Model Context Protocol (MCP)](https://modelcontex
 server that provides seamless integration with Terraform Registry APIs, enabling advanced
 automation and interaction capabilities for Infrastructure as Code (IaC) development.
 
+## Table of Contents
+
+<table width="100%">
+<tr>
+<th width="33%" align="left">Get started</th>
+<th width="34%" align="left">Client integrations</th>
+<th width="33%" align="left">Build and run</th>
+</tr>
+<tr>
+<td width="33%" valign="top">
+<a href="#features">Features</a><br>
+<a href="#prerequisites">Prerequisites</a><br>
+<a href="#command-line-options">Command Line Options</a><br>
+<a href="#instructions">Instructions</a>
+</td>
+<td width="34%" valign="top">
+<a href="#installation">Installation</a><br>
+<a href="#usage-with-visual-studio-code">Visual Studio Code</a><br>
+<a href="#usage-with-cursor">Cursor</a><br>
+<a href="#usage-with-claude-desktop--amazon-q-developer--kiro-cli">Claude Desktop, Amazon Q Developer, and Kiro CLI</a><br>
+<a href="#usage-with-claude-code">Claude Code</a><br>
+<a href="#usage-with-codex-cli">Codex CLI</a><br>
+<a href="#usage-with-gemini-extensions">Gemini extensions</a><br>
+<a href="#usage-with-bob-ide--shell">Bob IDE and Shell</a>
+</td>
+<td width="33%" valign="top">
+<a href="#install-from-source">Install from source</a><br>
+<a href="#building-the-docker-image-locally">Building the Docker Image locally</a><br>
+<a href="#transport-support">Transport Support</a><br>
+<a href="#1-stdio-transport-default">Stdio Transport</a><br>
+<a href="#2-streamablehttp-transport">StreamableHTTP Transport</a>
+</td>
+</tr>
+</table>
+
+<table width="100%">
+<tr>
+<th width="33%" align="left">Server capabilities</th>
+<th width="34%" align="left">Deployment and security</th>
+<th width="33%" align="left">Help and project</th>
+</tr>
+<tr>
+<td width="33%" valign="top">
+<a href="#available-tools">Available Tools</a><br>
+<a href="#available-resources">Available Resources</a><br>
+<a href="#available-metrics">Available Metrics</a><br>
+<a href="#tool-filtering">Tool Filtering</a>
+</td>
+<td width="34%" valign="top">
+<a href="#session-modes">Session Modes</a><br>
+<a href="#token-passthrough-for-centralized-deployments">Token Passthrough for Centralized Deployments</a><br>
+<a href="#client-ip-forwarding">Client IP Forwarding</a><br>
+<a href="#trust-model">Trust model</a><br>
+<a href="#trusted-hops">Trusted hops</a><br>
+<a href="#limitations">Limitations</a><br>
+<a href="#migrating-from-earlier-versions">Migrating from earlier versions</a><br>
+<a href="#supported-headers">Supported Headers</a><br>
+<a href="#security-considerations">Security Considerations</a><br>
+<a href="#centralized-deployment-example">Centralized Deployment Example</a>
+</td>
+<td width="33%" valign="top">
+<a href="#troubleshooting">Troubleshooting</a><br>
+<a href="#corporate-proxy--tls-inspection-zscaler-etc">Corporate Proxy and TLS Inspection</a><br>
+<a href="#development">Development</a><br>
+<a href="#contributing">Contributing</a><br>
+<a href="#license">License</a><br>
+<a href="#security">Security</a><br>
+<a href="#support">Support</a>
+</td>
+</tr>
+</table>
+
 ## Features
 
 - **Dual Transport Support**: Both Stdio and StreamableHTTP transports with configurable endpoints
@@ -332,6 +404,28 @@ docker run -p 8080:8080 --rm -e TRANSPORT_MODE=streamable-http -e TRANSPORT_HOST
 
 # Add to Claude Code
 claude mcp add --transport http terraform http://localhost:8080/mcp
+```
+
+### Usage with Codex CLI
+
+More about using and adding MCP server tools in Codex CLI [user documentation](https://learn.chatgpt.com/docs/extend/mcp?surface=app).
+
+> **Note:** Add `TFE_ADDRESS` and `TFE_TOKEN` to the Docker commands for authenticated HCP Terraform or Terraform Enterprise tools.
+
+- Local (`stdio`) Transport
+
+```sh
+codex mcp add terraform -- docker run -i --rm hashicorp/terraform-mcp-server
+```
+
+- Remote (`streamable-http`) Transport
+
+```sh
+# Run server (example)
+docker run --rm -p 127.0.0.1:8080:8080 -e TRANSPORT_MODE=streamable-http -e TRANSPORT_HOST=0.0.0.0 hashicorp/terraform-mcp-server
+
+# Add to Codex
+codex mcp add terraform --url http://localhost:8080/mcp
 ```
 
 ### Usage with Gemini extensions
