@@ -16,6 +16,8 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
+const workspaceLockedError = "workspace %q is locked and cannot accept new runs. Use the force_unlock_workspace tool to unlock first"
+
 // CreateRunSafe creates a tool to create a new Terraform run without destructive options.
 func CreateRunSafe(logger *log.Logger) server.ServerTool {
 	return server.ServerTool{
@@ -72,6 +74,10 @@ func createRunSafeHandler(ctx context.Context, request mcp.CallToolRequest, logg
 	workspace, err := tfeClient.Workspaces.Read(ctx, terraformOrgName, workspaceName)
 	if err != nil {
 		return ToolErrorf(logger, "workspace '%s' not found in org '%s': %v", workspaceName, terraformOrgName, err)
+	}
+
+	if workspace.Locked {
+		return ToolErrorf(logger, workspaceLockedError, workspaceName)
 	}
 
 	options := &tfe.RunCreateOptions{
@@ -164,6 +170,10 @@ func createRunHandler(ctx context.Context, request mcp.CallToolRequest, logger *
 	workspace, err := tfeClient.Workspaces.Read(ctx, terraformOrgName, workspaceName)
 	if err != nil {
 		return ToolErrorf(logger, "workspace '%s' not found in org '%s': %v", workspaceName, terraformOrgName, err)
+	}
+
+	if workspace.Locked {
+		return ToolErrorf(logger, workspaceLockedError, workspaceName)
 	}
 
 	options := &tfe.RunCreateOptions{
