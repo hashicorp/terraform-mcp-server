@@ -1,22 +1,18 @@
 package terraform
 
 import (
+	"slices"
 	"testing"
 
+	"github.com/hashicorp/go-tfe"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tidwall/gjson"
 )
 
 func TestListTeams(t *testing.T) {
-
-	// Guard: skip if the organization does not support team management.
 	client := tfeClient(t)
-	entitlements, err := client.Organizations.ReadEntitlements(t.Context(), tfeOrgName)
-	require.NoError(t, err, "Failed to read entitlements for organization %q", tfeOrgName)
-	if !entitlements.Teams {
-		t.Skipf("Organization %q does not have the Teams entitlement", tfeOrgName)
-	}
+	requireTeamsEntitlement(t, client)
 
 	t.Run("list all teams", func(t *testing.T) {
 		s := newTestingSession(t)
@@ -72,16 +68,9 @@ func TestCreateTeam(t *testing.T) {
 	defer s.Close()
 
 	client := tfeClient(t)
+	requireTeamsEntitlement(t, client)
 	teamName := randomName("team-")
 	visibility := "organization"
-
-	// Guard: skip if the organization does not support team management.
-	entitlements, err := client.Organizations.ReadEntitlements(t.Context(), tfeOrgName)
-	require.NoError(t, err, "Failed to read entitlements for organization %q", tfeOrgName)
-
-	if !entitlements.Teams {
-		t.Skipf("Organization %q does not have the Teams entitlement", tfeOrgName)
-	}
 
 	result, resultText := callTool(t, s, "create_team", map[string]any{
 		"terraform_org_name": tfeOrgName,
@@ -112,11 +101,7 @@ func TestCreateTeam(t *testing.T) {
 
 func TestGetTeam(t *testing.T) {
 	client := tfeClient(t)
-	entitlements, err := client.Organizations.ReadEntitlements(t.Context(), tfeOrgName)
-	require.NoError(t, err, "Failed to read entitlements for organization %q", tfeOrgName)
-	if !entitlements.Teams {
-		t.Skipf("Organization %q does not have the Teams entitlement", tfeOrgName)
-	}
+	requireTeamsEntitlement(t, client)
 
 	// Get a real team ID to look up (the owners team always exists)
 	teams, err := client.Teams.List(t.Context(), tfeOrgName, nil)
@@ -139,4 +124,96 @@ func TestGetTeam(t *testing.T) {
 	assert.NotEmpty(t, gjson.Get(resultText, "data.attributes.name").String(), "Response should contain the team name")
 	assert.NotEmpty(t, gjson.Get(resultText, "data.attributes.visibility").String(), "Response should contain the team visibility")
 	assert.True(t, gjson.Get(resultText, "data.attributes.users-count").Exists(), "Response should contain the user count field")
+}
+
+func TestAddTeamMember(t *testing.T) {
+	client := tfeClient(t)
+	requireTeamsEntitlement(t, client)
+
+	team, err := client.Teams.Create(t.Context(), tfeOrgName, tfe.TeamCreateOptions{
+		Name: tfe.String(randomName("team-")),
+	})
+	require.NoError(t, err, "Failed to create test team")
+	defer client.Teams.Delete(t.Context(), team.ID)
+
+	// Look up users's organization membership ID so we can test both paths.
+	memberships, err := client.OrganizationMemberships.List(t.Context(), tfeOrgName, &tfe.OrganizationMembershipListOptions{
+		Emails: []string{tfeUserEmail},
+	})
+	require.NoError(t, err, "Failed to list organization memberships")
+	require.NotEmpty(t, memberships.Items, "Expected %v to be a member of the organization", tfeUsername)
+	orgMembershipID := memberships.Items[0].ID
+
+	t.Run("add member by username", func(t *testing.T) {
+		s := newTestingSession(t)
+		defer s.Close()
+
+		result, resultText := callTool(t, s, "add_team_member", map[string]any{
+			"team_id":  team.ID,
+			"username": tfeUsername,
+		})
+
+		require.False(t, result.IsError, "add_team_member returned an error: %s", resultText)
+		assert.Contains(t, resultText, team.ID, "Success message should reference the team ID")
+
+		// Verify via the TFE API directly.
+		members, err := client.TeamMembers.List(t.Context(), team.ID)
+		require.NoError(t, err, "Failed to list team members after add")
+		found := slices.ContainsFunc(members, func(m *tfe.User) bool {
+			return m.Username == tfeUsername
+		})
+		assert.True(t, found, tfeUsername+" should be a member of the team after add_team_member")
+
+		// Remove the member so the membership-ID sub-test starts from a clean state.
+		_ = client.TeamMembers.Remove(t.Context(), team.ID, tfe.TeamMemberRemoveOptions{
+			Usernames: []string{tfeUsername},
+		})
+	})
+
+	t.Run("add member by organization membership ID", func(t *testing.T) {
+		s := newTestingSession(t)
+		defer s.Close()
+
+		result, resultText := callTool(t, s, "add_team_member", map[string]any{
+			"team_id":                    team.ID,
+			"organization_membership_id": orgMembershipID,
+		})
+
+		require.False(t, result.IsError, "add_team_member returned an error: %s", resultText)
+		assert.Contains(t, resultText, team.ID, "Success message should reference the team ID")
+
+		// Verify via the TFE API directly.
+		members, err := client.TeamMembers.List(t.Context(), team.ID)
+		require.NoError(t, err, "Failed to list team members after add")
+		found := slices.ContainsFunc(members, func(m *tfe.User) bool {
+			return m.Username == tfeUsername
+		})
+		assert.True(t, found, tfeUsername+" should be a member of the team after add by membership ID")
+	})
+
+	t.Run("errors when neither username nor membership ID is provided", func(t *testing.T) {
+		s := newTestingSession(t)
+		defer s.Close()
+
+		result, resultText := callTool(t, s, "add_team_member", map[string]any{
+			"team_id": team.ID,
+		})
+
+		require.True(t, result.IsError, "Tool call should return an error when no member identifier is provided")
+		assert.Contains(t, resultText, "username", "Error message should mention the missing inputs")
+	})
+
+	t.Run("errors when both username and membership ID are provided", func(t *testing.T) {
+		s := newTestingSession(t)
+		defer s.Close()
+
+		result, resultText := callTool(t, s, "add_team_member", map[string]any{
+			"team_id":                    team.ID,
+			"username":                   tfeUsername,
+			"organization_membership_id": orgMembershipID,
+		})
+
+		require.True(t, result.IsError, "Tool call should return an error when both identifiers are provided")
+		assert.Contains(t, resultText, "username", "Error message should mention the conflicting inputs")
+	})
 }

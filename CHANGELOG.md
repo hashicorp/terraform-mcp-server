@@ -7,6 +7,7 @@ FEATURES
 * [New Tool] `get_team` Fetches full details for a single team by ID, including members, organization access permissions, and SSO settings. Requires `team_id`. [441](https://github.com/hashicorp/terraform-mcp-server/pull/441)
 * [New Tool] `get_project` Fetches detailed information about a Terraform project by its ID. Requires `project_id`.
 * [New Tool] `create_team` Creates a new team in a Terraform Cloud/Enterprise organization. Requires `terraform_org_name` and `team_name`; optional `visibility` ("secret" or "organization"). [427](https://github.com/hashicorp/terraform-mcp-server/pull/427)
+* [New Tool] `add_team_member` Adds a single member to a Terraform Cloud/Enterprise team. Requires `team_id`; accepts either `username` (accepted-invite users only) or `organization_membership_id` (works for pending and accepted invites). Exactly one must be provided.
 
 FIXES
 
