@@ -106,6 +106,11 @@ func (r *DynamicToolRegistry) registerTFETools() {
 	r.logger.Info("Registering TFE tools - first session with valid TFE client detected")
 
 	// Terraform toolset - Organization
+	if toolsets.IsToolEnabled("whoami", r.enabledToolsets) {
+		tool := r.createDynamicTFETool("whoami", tfeTools.WhoAmI)
+		r.mcpServer.AddTool(tool.Tool, tool.Handler)
+	}
+
 	if toolsets.IsToolEnabled("list_terraform_orgs", r.enabledToolsets) {
 		tool := r.createDynamicTFETool("list_terraform_orgs", tfeTools.ListTerraformOrgs)
 		r.mcpServer.AddTool(tool.Tool, tool.Handler)

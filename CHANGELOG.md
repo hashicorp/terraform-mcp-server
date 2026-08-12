@@ -2,6 +2,7 @@
 
 FEATURES
 
+* [New Tool] `whoami` Returns the identity of the currently authenticated Terraform token. Reports the username, email, and whether the token belongs to a service account (team or organization token) or a real user.
 * [New Tool] `list_teams` Lists all teams within a given Terraform Cloud organization. Requires `terraform_org_name`. Optionally filter by exact team names (`team_names`), or substring search (`search_query`). Supports pagination.
 * [New Tool] `get_team` Fetches full details for a single team by ID, including members, organization access permissions, and SSO settings. Requires `team_id`. [441](https://github.com/hashicorp/terraform-mcp-server/pull/441)
 * [New Tool] `get_project` Fetches detailed information about a Terraform project by its ID. Requires `project_id`.
