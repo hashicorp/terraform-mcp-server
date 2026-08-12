@@ -4,17 +4,10 @@
 package tools
 
 import (
-	"io"
-	"net/http"
-	"net/http/httptest"
 	"testing"
 
-	"github.com/hashicorp/terraform-mcp-server/pkg/client"
-	"github.com/mark3labs/mcp-go/mcp"
-	"github.com/mark3labs/mcp-go/server"
 	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 func TestCreateRunSafe(t *testing.T) {
@@ -65,49 +58,4 @@ func TestCreateRun(t *testing.T) {
 		runTypeProperty := tool.Tool.InputSchema.Properties["run_type"]
 		assert.NotNil(t, runTypeProperty)
 	})
-}
-
-func TestCreateRunLockedWorkspace(t *testing.T) {
-	logger := log.New()
-	logger.SetLevel(log.ErrorLevel)
-	logger.SetOutput(io.Discard)
-
-	terraformServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/vnd.api+json")
-		_, err := io.WriteString(w, `{"data":{"id":"test", "type":"workspaces", "attributes":{"name":"test-workspace","locked":true}}}`)
-		assert.NoError(t, err)
-	}))
-
-	t.Cleanup(terraformServer.Close)
-	t.Setenv(client.TerraformAddress, terraformServer.URL)
-	t.Setenv(client.TerraformToken, "test-token")
-
-	mcpServer := server.NewMCPServer("test", "1.0.0")
-	ctx := mcpServer.WithContext(t.Context(), server.NewInProcessSession("", nil))
-	request := mcp.CallToolRequest{Params: mcp.CallToolParams{Arguments: map[string]any{
-		"terraform_org_name": "test-org",
-		"workspace_name":     "test-workspace",
-	}}}
-
-	tests := []struct {
-		name string
-		tool server.ServerTool
-	}{
-		{name: "safe tool", tool: CreateRunSafe(logger)},
-		{name: "full tool", tool: CreateRun(logger)},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result, err := tt.tool.Handler(ctx, request)
-
-			require.NoError(t, err)
-			require.NotNil(t, result)
-			assert.True(t, result.IsError)
-			require.Len(t, result.Content, 1)
-			content, ok := result.Content[0].(mcp.TextContent)
-			require.True(t, ok)
-			assert.Equal(t, `workspace "test-workspace" is locked and cannot accept new runs. Use the force_unlock_workspace tool to unlock first`, content.Text)
-		})
-	}
 }

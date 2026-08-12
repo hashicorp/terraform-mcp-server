@@ -19,6 +19,30 @@ import (
 //go:embed testdata/run_test.tf
 var runTestConfiguration string
 
+func TestCreateRunLockedWorkspace(t *testing.T) {
+	s := newTestingSession(t)
+	defer s.Close()
+
+	client := tfeClient(t)
+	workspaceName := randomName("run-test-")
+	workspace, err := client.Workspaces.Create(t.Context(), tfeOrgName, tfe.WorkspaceCreateOptions{Name: &workspaceName})
+	require.NoError(t, err, "failed to create test workspace")
+	defer client.Workspaces.DeleteByID(t.Context(), workspace.ID)
+
+	lockReason := "Test create_run with a locked workspace"
+	_, err = client.Workspaces.Lock(t.Context(), workspace.ID, tfe.WorkspaceLockOptions{Reason: &lockReason})
+	require.NoError(t, err, "failed to lock test workspace")
+	defer client.Workspaces.ForceUnlock(t.Context(), workspace.ID)
+
+	result, resultText := callTool(t, s, "create_run", map[string]any{
+		"terraform_org_name": tfeOrgName,
+		"workspace_name":     workspaceName,
+	})
+
+	assert.True(t, result.IsError, "create_run should return an error for a locked workspace")
+	assert.Equal(t, `workspace "`+workspaceName+`" is locked and cannot accept new runs. Use the force_unlock_workspace tool to unlock first`, resultText)
+}
+
 func TestRunLifecycle(t *testing.T) {
 	requireTfOperations(t)
 
