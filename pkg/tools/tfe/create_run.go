@@ -74,6 +74,10 @@ func createRunSafeHandler(ctx context.Context, request mcp.CallToolRequest, logg
 		return ToolErrorf(logger, "workspace '%s' not found in org '%s': %v", workspaceName, terraformOrgName, err)
 	}
 
+	if workspace.Locked {
+		return ToolErrorf(logger, "workspace '%s' is locked and cannot accept new runs. Use the force_unlock_workspace tool to unlock first", workspaceName)
+	}
+
 	options := &tfe.RunCreateOptions{
 		Workspace: workspace,
 	}
@@ -164,6 +168,10 @@ func createRunHandler(ctx context.Context, request mcp.CallToolRequest, logger *
 	workspace, err := tfeClient.Workspaces.Read(ctx, terraformOrgName, workspaceName)
 	if err != nil {
 		return ToolErrorf(logger, "workspace '%s' not found in org '%s': %v", workspaceName, terraformOrgName, err)
+	}
+
+	if workspace.Locked {
+		return ToolErrorf(logger, "workspace '%s' is locked and cannot accept new runs. Use the force_unlock_workspace tool to unlock first", workspaceName)
 	}
 
 	options := &tfe.RunCreateOptions{
