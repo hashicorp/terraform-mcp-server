@@ -9,12 +9,11 @@ FEATURES
 * [New Tool] `create_team` Creates a new team in a Terraform Cloud/Enterprise organization. Requires `terraform_org_name` and `team_name`; optional `visibility` ("secret" or "organization"). [427](https://github.com/hashicorp/terraform-mcp-server/pull/427)
 * [New Tool] `add_team_member` Adds a single member to a Terraform Cloud/Enterprise team. Requires `team_id`; accepts either `username` (accepted-invite users only) or `organization_membership_id` (works for pending and accepted invites). Exactly one must be provided.
 * [New Tool] `grant_team_access` Grants a team access to a workspace or project by ID. Requires `team_id`, `access_level`, and either `workspace_id` or `project_id` (mutually exclusive). Valid access levels for workspaces: `admin`, `read`, `write`, `plan`, `custom`. Valid access levels for projects: `admin`, `read`, `write`, `maintain`, `custom`.
+* [New Tool] `delete_team` Permanently deletes a Terraform team by its `team_id`. Requires `team_id` (e.g. `team-abc123def456`). This is a destructive operation and must set `ENABLE_TF_OPERATIONS=true`.
 
 FIXES
 
 * `get_apply_logs` now checks the apply status before attempting to stream logs. If the apply is not yet in a terminal state (`finished`, `errored`, `canceled`), the tool returns an informative message instead of timing out.
-* [New Tool] `delete_team` Permanently deletes a Terraform team by its `team_id`. Requires `team_id` (e.g. `team-abc123def456`). This is a destructive operation and must set `ENABLE_TF_OPERATIONS=true`.
-* [New Tool] `create_team` Creates a new team in a Terraform Cloud/Enterprise organization. Requires `terraform_org_name` and `team_name`; optional `visibility` ("secret" or "organization"). [427](https://github.com/hashicorp/terraform-mcp-server/pull/427)
 
 # 1.2.0
 

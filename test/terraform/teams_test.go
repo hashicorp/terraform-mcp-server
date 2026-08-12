@@ -340,3 +340,44 @@ func TestGrantTeamAccess(t *testing.T) {
 		assert.Contains(t, resultText, "Invalid Team Project access level")
 	})
 }
+
+func TestDeleteTeam(t *testing.T) {
+	requireTfOperations(t)
+
+	client := tfeClient(t)
+	requireTeamsEntitlement(t, client)
+
+	s := newTestingSession(t)
+	defer s.Close()
+
+	// Create a team directly via the TFE API — independent of the tool under test.
+	team, err := client.Teams.Create(t.Context(), tfeOrgName, tfe.TeamCreateOptions{
+		Name: tfe.String(randomName("team-")),
+	})
+	require.NoError(t, err, "setup: failed to create team via TFE API")
+
+	// Safety net: if the delete tool fails mid-test, clean up via the API.
+	defer client.Teams.Delete(t.Context(), team.ID)
+
+	t.Run("deletes an existing team", func(t *testing.T) {
+		result, resultText := callTool(t, s, "delete_team", map[string]any{
+			"team_id": team.ID,
+		})
+
+		require.False(t, result.IsError, "delete_team should not return an error for an existing team: %s", resultText)
+		assert.Contains(t, resultText, team.ID, "response should reference the deleted team_id")
+
+		// Confirm the team is gone via the API directly.
+		_, err := client.Teams.Read(t.Context(), team.ID)
+		assert.Error(t, err, "team should no longer exist in the TFE API after deletion")
+	})
+
+	t.Run("returns an error for a non-existent team_id", func(t *testing.T) {
+		result, resultText := callTool(t, s, "delete_team", map[string]any{
+			"team_id": "team-doesnotexist000",
+		})
+
+		require.True(t, result.IsError, "delete_team should return an error for a non-existent team_id")
+		assert.Contains(t, resultText, "team-doesnotexist000", "error message should reference the unknown team_id")
+	})
+}
