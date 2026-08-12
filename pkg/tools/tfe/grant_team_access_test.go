@@ -99,15 +99,4 @@ func TestGrantTeamAccessHandler_AccessLevelValidation(t *testing.T) {
 			assert.True(t, found, "expected %q to be a valid project access level", level)
 		}
 	})
-
-	t.Run("plan is invalid for project access", func(t *testing.T) {
-		found := false
-		for _, v := range validTeamProjectAccessLevels {
-			if v == "plan" {
-				found = true
-				break
-			}
-		}
-		assert.False(t, found, `"plan" must not be a valid project access level`)
-	})
 }

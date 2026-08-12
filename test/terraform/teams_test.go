@@ -220,13 +220,7 @@ func TestAddTeamMember(t *testing.T) {
 
 func TestGrantTeamAccess(t *testing.T) {
 	client := tfeClient(t)
-
-	// Guard: skip if the organization does not support team management.
-	entitlements, err := client.Organizations.ReadEntitlements(t.Context(), tfeOrgName)
-	require.NoError(t, err, "Failed to read entitlements for organization %q", tfeOrgName)
-	if !entitlements.Teams {
-		t.Skipf("Organization %q does not have the Teams entitlement", tfeOrgName)
-	}
+	requireTeamsEntitlement(t, client)
 
 	// Resolve a real team ID to use for all sub-tests.
 	teams, err := client.Teams.List(t.Context(), tfeOrgName, nil)
