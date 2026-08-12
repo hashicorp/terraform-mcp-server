@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
+	_ "embed"
 	"io"
 	"testing"
 	"time"
@@ -15,20 +16,8 @@ import (
 	"github.com/tidwall/gjson"
 )
 
-// runTestConfiguration creates a state-only resource with no external provider dependencies.
-const runTestConfiguration = `
-terraform {
-  required_version = ">= 1.4.0"
-}
-
-resource "terraform_data" "run_test" {
-  input = "terraform-mcp-server integration test for run tools"
-}
-
-output "run_test_id" {
-  value = terraform_data.run_test.id
-}
-`
+//go:embed testdata/run_test.tf
+var runTestConfiguration string
 
 func TestRunLifecycle(t *testing.T) {
 	requireTfOperations(t)
@@ -274,7 +263,7 @@ func uploadRunTestConfiguration(t *testing.T, client *tfe.Client, workspaceID st
 func waitForRun(t *testing.T, client *tfe.Client, runID, condition string, conditionMet func(*tfe.Run) bool) *tfe.Run {
 	t.Helper()
 
-	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Minute)
+	ctx, cancel := context.WithTimeout(t.Context(), 2*time.Minute)
 	defer cancel()
 
 	// polling interval
@@ -297,7 +286,7 @@ func waitForRun(t *testing.T, client *tfe.Client, runID, condition string, condi
 
 		select {
 		case <-ctx.Done():
-			t.Fatalf("timed out waiting 10 minutes for run %s to %s", runID, condition)
+			t.Fatalf("timed out waiting 2 minute for run %s to %s", runID, condition)
 		case <-ticker.C:
 		}
 	}
