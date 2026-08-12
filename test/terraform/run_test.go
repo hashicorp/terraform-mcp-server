@@ -40,7 +40,7 @@ func TestCreateRunLockedWorkspace(t *testing.T) {
 	})
 
 	assert.True(t, result.IsError, "create_run should return an error for a locked workspace")
-	assert.Equal(t, `workspace "`+workspaceName+`" is locked and cannot accept new runs. Use the force_unlock_workspace tool to unlock first`, resultText)
+	assert.Equal(t, fmt.Sprintf(`workspace %q is locked and cannot accept new runs. Use the force_unlock_workspace tool to unlock first`, workspaceName), resultText)
 }
 
 func TestRunLifecycle(t *testing.T) {
