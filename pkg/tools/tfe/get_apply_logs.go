@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"slices"
 
 	tfe "github.com/hashicorp/go-tfe"
 	"github.com/hashicorp/terraform-mcp-server/pkg/client"
@@ -50,22 +51,17 @@ func getApplyLogsHandler(ctx context.Context, request mcp.CallToolRequest, logge
 		return ToolErrorf(logger, "apply not found: %s", applyID)
 	}
 
-	nonTerminalStatuses := []tfe.ApplyStatus{
-		tfe.ApplyPending,
-		tfe.ApplyCreated,
-		tfe.ApplyQueued,
-		tfe.ApplyMFAWaiting,
-		tfe.ApplyUnreachable,
-		tfe.ApplyRunning,
+	terminalStatuses := []tfe.ApplyStatus{
+		tfe.ApplyErrored,
+		tfe.ApplyFinished,
+		tfe.ApplyCanceled,
 	}
 
-	for _, s := range nonTerminalStatuses {
-		if apply.Status == s {
-			return mcp.NewToolResultText(fmt.Sprintf(
-				"Apply %s is currently in status %q. Wait for the status to change to a terminal state (finished, errored, canceled) before calling again.",
-				applyID, apply.Status,
-			)), nil
-		}
+	if !slices.Contains(terminalStatuses, apply.Status) {
+		return mcp.NewToolResultText(fmt.Sprintf(
+			"Apply %s is currently in status %q. Wait for the status to change to a terminal state (finished, errored, canceled) before calling again.",
+			applyID, apply.Status,
+		)), nil
 	}
 
 	logReader, err := tfeClient.Applies.Logs(ctx, applyID)
