@@ -70,33 +70,3 @@ func TestGrantTeamAccessHandler_InputValidation(t *testing.T) {
 		assert.Contains(t, err.Error(), "missing required parameter")
 	})
 }
-
-func TestGrantTeamAccessHandler_AccessLevelValidation(t *testing.T) {
-	t.Run("valid workspace access levels", func(t *testing.T) {
-		validLevels := []string{"admin", "read", "write", "plan", "custom"}
-		for _, level := range validLevels {
-			found := false
-			for _, v := range validTeamAccessLevels {
-				if v == level {
-					found = true
-					break
-				}
-			}
-			assert.True(t, found, "expected %q to be a valid workspace access level", level)
-		}
-	})
-
-	t.Run("valid project access levels", func(t *testing.T) {
-		validLevels := []string{"admin", "read", "write", "maintain", "custom"}
-		for _, level := range validLevels {
-			found := false
-			for _, v := range validTeamProjectAccessLevels {
-				if v == level {
-					found = true
-					break
-				}
-			}
-			assert.True(t, found, "expected %q to be a valid project access level", level)
-		}
-	})
-}

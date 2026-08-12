@@ -103,7 +103,7 @@ func TestGetTeam(t *testing.T) {
 	client := tfeClient(t)
 	requireTeamsEntitlement(t, client)
 
-	// Get a real team ID to look up (the owners team always exists)
+	// Get a real team ID to look up
 	teams, err := client.Teams.List(t.Context(), tfeOrgName, nil)
 	require.NoError(t, err)
 	require.NotEmpty(t, teams.Items, "Expected at least one team in the organization")
@@ -222,11 +222,15 @@ func TestGrantTeamAccess(t *testing.T) {
 	client := tfeClient(t)
 	requireTeamsEntitlement(t, client)
 
-	// Resolve a real team ID to use for all sub-tests.
-	teams, err := client.Teams.List(t.Context(), tfeOrgName, nil)
-	require.NoError(t, err, "Failed to list teams")
-	require.NotEmpty(t, teams.Items, "Expected at least one team in the organization")
-	teamID := teams.Items[0].ID
+	// Create a temporary team for all sub-tests so we never touch the owners group.
+	team, err := client.Teams.Create(t.Context(), tfeOrgName, tfe.TeamCreateOptions{
+		Name: tfe.String(randomName("team-")),
+	})
+	require.NoError(t, err, "Failed to create test team")
+
+	// Safety net: if the delete tool fails mid-test, clean up via the API.
+	defer client.Teams.Delete(t.Context(), team.ID)
+	teamID := team.ID
 
 	t.Run("grant workspace access", func(t *testing.T) {
 		s := newTestingSession(t)

@@ -35,8 +35,8 @@ func GrantTeamAccess(logger *log.Logger) server.ServerTool {
 			mcp.WithString("access_level",
 				mcp.Required(),
 				mcp.Description(`The permission level to grant the team.
-				For workspace access (workspace_id): "read" (view only), "plan" (can queue plans), "write" (apply runs), "admin" (full control), "custom" (fine-grained permissions).
-				For project access (project_id): "read", "write", "maintain" (manage workspaces), "admin" (full control), "custom". Note: "plan" is only valid for workspaces; "maintain" is only valid for projects.`),
+				For workspace access (workspace_id): "read" (view only), "plan" (can queue plans), "write" (apply runs), "admin" (full control).
+				For project access (project_id): "read", "write", "maintain" (manage workspaces), "admin" (full control). Note: "plan" is only valid for workspaces; "maintain" is only valid for projects.`),
 			),
 			mcp.WithString("workspace_id",
 				mcp.Description(`The ID of the workspace to grant the team access to. Workspace IDs begin with 'ws-' (e.g., 'ws-abc123def456'). Mutually exclusive with project_id — provide one or the other, not both.`),
@@ -51,9 +51,9 @@ func GrantTeamAccess(logger *log.Logger) server.ServerTool {
 	}
 }
 
-var validTeamAccessLevels = []string{"admin", "read", "write", "plan", "custom"}
+var validTeamAccessLevels = []string{"admin", "read", "write", "plan"}
 var validTeamAccessLevelsStr = strings.Join(validTeamAccessLevels, ", ")
-var validTeamProjectAccessLevels = []string{"admin", "read", "write", "maintain", "custom"}
+var validTeamProjectAccessLevels = []string{"admin", "read", "write", "maintain"}
 var validTeamProjectAccessLevelsStr = strings.Join(validTeamProjectAccessLevels, ", ")
 
 // grantTeamAccessHandler handles tool logics and functionality
