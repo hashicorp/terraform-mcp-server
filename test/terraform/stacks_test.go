@@ -90,3 +90,53 @@ func TestListStacks(t *testing.T) {
 		assert.True(t, result.IsError, "list_stacks with a non-existent org should return an error")
 	})
 }
+
+func TestGetStackDetails(t *testing.T) {
+	client := tfeClient(t)
+	requireStacksEntitlement(t, client)
+
+	// Create a temporary project and stack to look up.
+	projectName := randomName("project-")
+	project, err := client.Projects.Create(t.Context(), tfeOrgName, tfe.ProjectCreateOptions{
+		Name: projectName,
+	})
+	require.NoError(t, err, "setup: failed to create test project via TFE API")
+	defer client.Projects.Delete(t.Context(), project.ID)
+
+	stackName := randomName("stack-")
+	stack, err := client.Stacks.Create(t.Context(), tfe.StackCreateOptions{
+		Name:    stackName,
+		Project: &tfe.Project{ID: project.ID},
+	})
+	if errors.Is(err, tfe.ErrResourceNotFound) {
+		t.Skipf("Stacks feature is not active for organization %q (resource not found)", tfeOrgName)
+	}
+	require.NoError(t, err, "setup: failed to create test stack via TFE API")
+	defer client.Stacks.ForceDelete(t.Context(), stack.ID)
+
+	s := newTestingSession(t)
+	defer s.Close()
+
+	t.Run("returns details for a valid stack_id", func(t *testing.T) {
+		result, resultText := callTool(t, s, "get_stack_details", map[string]any{
+			"stack_id": stack.ID,
+		})
+
+		require.False(t, result.IsError, "get_stack_details should not return an error")
+		require.NotEmpty(t, resultText, "get_stack_details should return a non-empty response")
+
+		assert.Equal(t, stack.ID, gjson.Get(resultText, "data.id").String(), "response should echo back the requested stack ID")
+		assert.Equal(t, stackName, gjson.Get(resultText, "data.attributes.name").String(), "response should contain the stack name")
+		assert.True(t, gjson.Get(resultText, "data.attributes.description").Exists(), "response should contain the description field")
+		assert.True(t, gjson.Get(resultText, "data.attributes.created-at").Exists(), "response should contain the created-at field")
+	})
+
+	t.Run("returns an error for a non-existent stack_id", func(t *testing.T) {
+		result, resultText := callTool(t, s, "get_stack_details", map[string]any{
+			"stack_id": "st-0000000000dead",
+		})
+
+		require.True(t, result.IsError, "get_stack_details should return an error for a non-existent stack_id")
+		assert.Contains(t, resultText, "st-0000000000dead", "error message should reference the unknown stack_id")
+	})
+}
