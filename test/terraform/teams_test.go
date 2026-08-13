@@ -103,7 +103,7 @@ func TestGetTeam(t *testing.T) {
 	client := tfeClient(t)
 	requireTeamsEntitlement(t, client)
 
-	// Get a real team ID to look up (the owners team always exists)
+	// Get a real team ID to look up
 	teams, err := client.Teams.List(t.Context(), tfeOrgName, nil)
 	require.NoError(t, err)
 	require.NotEmpty(t, teams.Items, "Expected at least one team in the organization")
@@ -215,5 +215,128 @@ func TestAddTeamMember(t *testing.T) {
 
 		require.True(t, result.IsError, "Tool call should return an error when both identifiers are provided")
 		assert.Contains(t, resultText, "username", "Error message should mention the conflicting inputs")
+	})
+}
+
+func TestGrantTeamAccess(t *testing.T) {
+	client := tfeClient(t)
+	requireTeamsEntitlement(t, client)
+
+	// Create a temporary team for all sub-tests so we never touch the owners group.
+	team, err := client.Teams.Create(t.Context(), tfeOrgName, tfe.TeamCreateOptions{
+		Name: tfe.String(randomName("team-")),
+	})
+	require.NoError(t, err, "Failed to create test team")
+
+	// Safety net: if the delete tool fails mid-test, clean up via the API.
+	defer client.Teams.Delete(t.Context(), team.ID)
+	teamID := team.ID
+
+	t.Run("grant workspace access", func(t *testing.T) {
+		s := newTestingSession(t)
+		defer s.Close()
+
+		// Create a temporary workspace to grant access to.
+		ws, err := client.Workspaces.Create(t.Context(), tfeOrgName, tfe.WorkspaceCreateOptions{
+			Name: tfe.String(randomName("ws-")),
+		})
+		require.NoError(t, err, "Failed to create test workspace")
+		defer client.Workspaces.SafeDeleteByID(t.Context(), ws.ID)
+
+		result, resultText := callTool(t, s, "grant_team_access", map[string]any{
+			"team_id":      teamID,
+			"workspace_id": ws.ID,
+			"access_level": "read",
+		})
+
+		require.False(t, result.IsError, "grant_team_access returned an error: %s", resultText)
+		require.NotEmpty(t, resultText, "Tool call result must not be empty")
+
+		assert.NotEmpty(t, gjson.Get(resultText, "id").String(), "Response should contain a grant ID")
+		assert.Equal(t, teamID, gjson.Get(resultText, "team_id").String(), "Response should contain the requested team ID")
+		assert.Equal(t, ws.ID, gjson.Get(resultText, "workspace_id").String(), "Response should contain the requested workspace ID")
+		assert.Equal(t, "read", gjson.Get(resultText, "access").String(), "Response should reflect the requested access level")
+	})
+
+	t.Run("grant project access", func(t *testing.T) {
+		s := newTestingSession(t)
+		defer s.Close()
+
+		// Create a temporary project to grant access to.
+		project, err := client.Projects.Create(t.Context(), tfeOrgName, tfe.ProjectCreateOptions{
+			Name: randomName("proj-"),
+		})
+		require.NoError(t, err, "Failed to create test project")
+		defer client.Projects.Delete(t.Context(), project.ID)
+
+		result, resultText := callTool(t, s, "grant_team_access", map[string]any{
+			"team_id":      teamID,
+			"project_id":   project.ID,
+			"access_level": "read",
+		})
+
+		require.False(t, result.IsError, "grant_team_access returned an error: %s", resultText)
+		require.NotEmpty(t, resultText, "Tool call result must not be empty")
+
+		assert.NotEmpty(t, gjson.Get(resultText, "id").String(), "Response should contain a grant ID")
+		assert.Equal(t, teamID, gjson.Get(resultText, "team_id").String(), "Response should contain the requested team ID")
+		assert.Equal(t, project.ID, gjson.Get(resultText, "project_id").String(), "Response should contain the requested project ID")
+		assert.Equal(t, "read", gjson.Get(resultText, "access").String(), "Response should reflect the requested access level")
+	})
+
+	t.Run("error on both workspace_id and project_id", func(t *testing.T) {
+		s := newTestingSession(t)
+		defer s.Close()
+
+		result, resultText := callTool(t, s, "grant_team_access", map[string]any{
+			"team_id":      teamID,
+			"workspace_id": "ws-fakeid",
+			"project_id":   "prj-fakeid",
+			"access_level": "read",
+		})
+
+		require.True(t, result.IsError, "Expected an error when both workspace_id and project_id are provided")
+		assert.Contains(t, resultText, "Only one of workspace_id or project_id may be provided")
+	})
+
+	t.Run("error on neither workspace_id nor project_id", func(t *testing.T) {
+		s := newTestingSession(t)
+		defer s.Close()
+
+		result, resultText := callTool(t, s, "grant_team_access", map[string]any{
+			"team_id":      teamID,
+			"access_level": "read",
+		})
+
+		require.True(t, result.IsError, "Expected an error when neither workspace_id nor project_id is provided")
+		assert.Contains(t, resultText, "One of workspace_id or project_id must be provided")
+	})
+
+	t.Run("error on invalid workspace access level", func(t *testing.T) {
+		s := newTestingSession(t)
+		defer s.Close()
+
+		result, resultText := callTool(t, s, "grant_team_access", map[string]any{
+			"team_id":      teamID,
+			"workspace_id": "ws-fakeid",
+			"access_level": "maintain",
+		})
+
+		require.True(t, result.IsError, "Expected an error when 'maintain' is used for workspace access")
+		assert.Contains(t, resultText, "Invalid Team access level")
+	})
+
+	t.Run("error on invalid project access level", func(t *testing.T) {
+		s := newTestingSession(t)
+		defer s.Close()
+
+		result, resultText := callTool(t, s, "grant_team_access", map[string]any{
+			"team_id":      teamID,
+			"project_id":   "prj-fakeid",
+			"access_level": "plan",
+		})
+
+		require.True(t, result.IsError, "Expected an error when 'plan' is used for project access")
+		assert.Contains(t, resultText, "Invalid Team Project access level")
 	})
 }

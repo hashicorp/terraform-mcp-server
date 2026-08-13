@@ -137,6 +137,11 @@ func (r *DynamicToolRegistry) registerTFETools() {
 		r.mcpServer.AddTool(tool.Tool, tool.Handler)
 	}
 
+	if toolsets.IsToolEnabled("grant_team_access", r.enabledToolsets) {
+		tool := r.createDynamicTFETool("grant_team_access", tfeTools.GrantTeamAccess)
+		r.mcpServer.AddTool(tool.Tool, tool.Handler)
+	}
+
 	// Terraform toolset - Workspace management tools
 	if toolsets.IsToolEnabled("list_workspaces", r.enabledToolsets) {
 		tool := r.createDynamicTFETool("list_workspaces", tfeTools.ListWorkspaces)
