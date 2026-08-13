@@ -142,6 +142,15 @@ func requireTeamsEntitlement(t *testing.T, client *tfe.Client) {
 	}
 }
 
+func requireStacksEntitlement(t *testing.T, client *tfe.Client) {
+	t.Helper()
+	org, err := client.Organizations.Read(t.Context(), tfeOrgName)
+	require.NoError(t, err, "Failed to read organization %q", tfeOrgName)
+	if !org.Permissions.CanEnableStacks {
+		t.Skipf("Organization %q does not have the Stacks entitlement", tfeOrgName)
+	}
+}
+
 func randomName(prefix string) string {
 	suffix := make([]byte, randomNameLength)
 	for i := range suffix {
