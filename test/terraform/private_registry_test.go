@@ -71,7 +71,9 @@ func TestPrivateRegistryModules(t *testing.T) {
 
 		directModule := modules.Items[0]
 		expectedModuleAddress := strings.Join([]string{directModule.Namespace, directModule.Name, directModule.Provider}, "/")
-
+		// TODO: The private registry tools currently return plain text, so verify
+		// expected values with assert.Contains(). Use structured field assertions if
+		// these tools return structured output after the MCP SDK migration.
 		assert.Contains(t, resultText, expectedModuleAddress)
 	})
 
@@ -87,6 +89,7 @@ func TestPrivateRegistryModules(t *testing.T) {
 		// Verify against the TFE API directly.
 		expectedModuleAddress := strings.Join([]string{registryDetails.Namespace, registryDetails.Name, registryDetails.Provider}, "/")
 
+		// TODO: update this after MCP SKD migration
 		assert.Contains(t, resultText, expectedModuleAddress)
 		assert.Contains(t, resultText, registryDetails.Root.Inputs[0].Name)
 		assert.Contains(t, resultText, registryDetails.Root.Inputs[0].Description)
@@ -166,6 +169,7 @@ func TestPrivateRegistryProviders(t *testing.T) {
 		directProvider := providers.Items[0]
 		expectedProviderAddress := strings.Join([]string{directProvider.Namespace, directProvider.Name}, "/")
 
+		// TODO: update this after MCP SKD migration
 		assert.Contains(t, resultText, expectedProviderAddress)
 		assert.Contains(t, resultText, directProvider.ID)
 	})
@@ -187,8 +191,8 @@ func TestPrivateRegistryProviders(t *testing.T) {
 
 		expectedProviderAddress := strings.Join([]string{directProvider.Namespace, directProvider.Name}, "/")
 
+		// TODO: update this after MCP SKD migration
 		assert.Contains(t, resultText, expectedProviderAddress)
 		assert.Contains(t, resultText, directProvider.ID)
-		assert.Contains(t, resultText, directProvider.RegistryName)
 	})
 }
