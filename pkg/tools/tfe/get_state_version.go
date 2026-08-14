@@ -32,12 +32,10 @@ func GetStateVersion(logger *log.Logger) server.ServerTool {
 				mcp.Description("Optional Workspace id to fetch latest version"),
 			),
 		),
-
 		Handler: func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			return getStateVersionWithIDHandler(ctx, request, logger)
 		},
 	}
-
 }
 
 // getStateVersionWithIDHandler handles tool logics and functionality
