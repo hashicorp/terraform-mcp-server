@@ -5,7 +5,6 @@ package tools
 
 import (
 	"context"
-	"encoding/json"
 
 	"github.com/hashicorp/go-tfe"
 	"github.com/hashicorp/terraform-mcp-server/pkg/client"
@@ -74,20 +73,9 @@ func actionRunHandler(ctx context.Context, request mcp.CallToolRequest, logger *
 	default:
 		return ToolErrorf(logger, "invalid run_action: %s - must be 'apply', 'discard', or 'cancel'", runAction)
 	}
-
 	if err != nil {
 		return ToolErrorf(logger, "failed to %s run %s: %v", runAction, runID, err)
 	}
 
-	result := map[string]interface{}{
-		"success": true,
-		"message": msg,
-		"run_id":  runID,
-	}
-
-	resultJSON, err := json.Marshal(result)
-	if err != nil {
-		return ToolError(logger, "failed to marshal result", err)
-	}
-	return mcp.NewToolResultText(string(resultJSON)), nil
+	return mcp.NewToolResultText(msg), nil
 }

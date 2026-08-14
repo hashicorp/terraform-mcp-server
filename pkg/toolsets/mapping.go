@@ -23,62 +23,75 @@ var ToolToToolset = map[string]string{
 	"search_private_providers":     RegistryPrivate,
 	"get_private_provider_details": RegistryPrivate,
 
-	// Terraform Tools - User
-	"whoami": Terraform,
+	// Terraform tools - User
+	"whoami":                Terraform,
+	"get_token_permissions": Terraform,
 
 	// Terraform tools - Organization
 	"list_terraform_orgs": Terraform,
 
-	// Terraform tools - Project
+	// Terraform tools - Projects
 	"list_terraform_projects": Terraform,
 	"create_project":          Terraform,
-	"delete_project":          Terraform,
 	"get_project":             Terraform,
+	"delete_project":          Terraform,
 
-	// Terraform tools - Team
-	"create_team":       Terraform,
+	// Terraform tools - Teams
 	"list_teams":        Terraform,
 	"get_team":          Terraform,
+	"create_team":       Terraform,
 	"add_team_member":   Terraform,
 	"grant_team_access": Terraform,
+	"delete_team":       Terraform,
 
-	// Terraform tools - Workspace management
-	"list_workspaces":                     Terraform,
-	"get_workspace_details":               Terraform,
-	"create_workspace":                    Terraform,
-	"create_no_code_workspace":            Terraform,
-	"update_workspace":                    Terraform,
-	"delete_workspace_safely":             Terraform,
-	"list_runs":                           Terraform,
-	"get_run_details":                     Terraform,
-	"get_plan_details":                    Terraform,
-	"get_plan_logs":                       Terraform,
-	"get_plan_json_output":                Terraform,
-	"get_apply_details":                   Terraform,
-	"get_apply_logs":                      Terraform,
-	"get_sentinel_mock":                   Terraform,
-	"create_run":                          Terraform,
-	"action_run":                          Terraform,
-	"list_workspace_variables":            Terraform,
-	"create_workspace_variable":           Terraform,
-	"update_workspace_variable":           Terraform,
+	// Terraform tools - Workspaces
+	"list_workspaces":          Terraform,
+	"get_workspace_details":    Terraform,
+	"create_workspace":         Terraform,
+	"create_no_code_workspace": Terraform,
+	"update_workspace":         Terraform,
+	"delete_workspace_safely":  Terraform,
+	"force_unlock_workspace":   Terraform,
+
+	// Terraform tools - Runs and Plans
+	"list_runs":            Terraform,
+	"get_run_details":      Terraform,
+	"get_run_comments":     Terraform,
+	"create_run":           Terraform,
+	"action_run":           Terraform,
+	"get_plan_details":     Terraform,
+	"get_plan_logs":        Terraform,
+	"get_plan_json_output": Terraform,
+	"get_apply_details":    Terraform,
+	"get_apply_logs":       Terraform,
+	"get_sentinel_mock":    Terraform,
+
+	// Terraform tools - Workspace Variables
+	"list_workspace_variables":  Terraform,
+	"create_workspace_variable": Terraform,
+	"update_workspace_variable": Terraform,
+
+	// Terraform tools - Variable Sets
 	"list_variable_sets":                  Terraform,
 	"create_variable_set":                 Terraform,
 	"create_variable_in_variable_set":     Terraform,
 	"delete_variable_in_variable_set":     Terraform,
 	"attach_variable_set_to_workspaces":   Terraform,
 	"detach_variable_set_from_workspaces": Terraform,
-	"create_workspace_tags":               Terraform,
-	"read_workspace_tags":                 Terraform,
-	"attach_policy_set_to_workspaces":     Terraform,
-	"get_token_permissions":               Terraform,
-	"list_stacks":                         Terraform,
-	"get_stack_details":                   Terraform,
-	"list_workspace_policy_sets":          Terraform,
-	"force_unlock_workspace":              Terraform,
-	"list_state_versions":                 Terraform,
-	"get_state_version":                   Terraform,
-	"get_run_comments":                    Terraform,
+
+	// Terraform tools - Tags and Policies
+	"create_workspace_tags":           Terraform,
+	"read_workspace_tags":             Terraform,
+	"attach_policy_set_to_workspaces": Terraform,
+	"list_workspace_policy_sets":      Terraform,
+
+	// Terraform tools - Stacks
+	"list_stacks":       Terraform,
+	"get_stack_details": Terraform,
+
+	// Terraform tools - State Versions
+	"list_state_versions": Terraform,
+	"get_state_version":   Terraform,
 }
 
 // GetToolsetForTool returns the toolset name for a given tool name

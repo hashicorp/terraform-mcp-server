@@ -142,6 +142,12 @@ func (r *DynamicToolRegistry) registerTFETools() {
 		r.mcpServer.AddTool(tool.Tool, tool.Handler)
 	}
 
+	// Only register delete_team if TF operations are enable AND toolset is enable
+	if isTerraformOperationsEnabled() && toolsets.IsToolEnabled("delete_team", r.enabledToolsets) {
+		tool := r.createDynamicTFETool("delete_team", tfeTools.DeleteTeam)
+		r.mcpServer.AddTool(tool.Tool, tool.Handler)
+	}
+
 	// Terraform toolset - Workspace management tools
 	if toolsets.IsToolEnabled("list_workspaces", r.enabledToolsets) {
 		tool := r.createDynamicTFETool("list_workspaces", tfeTools.ListWorkspaces)
