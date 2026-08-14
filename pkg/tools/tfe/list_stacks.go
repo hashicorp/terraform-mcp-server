@@ -50,8 +50,8 @@ func listTerraformStacksHandler(ctx context.Context, request mcp.CallToolRequest
 	}
 	terraformOrgName = strings.TrimSpace(terraformOrgName)
 
-	projectID := request.GetString("project_id", "")
-	searchQuery := request.GetString("search_query", "")
+	projectID := GetTrimmedString(request, "project_id", "")
+	searchQuery := GetTrimmedString(request, "search_query", "")
 
 	tfeClient, err := client.GetTfeClientFromContext(ctx, logger)
 	if err != nil {
@@ -86,7 +86,6 @@ func listTerraformStacksHandler(ctx context.Context, request mcp.CallToolRequest
 			ID:          item.ID,
 			Name:        item.Name,
 			Description: item.Description,
-			ProjectName: item.Project.Name,
 		}
 	}
 	list := &StackSummaryList{
@@ -107,7 +106,6 @@ type StackSummary struct {
 	ID          string `json:"ID"`
 	Name        string `json:"name"`
 	Description string `json:"description"`
-	ProjectName string `json:"project_name"`
 }
 
 // StackSummaryList is a list of Stack summaries with pagination parameters

@@ -25,10 +25,6 @@ func GetStackDetails(logger *log.Logger) server.ServerTool {
 			mcp.WithTitleAnnotation("Get detailed information about a Terraform Stack"),
 			mcp.WithReadOnlyHintAnnotation(true),
 			mcp.WithDestructiveHintAnnotation(false),
-			mcp.WithString("terraform_org_name",
-				mcp.Required(),
-				mcp.Description(terraformOrgNameDescription),
-			),
 			mcp.WithString("stack_id",
 				mcp.Required(),
 				mcp.Description("The ID of the stack to get details for"),
@@ -41,12 +37,6 @@ func GetStackDetails(logger *log.Logger) server.ServerTool {
 }
 
 func getStackDetailsHandler(ctx context.Context, request mcp.CallToolRequest, logger *log.Logger) (*mcp.CallToolResult, error) {
-	terraformOrgName, err := request.RequireString("terraform_org_name")
-	if err != nil {
-		return ToolError(logger, "missing required input: terraform_org_name", err)
-	}
-	terraformOrgName = strings.TrimSpace(terraformOrgName)
-
 	stackID, err := request.RequireString("stack_id")
 	if err != nil {
 		return ToolError(logger, "missing required input: stack_id", err)
@@ -60,7 +50,7 @@ func getStackDetailsHandler(ctx context.Context, request mcp.CallToolRequest, lo
 
 	stack, err := tfeClient.Stacks.Read(ctx, stackID)
 	if err != nil {
-		return ToolErrorf(logger, "stack %q not found in org %q", stackID, terraformOrgName)
+		return ToolErrorf(logger, "stack %q not found: %v", stackID, err)
 	}
 
 	buf := bytes.NewBuffer(nil)

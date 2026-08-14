@@ -24,7 +24,6 @@ func TestGetStackDetails(t *testing.T) {
 		assert.True(t, *tool.Tool.Annotations.ReadOnlyHint)
 
 		// Check that required parameters are defined
-		assert.Contains(t, tool.Tool.InputSchema.Required, "terraform_org_name")
 		assert.Contains(t, tool.Tool.InputSchema.Required, "stack_id")
 	})
 }
