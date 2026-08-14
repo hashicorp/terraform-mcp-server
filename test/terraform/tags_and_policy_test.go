@@ -1,6 +1,7 @@
 package terraform
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/hashicorp/go-tfe"
@@ -41,6 +42,8 @@ func TestListWorkspacePolicySets(t *testing.T) {
 			"workspace_id":       ws.ID,
 		})
 
+		t.Logf("returns directly attached policy set -> %v", resultText)
+
 		require.False(t, result.IsError, "list_workspace_policy_sets should not return an error")
 		require.NotEmpty(t, resultText, "list_workspace_policy_sets should return a non-empty response")
 
@@ -50,8 +53,42 @@ func TestListWorkspacePolicySets(t *testing.T) {
 		assert.False(t, gjson.Get(resultText, "0.global").Bool(), "policy set should not be global")
 	})
 
+	t.Run("returns global policy set for any workspace", func(t *testing.T) {
+		// Create a global policy set — it applies to every workspace in the org,
+		// regardless of whether the workspace is explicitly attached.
+		globalPsName := randomName("ps-global-")
+		globalPs, err := client.PolicySets.Create(t.Context(), tfeOrgName, tfe.PolicySetCreateOptions{
+			Name:   tfe.String(globalPsName),
+			Global: tfe.Bool(true),
+		})
+		require.NoError(t, err, "setup: failed to create global policy set via TFE API")
+		defer client.PolicySets.Delete(t.Context(), globalPs.ID)
+
+		// Use the workspace created in the parent test — it has no direct attachment
+		// to this global policy set, yet the tool must still return it.
+		result, resultText := callTool(t, s, "list_workspace_policy_sets", map[string]any{
+			"terraform_org_name": tfeOrgName,
+			"workspace_id":       ws.ID,
+		})
+
+		t.Logf("returns global policy set for any workspace -> %v", resultText)
+
+		require.False(t, result.IsError, "list_workspace_policy_sets should not return an error")
+		require.NotEmpty(t, resultText, "list_workspace_policy_sets should return a non-empty response")
+
+		// Find the global policy set in the result array by ID using gjson query syntax.
+		globalPsResult := gjson.Get(resultText, fmt.Sprintf("#(id==%q)", globalPs.ID))
+		require.True(t, globalPsResult.Exists(), "response should contain the global policy set")
+		assert.Equal(t, globalPsName, globalPsResult.Get("name").String(), "global policy set name should match")
+		assert.Equal(t, "global", globalPsResult.Get("reason").String(), "global policy set should have reason 'global'")
+		assert.True(t, globalPsResult.Get("global").Bool(), "global policy set should have global=true")
+	})
+
 	t.Run("returns no policy sets for an unattached workspace", func(t *testing.T) {
 		// Create a second workspace that has no policy sets attached.
+		// Note: there must be no global policy sets in the org while this subtest
+		// runs, which is guaranteed because the global set above is created and
+		// deleted entirely within its own subtest scope.
 		bareWsName := randomName("ws-bare-")
 		bareWs, err := client.Workspaces.Create(t.Context(), tfeOrgName, tfe.WorkspaceCreateOptions{
 			Name: &bareWsName,
@@ -63,6 +100,8 @@ func TestListWorkspacePolicySets(t *testing.T) {
 			"terraform_org_name": tfeOrgName,
 			"workspace_id":       bareWs.ID,
 		})
+
+		t.Logf("returns no policy sets for an unattached workspace -> %v", resultText)
 
 		require.False(t, result.IsError, "list_workspace_policy_sets should not return an error for an unattached workspace")
 		assert.Contains(t, resultText, "No policy sets are attached to workspace", "response should indicate no policy sets are attached")
