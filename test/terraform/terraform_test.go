@@ -154,6 +154,15 @@ func requireStacksEntitlement(t *testing.T, client *tfe.Client) {
 	}
 }
 
+func requireSentinelEntitlement(t *testing.T, client *tfe.Client) {
+	t.Helper()
+	entitlements, err := client.Organizations.ReadEntitlements(t.Context(), tfeOrgName)
+	require.NoError(t, err, "Failed to read entitlements for organization %q", tfeOrgName)
+	if !entitlements.Sentinel {
+		t.Skipf("Organization %q does not have the Sentinel entitlement", tfeOrgName)
+	}
+}
+
 func randomName(prefix string) string {
 	suffix := make([]byte, randomNameLength)
 	for i := range suffix {

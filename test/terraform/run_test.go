@@ -3,6 +3,7 @@ package terraform
 import (
 	"context"
 	_ "embed"
+	"encoding/base64"
 	"fmt"
 	"io"
 	"testing"
@@ -17,7 +18,7 @@ import (
 //go:embed testdata/run_test.tf
 var runTestConfiguration string
 
-func TestCreateRunLockedWorkspace(t *testing.T) {
+func TestCreateRunWithLockedWorkspace(t *testing.T) {
 	s := newTestingSession(t)
 	defer s.Close()
 
@@ -199,6 +200,34 @@ func TestRunLifecycle(t *testing.T) {
 		directJSON, err := client.Plans.ReadJSONOutput(t.Context(), planID)
 		require.NoError(t, err)
 		assert.JSONEq(t, string(directJSON), resultText)
+	})
+
+	t.Run("Get Sentinel mock", func(t *testing.T) {
+		requireSentinelEntitlement(t, client)
+
+		result, resultText := callTool(t, s, "get_sentinel_mock", map[string]any{"plan_id": planID})
+		require.False(t, result.IsError, "get_sentinel_mock should not return an error")
+		require.True(t, gjson.Valid(resultText), "get_sentinel_mock should return valid JSON")
+
+		assert.Equal(t, planID, gjson.Get(resultText, "plan_id").String())
+		assert.Equal(t, "sentinel-mock-bundle-v0", gjson.Get(resultText, "data_type").String())
+		assert.Equal(t, "base64-tar-gz", gjson.Get(resultText, "format").String())
+		planExportID := gjson.Get(resultText, "plan_export_id").String()
+		require.NotEmpty(t, planExportID, "response should include the plan export ID")
+		defer client.PlanExports.Delete(t.Context(), planExportID)
+
+		archiveData, err := base64.StdEncoding.DecodeString(gjson.Get(resultText, "data").String())
+		require.NoError(t, err, "Sentinel mock data should be valid base64")
+		require.NotEmpty(t, archiveData, "Sentinel mock archive should not be empty")
+
+		// direct verification of the plan export from TFE
+		planExport, err := client.PlanExports.Read(t.Context(), planExportID)
+		require.NoError(t, err, "failed to read the plan export directly from TFE")
+		assert.Equal(t, tfe.PlanExportFinished, planExport.Status)
+		assert.Equal(t, tfe.PlanExportSentinelMockBundleV0, planExport.DataType)
+		directArchiveData, err := client.PlanExports.Download(t.Context(), planExportID)
+		require.NoError(t, err, "failed to download the plan export directly from TFE")
+		assert.Equal(t, directArchiveData, archiveData)
 	})
 
 	t.Run("Action run", func(t *testing.T) {
