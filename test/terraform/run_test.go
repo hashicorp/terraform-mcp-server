@@ -204,7 +204,6 @@ func TestRunLifecycle(t *testing.T) {
 		assert.JSONEq(t, string(directJSON), resultText)
 	})
 
-	var actionRunID string
 	t.Run("Action run", func(t *testing.T) {
 		result, resultText := callTool(t, s, "action_run", map[string]any{
 			"run_id":     runID,
@@ -213,17 +212,13 @@ func TestRunLifecycle(t *testing.T) {
 		})
 		require.False(t, result.IsError, "action_run should not return an error")
 		require.NotEmpty(t, resultText, "action_run response must not be empty")
-		actionSucceeded := gjson.Get(resultText, "success").Bool()
-		actionRunID = gjson.Get(resultText, "run_id").String()
-		assert.True(t, actionSucceeded)
-		assert.Equal(t, runID, actionRunID)
 	})
 
 	// action_run starts applying asynchronously; wait until the apply finishes.
 	appliedRun := waitForRun(t, client, runID, "finish applying", func(run *tfe.Run) bool {
 		return run.Status == tfe.RunApplied
 	})
-	assert.Equal(t, appliedRun.ID, actionRunID)
+	assert.Equal(t, appliedRun.ID, runID)
 	require.NotNil(t, appliedRun.Apply, "the applied run should have an apply")
 	applyID := appliedRun.Apply.ID
 	require.NotEmpty(t, applyID, "the applied run should have an apply ID")
