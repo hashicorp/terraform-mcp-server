@@ -157,6 +157,15 @@ func requireTeamsEntitlement(t *testing.T, client *tfe.Client) {
 	}
 }
 
+func requirePolicySetsEntitlement(t *testing.T, client *tfe.Client) {
+	t.Helper()
+	entitlements, err := client.Organizations.ReadEntitlements(t.Context(), tfeOrgName)
+	require.NoError(t, err, "Failed to read entitlements for organization %q", tfeOrgName)
+	if !entitlements.Sentinel {
+		t.Skipf("Organization %q does not have the Sentinel/policy-sets entitlement", tfeOrgName)
+	}
+}
+
 func requireStacksEntitlement(t *testing.T, client *tfe.Client) {
 	t.Helper()
 	org, err := client.Organizations.Read(t.Context(), tfeOrgName)
