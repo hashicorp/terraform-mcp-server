@@ -2,6 +2,7 @@ package terraform
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -49,7 +50,18 @@ func TestPrivateRegistryModules(t *testing.T) {
 
 	// Module source is processed asynchronously after upload. Wait until its
 	// inputs, outputs, and README are available through the registry API.
-	registryDetails := waitForPrivateModuleDetails(t, client, moduleLocator, moduleVersion)
+	registryDetails := waitFor(t, 2*time.Minute, fmt.Sprintf("private module %q version %s to finish processing", moduleLocator.Name, moduleVersion), func(ctx context.Context) (*tfe.TerraformRegistryModule, error) {
+		module, err := client.RegistryModules.ReadTerraformRegistryModule(ctx, moduleLocator, moduleVersion)
+		if err != nil {
+			return nil, err
+		}
+
+		ready := module != nil && len(module.Root.Inputs) > 0 && len(module.Root.Outputs) > 0 && module.Root.Readme != ""
+		if !ready {
+			return nil, nil
+		}
+		return module, nil
+	})
 
 	privateModuleAddress := strings.Join([]string{module.Namespace, module.Name, module.Provider}, "/")
 
@@ -97,29 +109,6 @@ func TestPrivateRegistryModules(t *testing.T) {
 		assert.Contains(t, resultText, registryDetails.Root.Outputs[0].Description)
 		assert.Contains(t, resultText, strings.TrimSpace(registryDetails.Root.Readme))
 	})
-}
-
-func waitForPrivateModuleDetails(t *testing.T, client *tfe.Client, moduleLocator tfe.RegistryModuleID, version string) *tfe.TerraformRegistryModule {
-	t.Helper()
-
-	ctx, cancel := context.WithTimeout(t.Context(), 2*time.Minute)
-	defer cancel()
-
-	ticker := time.NewTicker(2 * time.Second)
-	defer ticker.Stop()
-
-	for {
-		module, err := client.RegistryModules.ReadTerraformRegistryModule(ctx, moduleLocator, version)
-		if err == nil && module != nil && len(module.Root.Inputs) > 0 && len(module.Root.Outputs) > 0 && module.Root.Readme != "" {
-			return module
-		}
-
-		select {
-		case <-ctx.Done():
-			t.Fatalf("timed out waiting for private module %q version %s to finish processing", moduleLocator.Name, version)
-		case <-ticker.C:
-		}
-	}
 }
 
 func TestPrivateRegistryProviders(t *testing.T) {

@@ -212,6 +212,8 @@ func TestRunLifecycle(t *testing.T) {
 		})
 		require.False(t, result.IsError, "action_run should not return an error")
 		require.NotEmpty(t, resultText, "action_run response must not be empty")
+		// TODO: update this after MCP SKD migration
+		assert.Contains(t, resultText, "Run approved and applied successfully")
 	})
 
 	// action_run starts applying asynchronously; wait until the apply finishes.
@@ -283,31 +285,20 @@ func uploadRunTestConfiguration(t *testing.T, client *tfe.Client, workspaceID st
 func waitForRun(t *testing.T, client *tfe.Client, runID, condition string, conditionMet func(*tfe.Run) bool) *tfe.Run {
 	t.Helper()
 
-	ctx, cancel := context.WithTimeout(t.Context(), 2*time.Minute)
-	defer cancel()
-
-	// polling interval
-	ticker := time.NewTicker(2 * time.Second)
-	defer ticker.Stop()
-
-	for {
+	description := fmt.Sprintf("run %s to %s", runID, condition)
+	return waitFor(t, 2*time.Minute, description, func(ctx context.Context) (*tfe.Run, error) {
 		run, err := client.Runs.ReadWithOptions(ctx, runID, &tfe.RunReadOptions{
 			Include: []tfe.RunIncludeOpt{tfe.RunPlan, tfe.RunApply},
 		})
 		require.NoError(t, err, "failed to poll run with the TFE client")
 		if conditionMet(run) {
-			return run
+			return run, nil
 		}
 
 		switch run.Status {
 		case tfe.RunErrored, tfe.RunCanceled, tfe.RunDiscarded:
 			t.Fatalf("run %s reached terminal state %s while waiting for it to %s", runID, run.Status, condition)
 		}
-
-		select {
-		case <-ctx.Done():
-			t.Fatalf("timed out waiting 2 minute for run %s to %s", runID, condition)
-		case <-ticker.C:
-		}
-	}
+		return nil, nil
+	})
 }

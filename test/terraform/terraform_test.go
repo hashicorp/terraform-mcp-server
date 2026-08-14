@@ -191,3 +191,35 @@ func callTool(t *testing.T, s *mcp.ClientSession, toolName string, arguments map
 	}
 	return result, textContent
 }
+
+// waitFor polls until poll returns a non-nil result. Poll errors are retried
+// and included in the timeout failure.
+func waitFor[T any](t *testing.T, timeout time.Duration, description string, poll func(context.Context) (*T, error)) *T {
+	t.Helper()
+
+	ctx, cancel := context.WithTimeout(t.Context(), timeout)
+	defer cancel()
+
+	ticker := time.NewTicker(2 * time.Second)
+	defer ticker.Stop()
+
+	var lastErr error
+	for {
+		result, err := poll(ctx)
+		if err == nil && result != nil && ctx.Err() == nil {
+			return result
+		}
+		if err != nil && ctx.Err() == nil {
+			lastErr = err
+		}
+
+		select {
+		case <-ctx.Done():
+			if lastErr != nil {
+				t.Fatalf("timed out after %s waiting for %s: last error: %v", timeout, description, lastErr)
+			}
+			t.Fatalf("timed out after %s waiting for %s", timeout, description)
+		case <-ticker.C:
+		}
+	}
+}
