@@ -42,8 +42,8 @@ func GetStateVersion(logger *log.Logger) server.ServerTool {
 
 // getStateVersionWithIDHandler handles tool logics and functionality
 func getStateVersionWithIDHandler(ctx context.Context, request mcp.CallToolRequest, logger *log.Logger) (*mcp.CallToolResult, error) {
-	stateVersionID := request.GetString("state_version_id", "")
-	workspaceID := request.GetString("workspace_id", "")
+	stateVersionID := GetTrimmedString(request, "state_version_id", "")
+	workspaceID := GetTrimmedString(request, "workspace_id", "")
 
 	stateVersionID = strings.TrimLeft(strings.TrimSpace(stateVersionID), "#")
 	workspaceID = strings.TrimLeft(strings.TrimSpace(workspaceID), "#")
@@ -57,7 +57,6 @@ func getStateVersionWithIDHandler(ctx context.Context, request mcp.CallToolReque
 	}
 
 	var sv *tfe.StateVersion
-
 	if stateVersionID == "" && workspaceID == "" {
 		return ToolError(logger, "One of state_version_id or workspace_id must be provided", nil)
 	}
@@ -75,6 +74,5 @@ func getStateVersionWithIDHandler(ctx context.Context, request mcp.CallToolReque
 	if err != nil {
 		return ToolError(logger, "failed to marshal state version", err)
 	}
-
 	return mcp.NewToolResultText(buf.String()), nil
 }

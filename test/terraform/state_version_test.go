@@ -125,3 +125,98 @@ func TestListStateVersionsErrorPaths(t *testing.T) {
 		assert.True(t, result.IsError, "list_state_versions on a workspace with no state should return an error")
 	})
 }
+
+func TestGetStateVersionHappyPath(t *testing.T) {
+	requireTfOperations(t)
+
+	s := newTestingSession(t)
+	defer s.Close()
+
+	client := tfeClient(t)
+	workspaceName := randomName("sv-get-")
+	executionMode := "remote"
+	workspace, err := client.Workspaces.Create(t.Context(), tfeOrgName, tfe.WorkspaceCreateOptions{
+		Name:          &workspaceName,
+		ExecutionMode: &executionMode,
+		AutoApply:     tfe.Bool(false),
+	})
+	require.NoError(t, err, "failed to create test workspace")
+	defer client.Workspaces.DeleteByID(t.Context(), workspace.ID)
+
+	uploadRunTestConfiguration(t, client, workspace.ID)
+	runMessage := "Created by terraform-mcp-server get state version integration tests"
+	run, err := client.Runs.Create(t.Context(), tfe.RunCreateOptions{
+		Workspace: workspace,
+		AutoApply: tfe.Bool(false),
+		Message:   &runMessage,
+	})
+	require.NoError(t, err, "failed to create run")
+
+	waitForRun(t, client, run.ID, "become confirmable", func(r *tfe.Run) bool {
+		return r.Actions != nil && r.Actions.IsConfirmable
+	})
+	applyComment := "Approved by get state version integration tests"
+	require.NoError(t, client.Runs.Apply(t.Context(), run.ID, tfe.RunApplyOptions{Comment: &applyComment}), "failed to apply run")
+	waitForRun(t, client, run.ID, "finish applying", func(r *tfe.Run) bool {
+		return r.Status == tfe.RunApplied
+	})
+
+	stateVersions, err := client.StateVersions.List(t.Context(), &tfe.StateVersionListOptions{
+		Organization: tfeOrgName,
+		Workspace:    workspaceName,
+	})
+	require.NoError(t, err, "failed to list created state versions")
+	require.NotEmpty(t, stateVersions.Items, "applied run should create a state version")
+	stateVersion := stateVersions.Items[0]
+
+	t.Run("gets an exact state version by state_version_id", func(t *testing.T) {
+		result, resultText := callTool(t, s, "get_state_version", map[string]any{
+			"state_version_id": "#" + stateVersion.ID,
+		})
+
+		require.False(t, result.IsError, "get_state_version should not return an error")
+		require.NotEmpty(t, resultText, "get_state_version response must not be empty")
+		assert.Equal(t, stateVersion.ID, gjson.Get(resultText, "data.id").String())
+		assert.Equal(t, stateVersion.Serial, gjson.Get(resultText, "data.attributes.serial").Int())
+		assert.NotEmpty(t, gjson.Get(resultText, "data.attributes.created-at").String())
+	})
+
+	t.Run("gets the current state version by workspace_id", func(t *testing.T) {
+		result, resultText := callTool(t, s, "get_state_version", map[string]any{
+			"workspace_id": "#" + workspace.ID,
+		})
+
+		require.False(t, result.IsError, "get_state_version should not return an error")
+		require.NotEmpty(t, resultText, "get_state_version response must not be empty")
+		assert.Equal(t, stateVersion.ID, gjson.Get(resultText, "data.id").String())
+	})
+}
+
+func TestGetStateVersionErrorPaths(t *testing.T) {
+	requireTfOperations(t)
+
+	s := newTestingSession(t)
+	defer s.Close()
+
+	t.Run("requires a state version or workspace ID", func(t *testing.T) {
+		result, resultText := callTool(t, s, "get_state_version", map[string]any{})
+		require.True(t, result.IsError, "get_state_version without an identifier should return an error")
+		assert.Contains(t, resultText, "One of state_version_id or workspace_id must be provided")
+	})
+
+	t.Run("rejects a non-existent state version", func(t *testing.T) {
+		result, resultText := callTool(t, s, "get_state_version", map[string]any{
+			"state_version_id": "sv-0000000000dead",
+		})
+		require.True(t, result.IsError, "get_state_version should return an error for an unknown state version")
+		assert.Contains(t, resultText, "sv-0000000000dead")
+	})
+
+	t.Run("rejects a non-existent workspace", func(t *testing.T) {
+		result, resultText := callTool(t, s, "get_state_version", map[string]any{
+			"workspace_id": "ws-0000000000dead",
+		})
+		require.True(t, result.IsError, "get_state_version should return an error for an unknown workspace")
+		assert.Contains(t, resultText, "ws-0000000000dead")
+	})
+}
