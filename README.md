@@ -4,6 +4,8 @@ The Terraform MCP Server is a [Model Context Protocol (MCP)](https://modelcontex
 server that integrates seamlessly with [Terraform Registry](https://developer.hashicorp.com/terraform/registry/api-docs) and [HCP Terraform](https://developer.hashicorp.com/terraform/cloud-docs/api-docs) APIs, enabling advanced
 automation and interaction capabilities for Infrastructure as Code (IaC) development.
 
+[![context cost](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Fathakur3%2Fmcp-context-cost%2Fmain%2Fbadges%2Fterraform.json)](https://athakur3.github.io/mcp-context-cost/METHODOLOGY)
+
 ## Table of Contents
 
 <table width="100%">
