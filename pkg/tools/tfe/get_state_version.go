@@ -56,14 +56,11 @@ func getStateVersionWithIDHandler(ctx context.Context, request mcp.CallToolReque
 	}
 	if stateVersionID != "" {
 		sv, err = tfeClient.StateVersions.Read(ctx, stateVersionID)
-		if err != nil {
-			return ToolErrorf(logger, "Failed to get state version %s: %v", stateVersionID, err)
-		}
 	} else {
 		sv, err = tfeClient.StateVersions.ReadCurrent(ctx, workspaceID)
-		if err != nil {
-			return ToolErrorf(logger, "Failed to get current state version for workspace %s: %v", workspaceID, err)
-		}
+	}
+	if err != nil {
+		return ToolError(logger, "Failed to get state version", err)
 	}
 
 	buf := bytes.NewBuffer(nil)
