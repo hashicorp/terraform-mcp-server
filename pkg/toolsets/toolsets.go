@@ -10,6 +10,7 @@ const (
 	Registry        = "registry"
 	RegistryPrivate = "registry-private" // Private registry (TFE/TFC)
 	Terraform       = "terraform"        // TFE/TFC operations
+	Search          = "search"           // HCP Terraform no-code search
 
 	// Special toolsets
 	All     = "all"
@@ -46,6 +47,10 @@ var (
 		Name:        Terraform,
 		Description: "HCP Terraform/TFE operations (workspaces, runs, variables, etc.)",
 	}
+	SearchToolset = Toolset{
+		Name:        Search,
+		Description: "HCP Terraform no-code search (query configuration for infrastructure discovery)",
+	}
 )
 
 func AvailableToolsets() []Toolset {
@@ -53,6 +58,7 @@ func AvailableToolsets() []Toolset {
 		RegistryToolset,
 		RegistryPrivateToolset,
 		TerraformToolset,
+		SearchToolset,
 	}
 }
 

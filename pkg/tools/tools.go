@@ -5,6 +5,7 @@ package tools
 
 import (
 	registryTools "github.com/hashicorp/terraform-mcp-server/pkg/tools/registry"
+	searchTools "github.com/hashicorp/terraform-mcp-server/pkg/tools/search"
 	"github.com/hashicorp/terraform-mcp-server/pkg/toolsets"
 	"github.com/mark3labs/mcp-go/server"
 	log "github.com/sirupsen/logrus"
@@ -59,6 +60,12 @@ func RegisterTools(hcServer *server.MCPServer, logger *log.Logger, enabledToolse
 
 	if toolsets.IsToolEnabled("get_policy_details", enabledToolsets) {
 		tool := registryTools.PolicyDetails(logger)
+		hcServer.AddTool(tool.Tool, tool.Handler)
+	}
+
+	// Search toolset - No-Code Query Configuration
+	if toolsets.IsToolEnabled("generate_query_configuration", enabledToolsets) {
+		tool := searchTools.GenerateQueryConfiguration(logger)
 		hcServer.AddTool(tool.Tool, tool.Handler)
 	}
 }

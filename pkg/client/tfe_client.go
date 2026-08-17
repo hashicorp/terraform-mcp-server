@@ -153,6 +153,16 @@ func GetTfeClientFromContext(ctx context.Context, logger *log.Logger) (*tfe.Clie
 	return CreateTfeClientForSession(ctx, session, logger)
 }
 
+// GetTokenFromContext extracts the TFE bearer token from the MCP request context.
+// It mirrors the lookup order used internally by GetTfeClientFromContext:
+// context value first, then the TFE_TOKEN environment variable.
+func GetTokenFromContext(ctx context.Context) string {
+	if token, ok := ctx.Value(contextKey(TerraformToken)).(string); ok && token != "" {
+		return token
+	}
+	return utils.GetEnv(TerraformToken, "")
+}
+
 // CreateTfeClientForSession creates only a TFE client for the session
 func CreateTfeClientForSession(ctx context.Context, session server.ClientSession, logger *log.Logger) (*tfe.Client, error) {
 	var err error

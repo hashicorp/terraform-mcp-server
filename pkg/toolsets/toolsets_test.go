@@ -160,7 +160,7 @@ func TestGetValidToolsetNames(t *testing.T) {
 	validNames := GetValidToolsetNames()
 
 	// Check that all expected toolsets are present
-	expected := []string{"registry", "registry-private", "terraform", "all", "default"}
+	expected := []string{"registry", "registry-private", "terraform", "search", "all", "default"}
 	for _, name := range expected {
 		if !validNames[name] {
 			t.Errorf("GetValidToolsetNames() missing expected toolset: %s", name)
@@ -213,6 +213,24 @@ func TestIsToolEnabled(t *testing.T) {
 			name:            "private registry tool",
 			toolName:        "search_private_modules",
 			enabledToolsets: []string{"registry-private"},
+			expected:        true,
+		},
+		{
+			name:            "search tool enabled by search toolset",
+			toolName:        "generate_query_configuration",
+			enabledToolsets: []string{"search"},
+			expected:        true,
+		},
+		{
+			name:            "search tool not enabled by registry toolset",
+			toolName:        "generate_query_configuration",
+			enabledToolsets: []string{"registry"},
+			expected:        false,
+		},
+		{
+			name:            "search tool enabled by all toolset",
+			toolName:        "generate_query_configuration",
+			enabledToolsets: []string{"all"},
 			expected:        true,
 		},
 	}
