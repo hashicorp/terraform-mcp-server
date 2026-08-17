@@ -6,7 +6,6 @@ package tools
 import (
 	"bytes"
 	"context"
-	"strings"
 
 	"github.com/hashicorp/go-tfe"
 	"github.com/hashicorp/jsonapi"
@@ -43,9 +42,6 @@ func getStateVersionWithIDHandler(ctx context.Context, request mcp.CallToolReque
 	stateVersionID := GetTrimmedString(request, "state_version_id", "")
 	workspaceID := GetTrimmedString(request, "workspace_id", "")
 
-	stateVersionID = strings.TrimLeft(strings.TrimSpace(stateVersionID), "#")
-	workspaceID = strings.TrimLeft(strings.TrimSpace(workspaceID), "#")
-
 	tfeClient, err := client.GetTfeClientFromContext(ctx, logger)
 	if err != nil {
 		return ToolError(logger, "Failed to get Terraform client", err)
@@ -60,11 +56,14 @@ func getStateVersionWithIDHandler(ctx context.Context, request mcp.CallToolReque
 	}
 	if stateVersionID != "" {
 		sv, err = tfeClient.StateVersions.Read(ctx, stateVersionID)
+		if err != nil {
+			return ToolErrorf(logger, "Failed to get state version %s: %v", stateVersionID, err)
+		}
 	} else {
 		sv, err = tfeClient.StateVersions.ReadCurrent(ctx, workspaceID)
-	}
-	if err != nil {
-		return ToolError(logger, "Failed to get state version", err)
+		if err != nil {
+			return ToolErrorf(logger, "Failed to get current state version for workspace %s: %v", workspaceID, err)
+		}
 	}
 
 	buf := bytes.NewBuffer(nil)

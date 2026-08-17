@@ -4,6 +4,7 @@
 package terraform
 
 import (
+	_ "embed"
 	"testing"
 
 	"github.com/hashicorp/go-tfe"
@@ -11,6 +12,9 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/tidwall/gjson"
 )
+
+//go:embed testdata/state_version_test.tf
+var stateVersionTestConfiguration string
 
 func TestListStateVersionsHappyPath(t *testing.T) {
 	requireTfOperations(t)
@@ -33,9 +37,9 @@ func TestListStateVersionsHappyPath(t *testing.T) {
 
 	// Upload a Terraform configuration then create and apply a run via the TFE
 	// client directly — we are only testing list_state_versions here.
-	uploadRunTestConfiguration(t, client, workspace.ID)
+	uploadStateVersionTestConfiguration(t, client, workspace.ID)
 
-	runMessage := "Created by terraform-mcp-server state version integration tests"
+	runMessage := "Created by terraform-mcp-server list state version integration tests"
 	run, err := client.Runs.Create(t.Context(), tfe.RunCreateOptions{
 		Workspace: workspace,
 		AutoApply: tfe.Bool(false),
@@ -90,8 +94,8 @@ func TestListStateVersionsErrorPaths(t *testing.T) {
 
 	client := tfeClient(t)
 
-	nonExistentOrg := randomName("org-")
-	nonExistentWs := randomName("workspace-")
+	nonExistentOrg := "org-doesnotexist123"
+	nonExistentWs := "ws-doesnotexist123"
 
 	t.Run("list_state_versions non-existent org", func(t *testing.T) {
 		result, _ := callTool(t, s, "list_state_versions", map[string]any{
@@ -143,7 +147,10 @@ func TestGetStateVersionHappyPath(t *testing.T) {
 	require.NoError(t, err, "failed to create test workspace")
 	defer client.Workspaces.DeleteByID(t.Context(), workspace.ID)
 
-	uploadRunTestConfiguration(t, client, workspace.ID)
+	// Upload a Terraform configuration then create and apply a run via the TFE
+	// client directly — we are only testing list_state_versions here.
+	uploadStateVersionTestConfiguration(t, client, workspace.ID)
+
 	runMessage := "Created by terraform-mcp-server get state version integration tests"
 	run, err := client.Runs.Create(t.Context(), tfe.RunCreateOptions{
 		Workspace: workspace,
@@ -169,9 +176,15 @@ func TestGetStateVersionHappyPath(t *testing.T) {
 	require.NotEmpty(t, stateVersions.Items, "applied run should create a state version")
 	stateVersion := stateVersions.Items[0]
 
+	// Download the raw state file once and reuse it across sub-tests so we only
+	// hit the download URL a single time.
+	stateBytes, err := client.StateVersions.Download(t.Context(), stateVersion.DownloadURL)
+	require.NoError(t, err, "failed to download state file")
+	stateJSON := string(stateBytes)
+
 	t.Run("gets an exact state version by state_version_id", func(t *testing.T) {
 		result, resultText := callTool(t, s, "get_state_version", map[string]any{
-			"state_version_id": "#" + stateVersion.ID,
+			"state_version_id": stateVersion.ID,
 		})
 
 		require.False(t, result.IsError, "get_state_version should not return an error")
@@ -179,16 +192,24 @@ func TestGetStateVersionHappyPath(t *testing.T) {
 		assert.Equal(t, stateVersion.ID, gjson.Get(resultText, "data.id").String())
 		assert.Equal(t, stateVersion.Serial, gjson.Get(resultText, "data.attributes.serial").Int())
 		assert.NotEmpty(t, gjson.Get(resultText, "data.attributes.created-at").String())
+
+		// Verify the state file contains the resources from the test fixture.
+		assert.Contains(t, stateJSON, `"name": "resource_one"`, "state file should contain resource_one from the test fixture")
+		assert.Contains(t, stateJSON, `"name": "resource_two"`, "state file should contain resource_two from the test fixture")
 	})
 
 	t.Run("gets the current state version by workspace_id", func(t *testing.T) {
 		result, resultText := callTool(t, s, "get_state_version", map[string]any{
-			"workspace_id": "#" + workspace.ID,
+			"workspace_id": workspace.ID,
 		})
 
 		require.False(t, result.IsError, "get_state_version should not return an error")
 		require.NotEmpty(t, resultText, "get_state_version response must not be empty")
 		assert.Equal(t, stateVersion.ID, gjson.Get(resultText, "data.id").String())
+
+		// Verify the state file contains the resources from the test fixture.
+		assert.Contains(t, stateJSON, `"name": "resource_one"`, "state file should contain resource_one from the test fixture")
+		assert.Contains(t, stateJSON, `"name": "resource_two"`, "state file should contain resource_two from the test fixture")
 	})
 }
 
@@ -198,6 +219,9 @@ func TestGetStateVersionErrorPaths(t *testing.T) {
 	s := newTestingSession(t)
 	defer s.Close()
 
+	nonExistentSV := "sv-doesnotexist123"
+	nonExistentWs := "ws-doesnotexist123"
+
 	t.Run("requires a state version or workspace ID", func(t *testing.T) {
 		result, resultText := callTool(t, s, "get_state_version", map[string]any{})
 		require.True(t, result.IsError, "get_state_version without an identifier should return an error")
@@ -205,18 +229,20 @@ func TestGetStateVersionErrorPaths(t *testing.T) {
 	})
 
 	t.Run("rejects a non-existent state version", func(t *testing.T) {
-		result, resultText := callTool(t, s, "get_state_version", map[string]any{
-			"state_version_id": "sv-0000000000dead",
+		result, _ := callTool(t, s, "get_state_version", map[string]any{
+			"state_version_id": nonExistentSV,
 		})
 		require.True(t, result.IsError, "get_state_version should return an error for an unknown state version")
-		assert.Contains(t, resultText, "sv-0000000000dead")
 	})
 
 	t.Run("rejects a non-existent workspace", func(t *testing.T) {
-		result, resultText := callTool(t, s, "get_state_version", map[string]any{
-			"workspace_id": "ws-0000000000dead",
+		result, _ := callTool(t, s, "get_state_version", map[string]any{
+			"workspace_id": nonExistentWs,
 		})
 		require.True(t, result.IsError, "get_state_version should return an error for an unknown workspace")
-		assert.Contains(t, resultText, "ws-0000000000dead")
 	})
+}
+
+func uploadStateVersionTestConfiguration(t *testing.T, client *tfe.Client, workspaceID string) {
+	uploadConfiguration(t, client, workspaceID, stateVersionTestConfiguration)
 }
