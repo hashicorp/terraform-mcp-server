@@ -17,16 +17,6 @@ import (
 	"github.com/mark3labs/mcp-go/server"
 )
 
-// MatchingPolicySet represents a policy set that applies to a workspace.
-type MatchingPolicySet struct {
-	ID          string `json:"id"`
-	Name        string `json:"name"`
-	Description string `json:"description"`
-	Kind        string `json:"kind"`
-	Global      bool   `json:"global"`
-	Reason      string `json:"reason"`
-}
-
 // AttachPolicySetToWorkspaces creates a tool to attach a policy set to workspaces.
 func AttachPolicySetToWorkspaces(logger *log.Logger) server.ServerTool {
 	return server.ServerTool{
@@ -85,8 +75,13 @@ func ListWorkspacePolicySets(logger *log.Logger) server.ServerTool {
 		Tool: mcp.NewTool("list_workspace_policy_sets",
 			mcp.WithDescription("Read all policy sets attached to a workspace. Returns both directly attached policy sets and global policy sets that apply to all workspaces."),
 			mcp.WithReadOnlyHintAnnotation(true),
-			mcp.WithString("terraform_org_name", mcp.Required(), mcp.Description(terraformOrgNameDescription)),
-			mcp.WithString("workspace_id", mcp.Required(), mcp.Description("The workspace ID to get policy sets for (e.g., ws-2HRvNs49EWPjDqT1)")),
+			mcp.WithString("terraform_org_name",
+				mcp.Required(),
+				mcp.Description(terraformOrgNameDescription),
+			),
+			mcp.WithString("workspace_id",
+				mcp.Description("The workspace ID to get policy sets for (e.g., ws-2HRvNs49EWPjDqT1)"),
+			),
 		),
 		Handler: func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			return listWorkspacePolicySetsHandler(ctx, request, logger)
@@ -95,18 +90,22 @@ func ListWorkspacePolicySets(logger *log.Logger) server.ServerTool {
 }
 
 func listWorkspacePolicySetsHandler(ctx context.Context, request mcp.CallToolRequest, logger *log.Logger) (*mcp.CallToolResult, error) {
-	orgName, err := request.RequireString("terraform_org_name")
+	terraformOrgName, err := request.RequireString("terraform_org_name")
 	if err != nil {
 		return ToolError(logger, "missing required input: terraform_org_name", err)
 	}
+
 	workspaceID, err := request.RequireString("workspace_id")
 	if err != nil {
 		return ToolError(logger, "missing required input: workspace_id", err)
 	}
 
+	terraformOrgName = strings.TrimSpace(terraformOrgName)
+	workspaceID = strings.TrimSpace(workspaceID)
+
 	tfeClient, err := client.GetTfeClientFromContext(ctx, logger)
 	if err != nil {
-		return ToolError(logger, "failed to get Terraform client", err)
+		return ToolError(logger, "failed to get Terraform client - ensure TFE_TOKEN and TFE_ADDRESS are configured", err)
 	}
 
 	// Paginate through all policy sets with the workspaces included
@@ -114,7 +113,7 @@ func listWorkspacePolicySetsHandler(ctx context.Context, request mcp.CallToolReq
 	pageNumber := 1
 
 	for {
-		policySets, err := tfeClient.PolicySets.List(ctx, orgName, &tfe.PolicySetListOptions{
+		policySets, err := tfeClient.PolicySets.List(ctx, terraformOrgName, &tfe.PolicySetListOptions{
 			Include: []tfe.PolicySetIncludeOpt{tfe.PolicySetWorkspaces},
 			ListOptions: tfe.ListOptions{
 				PageNumber: pageNumber,
@@ -122,7 +121,7 @@ func listWorkspacePolicySetsHandler(ctx context.Context, request mcp.CallToolReq
 			},
 		})
 		if err != nil {
-			return ToolErrorf(logger, "failed to list policy sets for org '%s': %v", orgName, err)
+			return ToolErrorf(logger, "failed to list policy sets for org '%s': %v", terraformOrgName, err)
 		}
 
 		// Filter policy sets that apply to this workspace
@@ -181,4 +180,13 @@ func listWorkspacePolicySetsHandler(ctx context.Context, request mcp.CallToolReq
 			mcp.NewTextContent(string(result)),
 		},
 	}, nil
+}
+
+type MatchingPolicySet struct {
+	ID          string `json:"id"`
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	Kind        string `json:"kind"`
+	Global      bool   `json:"global"`
+	Reason      string `json:"reason"`
 }
