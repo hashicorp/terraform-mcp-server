@@ -18,7 +18,7 @@ import (
 )
 
 const (
-	toolCallTimeout  = 30 * time.Second
+	toolCallTimeout  = 90 * time.Second
 	alphaNum         = "abcdefghijklmnopqrstuvwxyz0123456789"
 	randomNameLength = 8
 )
