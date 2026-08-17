@@ -7,13 +7,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"path"
 	"strconv"
 	"strings"
 
 	"github.com/hashicorp/go-tfe"
 	"github.com/hashicorp/terraform-mcp-server/pkg/client"
-	"github.com/hashicorp/terraform-mcp-server/pkg/utils"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 	log "github.com/sirupsen/logrus"
@@ -52,6 +52,28 @@ func CreateNoCodeWorkspace(logger *log.Logger, mcpServer *server.MCPServer) serv
 }
 
 func createNoCodeWorkspaceHandler(ctx context.Context, request mcp.CallToolRequest, logger *log.Logger, mcpServer *server.MCPServer) (*mcp.CallToolResult, error) {
+	noCodeModuleID, err := request.RequireString("no_code_module_id")
+	if err != nil {
+		return ToolError(logger, "missing required input: no_code_module_id", err)
+	}
+	workspaceName, err := request.RequireString("workspace_name")
+	if err != nil {
+		return ToolError(logger, "missing required input: workspace_name", err)
+	}
+	projectID, err := request.RequireString("project_id")
+	if err != nil {
+		return ToolError(logger, "missing required input: project_id", err)
+	}
+
+	noCodeModuleID = strings.TrimSpace(noCodeModuleID)
+	workspaceName = strings.TrimSpace(workspaceName)
+	projectID = strings.TrimSpace(projectID)
+	autoApply := request.GetBool("auto_apply", false)
+
+	if !strings.HasPrefix(noCodeModuleID, "nocode-") {
+		return ToolError(logger, "no_code_module_id must start with 'nocode-'", nil)
+	}
+
 	tfeClient, err := client.GetTfeClientFromContext(ctx, logger)
 	if err != nil {
 		return ToolError(logger, "failed to get Terraform client", err)
@@ -60,37 +82,30 @@ func createNoCodeWorkspaceHandler(ctx context.Context, request mcp.CallToolReque
 		return ToolError(logger, "failed to get Terraform client - ensure TFE_TOKEN and TFE_ADDRESS are configured", nil)
 	}
 
-	params, err := extractRequestParams(request)
+	project, noCodeModule, moduleMetadata, err := fetchModuleData(ctx, tfeClient, projectID, noCodeModuleID)
 	if err != nil {
 		return ToolError(logger, err.Error(), nil)
 	}
 
-	if !strings.HasPrefix(params.noCodeModuleID, "nocode-") {
-		return ToolError(logger, "no_code_module_id must start with 'nocode-'", nil)
-	}
+	// parse the returned module meta data to get required variable names for the module and all other variabels information correctly
+	elicitationSchema := buildElicitationSchema(moduleMetadata, noCodeModule)
 
-	project, noCodeModule, moduleMetadata, err := fetchModuleData(ctx, tfeClient, params.projectID, params.noCodeModuleID)
+	// return client response for the elicitation message
+	result, err := requestVariableValues(ctx, mcpServer, noCodeModuleID, elicitationSchema)
 	if err != nil {
 		return ToolError(logger, err.Error(), nil)
 	}
 
-	elicitationProperties, requestedVars := buildElicitationSchema(moduleMetadata, noCodeModule)
-
-	result, err := requestVariableValues(ctx, mcpServer, params.noCodeModuleID, elicitationProperties, requestedVars)
+	variables, err := processElicitationResponse(result, elicitationSchema)
 	if err != nil {
 		return ToolError(logger, err.Error(), nil)
 	}
 
-	variables, err := processElicitationResponse(result, requestedVars, elicitationProperties)
-	if err != nil {
-		return ToolError(logger, err.Error(), nil)
-	}
-
-	workspace, err := tfeClient.RegistryNoCodeModules.CreateWorkspace(ctx, params.noCodeModuleID, &tfe.RegistryNoCodeModuleCreateWorkspaceOptions{
-		Name:      params.workspaceName,
+	workspace, err := tfeClient.RegistryNoCodeModules.CreateWorkspace(ctx, noCodeModuleID, &tfe.RegistryNoCodeModuleCreateWorkspaceOptions{
+		Name:      workspaceName,
 		Project:   project,
 		Variables: variables,
-		AutoApply: &params.autoApply,
+		AutoApply: &autoApply,
 	})
 	if err != nil {
 		return ToolError(logger, "failed to create No Code module workspace", err)
@@ -103,37 +118,6 @@ func createNoCodeWorkspaceHandler(ctx context.Context, request mcp.CallToolReque
 	}
 
 	return mcp.NewToolResultText(buf.String()), nil
-}
-
-type workspaceParams struct {
-	noCodeModuleID string
-	workspaceName  string
-	projectID      string
-	autoApply      bool
-}
-
-func extractRequestParams(request mcp.CallToolRequest) (*workspaceParams, error) {
-	noCodeModuleID, err := request.RequireString("no_code_module_id")
-	if err != nil {
-		return nil, fmt.Errorf("missing required input: no_code_module_id")
-	}
-
-	workspaceName, err := request.RequireString("workspace_name")
-	if err != nil {
-		return nil, fmt.Errorf("missing required input: workspace_name")
-	}
-
-	projectID, err := request.RequireString("project_id")
-	if err != nil {
-		return nil, fmt.Errorf("missing required input: project_id")
-	}
-
-	return &workspaceParams{
-		noCodeModuleID: noCodeModuleID,
-		workspaceName:  workspaceName,
-		projectID:      projectID,
-		autoApply:      request.GetBool("auto_apply", false),
-	}, nil
 }
 
 func fetchModuleData(ctx context.Context, tfeClient *tfe.Client, projectID, noCodeModuleID string) (*tfe.Project, *tfe.RegistryNoCodeModule, *client.ModuleMetadata, error) {
@@ -155,58 +139,70 @@ func fetchModuleData(ctx context.Context, tfeClient *tfe.Client, projectID, noCo
 	}
 
 	metadataPath := path.Join("/api/registry/private/v2/modules", registryModule.Namespace, registryModule.Name, registryModule.Provider, "metadata", noCodeModule.VersionPin)
-	metadataData, err := utils.MakeCustomGetRequestRaw(ctx, tfeClient, metadataPath, map[string][]string{"organization_name": {noCodeModule.Organization.Name}})
+	metadataRequest, err := tfeClient.NewRequestWithAdditionalQueryParams(
+		http.MethodGet,
+		metadataPath,
+		nil,
+		map[string][]string{"organization_name": {noCodeModule.Organization.Name}},
+	)
 	if err != nil {
-		return nil, nil, nil, fmt.Errorf("failed to fetch module metadata: %w", err)
+		return nil, nil, nil, fmt.Errorf("failed to create module metadata request: %w", err)
 	}
 
 	var moduleMetadata client.ModuleMetadata
-	if err := json.Unmarshal(metadataData, &moduleMetadata); err != nil {
-		return nil, nil, nil, fmt.Errorf("failed to parse module metadata: %w", err)
+	if err := metadataRequest.DoJSON(ctx, &moduleMetadata); err != nil {
+		return nil, nil, nil, fmt.Errorf("failed to fetch module metadata: %w", err)
 	}
 
 	return project, noCodeModule, &moduleMetadata, nil
 }
 
-func buildElicitationSchema(moduleMetadata *client.ModuleMetadata, noCodeModule *tfe.RegistryNoCodeModule) (map[string]any, []string) {
-	elicitationProperties := make(map[string]any)
-	requestedVars := make([]string, 0, len(moduleMetadata.Data.Attributes.InputVariables))
-
-	for _, inputVar := range moduleMetadata.Data.Attributes.InputVariables {
-		property := buildPropertySchema(inputVar, noCodeModule)
-		elicitationProperties[inputVar.Name] = property
-		requestedVars = append(requestedVars, inputVar.Name)
-	}
-
-	return elicitationProperties, requestedVars
+type moduleElicitationSchema struct {
+	properties    map[string]any
+	variableNames []string
+	requiredNames []string
+	requiredSet   map[string]struct{}
 }
 
-func buildPropertySchema(inputVar struct {
-	Name        string `json:"name"`
-	Type        string `json:"type"`
-	Description string `json:"description"`
-	Required    bool   `json:"required"`
-	Sensitive   bool   `json:"sensitive"`
-}, noCodeModule *tfe.RegistryNoCodeModule) map[string]any {
-	property := map[string]any{
-		"title":       inputVar.Name,
-		"description": inputVar.Description,
-		"type":        mapTerraformTypeToJSON(inputVar.Type),
+func buildElicitationSchema(moduleMetadata *client.ModuleMetadata, noCodeModule *tfe.RegistryNoCodeModule) *moduleElicitationSchema {
+	inputCount := len(moduleMetadata.Data.Attributes.InputVariables)
+	schema := &moduleElicitationSchema{
+		properties:    make(map[string]any, inputCount),
+		variableNames: make([]string, 0, inputCount),
+		requiredNames: make([]string, 0, inputCount),
+		requiredSet:   make(map[string]struct{}, inputCount),
 	}
 
-	if enumOptions := findEnumOptions(inputVar.Name, inputVar.Type, noCodeModule.VariableOptions); enumOptions != nil {
-		property["enum"] = enumOptions
+	for _, inputVar := range moduleMetadata.Data.Attributes.InputVariables {
+		property := map[string]any{
+			"title":       inputVar.Name,
+			"description": inputVar.Description,
+			"type":        mapTerraformTypeToJSON(inputVar.Type),
+		}
+		if enumOptions := findEnumOptions(inputVar.Name, inputVar.Type, noCodeModule.VariableOptions); enumOptions != nil {
+			property["enum"] = enumOptions
+		}
+
+		schema.properties[inputVar.Name] = property
+		schema.variableNames = append(schema.variableNames, inputVar.Name)
+		if inputVar.Required {
+			schema.requiredNames = append(schema.requiredNames, inputVar.Name)
+			schema.requiredSet[inputVar.Name] = struct{}{}
+		}
 	}
 
-	return property
+	return schema
+}
+
+func (s *moduleElicitationSchema) isRequired(variableName string) bool {
+	_, required := s.requiredSet[variableName]
+	return required
 }
 
 func mapTerraformTypeToJSON(tfType string) string {
 	switch tfType {
-	case "string":
-		return "string"
-	case "number":
-		return "number"
+	case "string", "number":
+		return tfType
 	case "bool":
 		return "boolean"
 	default:
@@ -258,14 +254,14 @@ func convertToBoolEnum(options []string) []bool {
 	return nil
 }
 
-func requestVariableValues(ctx context.Context, mcpServer *server.MCPServer, moduleID string, properties map[string]any, required []string) (*mcp.ElicitationResult, error) {
+func requestVariableValues(ctx context.Context, mcpServer *server.MCPServer, moduleID string, schema *moduleElicitationSchema) (*mcp.ElicitationResult, error) {
 	request := mcp.ElicitationRequest{
 		Params: mcp.ElicitationParams{
-			Message: fmt.Sprintf("The No Code module '%s' requires %d variable(s) to create the workspace. Please provide values for the required variables.", moduleID, len(required)),
+			Message: fmt.Sprintf("The No Code module '%s' requires %d variable(s) to create the workspace. Please provide values for the required variables.", moduleID, len(schema.requiredNames)),
 			RequestedSchema: map[string]any{
 				"type":       "object",
-				"properties": properties,
-				"required":   required,
+				"properties": schema.properties,
+				"required":   schema.requiredNames,
 			},
 		},
 	}
@@ -278,28 +274,42 @@ func requestVariableValues(ctx context.Context, mcpServer *server.MCPServer, mod
 	return result, nil
 }
 
-func processElicitationResponse(result *mcp.ElicitationResult, requestedVars []string, elicitationProperties map[string]any) ([]*tfe.Variable, error) {
+func processElicitationResponse(result *mcp.ElicitationResult, schema *moduleElicitationSchema) ([]*tfe.Variable, error) {
 	switch result.Action {
 	case mcp.ElicitationResponseActionDecline:
 		return nil, fmt.Errorf("workspace creation declined by user")
 	case mcp.ElicitationResponseActionCancel:
 		return nil, fmt.Errorf("workspace creation cancelled by user")
 	case mcp.ElicitationResponseActionAccept:
-		return extractVariablesFromResponse(result.Content, requestedVars, elicitationProperties)
+		return extractVariablesFromResponse(result.Content, schema)
 	default:
 		return nil, fmt.Errorf("unexpected elicitation response action: %s", result.Action)
 	}
 }
 
-func extractVariablesFromResponse(content any, requestedVars []string, elicitationProperties map[string]any) ([]*tfe.Variable, error) {
+func extractVariablesFromResponse(content any, schema *moduleElicitationSchema) ([]*tfe.Variable, error) {
 	data, ok := content.(map[string]any)
 	if !ok {
 		return nil, fmt.Errorf("elicitation response content is not a map, got %T", content)
 	}
 
-	variables := make([]*tfe.Variable, 0, len(requestedVars))
-	for _, varName := range requestedVars {
-		variable, err := createVariable(varName, data, elicitationProperties)
+	variables := make([]*tfe.Variable, 0, len(schema.variableNames))
+	for _, varName := range schema.variableNames {
+		valueRaw, exists := data[varName]
+		if !exists {
+			if schema.isRequired(varName) {
+				return nil, fmt.Errorf("required variable '%s' is missing from response", varName)
+			}
+			continue
+		}
+
+		// A blank optional form field means that the caller did not override the
+		// module value. Omit it from the API request so Terraform uses its default.
+		if strValue, isString := valueRaw.(string); isString && strValue == "" && !schema.isRequired(varName) {
+			continue
+		}
+
+		variable, err := createVariable(varName, valueRaw, schema.properties)
 		if err != nil {
 			return nil, err
 		}
@@ -309,12 +319,7 @@ func extractVariablesFromResponse(content any, requestedVars []string, elicitati
 	return variables, nil
 }
 
-func createVariable(varName string, data map[string]any, elicitationProperties map[string]any) (*tfe.Variable, error) {
-	valueRaw, exists := data[varName]
-	if !exists {
-		return nil, fmt.Errorf("required variable '%s' is missing from response", varName)
-	}
-
+func createVariable(varName string, valueRaw any, elicitationProperties map[string]any) (*tfe.Variable, error) {
 	propertyDef, ok := elicitationProperties[varName].(map[string]any)
 	if !ok {
 		return nil, fmt.Errorf("invalid property definition for variable '%s'", varName)
