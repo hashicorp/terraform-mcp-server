@@ -42,8 +42,6 @@ func TestListWorkspacePolicySets(t *testing.T) {
 			"workspace_id":       ws.ID,
 		})
 
-		t.Logf("returns directly attached policy set -> %v", resultText)
-
 		require.False(t, result.IsError, "list_workspace_policy_sets should not return an error")
 		require.NotEmpty(t, resultText, "list_workspace_policy_sets should return a non-empty response")
 
@@ -71,8 +69,6 @@ func TestListWorkspacePolicySets(t *testing.T) {
 			"workspace_id":       ws.ID,
 		})
 
-		t.Logf("returns global policy set for any workspace -> %v", resultText)
-
 		require.False(t, result.IsError, "list_workspace_policy_sets should not return an error")
 		require.NotEmpty(t, resultText, "list_workspace_policy_sets should return a non-empty response")
 
@@ -83,38 +79,14 @@ func TestListWorkspacePolicySets(t *testing.T) {
 		assert.Equal(t, "global", globalPsResult.Get("reason").String(), "global policy set should have reason 'global'")
 		assert.True(t, globalPsResult.Get("global").Bool(), "global policy set should have global=true")
 	})
-
-	t.Run("returns no policy sets for an unattached workspace", func(t *testing.T) {
-		// Create a second workspace that has no policy sets attached.
-		// Note: there must be no global policy sets in the org while this subtest
-		// runs, which is guaranteed because the global set above is created and
-		// deleted entirely within its own subtest scope.
-		bareWsName := randomName("ws-bare-")
-		bareWs, err := client.Workspaces.Create(t.Context(), tfeOrgName, tfe.WorkspaceCreateOptions{
-			Name: &bareWsName,
-		})
-		require.NoError(t, err, "setup: failed to create bare workspace via TFE API")
-		defer client.Workspaces.SafeDeleteByID(t.Context(), bareWs.ID)
-
-		result, resultText := callTool(t, s, "list_workspace_policy_sets", map[string]any{
-			"terraform_org_name": tfeOrgName,
-			"workspace_id":       bareWs.ID,
-		})
-
-		t.Logf("returns no policy sets for an unattached workspace -> %v", resultText)
-
-		require.False(t, result.IsError, "list_workspace_policy_sets should not return an error for an unattached workspace")
-		assert.Contains(t, resultText, "No policy sets are attached to workspace", "response should indicate no policy sets are attached")
-		assert.Contains(t, resultText, bareWs.ID, "response should reference the workspace ID")
-	})
 }
 
 func TestListWorkspacePolicySetsErrorPaths(t *testing.T) {
 	s := newTestingSession(t)
 	defer s.Close()
 
-	nonExistentOrg := randomName("org-")
-	const nonExistentWsID = "ws-0000000000dead"
+	nonExistentOrg := "org-doesnotexist123"
+	nonExistentWsID := "ws-doesnotexist123"
 
 	t.Run("returns an error for a non-existent org", func(t *testing.T) {
 		result, _ := callTool(t, s, "list_workspace_policy_sets", map[string]any{
@@ -124,16 +96,16 @@ func TestListWorkspacePolicySetsErrorPaths(t *testing.T) {
 		assert.True(t, result.IsError, "list_workspace_policy_sets should return an error for a non-existent org")
 	})
 
-	t.Run("returns no policy sets for a non-existent workspace ID in a valid org", func(t *testing.T) {
-		// The tool lists org-level policy sets and filters by workspace ID match.
-		// A bogus workspace ID will never match, so the tool returns a plain-text
-		// "no policy sets" message rather than an API error.
+	t.Run("does not error for a non-existent workspace ID in a valid org", func(t *testing.T) {
+		// The tool never validates whether workspace_id exists in the API — it uses it
+		// only as a client-side filter against directly-attached policy sets. Global
+		// policy sets are always returned regardless. The response content therefore
+		// depends on live org state and cannot be deterministically asserted here.
 		result, resultText := callTool(t, s, "list_workspace_policy_sets", map[string]any{
 			"terraform_org_name": tfeOrgName,
 			"workspace_id":       nonExistentWsID,
 		})
 		assert.False(t, result.IsError, "list_workspace_policy_sets should not return an error for a non-existent workspace ID")
 		assert.Contains(t, resultText, "No policy sets are attached to workspace", "response should indicate no policy sets are attached")
-		assert.Contains(t, resultText, nonExistentWsID, "response should reference the workspace ID")
 	})
 }

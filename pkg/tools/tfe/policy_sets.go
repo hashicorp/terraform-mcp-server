@@ -80,6 +80,7 @@ func ListWorkspacePolicySets(logger *log.Logger) server.ServerTool {
 				mcp.Description(terraformOrgNameDescription),
 			),
 			mcp.WithString("workspace_id",
+				mcp.Required(),
 				mcp.Description("The workspace ID to get policy sets for (e.g., ws-2HRvNs49EWPjDqT1)"),
 			),
 		),
@@ -94,7 +95,6 @@ func listWorkspacePolicySetsHandler(ctx context.Context, request mcp.CallToolReq
 	if err != nil {
 		return ToolError(logger, "missing required input: terraform_org_name", err)
 	}
-
 	workspaceID, err := request.RequireString("workspace_id")
 	if err != nil {
 		return ToolError(logger, "missing required input: workspace_id", err)
