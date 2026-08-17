@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 
+	"github.com/hashicorp/go-tfe"
 	"github.com/hashicorp/terraform-mcp-server/pkg/client"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
@@ -48,8 +49,21 @@ func getTokenPermissionsHandler(ctx context.Context, request mcp.CallToolRequest
 		return ToolErrorf(logger, "organization not found: %q", terraformOrgName)
 	}
 
-	permissions := org.Permissions
-	humanReadablePermissions := map[string]bool{
+	buf, err := json.Marshal(HumanReadableTokenPermissions(org.Permissions))
+	if err != nil {
+		return ToolError(logger, "failed to marshal token permissions", err)
+	}
+
+	return mcp.NewToolResultText(string(buf)), nil
+}
+
+// HumanReadableTokenPermissions returns the display names of the permissions enabled for an organization.
+func HumanReadableTokenPermissions(permissions *tfe.OrganizationPermissions) []string {
+	if permissions == nil {
+		return nil
+	}
+
+	permissionsByName := map[string]bool{
 		"Create Teams":                  permissions.CanCreateTeam,
 		"Create Workspaces":             permissions.CanCreateWorkspace,
 		"Create Workspace Migrations":   permissions.CanCreateWorkspaceMigration,
@@ -68,17 +82,13 @@ func getTokenPermissionsHandler(ctx context.Context, request mcp.CallToolRequest
 		"Enable Stacks":                 permissions.CanEnableStacks,
 		"Create Projects":               permissions.CanCreateProject,
 	}
-	perms := []string{}
-	for k, v := range humanReadablePermissions {
-		if v {
-			perms = append(perms, k)
+
+	permissionNames := []string{}
+	for name, enabled := range permissionsByName {
+		if enabled {
+			permissionNames = append(permissionNames, name)
 		}
 	}
 
-	buf, err := json.Marshal(perms)
-	if err != nil {
-		return ToolError(logger, "failed to marshal token permissions", err)
-	}
-
-	return mcp.NewToolResultText(string(buf)), nil
+	return permissionNames
 }

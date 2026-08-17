@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"testing"
 
+	tfetools "github.com/hashicorp/terraform-mcp-server/pkg/tools/tfe"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -32,7 +33,8 @@ func TestWhoAmI(t *testing.T) {
 	require.NoError(t, err, "failed to read the current user directly from TFE")
 	assert.Equal(t, tfeUser.Username, toolAccount.Username)
 	assert.Equal(t, tfeUser.Email, toolAccount.Email)
-	if assert.NotNil(t, toolAccount.IsServiceAccount) {
+	assert.NotNil(t, toolAccount.IsServiceAccount)
+	if toolAccount.IsServiceAccount != nil {
 		assert.Equal(t, tfeUser.IsServiceAccount, *toolAccount.IsServiceAccount)
 	}
 }
@@ -55,31 +57,6 @@ func TestGetTokenPermissions(t *testing.T) {
 	tfeOrg, err := client.Organizations.Read(t.Context(), tfeOrgName)
 	require.NoError(t, err, "failed to read the organization directly from TFE")
 
-	tfePermissions := map[string]bool{
-		"Create Teams":                  tfeOrg.Permissions.CanCreateTeam,
-		"Create Workspaces":             tfeOrg.Permissions.CanCreateWorkspace,
-		"Create Workspace Migrations":   tfeOrg.Permissions.CanCreateWorkspaceMigration,
-		"Deploy NoCode Modules":         tfeOrg.Permissions.CanDeployNoCodeModules,
-		"Destroy":                       tfeOrg.Permissions.CanDestroy,
-		"Manage Auditing":               tfeOrg.Permissions.CanManageAuditing,
-		"Manage NoCodeModules":          tfeOrg.Permissions.CanManageNoCodeModules,
-		"Manage Run Tasks":              tfeOrg.Permissions.CanManageRunTasks,
-		"Traverse":                      tfeOrg.Permissions.CanTraverse,
-		"Update":                        tfeOrg.Permissions.CanUpdate,
-		"Update API Tokens":             tfeOrg.Permissions.CanUpdateAPIToken,
-		"Update OAuth":                  tfeOrg.Permissions.CanUpdateOAuth,
-		"Update Sentinel":               tfeOrg.Permissions.CanUpdateSentinel,
-		"Update HYOK Configuration":     tfeOrg.Permissions.CanUpdateHYOKConfiguration,
-		"View HYOK Feature Information": tfeOrg.Permissions.CanViewHYOKFeatureInfo,
-		"Enable Stacks":                 tfeOrg.Permissions.CanEnableStacks,
-		"Create Projects":               tfeOrg.Permissions.CanCreateProject,
-	}
-
-	var expectedPermissions []string
-	for name, allowed := range tfePermissions {
-		if allowed {
-			expectedPermissions = append(expectedPermissions, name)
-		}
-	}
+	expectedPermissions := tfetools.HumanReadableTokenPermissions(tfeOrg.Permissions)
 	assert.ElementsMatch(t, expectedPermissions, toolPermissions, "tool permissions should match the TFE API")
 }
