@@ -59,7 +59,6 @@ func TestVariableSetHappyPath(t *testing.T) {
 	assert.Equal(t, varSetName, varSet.Name, "variable set name in TFE API should match the requested name")
 	assert.Equal(t, "Created by terraform-mcp-server integration tests", varSet.Description, "variable set description in TFE API should match")
 
-	// ── list_variable_sets ────────────────────────────────────────────────────
 	t.Run("list_variable_sets returns the created variable set", func(t *testing.T) {
 		listResult, listResultText := callTool(t, s, "list_variable_sets", map[string]any{
 			"terraform_org_name": tfeOrgName,
@@ -74,7 +73,6 @@ func TestVariableSetHappyPath(t *testing.T) {
 			"list_variable_sets response should include the created variable set ID")
 	})
 
-	// ── create_variable_in_variable_set ──────────────────────────────────────
 	var variableID string
 	t.Run("create_variable_in_variable_set adds a variable", func(t *testing.T) {
 		createVarResult, createVarResultText := callTool(t, s, "create_variable_in_variable_set", map[string]any{
@@ -102,7 +100,6 @@ func TestVariableSetHappyPath(t *testing.T) {
 		assert.Equal(t, "test_key", variables.Items[0].Key, "variable key in TFE API should match")
 	})
 
-	// ── delete_variable_in_variable_set ──────────────────────────────────────
 	t.Run("delete_variable_in_variable_set removes the variable", func(t *testing.T) {
 		require.NotEmpty(t, variableID, "prerequisite: variable ID must be set from the create step")
 
@@ -120,7 +117,6 @@ func TestVariableSetHappyPath(t *testing.T) {
 		assert.Empty(t, variables.Items, "variable set should have no variables after deletion")
 	})
 
-	// ── attach_variable_set_to_workspaces ─────────────────────────────────────
 	t.Run("attach_variable_set_to_workspaces attaches to the workspace", func(t *testing.T) {
 		attachResult, attachResultText := callTool(t, s, "attach_variable_set_to_workspaces", map[string]any{
 			"variable_set_id": varSetID,
@@ -144,7 +140,6 @@ func TestVariableSetHappyPath(t *testing.T) {
 			"workspace should appear in the variable set's workspace list after attach")
 	})
 
-	// ── detach_variable_set_from_workspaces ───────────────────────────────────
 	t.Run("detach_variable_set_from_workspaces detaches from the workspace", func(t *testing.T) {
 		detachResult, detachResultText := callTool(t, s, "detach_variable_set_from_workspaces", map[string]any{
 			"variable_set_id": varSetID,
