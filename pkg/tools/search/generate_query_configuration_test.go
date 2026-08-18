@@ -153,7 +153,7 @@ func TestParseListResourceSchemas_EmptyWrappedMap(t *testing.T) {
 
 func TestFilterResourceTypes_AllWhenEmpty(t *testing.T) {
 	schemas := map[string]listResourceEntry{
-		"aws_instance": {},
+		"aws_instance":  {},
 		"aws_s3_bucket": {},
 	}
 	got := filterResourceTypes(schemas, "")
@@ -305,7 +305,10 @@ func TestWriteInstructions_ContainsPreConditions(t *testing.T) {
 		"Pre-conditions",
 		"1.14.0",
 		"NO_CODE_QUERY",
-		"latestQueryRun",
+		"latest-query-run",
+		"create_query",
+		"organization_name",
+		"workspace_name",
 		"generate_config_out",
 		"nesting_mode",
 		"list` or `set",
@@ -315,6 +318,9 @@ func TestWriteInstructions_ContainsPreConditions(t *testing.T) {
 		if !strings.Contains(out, want) {
 			t.Errorf("instructions missing expected content: %q", want)
 		}
+	}
+	if strings.Contains(out, `"relationships"`) {
+		t.Error("instructions should not require callers to construct JSON:API relationships")
 	}
 }
 
@@ -348,6 +354,12 @@ func TestWriteExamplePayload_ContainsGenerateConfigOut(t *testing.T) {
 	}
 	if !strings.Contains(out, `"limit": 100`) {
 		t.Error("example payload must contain default limit of 100")
+	}
+	if strings.Contains(out, `"organization_name"`) || strings.Contains(out, `"workspace_name"`) {
+		t.Error("example query_configuration must not contain workspace selectors because they are separate tool inputs")
+	}
+	if strings.Contains(out, `"relationships"`) || strings.Contains(out, `"data"`) {
+		t.Error("example query_configuration must not contain the JSON:API envelope")
 	}
 }
 
