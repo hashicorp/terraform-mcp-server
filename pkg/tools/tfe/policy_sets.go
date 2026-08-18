@@ -22,8 +22,14 @@ func AttachPolicySetToWorkspaces(logger *log.Logger) server.ServerTool {
 	return server.ServerTool{
 		Tool: mcp.NewTool("attach_policy_set_to_workspaces",
 			mcp.WithDescription("Attach a policy set to one or more workspaces. Note: Policy sets marked as global cannot be attached to individual workspaces."),
-			mcp.WithString("policy_set_id", mcp.Required(), mcp.Description("The ID of the policy set to attach (e.g., polset-3yVQZvHzf5j3WRJ1)")),
-			mcp.WithString("workspace_ids", mcp.Required(), mcp.Description("Comma-separated list of workspace IDs to attach the policy set to")),
+			mcp.WithString("policy_set_id",
+				mcp.Required(),
+				mcp.Description("The ID of the policy set to attach (e.g., polset-3yVQZvHzf5j3WRJ1)"),
+			),
+			mcp.WithString("workspace_ids",
+				mcp.Required(),
+				mcp.Description("Comma-separated list of workspace IDs to attach the policy set to"),
+			),
 		),
 		Handler: func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			policySetID, err := request.RequireString("policy_set_id")
@@ -142,7 +148,6 @@ func listWorkspacePolicySetsHandler(ctx context.Context, request mcp.CallToolReq
 					}
 				}
 			}
-
 			if applies {
 				matchingPolicySets = append(matchingPolicySets, &MatchingPolicySet{
 					ID:          ps.ID,
