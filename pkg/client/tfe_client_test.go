@@ -7,6 +7,7 @@ import (
 	"io"
 	"testing"
 
+	"github.com/hashicorp/go-tfe"
 	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 )
@@ -43,5 +44,41 @@ func TestBuildTFEConfig_ForwardedFor(t *testing.T) {
 	t.Run("omits X-Forwarded-For when clientIP is empty", func(t *testing.T) {
 		cfg := buildTFEConfig("https://app.terraform.io", false, "token", "", logger)
 		assert.Empty(t, cfg.Headers.Get("X-Forwarded-For"))
+	})
+}
+
+func TestHumanReadableTokenPermissions(t *testing.T) {
+	tests := []struct {
+		name        string
+		permissions tfe.OrganizationPermissions
+		expected    string
+	}{
+		{"CanCreateTeam", tfe.OrganizationPermissions{CanCreateTeam: true}, "Create Teams"},
+		{"CanCreateWorkspace", tfe.OrganizationPermissions{CanCreateWorkspace: true}, "Create Workspaces"},
+		{"CanCreateWorkspaceMigration", tfe.OrganizationPermissions{CanCreateWorkspaceMigration: true}, "Create Workspace Migrations"},
+		{"CanDeployNoCodeModules", tfe.OrganizationPermissions{CanDeployNoCodeModules: true}, "Deploy NoCode Modules"},
+		{"CanDestroy", tfe.OrganizationPermissions{CanDestroy: true}, "Destroy"},
+		{"CanManageAuditing", tfe.OrganizationPermissions{CanManageAuditing: true}, "Manage Auditing"},
+		{"CanManageNoCodeModules", tfe.OrganizationPermissions{CanManageNoCodeModules: true}, "Manage NoCodeModules"},
+		{"CanManageRunTasks", tfe.OrganizationPermissions{CanManageRunTasks: true}, "Manage Run Tasks"},
+		{"CanTraverse", tfe.OrganizationPermissions{CanTraverse: true}, "Traverse"},
+		{"CanUpdate", tfe.OrganizationPermissions{CanUpdate: true}, "Update"},
+		{"CanUpdateAPIToken", tfe.OrganizationPermissions{CanUpdateAPIToken: true}, "Update API Tokens"},
+		{"CanUpdateOAuth", tfe.OrganizationPermissions{CanUpdateOAuth: true}, "Update OAuth"},
+		{"CanUpdateSentinel", tfe.OrganizationPermissions{CanUpdateSentinel: true}, "Update Sentinel"},
+		{"CanUpdateHYOKConfiguration", tfe.OrganizationPermissions{CanUpdateHYOKConfiguration: true}, "Update HYOK Configuration"},
+		{"CanViewHYOKFeatureInfo", tfe.OrganizationPermissions{CanViewHYOKFeatureInfo: true}, "View HYOK Feature Information"},
+		{"CanEnableStacks", tfe.OrganizationPermissions{CanEnableStacks: true}, "Enable Stacks"},
+		{"CanCreateProject", tfe.OrganizationPermissions{CanCreateProject: true}, "Create Projects"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, []string{tt.expected}, HumanReadableTokenPermissions(&tt.permissions))
+		})
+	}
+
+	t.Run("nil permissions", func(t *testing.T) {
+		assert.Nil(t, HumanReadableTokenPermissions(nil))
 	})
 }

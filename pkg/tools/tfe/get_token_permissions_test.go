@@ -6,7 +6,6 @@ package tools
 import (
 	"testing"
 
-	"github.com/hashicorp/go-tfe"
 	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 )
@@ -29,22 +28,5 @@ func TestGetTokenPermissions(t *testing.T) {
 
 		// Check that required parameters are defined
 		assert.Contains(t, tool.Tool.InputSchema.Required, "terraform_org_name")
-	})
-}
-
-func TestHumanReadableTokenPermissions(t *testing.T) {
-	t.Run("returns enabled permissions", func(t *testing.T) {
-		permissions := &tfe.OrganizationPermissions{
-			CanCreateTeam: true,
-			CanDestroy:    true,
-		}
-
-		result := HumanReadableTokenPermissions(permissions)
-
-		assert.ElementsMatch(
-			t,
-			[]string{"Create Teams", "Destroy"},
-			result,
-		)
 	})
 }

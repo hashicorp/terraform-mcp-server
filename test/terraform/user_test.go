@@ -7,7 +7,7 @@ import (
 	"encoding/json"
 	"testing"
 
-	tfetools "github.com/hashicorp/terraform-mcp-server/pkg/tools/tfe"
+	tfeclient "github.com/hashicorp/terraform-mcp-server/pkg/client"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -57,6 +57,6 @@ func TestGetTokenPermissions(t *testing.T) {
 	tfeOrg, err := client.Organizations.Read(t.Context(), tfeOrgName)
 	require.NoError(t, err, "failed to read the organization directly from TFE")
 
-	expectedPermissions := tfetools.HumanReadableTokenPermissions(tfeOrg.Permissions)
+	expectedPermissions := tfeclient.HumanReadableTokenPermissions(tfeOrg.Permissions)
 	assert.ElementsMatch(t, expectedPermissions, toolPermissions, "tool permissions should match the TFE API")
 }

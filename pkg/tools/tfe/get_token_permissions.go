@@ -7,7 +7,6 @@ import (
 	"context"
 	"encoding/json"
 
-	"github.com/hashicorp/go-tfe"
 	"github.com/hashicorp/terraform-mcp-server/pkg/client"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
@@ -49,46 +48,10 @@ func getTokenPermissionsHandler(ctx context.Context, request mcp.CallToolRequest
 		return ToolErrorf(logger, "organization not found: %q", terraformOrgName)
 	}
 
-	buf, err := json.Marshal(HumanReadableTokenPermissions(org.Permissions))
+	buf, err := json.Marshal(client.HumanReadableTokenPermissions(org.Permissions))
 	if err != nil {
 		return ToolError(logger, "failed to marshal token permissions", err)
 	}
 
 	return mcp.NewToolResultText(string(buf)), nil
-}
-
-// HumanReadableTokenPermissions returns the display names of the permissions enabled for an organization.
-func HumanReadableTokenPermissions(permissions *tfe.OrganizationPermissions) []string {
-	if permissions == nil {
-		return nil
-	}
-
-	permissionsByName := map[string]bool{
-		"Create Teams":                  permissions.CanCreateTeam,
-		"Create Workspaces":             permissions.CanCreateWorkspace,
-		"Create Workspace Migrations":   permissions.CanCreateWorkspaceMigration,
-		"Deploy NoCode Modules":         permissions.CanDeployNoCodeModules,
-		"Destroy":                       permissions.CanDestroy,
-		"Manage Auditing":               permissions.CanManageAuditing,
-		"Manage NoCodeModules":          permissions.CanManageNoCodeModules,
-		"Manage Run Tasks":              permissions.CanManageRunTasks,
-		"Traverse":                      permissions.CanTraverse,
-		"Update":                        permissions.CanUpdate,
-		"Update API Tokens":             permissions.CanUpdateAPIToken,
-		"Update OAuth":                  permissions.CanUpdateOAuth,
-		"Update Sentinel":               permissions.CanUpdateSentinel,
-		"Update HYOK Configuration":     permissions.CanUpdateHYOKConfiguration,
-		"View HYOK Feature Information": permissions.CanViewHYOKFeatureInfo,
-		"Enable Stacks":                 permissions.CanEnableStacks,
-		"Create Projects":               permissions.CanCreateProject,
-	}
-
-	permissionNames := []string{}
-	for name, enabled := range permissionsByName {
-		if enabled {
-			permissionNames = append(permissionNames, name)
-		}
-	}
-
-	return permissionNames
 }
