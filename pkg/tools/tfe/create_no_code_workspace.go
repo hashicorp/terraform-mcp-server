@@ -87,7 +87,7 @@ func createNoCodeWorkspaceHandler(ctx context.Context, request mcp.CallToolReque
 		return ToolError(logger, err.Error(), nil)
 	}
 
-	// parse the returned module meta data to get required variable names for the module and all other variabels information correctly
+	// build the elicitation schema from the module's metadata and configured variable options
 	elicitationSchema := buildElicitationSchema(moduleMetadata, noCodeModule)
 
 	// return client response for the elicitation message

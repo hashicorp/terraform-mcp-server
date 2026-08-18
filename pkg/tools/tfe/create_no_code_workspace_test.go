@@ -51,68 +51,27 @@ func TestCreateNoCodeWorkspace(t *testing.T) {
 	})
 }
 
-func TestBuildElicitationSchemaOnlyRequiresRequiredVariables(t *testing.T) {
+func TestBuildElicitationSchema(t *testing.T) {
 	moduleMetadata := testNoCodeModuleMetadata(t)
 
 	schema := buildElicitationSchema(moduleMetadata, &tfe.RegistryNoCodeModule{})
 
 	assert.Equal(t, []string{"name"}, schema.requiredNames)
-	require.Len(t, schema.properties, 4)
+	require.Len(t, schema.properties, 2)
 	assert.Contains(t, schema.properties, "name")
 	assert.Contains(t, schema.properties, "description")
-	assert.Contains(t, schema.properties, "enabled")
-	assert.Contains(t, schema.properties, "count")
 }
 
-func TestExtractVariablesFromResponseHonorsOptionalVariables(t *testing.T) {
+func TestExtractVariablesFromResponse(t *testing.T) {
 	moduleMetadata := testNoCodeModuleMetadata(t)
 	schema := buildElicitationSchema(moduleMetadata, &tfe.RegistryNoCodeModule{})
 
-	t.Run("omitted optional variables use module defaults", func(t *testing.T) {
-		variables, err := extractVariablesFromResponse(map[string]any{"name": "example"}, schema)
+	variables, err := extractVariablesFromResponse(map[string]any{"name": "example"}, schema)
 
-		require.NoError(t, err)
-		require.Len(t, variables, 1)
-		assert.Equal(t, "name", variables[0].Key)
-		assert.Equal(t, "example", variables[0].Value)
-	})
-
-	t.Run("empty optional string uses module default", func(t *testing.T) {
-		variables, err := extractVariablesFromResponse(
-			map[string]any{"name": "example", "description": ""},
-			schema,
-		)
-
-		require.NoError(t, err)
-		require.Len(t, variables, 1)
-		assert.Equal(t, "name", variables[0].Key)
-	})
-
-	t.Run("false and zero optional values are preserved", func(t *testing.T) {
-		variables, err := extractVariablesFromResponse(
-			map[string]any{"name": "example", "enabled": false, "count": float64(0)},
-			schema,
-		)
-
-		require.NoError(t, err)
-		require.Len(t, variables, 3)
-		assert.Equal(t, "enabled", variables[1].Key)
-		assert.Equal(t, "false", variables[1].Value)
-		assert.Equal(t, "count", variables[2].Key)
-		assert.Equal(t, "0", variables[2].Value)
-	})
-
-	t.Run("missing required variable remains invalid", func(t *testing.T) {
-		_, err := extractVariablesFromResponse(map[string]any{}, schema)
-
-		require.EqualError(t, err, "required variable 'name' is missing from response")
-	})
-
-	t.Run("empty required string remains invalid", func(t *testing.T) {
-		_, err := extractVariablesFromResponse(map[string]any{"name": ""}, schema)
-
-		require.EqualError(t, err, "variable 'name' cannot be empty")
-	})
+	require.NoError(t, err)
+	require.Len(t, variables, 1)
+	assert.Equal(t, "name", variables[0].Key)
+	assert.Equal(t, "example", variables[0].Value)
 }
 
 func testNoCodeModuleMetadata(t *testing.T) *client.ModuleMetadata {
@@ -123,9 +82,7 @@ func testNoCodeModuleMetadata(t *testing.T) *client.ModuleMetadata {
 			"attributes": {
 				"input-variables": [
 					{"name": "name", "type": "string", "required": true},
-					{"name": "description", "type": "string", "required": false},
-					{"name": "enabled", "type": "bool", "required": false},
-					{"name": "count", "type": "number", "required": false}
+					{"name": "description", "type": "string", "required": false}
 				]
 			}
 		}

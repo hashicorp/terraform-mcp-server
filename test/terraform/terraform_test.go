@@ -55,10 +55,18 @@ func init() {
 	tfeUserEmail = os.Getenv("TFE_USER_EMAIL")
 	enableTfOperations = os.Getenv("ENABLE_TF_OPERATIONS")
 
+	// ElicitationHandler is used to provide default values for required parameters during no_code workspace creation.
 	testingClient = mcp.NewClient(&mcp.Implementation{
 		Name:    "terraform-mcp-server-test-harness",
 		Version: "v0.0.0",
-	}, nil)
+	}, &mcp.ClientOptions{
+		ElicitationHandler: func(context.Context, *mcp.ElicitRequest) (*mcp.ElicitResult, error) {
+			return &mcp.ElicitResult{
+				Action:  "accept",
+				Content: map[string]any{"name": "integration-test"},
+			}, nil
+		},
+	})
 }
 
 func newTestingSession(t *testing.T) *mcp.ClientSession {
