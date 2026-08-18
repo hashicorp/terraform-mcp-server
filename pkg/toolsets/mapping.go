@@ -33,6 +33,7 @@ var ToolToToolset = map[string]string{
 	// Search tools (HCP Terraform no-code search)
 	"generate_query_configuration": Search,
 	"provider_list_schema_list":    Search,
+	"create_query":                 Search,
 
 	// Private Registry tools (TFE/TFC private registry)
 	"search_private_modules":       RegistryPrivate,

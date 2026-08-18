@@ -272,7 +272,7 @@ func fetchProviderSchema(ctx context.Context, baseURL, orgName, namespace, name,
 		"note": fmt.Sprintf(
 			"Pass list_resource_schemas to generate_query_configuration "+
 				"(with provider_namespace=%q, provider_name=%q, provider_version=%q) "+
-				"to get a full schema guide and example payload.",
+				"to get a full schema guide and example configuration, then pass it with organization_name and workspace_name to create_query.",
 			resp.Data.Attributes.Namespace,
 			resp.Data.Attributes.Name,
 			resp.Data.Attributes.Version,
@@ -354,7 +354,8 @@ Typical agent workflow:
   1. Call provider_list_schema_list() with no arguments to discover available providers.
   2. Call provider_list_schema_list(provider_namespace, provider_name) to fetch the schema.
   3. Pass the returned list_resource_schemas to generate_query_configuration to get
-     a full guide and example payload for POST /api/v2/search/no-code-query.
+     a full guide and example query configuration.
+  4. Fill in the configuration and pass it with organization_name and workspace_name to create_query.
 
 Requires TFE_TOKEN and TFE_ADDRESS to be configured (same credentials used for
 other HCP Terraform tools). The NO_CODE_QUERY feature flag must be active for
