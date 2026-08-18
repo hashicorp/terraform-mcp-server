@@ -233,6 +233,18 @@ func TestIsToolEnabled(t *testing.T) {
 			enabledToolsets: []string{"all"},
 			expected:        true,
 		},
+		{
+			name:            "create query enabled by search toolset",
+			toolName:        "create_query",
+			enabledToolsets: []string{"search"},
+			expected:        true,
+		},
+		{
+			name:            "create query disabled by registry toolset",
+			toolName:        "create_query",
+			enabledToolsets: []string{"registry"},
+			expected:        false,
+		},
 	}
 
 	for _, tt := range tests {
@@ -343,6 +355,12 @@ func TestIsToolEnabledIndividualMode(t *testing.T) {
 			enabledToolsets: EnableIndividualTools([]string{"search_private_modules"}),
 			expected:        true,
 		},
+		{
+			name:            "create query in individual mode",
+			toolName:        "create_query",
+			enabledToolsets: EnableIndividualTools([]string{"create_query"}),
+			expected:        true,
+		},
 	}
 
 	for _, tt := range tests {
@@ -371,6 +389,7 @@ func TestGetAllValidToolNames(t *testing.T) {
 		"create_workspace",
 		"search_private_modules",
 		"search_private_providers",
+		"create_query",
 	}
 
 	for _, tool := range expectedTools {

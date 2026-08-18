@@ -7,19 +7,20 @@ import "strings"
 
 var ToolToToolset = map[string]string{
 	// Public Registry tools (providers, modules, policies)
-	"search_providers":             Registry,
-	"get_provider_details":         Registry,
-	"get_latest_provider_version":  Registry,
-	"get_provider_capabilities":    Registry,
-	"search_modules":               Registry,
-	"get_module_details":           Registry,
-	"get_latest_module_version":    Registry,
-	"search_policies":              Registry,
-	"get_policy_details":           Registry,
+	"search_providers":            Registry,
+	"get_provider_details":        Registry,
+	"get_latest_provider_version": Registry,
+	"get_provider_capabilities":   Registry,
+	"search_modules":              Registry,
+	"get_module_details":          Registry,
+	"get_latest_module_version":   Registry,
+	"search_policies":             Registry,
+	"get_policy_details":          Registry,
 
 	// Search tools (HCP Terraform no-code search)
 	"generate_query_configuration": Search,
-	"provider_list_schema_list":     Search,
+	"provider_list_schema_list":    Search,
+	"create_query":                 Search,
 
 	// Private Registry tools (TFE/TFC private registry)
 	"search_private_modules":       RegistryPrivate,

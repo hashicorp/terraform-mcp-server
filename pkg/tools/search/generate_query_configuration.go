@@ -292,62 +292,55 @@ func writeInstructions(b *strings.Builder, namespace, name, version string) {
 	b.WriteString(fmt.Sprintf("Provider: **%s/%s** version **%s**\n\n", namespace, name, version))
 
 	b.WriteString("## What is a No-Code Query Config?\n\n")
-	b.WriteString("A No-Code Query Config is the JSON payload sent to\n")
-	b.WriteString("`POST /api/v2/search/no-code-query`\n")
-	b.WriteString("to create **and immediately execute** a Terraform Search query from HCP Terraform\n")
+	b.WriteString("A No-Code Query Config describes the provider and resources passed to the\n")
+	b.WriteString("`create_query` MCP tool to create **and immediately execute** a Terraform Search query from HCP Terraform\n")
 	b.WriteString("without writing `.tfquery.hcl` files by hand.\n\n")
 
 	b.WriteString("## Pre-conditions\n\n")
 	b.WriteString("Before calling the endpoint, verify:\n\n")
 	b.WriteString("1. The workspace's Terraform version is **>= 1.14.0**. Requests against older versions are rejected with `422 Unprocessable Entity`.\n")
 	b.WriteString("2. The `NO_CODE_QUERY` feature flag is active for the organization.\n")
-	b.WriteString("3. After a successful POST, the response contains a `latestQueryRun` relationship with the run ID. Poll `GET /api/v2/queries/:id` until the run reaches a terminal status (`finished`, `errored`, or `canceled`).\n\n")
+	b.WriteString("3. After a successful POST, the response contains a `latest-query-run` relationship with the run ID. Poll `GET /api/v2/queries/:id` until the run reaches a terminal status (`finished`, `errored`, or `canceled`).\n")
+	b.WriteString("4. Pass `organization_name` and `workspace_name` separately when calling `create_query`; it resolves the workspace ID through go-tfe.\n\n")
 
-	b.WriteString("## Top-level payload structure\n\n")
+	b.WriteString("## Query configuration structure\n\n")
 	b.WriteString("```json\n")
 	b.WriteString(`{
-  "data": {
-    "type": "no-code-queries",
-    "attributes": {
-      "workspace_id":        "<ws-XXXX>",
-      "generate_config_out": false,
-      "no_code_query_providers": [
+  "generate_config_out": false,
+  "no_code_query_providers": [
+    {
+      "namespace": "<provider-namespace>",
+      "name":      "<provider-name>",
+      "version":   "<provider-version>",
+      "no_code_query_resources": [
         {
-          "namespace": "<provider-namespace>",
-          "name":      "<provider-name>",
-          "version":   "<provider-version>",
-          "no_code_query_resources": [
-            {
-              "body": {
-                "resource_type": "<resource-type-name>",
-                "limit":         100,
-                "attributes": [
-                  { "attribute": "<attr-name>", "value": "<attr-value>" }
-                ]
-              }
-            }
-          ]
+          "body": {
+            "resource_type": "<resource-type-name>",
+            "limit":         100,
+            "attributes": [
+              { "attribute": "<attr-name>", "value": "<attr-value>" }
+            ]
+          }
         }
       ]
     }
-  }
+  ]
 }
 `)
 	b.WriteString("```\n\n")
 
 	b.WriteString("## Rules for building the payload\n\n")
-	b.WriteString("1. **`data.type`** — MUST be `\"no-code-queries\"`. The API uses JSON:API deserialization; a missing or wrong type causes a 422 rejection.\n")
-	b.WriteString("2. **`workspace_id`** — required; format `ws-XXXXXXXXXX`.\n")
-	b.WriteString("3. **`generate_config_out`** — optional boolean. Omit it (or set to `false`) to skip HCL scaffolding. Set to `true` to instruct Terraform to emit a `generated_config.tf` file containing importable HCL for each discovered resource.\n")
-	b.WriteString("4. **`namespace` / `name` / `version`** — must match a provider returned by `provider_list_schema_list`.\n")
-	b.WriteString("5. **`resource_type`** — must be one of the resource type keys listed in the schema catalog below.\n")
-	b.WriteString("6. **`attributes`** — include only attributes that appear in the schema for that resource type.\n")
+	b.WriteString("1. **`organization_name` / `workspace_name`** — pass these separately to `create_query`; do not include them in this JSON object.\n")
+	b.WriteString("2. **`generate_config_out`** — optional boolean. Omit it (or set to `false`) to skip HCL scaffolding. Set to `true` to instruct Terraform to emit a `generated_config.tf` file containing importable HCL for each discovered resource.\n")
+	b.WriteString("3. **`namespace` / `name` / `version`** — must match a provider returned by `provider_list_schema_list`.\n")
+	b.WriteString("4. **`resource_type`** — must be one of the resource type keys listed in the schema catalog below.\n")
+	b.WriteString("5. **`attributes`** — include only attributes that appear in the schema for that resource type.\n")
 	b.WriteString("   - Omit optional attributes that you do not need to filter on.\n")
 	b.WriteString("   - Required attributes MUST be included.\n")
 	b.WriteString("   - Scalar attributes: value is a string, bool, or number.\n")
 	b.WriteString("   - Block-type attributes: value is a JSON object (see section below).\n")
-	b.WriteString("7. **`limit`** — optional positive integer; caps results returned. Omitting it is valid; the HCP Terraform UI defaults to **100**. Explicitly pass `100` to match UI behaviour.\n")
-	b.WriteString("8. **Variable injection** — if a value should come from a Terraform workspace variable, use `${var.<name>}` as the exact value string (no prefix or suffix text).\n")
+	b.WriteString("6. **`limit`** — optional positive integer; caps results returned. Omitting it is valid; the HCP Terraform UI defaults to **100**. Explicitly pass `100` to match UI behaviour.\n")
+	b.WriteString("7. **Variable injection** — if a value should come from a Terraform workspace variable, use `${var.<name>}` as the exact value string (no prefix or suffix text).\n")
 	b.WriteString("   The backend automatically emits a `variable { <name> {} }` declaration in `main.tfquery.json`.\n\n")
 
 	b.WriteString("## How the payload becomes a Terraform query\n\n")
@@ -503,18 +496,12 @@ func writeExamplePayload(b *strings.Builder, schemas map[string]listResourceEntr
 	}
 
 	payload := map[string]any{
-		"data": map[string]any{
-			"type": "no-code-queries",
-			"attributes": map[string]any{
-				"workspace_id":            "ws-REPLACE_WITH_WORKSPACE_ID",
-				"no_code_query_providers": []any{
-					map[string]any{
-						"namespace":               providerNamespace,
-						"name":                    providerName,
-						"version":                 providerVersion,
-						"no_code_query_resources": resources,
-					},
-				},
+		"no_code_query_providers": []any{
+			map[string]any{
+				"namespace":               providerNamespace,
+				"name":                    providerName,
+				"version":                 providerVersion,
+				"no_code_query_resources": resources,
 			},
 		},
 	}
@@ -636,8 +623,8 @@ const generateQueryConfigDescription = `Generates a No-Code Query Configuration 
 Given a 'list_resource_schemas' JSON object (returned by the provider_list_schema_list tool
 or produced by 'terraform providers schema -json'), this tool:
 
-1. Explains the structure of the POST /api/v2/search/no-code-query payload
-   required to create and immediately run a No-Code Search query in HCP Terraform.
+1. Explains the query_configuration structure accepted by create_query, which calls
+   POST /api/v2/search/no-code-query to immediately run a No-Code Search query.
 2. Documents pre-conditions: workspace Terraform version >= 1.14.0, NO_CODE_QUERY
    feature flag active, and how to poll the resulting query run to completion.
 3. Catalogs every resource type with its scalar attributes AND block-type attributes
@@ -649,6 +636,7 @@ or produced by 'terraform providers schema -json'), this tool:
 6. Provides a ready-to-use example payload pre-filled with placeholder values for
    required scalar and block-type attributes.
 7. Documents variable injection syntax (${var.<name>}) and common mistakes.
+8. Directs the agent to pass organization_name and workspace_name separately when calling create_query.
 
 Use this tool before constructing a no-code query payload whenever you have
 access to a provider's list_resource_schemas data. The output is self-contained
