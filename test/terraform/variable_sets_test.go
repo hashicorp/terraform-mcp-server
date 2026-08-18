@@ -4,7 +4,6 @@
 package terraform
 
 import (
-	"strings"
 	"testing"
 
 	"github.com/hashicorp/go-tfe"
@@ -42,12 +41,11 @@ func TestVariableSetHappyPath(t *testing.T) {
 	})
 	require.False(t, createResult.IsError, "create_variable_set should not return an error")
 	require.NotEmpty(t, createResultText, "create_variable_set result should not be empty")
-	assert.Contains(t, createResultText, varSetName, "create_variable_set response should reference the variable set name")
+	assert.Equal(t, varSetName, gjson.Get(createResultText, "variable_set_name").String(),
+		"create_variable_set response should reference the variable set name")
 
-	// Extract the variable set ID from the response text ("…with ID varset-xxxx").
-	// The response format is: "Successfully created variable set <name> with ID <id>"
-	varSetID := extractID(createResultText, "varset-")
-	require.NotEmpty(t, varSetID, "create_variable_set response must contain a varset- ID")
+	varSetID := gjson.Get(createResultText, "variable_set_id").String()
+	require.NotEmpty(t, varSetID, "create_variable_set response must contain a variable_set_id")
 
 	// Ensure the variable set is deleted at the end of the test regardless of
 	// what the tools under test do.
@@ -84,14 +82,13 @@ func TestVariableSetHappyPath(t *testing.T) {
 		})
 		require.False(t, createVarResult.IsError, "create_variable_in_variable_set should not return an error")
 		require.NotEmpty(t, createVarResultText, "create_variable_in_variable_set result should not be empty")
-		assert.Contains(t, createVarResultText, "test_key",
+		assert.Equal(t, "test_key", gjson.Get(createVarResultText, "variable_key").String(),
 			"create_variable_in_variable_set response should reference the variable key")
-		assert.Contains(t, createVarResultText, varSetID,
+		assert.Equal(t, varSetID, gjson.Get(createVarResultText, "variable_set_id").String(),
 			"create_variable_in_variable_set response should reference the variable set ID")
 
-		// Extract the variable ID from the response (format: "…variable <key> with ID var-xxxx in variable set…").
-		variableID = extractID(createVarResultText, "var-")
-		require.NotEmpty(t, variableID, "create_variable_in_variable_set response must contain a var- ID")
+		variableID = gjson.Get(createVarResultText, "variable_id").String()
+		require.NotEmpty(t, variableID, "create_variable_in_variable_set response must contain a variable_id")
 
 		// Verify via the TFE API directly.
 		variables, err := client.VariableSetVariables.List(t.Context(), varSetID, nil)
@@ -108,7 +105,7 @@ func TestVariableSetHappyPath(t *testing.T) {
 			"variable_id":     variableID,
 		})
 		require.False(t, deleteVarResult.IsError, "delete_variable_in_variable_set should not return an error")
-		assert.Contains(t, deleteVarResultText, variableID,
+		assert.Equal(t, variableID, gjson.Get(deleteVarResultText, "variable_id").String(),
 			"delete_variable_in_variable_set response should reference the deleted variable ID")
 
 		// Verify the variable is gone via the TFE API directly.
@@ -123,7 +120,7 @@ func TestVariableSetHappyPath(t *testing.T) {
 			"workspace_ids":   ws.ID,
 		})
 		require.False(t, attachResult.IsError, "attach_variable_set_to_workspaces should not return an error")
-		assert.Contains(t, attachResultText, varSetID,
+		assert.Equal(t, varSetID, gjson.Get(attachResultText, "variable_set_id").String(),
 			"attach_variable_set_to_workspaces response should reference the variable set ID")
 
 		// Verify via the TFE API: read the variable set and confirm the workspace appears.
@@ -146,7 +143,7 @@ func TestVariableSetHappyPath(t *testing.T) {
 			"workspace_ids":   ws.ID,
 		})
 		require.False(t, detachResult.IsError, "detach_variable_set_from_workspaces should not return an error")
-		assert.Contains(t, detachResultText, varSetID,
+		assert.Equal(t, varSetID, gjson.Get(detachResultText, "variable_set_id").String(),
 			"detach_variable_set_from_workspaces response should reference the variable set ID")
 
 		// Verify via the TFE API: workspace should no longer be in the variable set.
@@ -250,16 +247,3 @@ func TestVariableSetErrorPaths(t *testing.T) {
 	})
 }
 
-// extractID finds the first token in s that starts with prefix and returns it,
-// trimmed of any trailing whitespace. Returns "" if not found.
-func extractID(s, prefix string) string {
-	idx := strings.Index(s, prefix)
-	if idx == -1 {
-		return ""
-	}
-	rest := s[idx:]
-	if end := strings.IndexAny(rest, " \t\n\r"); end != -1 {
-		return rest[:end]
-	}
-	return rest
-}
