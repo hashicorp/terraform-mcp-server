@@ -122,6 +122,10 @@ func (r *DynamicToolRegistry) registerTFETools() {
 
 		r.mcpServer.AddTool(built.Tool, r.wrapWithAvailabilityCheck(td.Name, built.Handler))
 	}
+	if toolsets.IsToolEnabled("create_query", r.enabledToolsets) {
+		tool := r.createDynamicTFETool("create_query", searchTools.CreateQuery)
+		r.mcpServer.AddTool(tool.Tool, tool.Handler)
+	}
 
 	r.tfeToolsRegistered = true
 }
