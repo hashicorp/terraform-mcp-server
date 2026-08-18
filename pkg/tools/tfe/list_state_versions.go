@@ -44,11 +44,7 @@ func ListStateVersions(logger *log.Logger) server.ServerTool {
 }
 
 // listStateVersionsHandler handles tool logics and functionality
-func listStateVersionsHandler(
-	ctx context.Context,
-	request mcp.CallToolRequest,
-	logger *log.Logger) (*mcp.CallToolResult, error) {
-
+func listStateVersionsHandler(ctx context.Context, request mcp.CallToolRequest, logger *log.Logger) (*mcp.CallToolResult, error) {
 	tfeClient, err := client.GetTfeClientFromContext(ctx, logger)
 	if err != nil {
 		return ToolError(logger, "Failed to get Terraform client", err)
@@ -108,9 +104,7 @@ func listStateVersionsHandler(
 	if err != nil {
 		return ToolError(logger, "Failed to marshal organization names", err)
 	}
-
 	return mcp.NewToolResultText(string(svJSON)), nil
-
 }
 
 // StateVersionsSummary is a truncated summary of State Version details for listing

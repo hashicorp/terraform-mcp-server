@@ -4,11 +4,11 @@
 package tools
 
 import (
+	"bytes"
 	"context"
-	"encoding/json"
-	"strings"
 
 	"github.com/hashicorp/go-tfe"
+	"github.com/hashicorp/jsonapi"
 	"github.com/hashicorp/terraform-mcp-server/pkg/client"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
@@ -31,19 +31,16 @@ func GetStateVersion(logger *log.Logger) server.ServerTool {
 				mcp.Description("Optional Workspace id to fetch latest version"),
 			),
 		),
-
 		Handler: func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			return getStateVersionWithIDHandler(ctx, request, logger)
 		},
 	}
-
 }
 
 // getStateVersionWithIDHandler handles tool logics and functionality
-func getStateVersionWithIDHandler(
-	ctx context.Context,
-	request mcp.CallToolRequest,
-	logger *log.Logger) (*mcp.CallToolResult, error) {
+func getStateVersionWithIDHandler(ctx context.Context, request mcp.CallToolRequest, logger *log.Logger) (*mcp.CallToolResult, error) {
+	stateVersionID := GetTrimmedString(request, "state_version_id", "")
+	workspaceID := GetTrimmedString(request, "workspace_id", "")
 
 	tfeClient, err := client.GetTfeClientFromContext(ctx, logger)
 	if err != nil {
@@ -53,14 +50,7 @@ func getStateVersionWithIDHandler(
 		return ToolError(logger, "Failed to get Terraform client - ensure TFE_TOKEN and TFE_ADDRESS are configured", nil)
 	}
 
-	stateVersionID := request.GetString("state_version_id", "")
-	stateVersionID = strings.TrimLeft(strings.TrimSpace(stateVersionID), "#")
-
-	workspaceID := request.GetString("workspace_id", "")
-	workspaceID = strings.TrimLeft(strings.TrimSpace(workspaceID), "#")
-
 	var sv *tfe.StateVersion
-
 	if stateVersionID == "" && workspaceID == "" {
 		return ToolError(logger, "One of state_version_id or workspace_id must be provided", nil)
 	}
@@ -73,10 +63,10 @@ func getStateVersionWithIDHandler(
 		return ToolError(logger, "Failed to get state version", err)
 	}
 
-	svJSON, err := json.Marshal(sv)
+	buf := bytes.NewBuffer(nil)
+	err = jsonapi.MarshalPayloadWithoutIncluded(buf, sv)
 	if err != nil {
-		return ToolError(logger, "Failed to serialize state version", err)
+		return ToolError(logger, "failed to marshal state version", err)
 	}
-
-	return mcp.NewToolResultText(string(svJSON)), nil
+	return mcp.NewToolResultText(buf.String()), nil
 }

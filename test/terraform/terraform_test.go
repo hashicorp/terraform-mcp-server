@@ -1,6 +1,9 @@
 package terraform
 
 import (
+	"archive/tar"
+	"bytes"
+	"compress/gzip"
 	"context"
 	"math/rand"
 	"net/http"
@@ -222,4 +225,31 @@ func waitFor[T any](t *testing.T, timeout time.Duration, description string, pol
 		case <-ticker.C:
 		}
 	}
+}
+
+// packages the HCL as a gzipped tar archive and uploads it to the workspace.
+func uploadConfiguration(t *testing.T, client *tfe.Client, workspaceID string, config string) {
+	t.Helper()
+
+	var archive bytes.Buffer
+	gzipWriter := gzip.NewWriter(&archive)
+	tarWriter := tar.NewWriter(gzipWriter)
+	configuration := []byte(config)
+
+	require.NoError(t, tarWriter.WriteHeader(&tar.Header{
+		Name: "main.tf",
+		Mode: 0o600,
+		Size: int64(len(configuration)),
+	}))
+	_, err := tarWriter.Write(configuration)
+	require.NoError(t, err)
+	require.NoError(t, tarWriter.Close())
+	require.NoError(t, gzipWriter.Close())
+
+	// Create the configuration-version record without auto-queuing a run.
+	configurationVersion, err := client.ConfigurationVersions.Create(t.Context(), workspaceID, tfe.ConfigurationVersionCreateOptions{
+		AutoQueueRuns: tfe.Bool(false),
+	})
+	require.NoError(t, err, "failed to create a configuration version")
+	require.NoError(t, client.ConfigurationVersions.UploadTarGzip(t.Context(), configurationVersion.UploadURL, &archive), "failed to upload the test configuration")
 }
