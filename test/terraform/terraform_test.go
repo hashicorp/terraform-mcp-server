@@ -261,4 +261,12 @@ func uploadConfiguration(t *testing.T, client *tfe.Client, workspaceID string, c
 	})
 	require.NoError(t, err, "failed to create a configuration version")
 	require.NoError(t, client.ConfigurationVersions.UploadTarGzip(t.Context(), configurationVersion.UploadURL, &archive), "failed to upload the test configuration")
+
+	waitFor(t, toolCallTimeout, "configuration version to finish processing", func(ctx context.Context) (*tfe.ConfigurationVersion, error) {
+		configurationVersion, err := client.ConfigurationVersions.Read(ctx, configurationVersion.ID)
+		if err != nil || configurationVersion.Status != tfe.ConfigurationUploaded {
+			return nil, err
+		}
+		return configurationVersion, nil
+	})
 }
