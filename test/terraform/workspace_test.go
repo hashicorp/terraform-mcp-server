@@ -3,6 +3,7 @@ package terraform
 import (
 	"testing"
 
+	"github.com/hashicorp/go-tfe"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -86,6 +87,36 @@ func TestWorkspaceHappyPath(t *testing.T) {
 		})
 		assert.True(t, getResult.IsError, "get_workspace_details should return an error after deletion")
 	})
+}
+
+func TestForceUnlockWorkspace(t *testing.T) {
+	requireTfOperations(t)
+
+	s := newTestingSession(t)
+	defer s.Close()
+
+	client := tfeClient(t)
+	workspaceName := randomName("unlock-test-")
+	workspace, err := client.Workspaces.Create(t.Context(), tfeOrgName, tfe.WorkspaceCreateOptions{Name: &workspaceName})
+	require.NoError(t, err, "failed to create test workspace")
+	defer client.Workspaces.DeleteByID(t.Context(), workspace.ID)
+
+	lockReason := "Test force_unlock_workspace integration"
+	workspace, err = client.Workspaces.Lock(t.Context(), workspace.ID, tfe.WorkspaceLockOptions{Reason: &lockReason})
+	require.NoError(t, err, "failed to lock test workspace")
+	// Ensure the workspace is unlocked at the end of the test in case the force unlock tool fails, so that the workspace can be deleted.
+	defer client.Workspaces.ForceUnlock(t.Context(), workspace.ID)
+	require.True(t, workspace.Locked, "setup should leave the workspace locked")
+
+	result, resultText := callTool(t, s, "force_unlock_workspace", map[string]any{
+		"workspace_id": workspace.ID,
+	})
+	require.False(t, result.IsError, "force_unlock_workspace should not return an error")
+	assert.Contains(t, resultText, workspace.ID, "response should reference the unlocked workspace")
+
+	workspace, err = client.Workspaces.ReadByID(t.Context(), workspace.ID)
+	require.NoError(t, err, "failed to read workspace after force unlock")
+	assert.False(t, workspace.Locked, "workspace should be unlocked in the TFE API")
 }
 
 func runVariablesTest(t *testing.T, s *mcp.ClientSession, wsName string) {

@@ -48,34 +48,7 @@ func getTokenPermissionsHandler(ctx context.Context, request mcp.CallToolRequest
 		return ToolErrorf(logger, "organization not found: %q", terraformOrgName)
 	}
 
-	permissions := org.Permissions
-	humanReadablePermissions := map[string]bool{
-		"Create Teams":                  permissions.CanCreateTeam,
-		"Create Workspaces":             permissions.CanCreateWorkspace,
-		"Create Workspace Migrations":   permissions.CanCreateWorkspaceMigration,
-		"Deploy NoCode Modules":         permissions.CanDeployNoCodeModules,
-		"Destroy":                       permissions.CanDestroy,
-		"Manage Auditing":               permissions.CanManageAuditing,
-		"Manage NoCodeModules":          permissions.CanManageNoCodeModules,
-		"Manage Run Tasks":              permissions.CanManageRunTasks,
-		"Traverse":                      permissions.CanTraverse,
-		"Update":                        permissions.CanUpdate,
-		"Update API Tokens":             permissions.CanUpdateAPIToken,
-		"Update OAuth":                  permissions.CanUpdateOAuth,
-		"Update Sentinel":               permissions.CanUpdateSentinel,
-		"Update HYOK Configuration":     permissions.CanUpdateHYOKConfiguration,
-		"View HYOK Feature Information": permissions.CanViewHYOKFeatureInfo,
-		"Enable Stacks":                 permissions.CanEnableStacks,
-		"Create Projects":               permissions.CanCreateProject,
-	}
-	perms := []string{}
-	for k, v := range humanReadablePermissions {
-		if v {
-			perms = append(perms, k)
-		}
-	}
-
-	buf, err := json.Marshal(perms)
+	buf, err := json.Marshal(client.HumanReadableTokenPermissions(org.Permissions))
 	if err != nil {
 		return ToolError(logger, "failed to marshal token permissions", err)
 	}

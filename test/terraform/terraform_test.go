@@ -18,7 +18,7 @@ import (
 )
 
 const (
-	toolCallTimeout  = 30 * time.Second
+	toolCallTimeout  = 90 * time.Second
 	alphaNum         = "abcdefghijklmnopqrstuvwxyz0123456789"
 	randomNameLength = 8
 )
@@ -154,6 +154,15 @@ func requireStacksEntitlement(t *testing.T, client *tfe.Client) {
 	}
 }
 
+func requireSentinelEntitlement(t *testing.T, client *tfe.Client) {
+	t.Helper()
+	entitlements, err := client.Organizations.ReadEntitlements(t.Context(), tfeOrgName)
+	require.NoError(t, err, "Failed to read entitlements for organization %q", tfeOrgName)
+	if !entitlements.Sentinel {
+		t.Skipf("Organization %q does not have the Sentinel entitlement", tfeOrgName)
+	}
+}
+
 func randomName(prefix string) string {
 	suffix := make([]byte, randomNameLength)
 	for i := range suffix {
@@ -252,4 +261,12 @@ func uploadConfiguration(t *testing.T, client *tfe.Client, workspaceID string, c
 	})
 	require.NoError(t, err, "failed to create a configuration version")
 	require.NoError(t, client.ConfigurationVersions.UploadTarGzip(t.Context(), configurationVersion.UploadURL, &archive), "failed to upload the test configuration")
+
+	waitFor(t, toolCallTimeout, "configuration version to finish processing", func(ctx context.Context) (*tfe.ConfigurationVersion, error) {
+		configurationVersion, err := client.ConfigurationVersions.Read(ctx, configurationVersion.ID)
+		if err != nil || configurationVersion.Status != tfe.ConfigurationUploaded {
+			return nil, err
+		}
+		return configurationVersion, nil
+	})
 }

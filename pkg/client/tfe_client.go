@@ -102,6 +102,45 @@ func buildTFEConfig(terraformAddress string, terraformSkipTLSVerify bool, terraf
 	return config
 }
 
+// HumanReadableTokenPermissions returns the display names of the permissions enabled for an organization.
+func HumanReadableTokenPermissions(permissions *tfe.OrganizationPermissions) []string {
+	if permissions == nil {
+		return nil
+	}
+
+	permissionsByName := []struct {
+		name    string
+		enabled bool
+	}{
+		{"Create Teams", permissions.CanCreateTeam},
+		{"Create Workspaces", permissions.CanCreateWorkspace},
+		{"Create Workspace Migrations", permissions.CanCreateWorkspaceMigration},
+		{"Deploy NoCode Modules", permissions.CanDeployNoCodeModules},
+		{"Destroy", permissions.CanDestroy},
+		{"Manage Auditing", permissions.CanManageAuditing},
+		{"Manage NoCodeModules", permissions.CanManageNoCodeModules},
+		{"Manage Run Tasks", permissions.CanManageRunTasks},
+		{"Traverse", permissions.CanTraverse},
+		{"Update", permissions.CanUpdate},
+		{"Update API Tokens", permissions.CanUpdateAPIToken},
+		{"Update OAuth", permissions.CanUpdateOAuth},
+		{"Update Sentinel", permissions.CanUpdateSentinel},
+		{"Update HYOK Configuration", permissions.CanUpdateHYOKConfiguration},
+		{"View HYOK Feature Information", permissions.CanViewHYOKFeatureInfo},
+		{"Enable Stacks", permissions.CanEnableStacks},
+		{"Create Projects", permissions.CanCreateProject},
+	}
+
+	permissionNames := make([]string, 0, len(permissionsByName))
+	for _, permission := range permissionsByName {
+		if permission.enabled {
+			permissionNames = append(permissionNames, permission.name)
+		}
+	}
+
+	return permissionNames
+}
+
 // GetTfeClient retrieves the TFE client for the given session
 func GetTfeClient(sessionId string) *tfe.Client {
 	if value, ok := activeTfeClients.Load(sessionId); ok {
