@@ -20,7 +20,7 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-type createQueryConfiguration struct {
+type executeQueryConfiguration struct {
 	GenerateConfigOut *bool                 `json:"generate_config_out,omitempty"`
 	Providers         []noCodeQueryProvider `json:"no_code_query_providers"`
 }
@@ -36,18 +36,18 @@ type noCodeQueryResource struct {
 	Body map[string]any `json:"body"`
 }
 
-type createQueryOptions struct {
+type executeQueryOptions struct {
 	Type              string                `jsonapi:"primary,no-code-queries"`
 	GenerateConfigOut *bool                 `jsonapi:"attr,generate-config-out,omitempty"`
 	Providers         []noCodeQueryProvider `jsonapi:"attr,no-code-query-providers"`
 	Workspace         *tfe.Workspace        `jsonapi:"relation,workspace"`
 }
 
-// CreateQuery creates and immediately executes an HCP Terraform no-code query.
-func CreateQuery(logger *log.Logger) server.ServerTool {
+// ExecuteQuery creates and immediately executes an HCP Terraform no-code query.
+func ExecuteQuery(logger *log.Logger) server.ServerTool {
 	return server.ServerTool{
-		Tool: mcp.NewTool("create_query",
-			mcp.WithDescription(createQueryDescription),
+		Tool: mcp.NewTool("execute_query",
+			mcp.WithDescription(executeQueryDescription),
 			mcp.WithTitleAnnotation("Create and execute an HCP Terraform no-code query"),
 			mcp.WithOpenWorldHintAnnotation(true),
 			mcp.WithReadOnlyHintAnnotation(false),
@@ -70,56 +70,56 @@ func CreateQuery(logger *log.Logger) server.ServerTool {
 			),
 		),
 		Handler: func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-			return createQueryHandler(ctx, request, logger)
+			return executeQueryHandler(ctx, request, logger)
 		},
 	}
 }
 
-func createQueryHandler(ctx context.Context, request mcp.CallToolRequest, logger *log.Logger) (*mcp.CallToolResult, error) {
+func executeQueryHandler(ctx context.Context, request mcp.CallToolRequest, logger *log.Logger) (*mcp.CallToolResult, error) {
 	organizationName, err := request.RequireString("organization_name")
 	if err != nil || strings.TrimSpace(organizationName) == "" {
-		return createQueryToolErrorf(logger, "missing required input: organization_name")
+		return executeQueryToolErrorf(logger, "missing required input: organization_name")
 	}
 	organizationName = strings.TrimSpace(organizationName)
 
 	workspaceName, err := request.RequireString("workspace_name")
 	if err != nil || strings.TrimSpace(workspaceName) == "" {
-		return createQueryToolErrorf(logger, "missing required input: workspace_name")
+		return executeQueryToolErrorf(logger, "missing required input: workspace_name")
 	}
 	workspaceName = strings.TrimSpace(workspaceName)
 
 	rawConfiguration, err := request.RequireString("query_configuration")
 	if err != nil || strings.TrimSpace(rawConfiguration) == "" {
-		return createQueryToolErrorf(logger, "missing required input: query_configuration")
+		return executeQueryToolErrorf(logger, "missing required input: query_configuration")
 	}
 
-	configuration, err := parseCreateQueryConfiguration(rawConfiguration)
+	configuration, err := parseExecuteQueryConfiguration(rawConfiguration)
 	if err != nil {
-		return createQueryToolErrorf(logger, "invalid query_configuration: %v", err)
+		return executeQueryToolErrorf(logger, "invalid query_configuration: %v", err)
 	}
 
 	tfeClient, err := client.GetTfeClientFromContext(ctx, logger)
 	if err != nil {
-		return createQueryToolErrorf(logger, "failed to get Terraform client: %v", err)
+		return executeQueryToolErrorf(logger, "failed to get Terraform client: %v", err)
 	}
 	workspace, err := tfeClient.Workspaces.Read(ctx, organizationName, workspaceName)
 	if err != nil {
-		return createQueryToolErrorf(logger, "workspace %q not found in organization %q: %v", workspaceName, organizationName, err)
+		return executeQueryToolErrorf(logger, "workspace %q not found in organization %q: %v", workspaceName, organizationName, err)
 	}
 
-	response, err := submitCreateQuery(ctx, tfeClient, workspace.ID, configuration)
+	response, err := submitExecuteQuery(ctx, tfeClient, workspace.ID, configuration)
 	if err != nil {
-		return createQueryToolErrorf(logger, "failed to create no-code query: %v", err)
+		return executeQueryToolErrorf(logger, "failed to create no-code query: %v", err)
 	}
 
 	return mcp.NewToolResultText(response), nil
 }
 
-func parseCreateQueryConfiguration(raw string) (*createQueryConfiguration, error) {
+func parseExecuteQueryConfiguration(raw string) (*executeQueryConfiguration, error) {
 	decoder := json.NewDecoder(strings.NewReader(raw))
 	decoder.UseNumber()
 
-	var configuration createQueryConfiguration
+	var configuration executeQueryConfiguration
 	if err := decoder.Decode(&configuration); err != nil {
 		return nil, fmt.Errorf("input is not valid JSON: %w", err)
 	}
@@ -186,8 +186,8 @@ func isPositiveInteger(value any) bool {
 	}
 }
 
-func submitCreateQuery(ctx context.Context, tfeClient *tfe.Client, workspaceID string, configuration *createQueryConfiguration) (string, error) {
-	options := &createQueryOptions{
+func submitExecuteQuery(ctx context.Context, tfeClient *tfe.Client, workspaceID string, configuration *executeQueryConfiguration) (string, error) {
+	options := &executeQueryOptions{
 		GenerateConfigOut: configuration.GenerateConfigOut,
 		Providers:         configuration.Providers,
 		Workspace: &tfe.Workspace{
@@ -207,15 +207,15 @@ func submitCreateQuery(ctx context.Context, tfeClient *tfe.Client, workspaceID s
 	return response.String(), nil
 }
 
-func createQueryToolErrorf(logger *log.Logger, format string, args ...any) (*mcp.CallToolResult, error) {
+func executeQueryToolErrorf(logger *log.Logger, format string, args ...any) (*mcp.CallToolResult, error) {
 	message := fmt.Sprintf(format, args...)
 	if logger != nil {
-		logger.Errorf("create_query: %s", message)
+		logger.Errorf("execute_query: %s", message)
 	}
 	return mcp.NewToolResultError(message), nil
 }
 
-const createQueryDescription = `Creates and immediately executes an HCP Terraform no-code Search query.
+const executeQueryDescription = `Creates and immediately executes an HCP Terraform Search query.
 
 Pass an organization name, workspace name, and the provider/resource configuration produced
 from the guidance returned by generate_query_configuration. The tool resolves the workspace
@@ -224,8 +224,9 @@ calls POST /api/v2/search/no-code-query, which persists the selections, uploads 
 Terraform query configuration, and starts a query run. It does not create or modify
 infrastructure.
 
-The response includes data.relationships.latest-query-run.data.id. Use that query
-run ID with the HCP Terraform query APIs to monitor execution and retrieve results.
+The response includes data.relationships.latest-query-run.data.id. Pass that query
+run ID to get_query_status and call it again while the status is pending, queued,
+or running. Do not use curl or call the HCP Terraform query API directly.
 
-Requires an authenticated HCP Terraform session, the NO_CODE_QUERY feature for the
-workspace organization, and a workspace using a supported Terraform version.`
+Requires an authenticated HCP Terraform session and a workspace using a supported
+Terraform version.`

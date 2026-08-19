@@ -293,15 +293,14 @@ func writeInstructions(b *strings.Builder, namespace, name, version string) {
 
 	b.WriteString("## What is a No-Code Query Config?\n\n")
 	b.WriteString("A No-Code Query Config describes the provider and resources passed to the\n")
-	b.WriteString("`create_query` MCP tool to create **and immediately execute** a Terraform Search query from HCP Terraform\n")
+	b.WriteString("`execute_query` MCP tool to create **and immediately execute** a Terraform Search query from HCP Terraform\n")
 	b.WriteString("without writing `.tfquery.hcl` files by hand.\n\n")
 
 	b.WriteString("## Pre-conditions\n\n")
 	b.WriteString("Before calling the endpoint, verify:\n\n")
 	b.WriteString("1. The workspace's Terraform version is **>= 1.14.0**. Requests against older versions are rejected with `422 Unprocessable Entity`.\n")
-	b.WriteString("2. The `NO_CODE_QUERY` feature flag is active for the organization.\n")
-	b.WriteString("3. After a successful POST, the response contains a `latest-query-run` relationship with the run ID. Poll `GET /api/v2/queries/:id` until the run reaches a terminal status (`finished`, `errored`, or `canceled`).\n")
-	b.WriteString("4. Pass `organization_name` and `workspace_name` separately when calling `create_query`; it resolves the workspace ID through go-tfe.\n\n")
+	b.WriteString("2. After `execute_query` succeeds, pass the ID from its `latest-query-run` relationship to the `get_query_status` MCP tool. Call it again while status is `pending`, `queued`, or `running`; `finished`, `errored`, and `canceled` are terminal. Do not use curl or call the query API directly.\n")
+	b.WriteString("3. Pass `organization_name` and `workspace_name` separately when calling `execute_query`; it resolves the workspace ID through go-tfe.\n\n")
 
 	b.WriteString("## Query configuration structure\n\n")
 	b.WriteString("```json\n")
@@ -330,7 +329,7 @@ func writeInstructions(b *strings.Builder, namespace, name, version string) {
 	b.WriteString("```\n\n")
 
 	b.WriteString("## Rules for building the payload\n\n")
-	b.WriteString("1. **`organization_name` / `workspace_name`** — pass these separately to `create_query`; do not include them in this JSON object.\n")
+	b.WriteString("1. **`organization_name` / `workspace_name`** — pass these separately to `execute_query`; do not include them in this JSON object.\n")
 	b.WriteString("2. **`generate_config_out`** — optional boolean. Omit it (or set to `false`) to skip HCL scaffolding. Set to `true` to instruct Terraform to emit a `generated_config.tf` file containing importable HCL for each discovered resource.\n")
 	b.WriteString("3. **`namespace` / `name` / `version`** — must match a provider returned by `provider_list_schema_list`.\n")
 	b.WriteString("4. **`resource_type`** — must be one of the resource type keys listed in the schema catalog below.\n")
@@ -623,10 +622,10 @@ const generateQueryConfigDescription = `Generates a No-Code Query Configuration 
 Given a 'list_resource_schemas' JSON object (returned by the provider_list_schema_list tool
 or produced by 'terraform providers schema -json'), this tool:
 
-1. Explains the query_configuration structure accepted by create_query, which calls
+1. Explains the query_configuration structure accepted by execute_query, which calls
    POST /api/v2/search/no-code-query to immediately run a No-Code Search query.
-2. Documents pre-conditions: workspace Terraform version >= 1.14.0, NO_CODE_QUERY
-   feature flag active, and how to poll the resulting query run to completion.
+2. Documents the workspace Terraform version pre-condition and how to monitor the
+   resulting query run with get_query_status.
 3. Catalogs every resource type with its scalar attributes AND block-type attributes
    (name, type, required/optional, nesting_mode, sub-attributes, description)
    so the agent knows exactly which filters can be applied and how to express them.
@@ -636,7 +635,7 @@ or produced by 'terraform providers schema -json'), this tool:
 6. Provides a ready-to-use example payload pre-filled with placeholder values for
    required scalar and block-type attributes.
 7. Documents variable injection syntax (${var.<name>}) and common mistakes.
-8. Directs the agent to pass organization_name and workspace_name separately when calling create_query.
+8. Directs the agent to pass organization_name and workspace_name separately when calling execute_query.
 
 Use this tool before constructing a no-code query payload whenever you have
 access to a provider's list_resource_schemas data. The output is self-contained

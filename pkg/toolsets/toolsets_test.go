@@ -234,16 +234,22 @@ func TestIsToolEnabled(t *testing.T) {
 			expected:        true,
 		},
 		{
-			name:            "create query enabled by search toolset",
-			toolName:        "create_query",
+			name:            "execute query enabled by search toolset",
+			toolName:        "execute_query",
 			enabledToolsets: []string{"search"},
 			expected:        true,
 		},
 		{
-			name:            "create query disabled by registry toolset",
-			toolName:        "create_query",
+			name:            "execute query disabled by registry toolset",
+			toolName:        "execute_query",
 			enabledToolsets: []string{"registry"},
 			expected:        false,
+		},
+		{
+			name:            "query status enabled by search toolset",
+			toolName:        "get_query_status",
+			enabledToolsets: []string{"search"},
+			expected:        true,
 		},
 	}
 
@@ -356,9 +362,15 @@ func TestIsToolEnabledIndividualMode(t *testing.T) {
 			expected:        true,
 		},
 		{
-			name:            "create query in individual mode",
-			toolName:        "create_query",
-			enabledToolsets: EnableIndividualTools([]string{"create_query"}),
+			name:            "execute query in individual mode",
+			toolName:        "execute_query",
+			enabledToolsets: EnableIndividualTools([]string{"execute_query"}),
+			expected:        true,
+		},
+		{
+			name:            "query status in individual mode",
+			toolName:        "get_query_status",
+			enabledToolsets: EnableIndividualTools([]string{"get_query_status"}),
 			expected:        true,
 		},
 	}
@@ -389,7 +401,8 @@ func TestGetAllValidToolNames(t *testing.T) {
 		"create_workspace",
 		"search_private_modules",
 		"search_private_providers",
-		"create_query",
+		"execute_query",
+		"get_query_status",
 	}
 
 	for _, tool := range expectedTools {

@@ -15,7 +15,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-const validCreateQueryConfiguration = `{
+const validExecuteQueryConfiguration = `{
   "generate_config_out": false,
   "no_code_query_providers": [{
     "namespace": "hashicorp",
@@ -31,10 +31,10 @@ const validCreateQueryConfiguration = `{
   }]
 }`
 
-func TestCreateQueryDefinition(t *testing.T) {
-	tool := CreateQuery(silentLogger())
+func TestExecuteQueryDefinition(t *testing.T) {
+	tool := ExecuteQuery(silentLogger())
 
-	assert.Equal(t, "create_query", tool.Tool.Name)
+	assert.Equal(t, "execute_query", tool.Tool.Name)
 	assert.Contains(t, tool.Tool.InputSchema.Required, "organization_name")
 	assert.Contains(t, tool.Tool.InputSchema.Required, "workspace_name")
 	assert.NotContains(t, tool.Tool.InputSchema.Properties, "workspace_id")
@@ -45,10 +45,12 @@ func TestCreateQueryDefinition(t *testing.T) {
 	assert.False(t, *tool.Tool.Annotations.DestructiveHint)
 	require.NotNil(t, tool.Tool.Annotations.OpenWorldHint)
 	assert.True(t, *tool.Tool.Annotations.OpenWorldHint)
+	assert.Contains(t, tool.Tool.Description, "get_query_status")
+	assert.Contains(t, tool.Tool.Description, "Do not use curl")
 }
 
-func TestParseCreateQueryConfiguration(t *testing.T) {
-	configuration, err := parseCreateQueryConfiguration(validCreateQueryConfiguration)
+func TestParseExecuteQueryConfiguration(t *testing.T) {
+	configuration, err := parseExecuteQueryConfiguration(validExecuteQueryConfiguration)
 
 	require.NoError(t, err)
 	assert.Equal(t, "aws", configuration.Providers[0].Name)
@@ -56,7 +58,7 @@ func TestParseCreateQueryConfiguration(t *testing.T) {
 	assert.False(t, *configuration.GenerateConfigOut)
 }
 
-func TestParseCreateQueryConfigurationValidation(t *testing.T) {
+func TestParseExecuteQueryConfigurationValidation(t *testing.T) {
 	tests := []struct {
 		name    string
 		payload string
@@ -73,14 +75,14 @@ func TestParseCreateQueryConfigurationValidation(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			_, err := parseCreateQueryConfiguration(test.payload)
+			_, err := parseExecuteQueryConfiguration(test.payload)
 			require.Error(t, err)
 			assert.Contains(t, err.Error(), test.want)
 		})
 	}
 }
 
-func TestSubmitCreateQuery(t *testing.T) {
+func TestSubmitExecuteQuery(t *testing.T) {
 	var received map[string]any
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/api/v2/ping" {
@@ -106,10 +108,10 @@ func TestSubmitCreateQuery(t *testing.T) {
 		HTTPClient: server.Client(),
 	})
 	require.NoError(t, err)
-	configuration, err := parseCreateQueryConfiguration(validCreateQueryConfiguration)
+	configuration, err := parseExecuteQueryConfiguration(validExecuteQueryConfiguration)
 	require.NoError(t, err)
 
-	response, err := submitCreateQuery(context.Background(), tfeClient, "ws-test", configuration)
+	response, err := submitExecuteQuery(context.Background(), tfeClient, "ws-test", configuration)
 
 	require.NoError(t, err)
 	assert.JSONEq(t, `{"data":{"type":"no-code-queries","id":"ncqry-test","relationships":{"latest-query-run":{"data":{"type":"queries","id":"qry-test"}}}}}`, response)
@@ -122,7 +124,7 @@ func TestSubmitCreateQuery(t *testing.T) {
 	assert.Equal(t, "ws-test", workspace["data"].(map[string]any)["id"])
 }
 
-func TestSubmitCreateQueryReturnsAPIError(t *testing.T) {
+func TestSubmitExecuteQueryReturnsAPIError(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/api/v2/ping" {
 			w.WriteHeader(http.StatusOK)
@@ -136,10 +138,10 @@ func TestSubmitCreateQueryReturnsAPIError(t *testing.T) {
 
 	tfeClient, err := tfe.NewClient(&tfe.Config{Address: server.URL, Token: "test-token", HTTPClient: server.Client()})
 	require.NoError(t, err)
-	configuration, err := parseCreateQueryConfiguration(validCreateQueryConfiguration)
+	configuration, err := parseExecuteQueryConfiguration(validExecuteQueryConfiguration)
 	require.NoError(t, err)
 
-	_, err = submitCreateQuery(context.Background(), tfeClient, "ws-test", configuration)
+	_, err = submitExecuteQuery(context.Background(), tfeClient, "ws-test", configuration)
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "Limit must be a positive integer")

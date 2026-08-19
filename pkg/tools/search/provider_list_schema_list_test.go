@@ -412,8 +412,20 @@ func TestProviderListSchemaList_ToolDefinition(t *testing.T) {
 	assert.Contains(t, props, "provider_name")
 	assert.Contains(t, props, "provider_version")
 	assert.Contains(t, props, "organization_name")
-	// None are required
-	assert.Empty(t, tool.Tool.InputSchema.Required)
+	assert.Contains(t, props, "workspace_name")
+	assert.ElementsMatch(t, []string{"organization_name", "workspace_name"}, tool.Tool.InputSchema.Required)
+	assert.Contains(t, tool.Tool.Description, "Do not attempt an unscoped request first")
+}
+
+func TestProviderListSchemaList_RejectsMissingScopeBeforeRequest(t *testing.T) {
+	result, err := providerListSchemaListHandler(context.Background(), mcp.CallToolRequest{}, silentLogger())
+
+	require.NoError(t, err)
+	require.True(t, result.IsError)
+	tc, ok := mcp.AsTextContent(result.Content[0])
+	require.True(t, ok, "expected TextContent")
+	assert.Contains(t, tc.Text, "organization_name and workspace_name are required")
+	assert.Contains(t, tc.Text, "ask the user")
 }
 
 // ── searchToolErrorf ──────────────────────────────────────────────────────────
