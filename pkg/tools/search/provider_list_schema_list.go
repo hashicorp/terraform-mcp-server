@@ -31,8 +31,8 @@ import (
 //
 // When the caller supplies namespace + name (+ optional version), the tool
 // fetches the schema for that specific provider directly.
-// When neither is supplied, it lists all supported providers and returns them
-// so the agent can pick one and call the tool again.
+// When neither is supplied, it lists all supported providers for the required
+// organization context so the agent can pick one and call the tool again.
 func ProviderListSchemaList(logger *log.Logger) server.ServerTool {
 	return server.ServerTool{
 		Tool: mcp.NewTool("provider_list_schema_list",
@@ -61,11 +61,17 @@ func ProviderListSchemaList(logger *log.Logger) server.ServerTool {
 				),
 			),
 			mcp.WithString("organization_name",
+				mcp.Required(),
 				mcp.Description(
-					"HCP Terraform organization name. "+
-						"Used to scope the provider-versions endpoint to the organization's "+
-						"search-compatible catalog. Required when the HCP Terraform instance "+
-						"enforces organization-scoped feature flags.",
+					"HCP Terraform organization name used to scope every provider catalog request. "+
+						"If the user has not supplied it, ask for both organization_name and workspace_name before calling this tool.",
+				),
+			),
+			mcp.WithString("workspace_name",
+				mcp.Required(),
+				mcp.Description(
+					"HCP Terraform workspace name that will execute the query. "+
+						"If the user has not supplied it, ask for both organization_name and workspace_name before calling this tool.",
 				),
 			),
 		),
@@ -80,6 +86,10 @@ func providerListSchemaListHandler(ctx context.Context, request mcp.CallToolRequ
 	providerName := strings.TrimSpace(strings.ToLower(request.GetString("provider_name", "")))
 	providerVersion := strings.TrimSpace(request.GetString("provider_version", ""))
 	orgName := strings.TrimSpace(request.GetString("organization_name", ""))
+	workspaceName := strings.TrimSpace(request.GetString("workspace_name", ""))
+	if orgName == "" || workspaceName == "" {
+		return searchToolErrorf(logger, "organization_name and workspace_name are required; ask the user to provide both before fetching provider schemas")
+	}
 
 	// Resolve bearer token from context (or env).
 	token := client.GetTokenFromContext(ctx)
@@ -171,7 +181,7 @@ func listSupportedProviders(ctx context.Context, baseURL, orgName, token string,
 	}
 
 	if len(resp.Data) == 0 {
-		return searchToolErrorf(logger, "no search-compatible providers found — the NO_CODE_QUERY feature flag may not be active for this organization")
+		return searchToolErrorf(logger, "no search-compatible providers are available for this organization")
 	}
 
 	type providerSummary struct {
@@ -191,7 +201,7 @@ func listSupportedProviders(ctx context.Context, baseURL, orgName, token string,
 
 	out, err := json.MarshalIndent(map[string]any{
 		"supported_providers": summaries,
-		"note":                "Call provider_list_schema_list again with provider_namespace and provider_name (and optionally provider_version) to fetch the full list_resource_schemas for a specific provider.",
+		"note":                "Call provider_list_schema_list again with the same organization_name and workspace_name, plus provider_namespace and provider_name (and optionally provider_version), to fetch the full list_resource_schemas for a specific provider.",
 	}, "", "  ")
 	if err != nil {
 		return searchToolErrorf(logger, "failed to marshal provider list: %v", err)
@@ -226,7 +236,7 @@ func discoverProviderVersion(ctx context.Context, baseURL, orgName, namespace, n
 
 	return "", fmt.Errorf(
 		"provider %s/%s is not in the search-compatible catalog — "+
-			"call provider_list_schema_list without arguments to see supported providers, "+
+			"call provider_list_schema_list with organization_name and workspace_name to see supported providers, "+
 			"or use search_providers to find a provider in the public Terraform Registry",
 		namespace, name,
 	)
@@ -272,7 +282,7 @@ func fetchProviderSchema(ctx context.Context, baseURL, orgName, namespace, name,
 		"note": fmt.Sprintf(
 			"Pass list_resource_schemas to generate_query_configuration "+
 				"(with provider_namespace=%q, provider_name=%q, provider_version=%q) "+
-				"to get a full schema guide and example configuration, then pass it with organization_name and workspace_name to create_query.",
+				"to get a full schema guide and example configuration, then pass it with organization_name and workspace_name to execute_query.",
 			resp.Data.Attributes.Namespace,
 			resp.Data.Attributes.Name,
 			resp.Data.Attributes.Version,
@@ -312,7 +322,7 @@ func doAuthenticatedGet(ctx context.Context, rawURL, token string, httpClient *h
 	}
 
 	if resp.StatusCode == http.StatusNotFound {
-		return nil, fmt.Errorf("404 Not Found — the provider or endpoint does not exist (feature flag may be inactive)")
+		return nil, fmt.Errorf("404 Not Found — the provider or endpoint is unavailable")
 	}
 	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
 		return nil, fmt.Errorf("HTTP %d — check that TFE_TOKEN has access to the no-code search endpoints", resp.StatusCode)
@@ -337,13 +347,17 @@ func searchToolErrorf(logger *log.Logger, format string, args ...any) (*mcp.Call
 const providerListSchemaListDescription = `Fetches list_resource_schemas for a search-compatible Terraform provider from the
 HCP Terraform no-code stub endpoint (GET /api/v2/search/provider-versions).
 
+Every call must be scoped with organization_name and workspace_name. Never call this tool
+without them. If either value is not present in the user's request, ask the user to provide
+both values before making any tool call. Do not attempt an unscoped request first.
+
 The tool has two modes:
 
-LIST mode (no provider_namespace or provider_name supplied):
+LIST mode (organization_name and workspace_name supplied; no provider identifiers supplied):
   Returns all providers currently in the search-compatible catalog so the agent
   can choose one. Each entry includes namespace, name, and version.
 
-FETCH mode (provider_namespace + provider_name supplied):
+FETCH mode (organization_name, workspace_name, provider_namespace, and provider_name supplied):
   Returns the full list_resource_schemas for the requested provider, ready to
   pass directly into generate_query_configuration.
   - If provider_version is omitted, the latest version in the catalog is used.
@@ -351,12 +365,14 @@ FETCH mode (provider_namespace + provider_name supplied):
     to use search_providers to find the provider in the public Terraform Registry.
 
 Typical agent workflow:
-  1. Call provider_list_schema_list() with no arguments to discover available providers.
-  2. Call provider_list_schema_list(provider_namespace, provider_name) to fetch the schema.
-  3. Pass the returned list_resource_schemas to generate_query_configuration to get
+  1. Obtain organization_name and workspace_name from the user's request. If either is absent,
+     ask the user for both and wait for their response.
+  2. Call provider_list_schema_list(organization_name, workspace_name) to discover available providers.
+  3. Call provider_list_schema_list(organization_name, workspace_name, provider_namespace,
+     provider_name) to fetch the schema.
+  4. Pass the returned list_resource_schemas to generate_query_configuration to get
      a full guide and example query configuration.
-  4. Fill in the configuration and pass it with organization_name and workspace_name to create_query.
+  5. Fill in the configuration and pass it with organization_name and workspace_name to execute_query.
 
 Requires TFE_TOKEN and TFE_ADDRESS to be configured (same credentials used for
-other HCP Terraform tools). The NO_CODE_QUERY feature flag must be active for
-the target organization.`
+other HCP Terraform tools).`
