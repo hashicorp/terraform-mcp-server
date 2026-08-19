@@ -381,6 +381,27 @@ func (r *DynamicToolRegistry) registerTFETools() {
 		r.mcpServer.AddTool(tool.Tool, tool.Handler)
 	}
 
+	// Terraform State-Inspection Toolset - filtered access to state content, addressing #437
+	if toolsets.IsToolEnabled("list_state_resources", r.enabledToolsets) {
+		tool := r.createDynamicTFETool("list_state_resources", tfeTools.ListStateResources)
+		r.mcpServer.AddTool(tool.Tool, tool.Handler)
+	}
+
+	if toolsets.IsToolEnabled("get_state_resource", r.enabledToolsets) {
+		tool := r.createDynamicTFETool("get_state_resource", tfeTools.GetStateResource)
+		r.mcpServer.AddTool(tool.Tool, tool.Handler)
+	}
+
+	if toolsets.IsToolEnabled("search_state_attributes", r.enabledToolsets) {
+		tool := r.createDynamicTFETool("search_state_attributes", tfeTools.SearchStateAttributes)
+		r.mcpServer.AddTool(tool.Tool, tool.Handler)
+	}
+
+	if toolsets.IsToolEnabled("get_state_summary", r.enabledToolsets) {
+		tool := r.createDynamicTFETool("get_state_summary", tfeTools.GetStateSummary)
+		r.mcpServer.AddTool(tool.Tool, tool.Handler)
+	}
+
 	// Terraform Toolset - Comments
 	if toolsets.IsToolEnabled("get_run_comments", r.enabledToolsets) {
 		tool := r.createDynamicTFETool("get_run_comments", tfeTools.GetRunComments)
