@@ -10,6 +10,10 @@ FEATURES
 * [New Tool] `add_team_member` Adds a single member to a Terraform Cloud/Enterprise team. Requires `team_id`; accepts either `username` (accepted-invite users only) or `organization_membership_id` (works for pending and accepted invites). Exactly one must be provided.
 * [New Tool] `grant_team_access` Grants a team access to a workspace or project by ID. Requires `team_id`, `access_level`, and either `workspace_id` or `project_id` (mutually exclusive). Valid access levels for workspaces: `admin`, `read`, `write`, `plan`, `custom`. Valid access levels for projects: `admin`, `read`, `write`, `maintain`, `custom`.
 * [New Tool] `delete_team` Permanently deletes a Terraform team by its `team_id`. Requires `team_id` (e.g. `team-abc123def456`). This is a destructive operation and must set `ENABLE_TF_OPERATIONS=true`.
+* [New Tool] `get_state_summary` Generates a high-level summary of a workspace's current Terraform state — resource counts by type and module, output names, Terraform version, and state serial — without any resource attributes. Requires `terraform_org_name` and `workspace_name`. [437](https://github.com/hashicorp/terraform-mcp-server/issues/437)
+* [New Tool] `list_state_resources` Lists resource addresses, types, and modules in a workspace's current Terraform state, with optional `type_filter`/`module_filter`, without dumping attributes. Requires `terraform_org_name` and `workspace_name`. [437](https://github.com/hashicorp/terraform-mcp-server/pull/484)
+* [New Tool] `get_state_resource` Fetches complete, redacted attributes for a single resource in a workspace's current Terraform state by its address (e.g. `aws_s3_bucket.assets`). Requires `terraform_org_name`, `workspace_name`, and `address`. [437](https://github.com/hashicorp/terraform-mcp-server/pull/484)
+* [New Tool] `search_state_attributes` Searches for a substring across resource attribute values in a workspace's current Terraform state and returns only the matching resources and fields. Requires `terraform_org_name`, `workspace_name`, and `query`; optional `resource_type`. [437](https://github.com/hashicorp/terraform-mcp-server/pull/484)
 
 FIXES
 
