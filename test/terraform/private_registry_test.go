@@ -3,11 +3,13 @@ package terraform
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/hashicorp/go-tfe"
+	mcpclient "github.com/hashicorp/terraform-mcp-server/pkg/client"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -48,15 +50,27 @@ func TestPrivateRegistryModules(t *testing.T) {
 	require.NoError(t, err, "failed to create test private module version")
 	require.NoError(t, client.RegistryModules.Upload(t.Context(), *version, "testdata/private_registry_module"), "failed to upload test private module")
 
-	// Module source is processed asynchronously after upload. Wait until its
-	// inputs, outputs, and README are available through the registry API.
-	registryDetails := waitFor(t, 2*time.Minute, fmt.Sprintf("private module %q version %s to finish processing", moduleLocator.Name, moduleVersion), func(ctx context.Context) (*tfe.TerraformRegistryModule, error) {
-		module, err := client.RegistryModules.ReadTerraformRegistryModule(ctx, moduleLocator, moduleVersion)
+	// Module source is processed asynchronously after upload. Wait until the root
+	// module and submodule details are available through the registry API.
+	registryDetails := waitFor(t, 2*time.Minute, fmt.Sprintf("private module %q version %s to finish processing", moduleLocator.Name, moduleVersion), func(ctx context.Context) (*mcpclient.TerraformModuleVersionDetails, error) {
+		u := fmt.Sprintf("/api/registry/v1/modules/%s/%s/%s/%s",
+			url.PathEscape(moduleLocator.Namespace),
+			url.PathEscape(moduleLocator.Name),
+			url.PathEscape(moduleLocator.Provider),
+			url.PathEscape(moduleVersion),
+		)
+		req, err := client.NewRequest("GET", u, nil)
 		if err != nil {
 			return nil, err
 		}
+		module := &mcpclient.TerraformModuleVersionDetails{}
+		if err := req.DoJSON(ctx, module); err != nil {
+			return nil, err
+		}
 
-		ready := module != nil && len(module.Root.Inputs) > 0 && len(module.Root.Outputs) > 0 && module.Root.Readme != ""
+		ready := len(module.Root.Inputs) > 0 && len(module.Root.Outputs) > 0 && module.Root.Readme != "" &&
+			len(module.Submodules) > 0 && len(module.Submodules[0].Inputs) > 0 && len(module.Submodules[0].Outputs) > 0 &&
+			len(module.Submodules[0].ProviderDependencies) > 0 && len(module.Submodules[0].Resources) > 0 && module.Submodules[0].Readme != ""
 		if !ready {
 			return nil, nil
 		}
@@ -95,6 +109,9 @@ func TestPrivateRegistryModules(t *testing.T) {
 			"private_module_id":      privateModuleAddress,
 			"private_module_version": moduleVersion,
 		})
+
+		t.Logf("Get private module details: %v", resultText)
+
 		require.False(t, result.IsError, "get_private_module_details should not return an error")
 		require.NotEmpty(t, resultText, "get_private_module_details response must not be empty")
 
@@ -108,6 +125,15 @@ func TestPrivateRegistryModules(t *testing.T) {
 		assert.Contains(t, resultText, registryDetails.Root.Outputs[0].Name)
 		assert.Contains(t, resultText, registryDetails.Root.Outputs[0].Description)
 		assert.Contains(t, resultText, strings.TrimSpace(registryDetails.Root.Readme))
+
+		submodule := registryDetails.Submodules[0]
+		assert.Contains(t, resultText, "Submodule: "+submodule.Name)
+		assert.Contains(t, resultText, submodule.Path)
+		assert.Contains(t, resultText, submodule.Inputs[0].Name)
+		assert.Contains(t, resultText, submodule.Outputs[0].Name)
+		assert.Contains(t, resultText, submodule.ProviderDependencies[0].Source)
+		assert.Contains(t, resultText, submodule.Resources[0].Type)
+		assert.Contains(t, resultText, strings.TrimSpace(submodule.Readme))
 	})
 }
 

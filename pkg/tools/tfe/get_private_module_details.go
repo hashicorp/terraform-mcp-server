@@ -6,6 +6,7 @@ package tools
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"path"
 	"regexp"
 	"strings"
@@ -94,14 +95,14 @@ func getPrivateModuleDetailsHandler(ctx context.Context, request mcp.CallToolReq
 	}).Info("Getting private module details")
 
 	var module *tfe.RegistryModule
-	var terraformRegistryModule *tfe.TerraformRegistryModule
+	var terraformRegistryModule *client.TerraformModuleVersionDetails
 
 	module, err = tfeClient.RegistryModules.Read(ctx, tfeModuleID)
 	if err != nil {
 		return ToolErrorf(logger, "module not found: %s - use search_private_modules to find valid module IDs", moduleID)
 	}
 
-	terraformRegistryModule, err = tfeClient.RegistryModules.ReadTerraformRegistryModule(ctx, tfeModuleID, moduleVersion)
+	terraformRegistryModule, err = readTerraformRegistryModuleDetails(ctx, tfeClient, tfeModuleID, moduleVersion)
 	if err != nil {
 		logger.WithError(err).Warn("failed to get detailed module information from Terraform Registry, continuing with basic info")
 	}
@@ -109,8 +110,37 @@ func getPrivateModuleDetailsHandler(ctx context.Context, request mcp.CallToolReq
 	return buildPrivateModuleDetailsResponse(module, terraformRegistryModule, tfeClient.BaseURL().Host, logger), nil
 }
 
+func readTerraformRegistryModuleDetails(ctx context.Context, tfeClient *tfe.Client, moduleID tfe.RegistryModuleID, moduleVersion string) (*client.TerraformModuleVersionDetails, error) {
+	u := fmt.Sprintf("/api/registry/v1/modules/%s/%s/%s/%s",
+		url.PathEscape(moduleID.Namespace),
+		url.PathEscape(moduleID.Name),
+		url.PathEscape(moduleID.Provider),
+		url.PathEscape(moduleVersion),
+	)
+	if moduleID.RegistryName == tfe.PublicRegistry {
+		u = fmt.Sprintf("/api/registry/public/v1/modules/%s/%s/%s/%s",
+			url.PathEscape(moduleID.Namespace),
+			url.PathEscape(moduleID.Name),
+			url.PathEscape(moduleID.Provider),
+			url.PathEscape(moduleVersion),
+		)
+	}
+
+	req, err := tfeClient.NewRequest("GET", u, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	module := &client.TerraformModuleVersionDetails{}
+	if err := req.DoJSON(ctx, module); err != nil {
+		return nil, err
+	}
+
+	return module, nil
+}
+
 func buildPrivateModuleDetailsResponse(registryModule *tfe.RegistryModule,
-	terraformRegistryModule *tfe.TerraformRegistryModule,
+	terraformRegistryModule *client.TerraformModuleVersionDetails,
 	tfeHostAddress string,
 	logger *log.Logger) *mcp.CallToolResult {
 
@@ -149,65 +179,18 @@ func buildPrivateModuleDetailsResponse(registryModule *tfe.RegistryModule,
 	}
 	builder.WriteString("\n")
 
-	if terraformRegistryModule != nil && len(terraformRegistryModule.Root.Inputs) > 0 {
-		builder.WriteString("Inputs:\n")
-		builder.WriteString(strings.Repeat("-", 20) + "\n")
-		builder.WriteString("| Name | Type | Description | Default | Required |\n")
-		builder.WriteString("|------|------|-------------|---------|----------|\n")
-		for _, input := range terraformRegistryModule.Root.Inputs {
-			builder.WriteString(fmt.Sprintf("| %s | %s | %s | `%s` | %t |\n",
-				input.Name,
-				input.Type,
-				input.Description,
-				input.Default,
-				input.Required,
-			))
-		}
-		builder.WriteString("\n")
-	}
+	if terraformRegistryModule != nil {
+		writeModulePartDetails(&builder, terraformRegistryModule.Root)
 
-	if terraformRegistryModule != nil && len(terraformRegistryModule.Root.Outputs) > 0 {
-		builder.WriteString("Outputs:\n")
-		builder.WriteString(strings.Repeat("-", 20) + "\n")
-		builder.WriteString("| Name | Description |\n")
-		builder.WriteString("|------|-------------|\n")
-		for _, output := range terraformRegistryModule.Root.Outputs {
-			builder.WriteString(fmt.Sprintf("| %s | %s |\n",
-				output.Name,
-				output.Description,
-			))
+		if len(terraformRegistryModule.Submodules) > 0 {
+			builder.WriteString("Submodules:\n")
+			for _, submodule := range terraformRegistryModule.Submodules {
+				builder.WriteString(fmt.Sprintf("Submodule: %s\n", submodule.Name))
+				builder.WriteString(fmt.Sprintf("- Path: %s\n\n", submodule.Path))
+				writeModulePartDetails(&builder, submodule)
+				writeModulePartReadme(&builder, submodule)
+			}
 		}
-		builder.WriteString("\n")
-	}
-
-	if terraformRegistryModule != nil && len(terraformRegistryModule.Root.ProviderDependencies) > 0 {
-		builder.WriteString("Provider Dependencies:\n")
-		builder.WriteString(strings.Repeat("-", 20) + "\n")
-		builder.WriteString("| Name | Namespace | Source | Version |\n")
-		builder.WriteString("|------|-----------|--------|----------|\n")
-		for _, dep := range terraformRegistryModule.Root.ProviderDependencies {
-			builder.WriteString(fmt.Sprintf("| %s | %s | %s | %s |\n",
-				dep.Name,
-				dep.Namespace,
-				dep.Source,
-				dep.Version,
-			))
-		}
-		builder.WriteString("\n")
-	}
-
-	if terraformRegistryModule != nil && len(terraformRegistryModule.Root.Resources) > 0 {
-		builder.WriteString("Resources:\n")
-		builder.WriteString(strings.Repeat("-", 20) + "\n")
-		builder.WriteString("| Name | Type |\n")
-		builder.WriteString("|------|------|\n")
-		for _, resource := range terraformRegistryModule.Root.Resources {
-			builder.WriteString(fmt.Sprintf("| %s | %s |\n",
-				resource.Name,
-				resource.Type,
-			))
-		}
-		builder.WriteString("\n")
 	}
 
 	if registryModule.Organization != nil {
@@ -258,6 +241,92 @@ func buildPrivateModuleDetailsResponse(registryModule *tfe.RegistryModule,
 	}).Info("Successfully retrieved private module details")
 
 	return mcp.NewToolResultText(builder.String())
+}
+
+func writeModulePartDetails(builder *strings.Builder, modulePart client.ModulePart) {
+	if len(modulePart.Inputs) > 0 {
+		builder.WriteString("Inputs:\n")
+		builder.WriteString(strings.Repeat("-", 20) + "\n")
+		builder.WriteString("| Name | Type | Description | Default | Required |\n")
+		builder.WriteString("|------|------|-------------|---------|----------|\n")
+		for _, input := range modulePart.Inputs {
+			builder.WriteString(fmt.Sprintf("| %s | %s | %s | `%s` | %t |\n",
+				input.Name,
+				input.Type,
+				input.Description,
+				formatModuleInputDefault(input.Default),
+				input.Required,
+			))
+		}
+		builder.WriteString("\n")
+	}
+
+	if len(modulePart.Outputs) > 0 {
+		builder.WriteString("Outputs:\n")
+		builder.WriteString(strings.Repeat("-", 20) + "\n")
+		builder.WriteString("| Name | Description |\n")
+		builder.WriteString("|------|-------------|\n")
+		for _, output := range modulePart.Outputs {
+			builder.WriteString(fmt.Sprintf("| %s | %s |\n",
+				output.Name,
+				output.Description,
+			))
+		}
+		builder.WriteString("\n")
+	}
+
+	if len(modulePart.ProviderDependencies) > 0 {
+		builder.WriteString("Provider Dependencies:\n")
+		builder.WriteString(strings.Repeat("-", 20) + "\n")
+		builder.WriteString("| Name | Namespace | Source | Version |\n")
+		builder.WriteString("|------|-----------|--------|----------|\n")
+		for _, dep := range modulePart.ProviderDependencies {
+			builder.WriteString(fmt.Sprintf("| %s | %s | %s | %s |\n",
+				dep.Name,
+				dep.Namespace,
+				dep.Source,
+				dep.Version,
+			))
+		}
+		builder.WriteString("\n")
+	}
+
+	if len(modulePart.Resources) > 0 {
+		builder.WriteString("Resources:\n")
+		builder.WriteString(strings.Repeat("-", 20) + "\n")
+		builder.WriteString("| Name | Type |\n")
+		builder.WriteString("|------|------|\n")
+		for _, resource := range modulePart.Resources {
+			builder.WriteString(fmt.Sprintf("| %s | %s |\n",
+				resource.Name,
+				resource.Type,
+			))
+		}
+		builder.WriteString("\n")
+	}
+}
+
+func formatModuleInputDefault(value any) string {
+	if value == nil {
+		return ""
+	}
+	return fmt.Sprint(value)
+}
+
+func writeModulePartReadme(builder *strings.Builder, modulePart client.ModulePart) {
+	if modulePart.Readme == "" {
+		return
+	}
+
+	cleanedReadme := removeReadmeSections(modulePart.Readme)
+	if cleanedReadme == "" {
+		return
+	}
+
+	builder.WriteString("README:\n")
+	builder.WriteString(strings.Repeat("-", 20) + "\n")
+	builder.WriteString(cleanedReadme)
+	builder.WriteString("\n\n")
 }
 
 func removeReadmeSections(readme string) string {
