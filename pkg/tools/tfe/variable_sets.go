@@ -19,6 +19,35 @@ import (
 	"github.com/mark3labs/mcp-go/server"
 )
 
+// variableSetCreatedResult is the success response for CreateVariableSet.
+type variableSetCreatedResult struct {
+	VariableSetID   string `json:"variable_set_id"`
+	VariableSetName string `json:"variable_set_name"`
+	Message         string `json:"message"`
+}
+
+// variableCreatedResult is the success response for CreateVariableInVariableSet.
+type variableCreatedResult struct {
+	VariableID    string `json:"variable_id"`
+	VariableKey   string `json:"variable_key"`
+	VariableSetID string `json:"variable_set_id"`
+	Message       string `json:"message"`
+}
+
+// variableDeletedResult is the success response for DeleteVariableInVariableSet.
+type variableDeletedResult struct {
+	VariableID    string `json:"variable_id"`
+	VariableSetID string `json:"variable_set_id"`
+	Message       string `json:"message"`
+}
+
+// variableSetWorkspacesResult is the success response for attach/detach workspace operations.
+type variableSetWorkspacesResult struct {
+	VariableSetID  string `json:"variable_set_id"`
+	WorkspaceCount int    `json:"workspace_count"`
+	Message        string `json:"message"`
+}
+
 // ListVariableSets creates a tool to list variable sets.
 func ListVariableSets(logger *log.Logger) server.ServerTool {
 	return server.ServerTool{
@@ -107,10 +136,10 @@ func CreateVariableSet(logger *log.Logger) server.ServerTool {
 				return ToolErrorf(logger, "failed to create variable set '%s' in org '%s': %v", name, orgName, err)
 			}
 
-			out, _ := json.Marshal(map[string]string{
-				"variable_set_id":   varSet.ID,
-				"variable_set_name": varSet.Name,
-				"message":           "variable set created successfully",
+			out, _ := json.Marshal(variableSetCreatedResult{
+				VariableSetID:   varSet.ID,
+				VariableSetName: varSet.Name,
+				Message:         "variable set created successfully",
 			})
 			return &mcp.CallToolResult{
 				Content: []mcp.Content{
@@ -174,11 +203,11 @@ func CreateVariableInVariableSet(logger *log.Logger) server.ServerTool {
 				return ToolErrorf(logger, "failed to create variable '%s' in variable set '%s': %v", key, varSetID, err)
 			}
 
-			out, _ := json.Marshal(map[string]string{
-				"variable_id":     variable.ID,
-				"variable_key":    variable.Key,
-				"variable_set_id": varSetID,
-				"message":         "variable created successfully",
+			out, _ := json.Marshal(variableCreatedResult{
+				VariableID:    variable.ID,
+				VariableKey:   variable.Key,
+				VariableSetID: varSetID,
+				Message:       "variable created successfully",
 			})
 			return &mcp.CallToolResult{
 				Content: []mcp.Content{
@@ -217,10 +246,10 @@ func DeleteVariableInVariableSet(logger *log.Logger) server.ServerTool {
 				return ToolErrorf(logger, "failed to delete variable '%s' from variable set '%s': %v", variableID, varSetID, err)
 			}
 
-			out, _ := json.Marshal(map[string]string{
-				"variable_id":     variableID,
-				"variable_set_id": varSetID,
-				"message":         "variable deleted successfully",
+			out, _ := json.Marshal(variableDeletedResult{
+				VariableID:    variableID,
+				VariableSetID: varSetID,
+				Message:       "variable deleted successfully",
 			})
 			return &mcp.CallToolResult{
 				Content: []mcp.Content{
@@ -267,10 +296,10 @@ func AttachVariableSetToWorkspaces(logger *log.Logger) server.ServerTool {
 				return ToolErrorf(logger, "failed to attach variable set '%s' to workspaces: %v", varSetID, err)
 			}
 
-			out, _ := json.Marshal(map[string]interface{}{
-				"variable_set_id": varSetID,
-				"workspace_count": len(workspaces),
-				"message":         "variable set attached to workspaces successfully",
+			out, _ := json.Marshal(variableSetWorkspacesResult{
+				VariableSetID:  varSetID,
+				WorkspaceCount: len(workspaces),
+				Message:        "variable set attached to workspaces successfully",
 			})
 			return &mcp.CallToolResult{
 				Content: []mcp.Content{
@@ -317,10 +346,10 @@ func DetachVariableSetFromWorkspaces(logger *log.Logger) server.ServerTool {
 				return ToolErrorf(logger, "failed to detach variable set '%s' from workspaces: %v", varSetID, err)
 			}
 
-			out, _ := json.Marshal(map[string]interface{}{
-				"variable_set_id": varSetID,
-				"workspace_count": len(workspaces),
-				"message":         "variable set detached from workspaces successfully",
+			out, _ := json.Marshal(variableSetWorkspacesResult{
+				VariableSetID:  varSetID,
+				WorkspaceCount: len(workspaces),
+				Message:        "variable set detached from workspaces successfully",
 			})
 			return &mcp.CallToolResult{
 				Content: []mcp.Content{
