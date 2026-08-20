@@ -2,6 +2,7 @@ package terraform
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/hashicorp/go-tfe"
@@ -142,7 +143,7 @@ func TestAttachPolicySetToWorkspaces(t *testing.T) {
 	t.Run("attaches policy set to multiple workspaces", func(t *testing.T) {
 		result, resultText := callTool(t, s, "attach_policy_set_to_workspaces", map[string]any{
 			"policy_set_id": ps.ID,
-			"workspace_ids": " " + workspaceIDs[0] + ", " + workspaceIDs[1] + " ",
+			"workspace_ids": strings.Join(workspaceIDs, ", "),
 		})
 
 		require.False(t, result.IsError, "attach_policy_set_to_workspaces should not return an error: %s", resultText)

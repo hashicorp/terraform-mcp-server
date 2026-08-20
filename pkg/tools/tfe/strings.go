@@ -14,3 +14,12 @@ func GetTrimmedString(request mcp.CallToolRequest, name, defaultValue string) st
 	value := request.GetString(name, defaultValue)
 	return strings.TrimSpace(value)
 }
+
+// RequiredTrimmedString wrapper: function around request.RequireString that also calls TrimSpace()
+func RequiredTrimmedString(request mcp.CallToolRequest, name string) (string, error) {
+	value, err := request.RequireString(name)
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(value), nil
+}
