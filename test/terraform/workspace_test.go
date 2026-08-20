@@ -1,7 +1,10 @@
 package terraform
 
 import (
+	"context"
+	"fmt"
 	"testing"
+	"time"
 
 	"github.com/hashicorp/go-tfe"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -9,6 +12,92 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/tidwall/gjson"
 )
+
+func TestCreateNoCodeWorkspace(t *testing.T) {
+	requireTfOperations(t)
+
+	s := newTestingSession(t)
+	defer s.Close()
+
+	client := tfeClient(t)
+
+	project, err := client.Projects.Create(t.Context(), tfeOrgName, tfe.ProjectCreateOptions{
+		Name: randomName("nocode-project-"),
+	})
+	require.NoError(t, err, "failed to create test project")
+	defer client.Projects.Delete(t.Context(), project.ID)
+
+	module, err := client.RegistryModules.Create(t.Context(), tfeOrgName, tfe.RegistryModuleCreateOptions{
+		Name:         tfe.String(randomName("nocode-module-")),
+		Provider:     tfe.String("testprovider"),
+		RegistryName: tfe.PrivateRegistry,
+	})
+	require.NoError(t, err, "failed to create test private module")
+
+	moduleID := tfe.RegistryModuleID{
+		Organization: tfeOrgName,
+		Namespace:    module.Namespace,
+		Name:         module.Name,
+		Provider:     module.Provider,
+		RegistryName: tfe.PrivateRegistry,
+	}
+	defer client.RegistryModules.DeleteProvider(t.Context(), moduleID)
+
+	const moduleVersion = "1.0.0"
+	version, err := client.RegistryModules.CreateVersion(t.Context(), moduleID, tfe.RegistryModuleCreateVersionOptions{
+		Version: tfe.String(moduleVersion),
+	})
+	require.NoError(t, err, "failed to create test private module version")
+	require.NoError(t, client.RegistryModules.Upload(t.Context(), *version, "testdata/no_code_workspace_module"), "failed to upload test private module")
+
+	waitFor(t, 2*time.Minute, fmt.Sprintf("private module %q version %s to finish processing", module.Name, moduleVersion), func(ctx context.Context) (*tfe.TerraformRegistryModule, error) {
+		registryModule, err := client.RegistryModules.ReadTerraformRegistryModule(ctx, moduleID, moduleVersion)
+		if err != nil {
+			return nil, err
+		}
+		if registryModule == nil || len(registryModule.Root.Inputs) != 2 || len(registryModule.Root.Outputs) != 2 {
+			return nil, nil
+		}
+		return registryModule, nil
+	})
+
+	noCodeModule, err := client.RegistryNoCodeModules.Create(t.Context(), tfeOrgName, tfe.RegistryNoCodeModuleCreateOptions{
+		RegistryModule: module,
+		Enabled:        tfe.Bool(true),
+		VersionPin:     moduleVersion,
+	})
+	require.NoError(t, err, "failed to enable the test module for no-code provisioning")
+	defer client.RegistryNoCodeModules.Delete(t.Context(), noCodeModule.ID)
+
+	workspaceName := randomName("nocode_workspace_")
+	// No-code workspace creation starts a run. Force-delete this test-owned
+	// workspace so a pending manual-apply run cannot block cleanup.
+	defer client.Workspaces.Delete(t.Context(), tfeOrgName, workspaceName)
+
+	result, resultText := callTool(t, s, "create_no_code_workspace", map[string]any{
+		"no_code_module_id": noCodeModule.ID,
+		"workspace_name":    workspaceName,
+		"project_id":        project.ID,
+		"auto_apply":        false,
+	})
+	require.False(t, result.IsError, "create_no_code_workspace should not return an error: %s", resultText)
+	require.NotEmpty(t, resultText, "create_no_code_workspace result should not be empty")
+
+	workspaceID := gjson.Get(resultText, "data.attributes.workspace_id").String()
+	require.NotEmpty(t, workspaceID, "create_no_code_workspace should return a workspace_id")
+
+	workspace, err := client.Workspaces.ReadByID(t.Context(), workspaceID)
+	require.NoError(t, err, "created no-code workspace could not be read through the TFE API")
+	assert.Equal(t, workspaceName, workspace.Name)
+	assert.False(t, workspace.AutoApply)
+	assert.Equal(t, project.ID, workspace.Project.ID)
+
+	variables, err := client.Variables.List(t.Context(), workspaceID, nil)
+	require.NoError(t, err, "failed to list variables for the created no-code workspace")
+	require.Len(t, variables.Items, 1, "only the required module input should be set on the workspace")
+	assert.Equal(t, "name", variables.Items[0].Key)
+	assert.Equal(t, "integration-test", variables.Items[0].Value)
+}
 
 func TestWorkspaceHappyPath(t *testing.T) {
 	requireTfOperations(t)
