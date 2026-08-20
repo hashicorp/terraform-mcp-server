@@ -6,7 +6,6 @@ package tools
 import (
 	"bytes"
 	"context"
-	"strings"
 
 	"github.com/hashicorp/jsonapi"
 	"github.com/hashicorp/terraform-mcp-server/pkg/client"
@@ -37,11 +36,10 @@ func GetTeam(logger *log.Logger) server.ServerTool {
 }
 
 func getTeamHandler(ctx context.Context, request mcp.CallToolRequest, logger *log.Logger) (*mcp.CallToolResult, error) {
-	teamID, err := request.RequireString("team_id")
+	teamID, err := RequiredTrimmedString(request, "team_id")
 	if err != nil {
 		return ToolError(logger, "missing required input: team_id", err)
 	}
-	teamID = strings.TrimSpace(teamID)
 
 	tfeClient, err := client.GetTfeClientFromContext(ctx, logger)
 	if err != nil {
