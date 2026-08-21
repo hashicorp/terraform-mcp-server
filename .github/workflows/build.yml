@@ -3,22 +3,15 @@
 
 name: build
 
-# We now default to running this workflow on every push to every branch.
-# This provides fast feedback when build issues occur, so they can be
-# fixed prior to being merged to the main branch.
-#
-# If you want to opt out of this, and only run the build on certain branches
-# please refer to the documentation on branch filtering here:
-#
-#   https://docs.github.com/en/actions/using-workflows/workflow-syntax-for-github-actions#onpushbranchestagsbranches-ignoretags-ignore
-#
+# Validate pull requests and pushes to long-lived branches without running both
+# events for each update to a feature branch.
+
 on:
   workflow_dispatch:
   push:
     branches:
       - main
       - release/**
-      - feature/**
   pull_request:
     branches:
       - main
