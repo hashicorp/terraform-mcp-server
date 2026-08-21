@@ -6,7 +6,7 @@ package tools
 import (
 	"bytes"
 	"context"
-	"fmt"
+	"encoding/json"
 	"strings"
 
 	"github.com/hashicorp/go-tfe"
@@ -18,6 +18,35 @@ import (
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 )
+
+// variableSetCreatedResult is the success response for CreateVariableSet.
+type variableSetCreatedResult struct {
+	VariableSetID   string `json:"variable_set_id"`
+	VariableSetName string `json:"variable_set_name"`
+	Message         string `json:"message"`
+}
+
+// variableCreatedResult is the success response for CreateVariableInVariableSet.
+type variableCreatedResult struct {
+	VariableID    string `json:"variable_id"`
+	VariableKey   string `json:"variable_key"`
+	VariableSetID string `json:"variable_set_id"`
+	Message       string `json:"message"`
+}
+
+// variableDeletedResult is the success response for DeleteVariableInVariableSet.
+type variableDeletedResult struct {
+	VariableID    string `json:"variable_id"`
+	VariableSetID string `json:"variable_set_id"`
+	Message       string `json:"message"`
+}
+
+// variableSetWorkspacesResult is the success response for attach/detach workspace operations.
+type variableSetWorkspacesResult struct {
+	VariableSetID  string `json:"variable_set_id"`
+	WorkspaceCount int    `json:"workspace_count"`
+	Message        string `json:"message"`
+}
 
 // ListVariableSets creates a tool to list variable sets.
 func ListVariableSets(logger *log.Logger) server.ServerTool {
@@ -107,9 +136,17 @@ func CreateVariableSet(logger *log.Logger) server.ServerTool {
 				return ToolErrorf(logger, "failed to create variable set '%s' in org '%s': %v", name, orgName, err)
 			}
 
+			out, err := json.Marshal(variableSetCreatedResult{
+				VariableSetID:   varSet.ID,
+				VariableSetName: varSet.Name,
+				Message:         "variable set created successfully",
+			})
+			if err != nil {
+				return ToolError(logger, "failed to marshal create variable set response", err)
+			}
 			return &mcp.CallToolResult{
 				Content: []mcp.Content{
-					mcp.NewTextContent(fmt.Sprintf("Successfully created variable set %s with ID %s", varSet.Name, varSet.ID)),
+					mcp.NewTextContent(string(out)),
 				},
 			}, nil
 		},
@@ -169,9 +206,18 @@ func CreateVariableInVariableSet(logger *log.Logger) server.ServerTool {
 				return ToolErrorf(logger, "failed to create variable '%s' in variable set '%s': %v", key, varSetID, err)
 			}
 
+			out, err := json.Marshal(variableCreatedResult{
+				VariableID:    variable.ID,
+				VariableKey:   variable.Key,
+				VariableSetID: varSetID,
+				Message:       "variable created successfully",
+			})
+			if err != nil {
+				return ToolError(logger, "failed to marshal create variable response", err)
+			}
 			return &mcp.CallToolResult{
 				Content: []mcp.Content{
-					mcp.NewTextContent(fmt.Sprintf("Successfully created variable %s with ID %s in variable set %s", variable.Key, variable.ID, varSetID)),
+					mcp.NewTextContent(string(out)),
 				},
 			}, nil
 		},
@@ -206,9 +252,17 @@ func DeleteVariableInVariableSet(logger *log.Logger) server.ServerTool {
 				return ToolErrorf(logger, "failed to delete variable '%s' from variable set '%s': %v", variableID, varSetID, err)
 			}
 
+			out, err := json.Marshal(variableDeletedResult{
+				VariableID:    variableID,
+				VariableSetID: varSetID,
+				Message:       "variable deleted successfully",
+			})
+			if err != nil {
+				return ToolError(logger, "failed to marshal delete variable response", err)
+			}
 			return &mcp.CallToolResult{
 				Content: []mcp.Content{
-					mcp.NewTextContent(fmt.Sprintf("Successfully deleted variable %s from variable set %s", variableID, varSetID)),
+					mcp.NewTextContent(string(out)),
 				},
 			}, nil
 		},
@@ -251,9 +305,17 @@ func AttachVariableSetToWorkspaces(logger *log.Logger) server.ServerTool {
 				return ToolErrorf(logger, "failed to attach variable set '%s' to workspaces: %v", varSetID, err)
 			}
 
+			out, err := json.Marshal(variableSetWorkspacesResult{
+				VariableSetID:  varSetID,
+				WorkspaceCount: len(workspaces),
+				Message:        "variable set attached to workspaces successfully",
+			})
+			if err != nil {
+				return ToolError(logger, "failed to marshal attach variable set response", err)
+			}
 			return &mcp.CallToolResult{
 				Content: []mcp.Content{
-					mcp.NewTextContent(fmt.Sprintf("Successfully attached variable set %s to %d workspaces", varSetID, len(workspaces))),
+					mcp.NewTextContent(string(out)),
 				},
 			}, nil
 		},
@@ -296,9 +358,17 @@ func DetachVariableSetFromWorkspaces(logger *log.Logger) server.ServerTool {
 				return ToolErrorf(logger, "failed to detach variable set '%s' from workspaces: %v", varSetID, err)
 			}
 
+			out, err := json.Marshal(variableSetWorkspacesResult{
+				VariableSetID:  varSetID,
+				WorkspaceCount: len(workspaces),
+				Message:        "variable set detached from workspaces successfully",
+			})
+			if err != nil {
+				return ToolError(logger, "failed to marshal detach variable set response", err)
+			}
 			return &mcp.CallToolResult{
 				Content: []mcp.Content{
-					mcp.NewTextContent(fmt.Sprintf("Successfully detached variable set %s from %d workspaces", varSetID, len(workspaces))),
+					mcp.NewTextContent(string(out)),
 				},
 			}, nil
 		},
