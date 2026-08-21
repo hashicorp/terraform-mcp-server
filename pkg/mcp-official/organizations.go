@@ -28,7 +28,7 @@ type ListOrganizationsArguments struct {
 	PageSize int `json:"pageSize,omitempty" jsonschema:"Results per page for pagination (min 1, max 100)"`
 }
 
-func ListOrganizationsTool() *mcp.Tool {
+func ListTerraformOrganizationsTool() *mcp.Tool {
 	trueVal := true
 	falseVal := false
 	return &mcp.Tool{
@@ -42,8 +42,8 @@ func ListOrganizationsTool() *mcp.Tool {
 	}
 }
 
-func ListOrganizationsFunc(ctx context.Context, request *mcp.CallToolRequest, input ListOrganizationsArguments) (*mcp.CallToolResult, *OrganizationSummaryList, error) {
-	log.Info("ListOrganizations for official mcp go-sdk called..")
+func ListTerraformOrganizationsFunc(ctx context.Context, request *mcp.CallToolRequest, input ListOrganizationsArguments) (*mcp.CallToolResult, *OrganizationSummaryList, error) {
+	log.Info("ListTerraformOrganizations for official mcp go-sdk called..")
 
 	tfeClient, err := GetTfeClient(ctx)
 	if err != nil {
