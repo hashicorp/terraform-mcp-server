@@ -17,6 +17,15 @@ import (
 	"github.com/mark3labs/mcp-go/server"
 )
 
+type MatchingPolicySet struct {
+	ID          string `json:"id"`
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	Kind        string `json:"kind"`
+	Global      bool   `json:"global"`
+	Reason      string `json:"reason"`
+}
+
 // AttachPolicySetToWorkspaces creates a tool to attach a policy set to workspaces.
 func AttachPolicySetToWorkspaces(logger *log.Logger) server.ServerTool {
 	return server.ServerTool{
@@ -32,11 +41,11 @@ func AttachPolicySetToWorkspaces(logger *log.Logger) server.ServerTool {
 			),
 		),
 		Handler: func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-			policySetID, err := RequiredTrimmedString(request, "policy_set_id")
+			policySetID, err := RequireTrimmedString(request, "policy_set_id")
 			if err != nil {
 				return ToolError(logger, "missing required input: policy_set_id", err)
 			}
-			workspaceIDsStr, err := RequiredTrimmedString(request, "workspace_ids")
+			workspaceIDsStr, err := RequireTrimmedString(request, "workspace_ids")
 			if err != nil {
 				return ToolError(logger, "missing required input: workspace_ids", err)
 			}
@@ -97,11 +106,11 @@ func ListWorkspacePolicySets(logger *log.Logger) server.ServerTool {
 }
 
 func listWorkspacePolicySetsHandler(ctx context.Context, request mcp.CallToolRequest, logger *log.Logger) (*mcp.CallToolResult, error) {
-	terraformOrgName, err := RequiredTrimmedString(request, "terraform_org_name")
+	terraformOrgName, err := RequireTrimmedString(request, "terraform_org_name")
 	if err != nil {
 		return ToolError(logger, "missing required input: terraform_org_name", err)
 	}
-	workspaceID, err := RequiredTrimmedString(request, "workspace_id")
+	workspaceID, err := RequireTrimmedString(request, "workspace_id")
 	if err != nil {
 		return ToolError(logger, "missing required input: workspace_id", err)
 	}
@@ -109,6 +118,18 @@ func listWorkspacePolicySetsHandler(ctx context.Context, request mcp.CallToolReq
 	tfeClient, err := client.GetTfeClientFromContext(ctx, logger)
 	if err != nil {
 		return ToolError(logger, "failed to get Terraform client - ensure TFE_TOKEN and TFE_ADDRESS are configured", err)
+	}
+
+	workspace, err := tfeClient.Workspaces.ReadByID(ctx, workspaceID)
+	if err != nil {
+		return ToolErrorf(logger, "workspace not found: %s", workspaceID)
+	}
+
+	// A workspace belongs to exactly one org and policy sets are org-scoped, so a
+	// mismatch would report this org's global policy sets against a foreign workspace.
+	if workspace.Organization != nil && !strings.EqualFold(workspace.Organization.Name, terraformOrgName) {
+		return ToolErrorf(logger, "workspace %q belongs to organization %q, not %q",
+			workspaceID, workspace.Organization.Name, terraformOrgName)
 	}
 
 	// Paginate through all policy sets with the workspaces included
@@ -181,13 +202,4 @@ func listWorkspacePolicySetsHandler(ctx context.Context, request mcp.CallToolReq
 			mcp.NewTextContent(string(result)),
 		},
 	}, nil
-}
-
-type MatchingPolicySet struct {
-	ID          string `json:"id"`
-	Name        string `json:"name"`
-	Description string `json:"description"`
-	Kind        string `json:"kind"`
-	Global      bool   `json:"global"`
-	Reason      string `json:"reason"`
 }
