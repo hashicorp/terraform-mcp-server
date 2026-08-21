@@ -53,7 +53,7 @@ func ListWorkpsacesTool() *mcp.Tool {
 }
 
 func ListWorkspacesFunc(ctx context.Context, request *mcp.CallToolRequest, input ListWorkspacesArguments) (*mcp.CallToolResult, *WorkspaceSummaryList, error) {
-	log.Info("ListWorkspaces for official mcp go-dk called..")
+	log.Info("ListWorkspaces for official mcp go-sdk called..")
 	terraformOrgName := strings.TrimSpace(input.TerraformOrgName)
 	projectID := input.ProjectID
 	searchQuery := input.SearchQuery
