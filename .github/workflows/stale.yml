@@ -1,0 +1,39 @@
+# Copyright (c) HashiCorp, Inc.
+# SPDX-License-Identifier: MPL-2.0
+
+name: Prune stale issues and PRs
+
+on:
+  schedule:
+    - cron: "0 0 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
+
+jobs:
+  stale:
+    name: Mark and close stale issues and pull requests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Process stale issues and pull requests
+        uses: actions/stale@4391f3da665fdf50b6810c1a66712fb9ba21aa93 # v11.0.0
+        with:
+          days-before-stale: 180
+          days-before-close: 14
+          stale-issue-message: >-
+            This issue has been automatically marked as stale because it has not had
+            recent activity in the last six months. It will be closed in 14 days if
+            no further activity occurs.
+          close-issue-message: >-
+            This issue has been automatically closed because it has not had recent
+            activity. If it is still relevant, please open a new issue.
+          stale-pr-message: >-
+            This pull request has been automatically marked as stale because it has
+            not had recent activity in the last six months. It will be closed in 14
+            days if no further activity occurs.
+          close-pr-message: >-
+            This pull request has been automatically closed because it has not had
+            recent activity. If it is still relevant, please open a new pull request.
