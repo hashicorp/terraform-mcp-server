@@ -23,9 +23,7 @@ import (
 func GetPrivateModuleDetails(logger *log.Logger) server.ServerTool {
 	return server.ServerTool{
 		Tool: mcp.NewTool("get_private_module_details",
-			mcp.WithDescription(`This tool retrieves detailed information about a specific private module in your Terraform Cloud/Enterprise organization.
-It provides comprehensive details including inputs, outputs, dependencies, versions, and usage examples. The private_module_id format is 'module-namespace/module-name/module-provider-name'.
-This can be obtained by calling 'search_private_modules' first to obtain the exact private_module_id required to use this tool. This tool requires a valid Terraform token to be configured.`),
+			mcp.WithDescription(`This tool retrieves detailed information about a specific private module in your Terraform Cloud/Enterprise organization. It provides comprehensive details including inputs, outputs, dependencies, versions, and usage examples. The private_module_id format is 'module-namespace/module-name/module-provider-name'. This can be obtained by calling 'search_private_modules' first to obtain the exact private_module_id required to use this tool. This tool requires a valid Terraform token to be configured.`),
 			mcp.WithTitleAnnotation("Get detailed information about a private module"),
 			mcp.WithOpenWorldHintAnnotation(true),
 			mcp.WithReadOnlyHintAnnotation(true),
@@ -36,8 +34,7 @@ This can be obtained by calling 'search_private_modules' first to obtain the exa
 			),
 			mcp.WithString("private_module_id",
 				mcp.Required(),
-				mcp.Description(`The private module ID should be in the format 'module-namespace/module-name/module-provider-name' (for example, 'my-tfc-org/vpc/aws' or 'my-module-namespace/vm/azurerm').
-The module-namespace is usually the name of the Terraform organization. Obtain this ID by calling 'search_private_modules'.`),
+				mcp.Description(`The private module ID should be in the format 'module-namespace/module-name/module-provider-name' (for example, 'my-tfc-org/vpc/aws' or 'my-module-namespace/vm/azurerm'). The module-namespace is usually the name of the Terraform organization. Obtain this ID by calling 'search_private_modules'.`),
 			),
 			mcp.WithString("registry_name",
 				mcp.Description("The type of Terraform registry to search within Terraform Cloud/Enterprise (e.g., 'private', 'public')"),
@@ -139,10 +136,7 @@ func readTerraformRegistryModuleDetails(ctx context.Context, tfeClient *tfe.Clie
 	return module, nil
 }
 
-func buildPrivateModuleDetailsResponse(registryModule *tfe.RegistryModule,
-	terraformRegistryModule *client.TerraformModuleVersionDetails,
-	tfeHostAddress string,
-	logger *log.Logger) *mcp.CallToolResult {
+func buildPrivateModuleDetailsResponse(registryModule *tfe.RegistryModule, terraformRegistryModule *client.TerraformModuleVersionDetails, tfeHostAddress string, logger *log.Logger) *mcp.CallToolResult {
 
 	registryPath := path.Join(tfeHostAddress, registryModule.Namespace, registryModule.Name, registryModule.Provider)
 
@@ -150,14 +144,12 @@ func buildPrivateModuleDetailsResponse(registryModule *tfe.RegistryModule,
 	builder.WriteString("Usage:\n")
 	builder.WriteString("To use this private module in your Terraform configuration:\n\n")
 	builder.WriteString("```hcl\n")
-	builder.WriteString(fmt.Sprintf("module \"%s\" {\n", registryModule.Name))
-	builder.WriteString(fmt.Sprintf("  source = \"%s\"\n", registryPath))
+	builder.WriteString(fmt.Sprintf("module %q {\n", registryModule.Name))
+	builder.WriteString(fmt.Sprintf("  source = %q\n", registryPath))
 
 	if len(registryModule.VersionStatuses) > 0 {
-		for _, versionStatus := range registryModule.VersionStatuses {
-			builder.WriteString(fmt.Sprintf("  version = \"%s\"\n", versionStatus.Version))
-			break
-		}
+		version := registryModule.VersionStatuses[0].Version
+		builder.WriteString(fmt.Sprintf("  version = %q\n", version))
 	}
 
 	builder.WriteString("\n")
