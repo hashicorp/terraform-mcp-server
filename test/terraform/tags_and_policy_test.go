@@ -46,10 +46,11 @@ func TestListWorkspacePolicySets(t *testing.T) {
 		require.False(t, result.IsError, "list_workspace_policy_sets should not return an error")
 		require.NotEmpty(t, resultText, "list_workspace_policy_sets should return a non-empty response")
 
-		assert.Equal(t, ps.ID, gjson.Get(resultText, "0.id").String(), "response should contain the policy set ID")
-		assert.Equal(t, psName, gjson.Get(resultText, "0.name").String(), "response should contain the policy set name")
-		assert.Equal(t, "directly attached", gjson.Get(resultText, "0.reason").String(), "policy set should be reported as directly attached")
-		assert.False(t, gjson.Get(resultText, "0.global").Bool(), "policy set should not be global")
+		psResult := gjson.Get(resultText, fmt.Sprintf("#(id==%q)", ps.ID))
+		require.True(t, psResult.Exists(), "response should contain the directly attached policy set")
+		assert.Equal(t, psName, psResult.Get("name").String(), "response should contain the policy set name")
+		assert.Equal(t, "directly attached", psResult.Get("reason").String(), "policy set should be reported as directly attached")
+		assert.False(t, psResult.Get("global").Bool(), "policy set should not be global")
 	})
 
 	t.Run("returns global policy set for any workspace", func(t *testing.T) {
@@ -80,34 +81,28 @@ func TestListWorkspacePolicySets(t *testing.T) {
 		assert.Equal(t, "global", globalPsResult.Get("reason").String(), "global policy set should have reason 'global'")
 		assert.True(t, globalPsResult.Get("global").Bool(), "global policy set should have global=true")
 	})
+
+	t.Run("returns an error when the workspace is not in the given org", func(t *testing.T) {
+		result, resultText := callTool(t, s, "list_workspace_policy_sets", map[string]any{
+			"terraform_org_name": "org-doesnotexist123",
+			"workspace_id":       ws.ID,
+		})
+		require.True(t, result.IsError, "list_workspace_policy_sets should reject a workspace/org mismatch")
+		assert.Contains(t, resultText, "belongs to organization", "error should explain the org mismatch")
+	})
 }
 
 func TestListWorkspacePolicySetsErrorPaths(t *testing.T) {
 	s := newTestingSession(t)
 	defer s.Close()
 
-	nonExistentOrg := "org-doesnotexist123"
-	nonExistentWsID := "ws-doesnotexist123"
-
-	t.Run("returns an error for a non-existent org", func(t *testing.T) {
-		result, _ := callTool(t, s, "list_workspace_policy_sets", map[string]any{
-			"terraform_org_name": nonExistentOrg,
-			"workspace_id":       nonExistentWsID,
-		})
-		assert.True(t, result.IsError, "list_workspace_policy_sets should return an error for a non-existent org")
-	})
-
-	t.Run("does not error for a non-existent workspace ID in a valid org", func(t *testing.T) {
-		// The tool never validates whether workspace_id exists in the API — it uses it
-		// only as a client-side filter against directly-attached policy sets. Global
-		// policy sets are always returned regardless. The response content therefore
-		// depends on live org state and cannot be deterministically asserted here.
+	t.Run("returns an error for a non-existent workspace", func(t *testing.T) {
 		result, resultText := callTool(t, s, "list_workspace_policy_sets", map[string]any{
 			"terraform_org_name": tfeOrgName,
-			"workspace_id":       nonExistentWsID,
+			"workspace_id":       "ws-doesnotexist123",
 		})
-		assert.False(t, result.IsError, "list_workspace_policy_sets should not return an error for a non-existent workspace ID")
-		assert.Contains(t, resultText, "No policy sets are attached to workspace", "response should indicate no policy sets are attached")
+		require.True(t, result.IsError, "list_workspace_policy_sets should reject a non-existent workspace ID")
+		assert.Contains(t, resultText, "workspace not found", "error should identify the workspace as not found")
 	})
 }
 

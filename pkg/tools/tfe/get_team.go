@@ -36,7 +36,7 @@ func GetTeam(logger *log.Logger) server.ServerTool {
 }
 
 func getTeamHandler(ctx context.Context, request mcp.CallToolRequest, logger *log.Logger) (*mcp.CallToolResult, error) {
-	teamID, err := RequiredTrimmedString(request, "team_id")
+	teamID, err := RequireTrimmedString(request, "team_id")
 	if err != nil {
 		return ToolError(logger, "missing required input: team_id", err)
 	}
