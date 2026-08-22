@@ -16,6 +16,10 @@ FIXES
 * `get_apply_logs` now checks the apply status before attempting to stream logs. If the apply is not yet in a terminal state (`finished`, `errored`, `canceled`), the tool returns an informative message instead of timing out. [468](https://github.com/hashicorp/terraform-mcp-server/pull/468)
 * Fix `create_no_code_workspace` elicitation to require only module inputs marked as required, allowing optional inputs to be omitted so Terraform module defaults are applied. [482](https://github.com/hashicorp/terraform-mcp-server/pull/482)
 
+IMPROVEMENTS
+
+* Set `service.instance.id` on the OTel metrics resource, plus `k8s.pod.uid` when running in K8s, so telemetry from separate instances is no longer attributed to a single entity [448](https://github.com/hashicorp/terraform-mcp-server/pull/448)
+
 # 1.2.0
 
 FEATURES
