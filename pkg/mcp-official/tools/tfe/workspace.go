@@ -92,7 +92,7 @@ func ListWorkspacesFunc(ctx context.Context, request *mcp.CallToolRequest, input
 		WildcardName: wildcardName,
 	})
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to list workspaces in org '%s': %w", terraformOrgName, err)
+		return nil, nil, fmt.Errorf("failed to list workspaces in org %q: %w", terraformOrgName, err)
 	}
 	if len(workspaces.Items) == 0 {
 		return nil, nil, fmt.Errorf("no workspaces to list in organization %q", terraformOrgName)
