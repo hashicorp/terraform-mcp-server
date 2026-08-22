@@ -231,6 +231,47 @@ func runTestSuite(t *testing.T, client mcpClient.MCPClient, transportName string
 		})
 	}
 
+	for _, modulePartTests := range []struct {
+		toolName  string
+		testCases []RegistryTestCase
+	}{
+		{toolName: "get_module_examples", testCases: moduleExamplesTestCases},
+		{toolName: "get_module_submodules", testCases: moduleSubmodulesTestCases},
+	} {
+		for _, testCase := range modulePartTests.testCases {
+			t.Run(fmt.Sprintf("%s_%s/%s", transportName, modulePartTests.toolName, testCase.TestName), func(t *testing.T) {
+				ensureClientInitialized(t, client)
+				t.Logf("TOOL %s %s", modulePartTests.toolName, testCase.TestDescription)
+				t.Logf("Test payload: %v", testCase.TestPayload)
+
+				ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+				defer cancel()
+
+				request := mcp.CallToolRequest{}
+				request.Params.Name = modulePartTests.toolName
+				request.Params.Arguments = testCase.TestPayload
+
+				response, err := client.CallTool(ctx, request)
+				if testCase.TestShouldFail {
+					require.NoError(t, err)
+					require.True(t, response.IsError, "expected to call %q tool with error", modulePartTests.toolName)
+				} else {
+					require.NoError(t, err, "expected to call %q tool successfully", modulePartTests.toolName)
+					require.False(t, response.IsError, "expected result not to be an error")
+					require.Len(t, response.Content, 1, "expected content to have one item")
+
+					textContent, ok := response.Content[0].(mcp.TextContent)
+					require.True(t, ok, "expected content to be of type TextContent")
+					t.Logf("Content length: %d", len(textContent.Text))
+
+					for _, want := range testCase.ExpectsContent {
+						require.Contains(t, textContent.Text, want, "expected response to contain %q", want)
+					}
+				}
+			})
+		}
+	}
+
 	for _, testCase := range searchPoliciesTestCases {
 		t.Run("CallTool search_policies", func(t *testing.T) {
 			// t.Parallel()

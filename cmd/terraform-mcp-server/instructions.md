@@ -20,6 +20,8 @@ The Terraform MCP server provides tools for generating better Terraform code thr
   - `get_provider_capabilities` shows what types of resources, data sources, functions, and guides are available
   
 - **Module Discovery**: `get_latest_module_version` (if unavailable in code) → `search_modules` → `get_module_details`
+  - `get_module_details` returns root module requirements plus lightweight example and submodule indexes
+  - Use `get_module_examples` or `get_module_submodules` with the selected name when you need a specific example or submodule
 
 - **Policy Discovery**: `search_policies` → `get_policy_details`
 
@@ -60,7 +62,8 @@ The Terraform MCP server provides tools for generating better Terraform code thr
 1. `search_modules`/`search_providers` for available resources
 2. `get_latest_provider_version` if no version available in existing code
 3. `get_module_details` for module requirements
-4. Generate code with discovered constraints
+4. `get_module_examples`/`get_module_submodules` when the selected module has a relevant example or submodule
+5. Generate code with discovered constraints
 
 **Run Management**:
 1. `search_workspaces` → select target
