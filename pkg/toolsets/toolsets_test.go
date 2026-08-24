@@ -251,6 +251,12 @@ func TestToolFilter_ToolsetsMode(t *testing.T) {
 			enabledToolsets: []string{"search"},
 			expected:        true,
 		},
+		{
+			name:            "query summary enabled by search toolset",
+			toolName:        "get_query_summary",
+			enabledToolsets: []string{"search"},
+			expected:        true,
+		},
 	}
 
 	for _, tt := range tests {
@@ -367,6 +373,12 @@ func TestToolFilter_IndividualMode(t *testing.T) {
 			enabledToolsets: EnableIndividualTools([]string{"get_query_status"}),
 			expected:        true,
 		},
+		{
+			name:            "query summary in individual mode",
+			toolName:        "get_query_summary",
+			enabledToolsets: EnableIndividualTools([]string{"get_query_summary"}),
+			expected:        true,
+		},
 	}
 
 	for _, tt := range tests {
@@ -397,6 +409,7 @@ func TestKnownToolNames(t *testing.T) {
 		"search_private_providers",
 		"execute_query",
 		"get_query_status",
+		"get_query_summary",
 	}
 
 	for _, tool := range expectedTools {

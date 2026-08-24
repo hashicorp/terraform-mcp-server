@@ -225,8 +225,9 @@ Terraform query configuration, and starts a query run. It does not create or mod
 infrastructure.
 
 The response includes data.relationships.latest-query-run.data.id. Pass that query
-run ID to get_query_status and call it again while the status is pending, queued,
-or running. Do not use curl or call the HCP Terraform query API directly.
+run ID to get_query_status. After it returns a terminal status, pass the same ID to
+get_query_summary to retrieve the parsed result. Do not use curl or call the HCP
+Terraform query API directly.
 
 Requires an authenticated HCP Terraform session and a workspace using a supported
 Terraform version.`

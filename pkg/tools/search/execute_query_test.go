@@ -46,6 +46,7 @@ func TestExecuteQueryDefinition(t *testing.T) {
 	require.NotNil(t, tool.Tool.Annotations.OpenWorldHint)
 	assert.True(t, *tool.Tool.Annotations.OpenWorldHint)
 	assert.Contains(t, tool.Tool.Description, "get_query_status")
+	assert.Contains(t, tool.Tool.Description, "get_query_summary")
 	assert.Contains(t, tool.Tool.Description, "Do not use curl")
 }
 
