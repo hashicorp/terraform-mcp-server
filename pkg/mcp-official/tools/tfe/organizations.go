@@ -1,4 +1,4 @@
-package mcpofficial
+package tools
 
 import (
 	"context"
@@ -8,6 +8,7 @@ import (
 	"github.com/hashicorp/go-tfe"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	log "github.com/sirupsen/logrus"
+	"github.com/hashicorp/terraform-mcp-server/pkg/mcp-official/client"
 )
 
 type OrganizationSummary struct {
@@ -45,7 +46,7 @@ func ListTerraformOrganizationsTool() *mcp.Tool {
 func ListTerraformOrganizationsFunc(ctx context.Context, request *mcp.CallToolRequest, input ListOrganizationsArguments) (*mcp.CallToolResult, *OrganizationSummaryList, error) {
 	log.Info("ListTerraformOrganizations for official mcp go-sdk called..")
 
-	tfeClient, err := GetTfeClient(ctx)
+	tfeClient, err := client.GetTfeClient(ctx)
 	if err != nil {
 		return nil, nil, err
 	}

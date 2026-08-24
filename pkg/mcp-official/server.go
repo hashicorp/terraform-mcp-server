@@ -3,6 +3,7 @@ package mcpofficial
 import (
 	"time"
 
+	"github.com/hashicorp/terraform-mcp-server/pkg/mcp-official/tools"
 	log "github.com/sirupsen/logrus"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -35,6 +36,6 @@ func NewServer(version, instructions string, heartbeatInterval time.Duration, lo
 		svr.AddReceivingMiddleware(cfg.middlewares...)
 	}
 
-	RegisterTools(svr, logger, enabledToolsets)
+	tools.RegisterTools(svr, logger, enabledToolsets)
 	return svr
 }

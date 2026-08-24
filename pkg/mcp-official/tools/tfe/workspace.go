@@ -1,4 +1,4 @@
-package mcpofficial
+package tools
 
 import (
 	"context"
@@ -9,6 +9,7 @@ import (
 	"github.com/hashicorp/go-tfe"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	log "github.com/sirupsen/logrus"
+	"github.com/hashicorp/terraform-mcp-server/pkg/mcp-official/client"
 )
 
 type WorkspaceSummary struct {
@@ -77,7 +78,7 @@ func ListWorkspacesFunc(ctx context.Context, request *mcp.CallToolRequest, input
 		}
 	}
 
-	client, err := GetTfeClient(ctx)
+	client, err := client.GetTfeClient(ctx)
 	if err != nil {
 		return nil, nil, err
 	}
