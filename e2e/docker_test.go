@@ -13,11 +13,16 @@ import (
 )
 
 // startHTTPContainer starts the server in stateful streamable HTTP mode.
-func startHTTPContainer(t *testing.T, port string) string {
+func startHTTPContainer(t *testing.T, port string, officialSDK bool) string {
 	t.Helper()
 
 	// Map the host test port to the server's container port.
 	portMapping := fmt.Sprintf("%s:8080", port)
+
+	sdkEnabled := "false"
+	if officialSDK {
+		sdkEnabled = "true"
+	}
 
 	cmd := exec.Command(
 		"docker", "run",
@@ -28,6 +33,7 @@ func startHTTPContainer(t *testing.T, port string) string {
 		"-e", "MCP_SESSION_MODE=stateful",
 		"-e", "MCP_RATE_LIMIT_GLOBAL=50:100",
 		"-e", "MCP_RATE_LIMIT_SESSION=50:100",
+		"-e", officialSDKEnabledEnv+"="+sdkEnabled,
 		"-p", portMapping,
 		"terraform-mcp-server:test-e2e",
 	)
@@ -161,10 +167,16 @@ func startHTTPContainerWithCORS(
 	port string,
 	mode string,
 	origins string,
+	officialSDK bool,
 ) string {
 	t.Helper()
 
 	portMapping := fmt.Sprintf("%s:8080", port)
+
+	sdkEnabled := "false"
+	if officialSDK {
+		sdkEnabled = "true"
+	}
 
 	cmd := exec.Command(
 		"docker", "run",
@@ -175,6 +187,7 @@ func startHTTPContainerWithCORS(
 		"-e", "MCP_SESSION_MODE=stateful",
 		"-e", "MCP_RATE_LIMIT_GLOBAL=50:100",
 		"-e", "MCP_RATE_LIMIT_SESSION=50:100",
+		"-e", officialSDKEnabledEnv+"="+sdkEnabled,
 		"-e", "MCP_CORS_MODE="+mode,
 		"-e", "MCP_ALLOWED_ORIGINS="+origins,
 		"-p", portMapping,

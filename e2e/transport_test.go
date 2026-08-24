@@ -13,6 +13,48 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+const (
+	officialSDKEnabledEnv = "TF_X_OFFICIAL_SDK_ENABLED"
+	legacyServerName      = "terraform-mcp-server"
+	officialServerName    = "terraform-mcp-official"
+	legacyMCPEndpoint     = "/mcp"
+	officialMCPEndpoint   = "/mcp/official"
+)
+
+type e2eServerConfig struct {
+	officialSDK bool
+	serverName  string
+	mcpPath     string
+}
+
+func officialSDKEnabled() bool {
+	return os.Getenv(officialSDKEnabledEnv) == "true"
+}
+
+// currentServerConfig selects the HTTP endpoint and server name for this run.
+func currentServerConfig() e2eServerConfig {
+	if officialSDKEnabled() {
+		return e2eServerConfig{
+			officialSDK: true,
+			serverName:  officialServerName,
+			mcpPath:     officialMCPEndpoint,
+		}
+	}
+
+	return e2eServerConfig{
+		officialSDK: false,
+		serverName:  legacyServerName,
+		mcpPath:     legacyMCPEndpoint,
+	}
+}
+
+func legacyServerConfig() e2eServerConfig {
+	return e2eServerConfig{
+		serverName: legacyServerName,
+		mcpPath:    legacyMCPEndpoint,
+	}
+}
+
 var e2eTransports = []struct {
 	name    string
 	factory func(*testing.T) (*mcp.ClientSession, func())
@@ -75,6 +117,9 @@ func createStdioClient(t *testing.T) (*mcp.ClientSession, func()) {
 		Command: cmd,
 	}, nil)
 	require.NoError(t, err, "failed to connect over stdio")
+	initResult := session.InitializeResult()
+	require.NotNil(t, initResult)
+	require.Equal(t, legacyServerName, initResult.ServerInfo.Name)
 
 	cleanup := func() {
 		if err := session.Close(); err != nil {
@@ -91,10 +136,13 @@ func createHTTPClient(t *testing.T) (*mcp.ClientSession, func()) {
 	t.Log("Starting HTTP MCP server...")
 
 	port := getTestPort()
+	// Registry tools are registered on the legacy endpoint today. The official
+	// endpoint currently exposes only list_workspaces.
+	config := legacyServerConfig()
 	baseURL := fmt.Sprintf("http://localhost:%s", port)
-	mcpURL := fmt.Sprintf("http://localhost:%s/mcp", port)
+	mcpURL := baseURL + config.mcpPath
 
-	containerID := startHTTPContainer(t, port)
+	containerID := startHTTPContainer(t, port, officialSDKEnabled())
 	// Register immediately so failures during readiness or Connect
 	// still stop the container.
 	t.Cleanup(func() {
@@ -122,6 +170,9 @@ func createHTTPClient(t *testing.T) (*mcp.ClientSession, func()) {
 		HTTPClient: httpClient,
 	}, nil)
 	require.NoError(t, err, "failed to connect over HTTP")
+	initResult := session.InitializeResult()
+	require.NotNil(t, initResult)
+	require.Equal(t, config.serverName, initResult.ServerInfo.Name)
 
 	cleanup := func() {
 		// Close MCP before the container cleanup registered above runs.

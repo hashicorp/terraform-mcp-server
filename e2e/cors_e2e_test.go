@@ -58,14 +58,18 @@ func TestCORSE2E(t *testing.T) {
 		config := config
 
 		t.Run(config.name, func(t *testing.T) {
+			// CORS checks use the legacy endpoint because the raw initializer is
+			// currently compatible with that endpoint only.
+			serverConfig := legacyServerConfig()
 			baseURL := fmt.Sprintf("http://localhost:%s", config.port)
-			mcpURL := baseURL + "/mcp"
+			mcpURL := baseURL + serverConfig.mcpPath
 
 			containerID := startHTTPContainerWithCORS(
 				t,
 				config.port,
 				config.mode,
 				config.origins,
+				officialSDKEnabled(),
 			)
 
 			// Each mode uses its own container and host port so its CORS configuration
@@ -75,13 +79,13 @@ func TestCORSE2E(t *testing.T) {
 			})
 
 			waitForServer(t, baseURL)
-			runCORSTests(t, mcpURL, config.mode)
+			runCORSTests(t, mcpURL, config.mode, serverConfig.serverName)
 		})
 	}
 }
 
 // runCORSTests executes the shared and mode-specific CORS cases.
-func runCORSTests(t *testing.T, mcpURL, mode string) {
+func runCORSTests(t *testing.T, mcpURL, mode, expectedServerName string) {
 	// Describe one HTTP request and its expected CORS response.
 	type testCase struct {
 		name              string
@@ -139,7 +143,7 @@ func runCORSTests(t *testing.T, mcpURL, mode string) {
 			if tc.method != "OPTIONS" {
 				// Initialize only for origins expected to pass the CORS policy.
 				if tc.expectedStatus == 200 {
-					sessionID = initializeMCPSession(t, mcpURL, tc.origin)
+					sessionID = initializeMCPSession(t, mcpURL, tc.origin, expectedServerName)
 					require.NotEmpty(t, sessionID, "Expected to get a session ID for allowed origin")
 				} else {
 					// Rejected origins should fail at the CORS middleware before MCP initialization.
@@ -155,7 +159,7 @@ func runCORSTests(t *testing.T, mcpURL, mode string) {
 				// Use a tool-call-shaped body; the tool result is irrelevant to this CORS test.
 				callToolReq := map[string]interface{}{
 					"jsonrpc": "2.0",
-					"method":  "callTool",
+					"method":  "tools/call",
 					"params": map[string]interface{}{
 						"name":      "ping", // Only the CORS response is being checked.
 						"arguments": map[string]interface{}{},
@@ -228,7 +232,7 @@ func testCORSDirectly(t *testing.T, mcpURL, method, origin string, expectedStatu
 }
 
 // initializeMCPSession performs raw initialization so the Origin header is controlled.
-func initializeMCPSession(t *testing.T, mcpURL, origin string) string {
+func initializeMCPSession(t *testing.T, mcpURL, origin, expectedServerName string) string {
 	// Build the smallest valid initialize request needed to obtain a session ID.
 	initReq := InitializeRequest{
 		Jsonrpc: "2.0",
@@ -276,7 +280,7 @@ func initializeMCPSession(t *testing.T, mcpURL, origin string) string {
 	var initResp InitializeResponse
 	err = json.NewDecoder(resp.Body).Decode(&initResp)
 	require.NoError(t, err)
-	assert.Equal(t, "terraform-mcp-server", initResp.Result.ServerInfo.Name)
+	assert.Equal(t, expectedServerName, initResp.Result.ServerInfo.Name)
 
 	return sessionID
 }
