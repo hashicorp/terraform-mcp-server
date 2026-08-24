@@ -26,6 +26,7 @@ func TestGetQueryStatusDefinition(t *testing.T) {
 	assert.Contains(t, tool.Tool.Description, "pending")
 	assert.Contains(t, tool.Tool.Description, "finished, errored, or canceled")
 	assert.Contains(t, tool.Tool.Description, "do not repeatedly call")
+	assert.Contains(t, tool.Tool.Description, "get_query_summary")
 	require.NotNil(t, tool.Tool.Annotations.ReadOnlyHint)
 	assert.True(t, *tool.Tool.Annotations.ReadOnlyHint)
 	require.NotNil(t, tool.Tool.Annotations.DestructiveHint)
