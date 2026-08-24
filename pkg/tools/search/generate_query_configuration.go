@@ -299,7 +299,7 @@ func writeInstructions(b *strings.Builder, namespace, name, version string) {
 	b.WriteString("## Pre-conditions\n\n")
 	b.WriteString("Before calling the endpoint, verify:\n\n")
 	b.WriteString("1. The workspace's Terraform version is **>= 1.14.0**. Requests against older versions are rejected with `422 Unprocessable Entity`.\n")
-	b.WriteString("2. After `execute_query` succeeds, pass the ID from its `latest-query-run` relationship to the `get_query_status` MCP tool. Call it again while status is `pending`, `queued`, or `running`; `finished`, `errored`, and `canceled` are terminal. Do not use curl or call the query API directly.\n")
+	b.WriteString("2. After `execute_query` succeeds, pass the ID from its `latest-query-run` relationship to the `get_query_status` MCP tool. Once it returns a terminal status, pass the same ID to `get_query_summary` to retrieve the parsed result. Do not use curl or call the query API directly.\n")
 	b.WriteString("3. Pass `organization_name` and `workspace_name` separately when calling `execute_query`; it resolves the workspace ID through go-tfe.\n\n")
 
 	b.WriteString("## Query configuration structure\n\n")
