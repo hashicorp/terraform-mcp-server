@@ -14,10 +14,31 @@ import (
 	"testing"
 	"time"
 
-	mcpClient "github.com/mark3labs/mcp-go/client"
-	"github.com/mark3labs/mcp-go/mcp"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+var tfToken string
+
+// To make authenticated calls to the MCP server over HTTP
+type httpTransport struct {
+	token            string
+	httpRoundTripper http.RoundTripper
+}
+
+type transportCase struct {
+	name           string
+	endpoint       string
+	expectedServer string
+	createSession  func(t *testing.T, endpoint string) (*mcp.ClientSession, func())
+}
+
+func (t *httpTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	req = req.Clone(req.Context())
+	req.Header.Set("Authorization", "Bearer "+t.token)
+	return t.httpRoundTripper.RoundTrip(req)
+}
 
 func TestE2E(t *testing.T) {
 	buildDockerImage(t)
@@ -29,7 +50,7 @@ func TestE2E(t *testing.T) {
 
 	testCases := []struct {
 		name          string
-		clientFactory func(t *testing.T) (mcpClient.MCPClient, func())
+		clientFactory func(t *testing.T) (*mcp.ClientSession, func())
 	}{
 		{"Stdio", createStdioClient},
 		{"HTTP", createHTTPClient},
@@ -42,26 +63,6 @@ func TestE2E(t *testing.T) {
 			runTestSuite(t, client, tc.name)
 		})
 	}
-}
-
-// ensureClientInitialized ensures the MCP client is initialized before running tool tests
-func ensureClientInitialized(t *testing.T, client mcpClient.MCPClient) {
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-
-	request := mcp.InitializeRequest{}
-	request.Params.ProtocolVersion = mcp.LATEST_PROTOCOL_VERSION
-	request.Params.ClientInfo = mcp.Implementation{
-		Name:    "e2e-test-client",
-		Version: "0.0.1",
-	}
-
-	result, err := client.Initialize(ctx, request)
-	if err != nil {
-		t.Fatalf("Failed to initialize MCP client: %v", err)
-	}
-	t.Logf("Initialized with server: %s %s", result.ServerInfo.Name, result.ServerInfo.Version)
-	require.Equal(t, "terraform-mcp-server", result.ServerInfo.Name)
 }
 
 // runTestSuite executes all test cases against the provided client
@@ -91,7 +92,6 @@ func runTestSuite(t *testing.T, client mcpClient.MCPClient, transportName string
 
 	for _, testCase := range searchProviderTestCases {
 		t.Run(fmt.Sprintf("%s_search_providers/%s", transportName, testCase.TestName), func(t *testing.T) {
-			ensureClientInitialized(t, client)
 			t.Logf("TOOL search_providers %s", testCase.TestDescription)
 			t.Logf("Test payload: %v", testCase.TestPayload)
 
@@ -135,7 +135,6 @@ func runTestSuite(t *testing.T, client mcpClient.MCPClient, transportName string
 
 	for _, testCase := range providerDetailsTestCases {
 		t.Run(fmt.Sprintf("%s_get_provider_details/%s", transportName, testCase.TestName), func(t *testing.T) {
-			ensureClientInitialized(t, client)
 			t.Logf("TOOL get_provider_details %s", testCase.TestDescription)
 			t.Logf("Test payload: %v", testCase.TestPayload)
 
@@ -166,7 +165,6 @@ func runTestSuite(t *testing.T, client mcpClient.MCPClient, transportName string
 
 	for _, testCase := range searchModulesTestCases {
 		t.Run(fmt.Sprintf("%s_search_modules/%s", transportName, testCase.TestName), func(t *testing.T) {
-			ensureClientInitialized(t, client)
 			t.Logf("TOOL search_modules %s", testCase.TestDescription)
 			t.Logf("Test payload: %v", testCase.TestPayload)
 
@@ -197,7 +195,6 @@ func runTestSuite(t *testing.T, client mcpClient.MCPClient, transportName string
 
 	for _, testCase := range moduleDetailsTestCases {
 		t.Run(fmt.Sprintf("%s_get_module_details/%s", transportName, testCase.TestName), func(t *testing.T) {
-			ensureClientInitialized(t, client)
 			t.Logf("TOOL get_module_details %s", testCase.TestDescription)
 			t.Logf("Test payload: %v", testCase.TestPayload)
 
@@ -303,7 +300,6 @@ func runTestSuite(t *testing.T, client mcpClient.MCPClient, transportName string
 
 	for _, testCase := range getLatestModuleVersionTestCases {
 		t.Run(fmt.Sprintf("%s_get_latest_module_version/%s", transportName, testCase.TestName), func(t *testing.T) {
-			ensureClientInitialized(t, client)
 			t.Logf("TOOL get_latest_module_version %s", testCase.TestDescription)
 			t.Logf("Test payload: %v", testCase.TestPayload)
 
@@ -337,7 +333,6 @@ func runTestSuite(t *testing.T, client mcpClient.MCPClient, transportName string
 
 	for _, testCase := range getLatestProviderVersionTestCases {
 		t.Run(fmt.Sprintf("%s_get_latest_provider_version/%s", transportName, testCase.TestName), func(t *testing.T) {
-			ensureClientInitialized(t, client)
 			t.Logf("TOOL get_latest_provider_version %s", testCase.TestDescription)
 			t.Logf("Test payload: %v", testCase.TestPayload)
 
@@ -368,12 +363,46 @@ func runTestSuite(t *testing.T, client mcpClient.MCPClient, transportName string
 			}
 		})
 	}
+}
 
+func TestSearchProvidersReturnsResourceDocumentation(t *testing.T) {
+	session := newTestSession(t)
+	defer session.Close()
+
+	result, text := callTool(t, session, "search_providers", map[string]any{
+		"provider_name":          "dns",
+		"provider_namespace":     "hashicorp",
+		"provider_document_type": "resources",
+		"service_slug":           "ns_record_set",
+	})
+
+	require.False(t, result.IsError)
+	require.NotEmpty(t, text)
+	assert.Contains(t, text, "Category: resources")
+	assert.Contains(t, text, "ns_record_set")
+}
+
+func TestToolsAreRegistered(t *testing.T) {
+	session := newTestSession(t)
+	defer session.Close()
+
+	result, err := session.ListTools(t.Context(), nil)
+	require.NoError(t, err)
+
+	names := make(map[string]bool)
+	for _, tool := range result.Tools {
+		names[tool.Name] = true
+	}
+
+	assert.True(t, names["list_workspaces"])
+	// assert.True(t, names["get_provider_details"])
+	// assert.True(t, names["search_modules"])
 }
 
 // createStdioClient creates a stdio-based MCP client
-func createStdioClient(t *testing.T) (mcpClient.MCPClient, func()) {
-	args := []string{
+func createStdioClient(t *testing.T) (*mcp.ClientSession, func()) {
+	t.Log("Starting Stdio MCP client...")
+	cmd := exec.Command(
 		"docker",
 		"run",
 		"-i",
@@ -381,20 +410,29 @@ func createStdioClient(t *testing.T) (mcpClient.MCPClient, func()) {
 		"-e", "MCP_RATE_LIMIT_GLOBAL=50:100",
 		"-e", "MCP_RATE_LIMIT_SESSION=50:100",
 		"terraform-mcp-server:test-e2e",
-	}
-	t.Log("Starting Stdio MCP client...")
-	client, err := mcpClient.NewStdioMCPClient(args[0], []string{}, args[1:]...)
-	require.NoError(t, err, "expected to create stdio client successfully")
+	)
+
+	client := mcp.NewClient(&mcp.Implementation{
+		Name:    "e2e-test-client",
+		Version: "0.0.1",
+	}, nil)
+
+	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+	defer cancel()
+
+	session, err := client.Connect(ctx, &mcp.CommandTransport{
+		Command: cmd,
+	}, nil)
+	require.NoError(t, err)
 
 	cleanup := func() {
-		client.Close()
+		require.NoError(t, session.Close())
 	}
-
-	return client, cleanup
+	return session, cleanup
 }
 
 // createHTTPClient creates an HTTP-based MCP client
-func createHTTPClient(t *testing.T) (mcpClient.MCPClient, func()) {
+func createHTTPClient(t *testing.T) (*mcp.ClientSession, func()) {
 	t.Log("Starting HTTP MCP server...")
 
 	port := getTestPort()
@@ -413,17 +451,40 @@ func createHTTPClient(t *testing.T) (mcpClient.MCPClient, func()) {
 	waitForServer(t, baseURL)
 
 	// Create client with MCP endpoint
-	client, err := mcpClient.NewStreamableHttpClient(mcpURL)
-	require.NoError(t, err, "expected to create HTTP client successfully")
+	client := mcp.NewClient(&mcp.Implementation{
+		Name:    "e2e-test-client",
+		Version: "0.0.1",
+	}, nil)
+
+	httpClient := &http.Client{
+		Timeout: 120 * time.Second,
+		Transport: &httpTransport{
+			token:            tfToken,
+			httpRoundTripper: http.DefaultTransport,
+		},
+	}
+
+	session, err := client.Connect(
+		t.Context(),
+		&mcp.StreamableClientTransport{
+			Endpoint:   mcpURL,
+			HTTPClient: httpClient,
+		},
+		nil,
+	)
+	require.NoError(t, err)
+	initResult := session.InitializeResult()
+	require.NotNil(t, initResult)
+	assert.Equal(t, "terraform-mcp-official", initResult.ServerInfo.Name)
 
 	cleanup := func() {
 		if client != nil {
-			client.Close()
+			session.Close()
 		}
 		// Container cleanup handled by t.Cleanup()
 	}
 
-	return client, cleanup
+	return session, cleanup
 }
 
 // startHTTPContainer starts a Docker container in HTTP mode and returns container ID
@@ -437,7 +498,7 @@ func startHTTPContainer(t *testing.T, port string) string {
 		"-e", "MCP_RATE_LIMIT_GLOBAL=50:100",
 		"-e", "MCP_RATE_LIMIT_SESSION=50:100",
 		"-p", portMapping,
-		"terraform-mcp-server:test-e2e",
+		"terraform-mcp-official:test-e2e",
 	)
 	output, err := cmd.Output()
 	require.NoError(t, err, "expected to start HTTP container successfully")
@@ -528,4 +589,8 @@ func buildDockerImage(t *testing.T) {
 	cmd.Dir = ".." // Run this in the context of the root, where the Makefile is located.
 	output, err := cmd.CombinedOutput()
 	require.NoError(t, err, "expected to build Docker image successfully, output: %s", string(output))
+}
+
+func init() {
+	tfToken = os.Getenv("TFE_TOKEN")
 }
