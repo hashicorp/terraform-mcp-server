@@ -63,7 +63,7 @@ func getQueryStatusHandler(ctx context.Context, request mcp.CallToolRequest, log
 	}
 
 	return mcp.NewToolResultText(fmt.Sprintf(
-		"Query run reached terminal status %q. Do not call get_query_status again for this query run.\n\n%s",
+		"Query run reached terminal status %q. Do not call get_query_status again for this query run. Call get_query_summary with the same query_run_id to retrieve the result summary.\n\n%s",
 		status,
 		response,
 	)), nil
@@ -128,5 +128,6 @@ const getQueryStatusDescription = `Fetches an HCP Terraform query run using go-t
 Pass the query run ID from data.relationships.latest-query-run.data.id in the
 execute_query response. This tool checks every three seconds while status is pending,
 queued, or running and returns once status is finished, errored, or canceled. Make one
-call only; do not repeatedly call this tool with the same query run ID. The wait times
-out after two minutes. Do not use curl or call the HCP Terraform query API directly.`
+call only; do not repeatedly call this tool with the same query run ID. After a terminal
+status is returned, call get_query_summary with the same ID. The wait times out after two
+minutes. Do not use curl or call the HCP Terraform query API directly.`

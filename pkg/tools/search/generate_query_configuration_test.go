@@ -307,6 +307,7 @@ func TestWriteInstructions_ContainsPreConditions(t *testing.T) {
 		"latest-query-run",
 		"execute_query",
 		"get_query_status",
+		"get_query_summary",
 		"organization_name",
 		"workspace_name",
 		"generate_config_out",

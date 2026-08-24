@@ -359,6 +359,10 @@ func (r *DynamicToolRegistry) registerTFETools() {
 		tool := r.createDynamicTFETool("get_query_status", searchTools.GetQueryStatus)
 		r.mcpServer.AddTool(tool.Tool, tool.Handler)
 	}
+	if toolsets.IsToolEnabled("get_query_summary", r.enabledToolsets) {
+		tool := r.createDynamicTFETool("get_query_summary", searchTools.GetQuerySummary)
+		r.mcpServer.AddTool(tool.Tool, tool.Handler)
+	}
 
 	r.tfeToolsRegistered = true
 }

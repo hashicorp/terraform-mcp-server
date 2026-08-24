@@ -22,6 +22,7 @@ var ToolToToolset = map[string]string{
 	"provider_list_schema_list":    Search,
 	"execute_query":                Search,
 	"get_query_status":             Search,
+	"get_query_summary":            Search,
 
 	// Private Registry tools (TFE/TFC private registry)
 	"search_private_modules":       RegistryPrivate,
