@@ -6,11 +6,12 @@ import (
 	"time"
 
 	"github.com/hashicorp/go-tfe"
-	"github.com/modelcontextprotocol/go-sdk/mcp"
-	log "github.com/sirupsen/logrus"
 	"github.com/hashicorp/terraform-mcp-server/pkg/mcp-official/client"
+	"github.com/hashicorp/terraform-mcp-server/pkg/mcp-official/utils"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
+// OrganizationSummary holds a trimmed view of a single Terraform organization.
 type OrganizationSummary struct {
 	Name      string    `json:"organization_name"`
 	Email     string    `json:"organization_email"`
@@ -23,6 +24,7 @@ type OrganizationSummaryList struct {
 	*tfe.Pagination
 }
 
+// ListOrganizationsArguments holds the optional pagination input for listing organizations.
 type ListOrganizationsArguments struct {
 	// Optional fields (will be zero values if not provided)
 	Page     int `json:"page,omitempty" jsonschema:"Page number for pagination (min 1)"`
@@ -30,21 +32,18 @@ type ListOrganizationsArguments struct {
 }
 
 func ListTerraformOrganizationsTool() *mcp.Tool {
-	trueVal := true
-	falseVal := false
 	return &mcp.Tool{
 		Name:        "list_terraform_orgs",
 		Description: "Fetches a list of all Terraform organizations. Supports Pagination for large result sets.",
 		Annotations: &mcp.ToolAnnotations{
 			Title:           "List all Terraform organizations",
-			ReadOnlyHint:    trueVal,
-			DestructiveHint: &falseVal,
+			ReadOnlyHint:    true,
+			DestructiveHint: utils.Ptr(false),
 		},
 	}
 }
 
 func ListTerraformOrganizationsFunc(ctx context.Context, request *mcp.CallToolRequest, input ListOrganizationsArguments) (*mcp.CallToolResult, *OrganizationSummaryList, error) {
-	log.Info("ListTerraformOrganizations for official mcp go-sdk called..")
 
 	tfeClient, err := client.GetTfeClient(ctx)
 	if err != nil {
