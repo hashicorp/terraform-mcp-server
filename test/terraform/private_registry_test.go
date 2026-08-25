@@ -68,12 +68,24 @@ func TestPrivateRegistryModules(t *testing.T) {
 			return nil, err
 		}
 
-		ready := len(module.Root.Inputs) > 0 && len(module.Root.Outputs) > 0 && module.Root.Readme != "" &&
-			len(module.Submodules) > 0 && len(module.Submodules[0].Inputs) > 0 && len(module.Submodules[0].Outputs) > 0 &&
-			len(module.Submodules[0].ProviderDependencies) > 0 && len(module.Submodules[0].Resources) > 0 && module.Submodules[0].Readme != ""
-		if !ready {
-			return nil, nil
+		// Report what is still missing so that a timeout says which part of the
+		// module never finished processing instead of only that we timed out.
+		if len(module.Root.Inputs) == 0 || len(module.Root.Outputs) == 0 || module.Root.Readme == "" {
+			return nil, fmt.Errorf("root module not processed yet: inputs=%d outputs=%d readme=%t",
+				len(module.Root.Inputs), len(module.Root.Outputs), module.Root.Readme != "")
 		}
+		if len(module.Submodules) == 0 {
+			return nil, fmt.Errorf("no submodules reported yet for %q", moduleLocator.Name)
+		}
+
+		submodule := module.Submodules[0]
+		if len(submodule.Inputs) == 0 || len(submodule.Outputs) == 0 ||
+			len(submodule.ProviderDependencies) == 0 || len(submodule.Resources) == 0 || submodule.Readme == "" {
+			return nil, fmt.Errorf("submodule %q not processed yet: inputs=%d outputs=%d provider_dependencies=%d resources=%d readme=%t",
+				submodule.Name, len(submodule.Inputs), len(submodule.Outputs),
+				len(submodule.ProviderDependencies), len(submodule.Resources), submodule.Readme != "")
+		}
+
 		return module, nil
 	})
 
@@ -120,13 +132,24 @@ func TestPrivateRegistryModules(t *testing.T) {
 
 		// TODO: update this after MCP SKD migration
 		assert.Contains(t, resultText, expectedModuleAddress)
+
+		require.NotEmpty(t, registryDetails.Root.Inputs, "the root module should report inputs")
+		require.NotEmpty(t, registryDetails.Root.Outputs, "the root module should report outputs")
+		assert.Contains(t, resultText, "Root Module:")
 		assert.Contains(t, resultText, registryDetails.Root.Inputs[0].Name)
 		assert.Contains(t, resultText, registryDetails.Root.Inputs[0].Description)
 		assert.Contains(t, resultText, registryDetails.Root.Outputs[0].Name)
 		assert.Contains(t, resultText, registryDetails.Root.Outputs[0].Description)
 		assert.Contains(t, resultText, strings.TrimSpace(registryDetails.Root.Readme))
 
+		// Submodules must be reported the same way as the root module.
+		require.NotEmpty(t, registryDetails.Submodules, "the module should report submodules")
 		submodule := registryDetails.Submodules[0]
+		require.NotEmpty(t, submodule.Inputs, "the submodule should report inputs")
+		require.NotEmpty(t, submodule.Outputs, "the submodule should report outputs")
+		require.NotEmpty(t, submodule.ProviderDependencies, "the submodule should report provider dependencies")
+		require.NotEmpty(t, submodule.Resources, "the submodule should report resources")
+
 		assert.Contains(t, resultText, "Submodule: "+submodule.Name)
 		assert.Contains(t, resultText, submodule.Path)
 		assert.Contains(t, resultText, submodule.Inputs[0].Name)

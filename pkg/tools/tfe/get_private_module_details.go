@@ -23,7 +23,7 @@ import (
 func GetPrivateModuleDetails(logger *log.Logger) server.ServerTool {
 	return server.ServerTool{
 		Tool: mcp.NewTool("get_private_module_details",
-			mcp.WithDescription(`This tool retrieves detailed information about a specific private module in your Terraform Cloud/Enterprise organization. It provides comprehensive details including inputs, outputs, dependencies, versions, and usage examples. The private_module_id format is 'module-namespace/module-name/module-provider-name'. This can be obtained by calling 'search_private_modules' first to obtain the exact private_module_id required to use this tool. This tool requires a valid Terraform token to be configured.`),
+			mcp.WithDescription(`This tool retrieves detailed information about a specific private module in your Terraform Cloud/Enterprise organization. It provides comprehensive details including inputs, outputs, dependencies, versions, and usage examples. It also reports every submodule (nested module) published with the module, each with its own inputs, outputs, provider dependencies, resources, and README. The private_module_id format is 'module-namespace/module-name/module-provider-name'. This can be obtained by calling 'search_private_modules' first to obtain the exact private_module_id required to use this tool. This tool requires a valid Terraform token to be configured.`),
 			mcp.WithTitleAnnotation("Get detailed information about a private module"),
 			mcp.WithOpenWorldHintAnnotation(true),
 			mcp.WithReadOnlyHintAnnotation(true),
@@ -107,20 +107,34 @@ func getPrivateModuleDetailsHandler(ctx context.Context, request mcp.CallToolReq
 	return buildPrivateModuleDetailsResponse(module, terraformRegistryModule, tfeClient.BaseURL().Host, logger), nil
 }
 
+// latestModuleVersion returns the first successfully published version, skipping
+// any still processing or failed. Used as a fallback when the registry API does
+// not return a version alongside the module details.
+func latestModuleVersion(registryModule *tfe.RegistryModule) string {
+	for _, versionStatus := range registryModule.VersionStatuses {
+		if versionStatus.Status == tfe.RegistryModuleVersionStatusOk {
+			return versionStatus.Version
+		}
+	}
+	return ""
+}
+
 func readTerraformRegistryModuleDetails(ctx context.Context, tfeClient *tfe.Client, moduleID tfe.RegistryModuleID, moduleVersion string) (*client.TerraformModuleVersionDetails, error) {
-	u := fmt.Sprintf("/api/registry/v1/modules/%s/%s/%s/%s",
+	basePath := "/api/registry/v1/modules"
+	if moduleID.RegistryName == tfe.PublicRegistry {
+		basePath = "/api/registry/public/v1/modules"
+	}
+
+	u := fmt.Sprintf("%s/%s/%s/%s",
+		basePath,
 		url.PathEscape(moduleID.Namespace),
 		url.PathEscape(moduleID.Name),
 		url.PathEscape(moduleID.Provider),
-		url.PathEscape(moduleVersion),
 	)
-	if moduleID.RegistryName == tfe.PublicRegistry {
-		u = fmt.Sprintf("/api/registry/public/v1/modules/%s/%s/%s/%s",
-			url.PathEscape(moduleID.Namespace),
-			url.PathEscape(moduleID.Name),
-			url.PathEscape(moduleID.Provider),
-			url.PathEscape(moduleVersion),
-		)
+
+	// Omit the version segment to request the latest version — the documented form of the route.
+	if moduleVersion != "" {
+		u += "/" + url.PathEscape(moduleVersion)
 	}
 
 	req, err := tfeClient.NewRequest("GET", u, nil)
@@ -140,6 +154,13 @@ func buildPrivateModuleDetailsResponse(registryModule *tfe.RegistryModule, terra
 
 	registryPath := path.Join(tfeHostAddress, registryModule.Namespace, registryModule.Name, registryModule.Provider)
 
+	// Use the version the registry returned content for, so the usage snippet and
+	// the inputs/outputs always refer to the same version.
+	moduleVersion := latestModuleVersion(registryModule)
+	if terraformRegistryModule != nil && terraformRegistryModule.Version != "" {
+		moduleVersion = terraformRegistryModule.Version
+	}
+
 	var builder strings.Builder
 	builder.WriteString("Usage:\n")
 	builder.WriteString("To use this private module in your Terraform configuration:\n\n")
@@ -147,9 +168,8 @@ func buildPrivateModuleDetailsResponse(registryModule *tfe.RegistryModule, terra
 	builder.WriteString(fmt.Sprintf("module %q {\n", registryModule.Name))
 	builder.WriteString(fmt.Sprintf("  source = %q\n", registryPath))
 
-	if len(registryModule.VersionStatuses) > 0 {
-		version := registryModule.VersionStatuses[0].Version
-		builder.WriteString(fmt.Sprintf("  version = %q\n", version))
+	if moduleVersion != "" {
+		builder.WriteString(fmt.Sprintf("  version = %q\n", moduleVersion))
 	}
 
 	builder.WriteString("\n")
@@ -162,6 +182,9 @@ func buildPrivateModuleDetailsResponse(registryModule *tfe.RegistryModule, terra
 	builder.WriteString(fmt.Sprintf("- Namespace: %s\n", registryModule.Namespace))
 	builder.WriteString(fmt.Sprintf("- Provider: %s\n", registryModule.Provider))
 	builder.WriteString(fmt.Sprintf("- Registry: %s\n", registryModule.RegistryName))
+	if moduleVersion != "" {
+		builder.WriteString(fmt.Sprintf("- Version: %s\n", moduleVersion))
+	}
 	builder.WriteString(fmt.Sprintf("- Created: %s\n", registryModule.CreatedAt))
 	builder.WriteString(fmt.Sprintf("- Updated: %s\n", registryModule.UpdatedAt))
 	builder.WriteString(fmt.Sprintf("- No Code Module: %t\n", registryModule.NoCode))
@@ -172,16 +195,19 @@ func buildPrivateModuleDetailsResponse(registryModule *tfe.RegistryModule, terra
 	builder.WriteString("\n")
 
 	if terraformRegistryModule != nil {
-		writeModulePartDetails(&builder, terraformRegistryModule.Root)
+		if modulePartHasDetails(terraformRegistryModule.Root) {
+			builder.WriteString("Root Module:\n")
+			writeModulePartDetails(&builder, terraformRegistryModule.Root)
+			writeModulePartReadme(&builder, terraformRegistryModule.Root)
+		}
 
-		if len(terraformRegistryModule.Submodules) > 0 {
-			builder.WriteString("Submodules:\n")
-			for _, submodule := range terraformRegistryModule.Submodules {
-				builder.WriteString(fmt.Sprintf("Submodule: %s\n", submodule.Name))
-				builder.WriteString(fmt.Sprintf("- Path: %s\n\n", submodule.Path))
-				writeModulePartDetails(&builder, submodule)
-				writeModulePartReadme(&builder, submodule)
-			}
+		// Submodules are reported the same way as the root module so that each one
+		// documents its own inputs, outputs, dependencies, resources, and README.
+		for _, submodule := range terraformRegistryModule.Submodules {
+			builder.WriteString(fmt.Sprintf("Submodule: %s\n", submodule.Name))
+			builder.WriteString(fmt.Sprintf("- Path: %s\n\n", submodule.Path))
+			writeModulePartDetails(&builder, submodule)
+			writeModulePartReadme(&builder, submodule)
 		}
 	}
 
@@ -216,13 +242,6 @@ func buildPrivateModuleDetailsResponse(registryModule *tfe.RegistryModule, terra
 		builder.WriteString("\n")
 	}
 
-	if terraformRegistryModule != nil && terraformRegistryModule.Root.Readme != "" {
-		cleanedReadme := removeReadmeSections(terraformRegistryModule.Root.Readme)
-		builder.WriteString("README:\n")
-		builder.WriteString(strings.Repeat("-", 20) + "\n")
-		builder.WriteString(cleanedReadme)
-	}
-
 	logger.WithFields(log.Fields{
 		"private_module_id":        registryModule.ID,
 		"private_module_namespace": registryModule.Namespace,
@@ -233,6 +252,17 @@ func buildPrivateModuleDetailsResponse(registryModule *tfe.RegistryModule, terra
 	}).Info("Successfully retrieved private module details")
 
 	return mcp.NewToolResultText(builder.String())
+}
+
+// modulePartHasDetails reports whether a module part has anything worth writing,
+// so that a heading is never emitted for a part the registry reported as empty.
+func modulePartHasDetails(modulePart client.ModulePart) bool {
+	return len(modulePart.Inputs) > 0 ||
+		len(modulePart.Outputs) > 0 ||
+		len(modulePart.Dependencies) > 0 ||
+		len(modulePart.ProviderDependencies) > 0 ||
+		len(modulePart.Resources) > 0 ||
+		modulePart.Readme != ""
 }
 
 func writeModulePartDetails(builder *strings.Builder, modulePart client.ModulePart) {
@@ -262,6 +292,21 @@ func writeModulePartDetails(builder *strings.Builder, modulePart client.ModulePa
 			builder.WriteString(fmt.Sprintf("| %s | %s |\n",
 				output.Name,
 				output.Description,
+			))
+		}
+		builder.WriteString("\n")
+	}
+
+	if len(modulePart.Dependencies) > 0 {
+		builder.WriteString("Dependencies:\n")
+		builder.WriteString(strings.Repeat("-", 20) + "\n")
+		builder.WriteString("| Name | Source | Version |\n")
+		builder.WriteString("|------|--------|---------|\n")
+		for _, dep := range modulePart.Dependencies {
+			builder.WriteString(fmt.Sprintf("| %s | %s | %s |\n",
+				dep.Name,
+				dep.Source,
+				dep.Version,
 			))
 		}
 		builder.WriteString("\n")
