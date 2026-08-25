@@ -416,6 +416,7 @@ func TestGetAllValidToolNames(t *testing.T) {
 		"execute_query",
 		"get_query_status",
 		"get_query_summary",
+		"import_query_results",
 	}
 
 	for _, tool := range expectedTools {
