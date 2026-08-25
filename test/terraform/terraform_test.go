@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
+	"log"
 	"math/rand"
 	"net/http"
 	"os"
@@ -21,6 +22,9 @@ const (
 	toolCallTimeout  = 90 * time.Second
 	alphaNum         = "abcdefghijklmnopqrstuvwxyz0123456789"
 	randomNameLength = 8
+
+	defaultTfeOrgName  = "terraform-ai-ecosystem-testing"
+	defaultMCPEndpoint = "http://localhost:8080/mcp"
 )
 
 var (
@@ -48,12 +52,21 @@ func (t *authTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 
 func init() {
 	mcpEndpoint = os.Getenv("TF_MCP_ENDPOINT")
+	tfeOrgName = os.Getenv("TFE_ORG_NAME")
 	tfeToken = os.Getenv("TFE_TOKEN")
 	tfeAddress = os.Getenv("TFE_ADDRESS")
-	tfeOrgName = os.Getenv("TFE_ORG_NAME")
 	tfeUsername = os.Getenv("TFE_USERNAME")
 	tfeUserEmail = os.Getenv("TFE_USER_EMAIL")
 	enableTfOperations = os.Getenv("ENABLE_TF_OPERATIONS")
+
+	if mcpEndpoint == "" {
+		mcpEndpoint = defaultMCPEndpoint
+		log.Printf("TF_MCP_ENDPOINT was not specified, using: %q", mcpEndpoint)
+	}
+	if tfeOrgName == "" {
+		tfeOrgName = defaultTfeOrgName
+		log.Printf("TFE_ORG_NAME was not specified, using: %q", tfeOrgName)
+	}
 
 	// ElicitationHandler is used to provide default values for required parameters during no_code workspace creation.
 	testingClient = mcp.NewClient(&mcp.Implementation{
@@ -70,27 +83,7 @@ func init() {
 }
 
 func newTestingSession(t *testing.T) *mcp.ClientSession {
-	if mcpEndpoint == "" {
-		mcpEndpoint = "http://localhost:8080/mcp"
-		t.Logf("TF_MCP_ENDPOINT was not specified, using: %q", mcpEndpoint)
-	}
-
-	if tfeToken == "" {
-		t.Skip("You need to supply TFE_TOKEN to run these tests")
-	}
-
-	if tfeOrgName == "" {
-		tfeOrgName = "terraform-ai-ecosystem-testing"
-		t.Logf("TFE_ORG_NAME was not specified, using: %q", tfeOrgName)
-	}
-
-	if tfeUsername == "" {
-		t.Skip("You need to supply TFE_USERNAME to run these tests")
-	}
-
-	if tfeUserEmail == "" {
-		t.Skip("You need to supply TFE_USER_EMAIL to run these tests")
-	}
+	requireTestConfig(t)
 
 	httpClient := &http.Client{
 		Timeout: toolCallTimeout,
@@ -118,9 +111,7 @@ func newTestingSession(t *testing.T) *mcp.ClientSession {
 // directly with the TFE API. It can verify create, update, and delete tool calls
 // against the actual API.
 func tfeClient(t *testing.T) *tfe.Client {
-	if tfeToken == "" {
-		t.Skip("You need to supply TFE_TOKEN to run these tests")
-	}
+	requireTestConfig(t)
 
 	address := tfeAddress
 	if address == "" {
@@ -135,6 +126,19 @@ func tfeClient(t *testing.T) *tfe.Client {
 		t.Fatalf("Failed to create direct TFE client: %v", err)
 	}
 	return client
+}
+
+func requireTestConfig(t *testing.T) {
+	t.Helper()
+	if tfeToken == "" {
+		t.Skip("You need to supply TFE_TOKEN to run these tests")
+	}
+	if tfeUsername == "" {
+		t.Skip("You need to supply TFE_USERNAME to run these tests")
+	}
+	if tfeUserEmail == "" {
+		t.Skip("You need to supply TFE_USER_EMAIL to run these tests")
+	}
 }
 
 func requireTfOperations(t *testing.T) {
