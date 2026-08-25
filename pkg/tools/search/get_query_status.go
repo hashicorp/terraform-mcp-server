@@ -4,14 +4,13 @@
 package search
 
 import (
-	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
 
 	"github.com/hashicorp/go-tfe"
-	"github.com/hashicorp/jsonapi"
 	"github.com/hashicorp/terraform-mcp-server/pkg/client"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
@@ -22,6 +21,21 @@ const (
 	queryStatusPollInterval = 3 * time.Second
 	queryStatusTimeout      = 2 * time.Minute
 )
+
+type queryStatusResponse struct {
+	ID               string                         `json:"id"`
+	Status           tfe.QueryRunStatus             `json:"status"`
+	StatusTimestamps *queryStatusTimestampsResponse `json:"status_timestamps,omitempty"`
+}
+
+type queryStatusTimestampsResponse struct {
+	CanceledAt      *time.Time `json:"canceled_at,omitempty"`
+	ErroredAt       *time.Time `json:"errored_at,omitempty"`
+	ForceCanceledAt *time.Time `json:"force_canceled_at,omitempty"`
+	QueuingAt       *time.Time `json:"queuing_at,omitempty"`
+	FinishedAt      *time.Time `json:"finished_at,omitempty"`
+	RunningAt       *time.Time `json:"running_at,omitempty"`
+}
 
 // GetQueryStatus gets the current status and details of an HCP Terraform query run.
 func GetQueryStatus(logger *log.Logger) server.ServerTool {
@@ -108,11 +122,41 @@ func isTerminalQueryStatus(status tfe.QueryRunStatus) bool {
 }
 
 func marshalQueryStatus(queryRun *tfe.QueryRun) (string, error) {
-	var response bytes.Buffer
-	if err := jsonapi.MarshalPayloadWithoutIncluded(&response, queryRun); err != nil {
+	response, err := json.Marshal(queryStatusResponse{
+		ID:               queryRun.ID,
+		Status:           queryRun.Status,
+		StatusTimestamps: queryStatusTimestamps(queryRun.StatusTimestamps),
+	})
+	if err != nil {
 		return "", fmt.Errorf("marshaling query run: %w", err)
 	}
-	return response.String(), nil
+	return string(response), nil
+}
+
+func queryStatusTimestamps(timestamps *tfe.QueryRunStatusTimestamps) *queryStatusTimestampsResponse {
+	if timestamps == nil {
+		return nil
+	}
+	response := &queryStatusTimestampsResponse{}
+	if !timestamps.CanceledAt.IsZero() {
+		response.CanceledAt = &timestamps.CanceledAt
+	}
+	if !timestamps.ErroredAt.IsZero() {
+		response.ErroredAt = &timestamps.ErroredAt
+	}
+	if !timestamps.ForceCanceledAt.IsZero() {
+		response.ForceCanceledAt = &timestamps.ForceCanceledAt
+	}
+	if !timestamps.QueuingAt.IsZero() {
+		response.QueuingAt = &timestamps.QueuingAt
+	}
+	if !timestamps.FinishedAt.IsZero() {
+		response.FinishedAt = &timestamps.FinishedAt
+	}
+	if !timestamps.RunningAt.IsZero() {
+		response.RunningAt = &timestamps.RunningAt
+	}
+	return response
 }
 
 func getQueryStatusToolErrorf(logger *log.Logger, format string, args ...any) (*mcp.CallToolResult, error) {
