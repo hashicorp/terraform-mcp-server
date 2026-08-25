@@ -64,8 +64,8 @@ func getPrivateModuleDetailsHandler(ctx context.Context, request mcp.CallToolReq
 	}
 	moduleID = strings.TrimSpace(moduleID)
 
-	registryName := strings.TrimSpace(request.GetString("registry_name", "private"))
-	moduleVersion := strings.TrimSpace(request.GetString("private_module_version", ""))
+	registryName := GetTrimmedString(request, "registry_name", "private")
+	moduleVersion := GetTrimmedString(request, "private_module_version", "")
 
 	tfeClient, err := client.GetTfeClientFromContext(ctx, logger)
 	if err != nil {
@@ -107,18 +107,6 @@ func getPrivateModuleDetailsHandler(ctx context.Context, request mcp.CallToolReq
 	return buildPrivateModuleDetailsResponse(module, terraformRegistryModule, tfeClient.BaseURL().Host, logger), nil
 }
 
-// latestModuleVersion returns the first successfully published version, skipping
-// any still processing or failed. Used as a fallback when the registry API does
-// not return a version alongside the module details.
-func latestModuleVersion(registryModule *tfe.RegistryModule) string {
-	for _, versionStatus := range registryModule.VersionStatuses {
-		if versionStatus.Status == tfe.RegistryModuleVersionStatusOk {
-			return versionStatus.Version
-		}
-	}
-	return ""
-}
-
 func readTerraformRegistryModuleDetails(ctx context.Context, tfeClient *tfe.Client, moduleID tfe.RegistryModuleID, moduleVersion string) (*client.TerraformModuleVersionDetails, error) {
 	basePath := "/api/registry/v1/modules"
 	if moduleID.RegistryName == tfe.PublicRegistry {
@@ -132,7 +120,8 @@ func readTerraformRegistryModuleDetails(ctx context.Context, tfeClient *tfe.Clie
 		url.PathEscape(moduleID.Provider),
 	)
 
-	// Omit the version segment to request the latest version — the documented form of the route.
+	// The registry uses /{namespace}/{name}/{provider} for the latest version
+	// and appends /{version} when a specific version is requested.
 	if moduleVersion != "" {
 		u += "/" + url.PathEscape(moduleVersion)
 	}
@@ -154,9 +143,9 @@ func buildPrivateModuleDetailsResponse(registryModule *tfe.RegistryModule, terra
 
 	registryPath := path.Join(tfeHostAddress, registryModule.Namespace, registryModule.Name, registryModule.Provider)
 
-	// Use the version the registry returned content for, so the usage snippet and
-	// the inputs/outputs always refer to the same version.
-	moduleVersion := latestModuleVersion(registryModule)
+	// Use the exact version represented by the details response so the generated
+	// Terraform usage example matches the inputs, outputs, and submodules below.
+	moduleVersion := ""
 	if terraformRegistryModule != nil && terraformRegistryModule.Version != "" {
 		moduleVersion = terraformRegistryModule.Version
 	}
@@ -268,7 +257,8 @@ func modulePartHasDetails(modulePart client.ModulePart) bool {
 func writeModulePartDetails(builder *strings.Builder, modulePart client.ModulePart) {
 	if len(modulePart.Inputs) > 0 {
 		builder.WriteString("Inputs:\n")
-		builder.WriteString(strings.Repeat("-", 20) + "\n")
+		builder.WriteString(strings.Repeat("-", 20))
+		builder.WriteByte('\n')
 		builder.WriteString("| Name | Type | Description | Default | Required |\n")
 		builder.WriteString("|------|------|-------------|---------|----------|\n")
 		for _, input := range modulePart.Inputs {
@@ -285,7 +275,8 @@ func writeModulePartDetails(builder *strings.Builder, modulePart client.ModulePa
 
 	if len(modulePart.Outputs) > 0 {
 		builder.WriteString("Outputs:\n")
-		builder.WriteString(strings.Repeat("-", 20) + "\n")
+		builder.WriteString(strings.Repeat("-", 20))
+		builder.WriteByte('\n')
 		builder.WriteString("| Name | Description |\n")
 		builder.WriteString("|------|-------------|\n")
 		for _, output := range modulePart.Outputs {
@@ -299,7 +290,8 @@ func writeModulePartDetails(builder *strings.Builder, modulePart client.ModulePa
 
 	if len(modulePart.Dependencies) > 0 {
 		builder.WriteString("Dependencies:\n")
-		builder.WriteString(strings.Repeat("-", 20) + "\n")
+		builder.WriteString(strings.Repeat("-", 20))
+		builder.WriteByte('\n')
 		builder.WriteString("| Name | Source | Version |\n")
 		builder.WriteString("|------|--------|---------|\n")
 		for _, dep := range modulePart.Dependencies {
@@ -314,7 +306,8 @@ func writeModulePartDetails(builder *strings.Builder, modulePart client.ModulePa
 
 	if len(modulePart.ProviderDependencies) > 0 {
 		builder.WriteString("Provider Dependencies:\n")
-		builder.WriteString(strings.Repeat("-", 20) + "\n")
+		builder.WriteString(strings.Repeat("-", 20))
+		builder.WriteByte('\n')
 		builder.WriteString("| Name | Namespace | Source | Version |\n")
 		builder.WriteString("|------|-----------|--------|----------|\n")
 		for _, dep := range modulePart.ProviderDependencies {
@@ -330,7 +323,8 @@ func writeModulePartDetails(builder *strings.Builder, modulePart client.ModulePa
 
 	if len(modulePart.Resources) > 0 {
 		builder.WriteString("Resources:\n")
-		builder.WriteString(strings.Repeat("-", 20) + "\n")
+		builder.WriteString(strings.Repeat("-", 20))
+		builder.WriteByte('\n')
 		builder.WriteString("| Name | Type |\n")
 		builder.WriteString("|------|------|\n")
 		for _, resource := range modulePart.Resources {
@@ -361,7 +355,8 @@ func writeModulePartReadme(builder *strings.Builder, modulePart client.ModulePar
 	}
 
 	builder.WriteString("README:\n")
-	builder.WriteString(strings.Repeat("-", 20) + "\n")
+	builder.WriteString(strings.Repeat("-", 20))
+	builder.WriteByte('\n')
 	builder.WriteString(cleanedReadme)
 	builder.WriteString("\n\n")
 }

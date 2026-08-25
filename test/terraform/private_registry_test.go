@@ -115,49 +115,65 @@ func TestPrivateRegistryModules(t *testing.T) {
 		assert.Contains(t, resultText, expectedModuleAddress)
 	})
 
-	t.Run("Get private module details", func(t *testing.T) {
-		result, resultText := callTool(t, s, "get_private_module_details", map[string]any{
-			"terraform_org_name":     tfeOrgName,
-			"private_module_id":      privateModuleAddress,
-			"private_module_version": moduleVersion,
+	getModuleDetailsTestCases := []struct {
+		name           string
+		includeVersion bool
+	}{
+		{name: "with explicit version", includeVersion: true},
+		{name: "with latest version", includeVersion: false},
+	}
+
+	for _, tc := range getModuleDetailsTestCases {
+		t.Run("Get private module details "+tc.name, func(t *testing.T) {
+			arguments := map[string]any{
+				"terraform_org_name": tfeOrgName,
+				"private_module_id":  privateModuleAddress,
+			}
+			if tc.includeVersion {
+				arguments["private_module_version"] = moduleVersion
+			}
+
+			result, resultText := callTool(t, s, "get_private_module_details", arguments)
+
+			t.Logf("Get private module details: %v", resultText)
+
+			require.False(t, result.IsError, "get_private_module_details should not return an error")
+			require.NotEmpty(t, resultText, "get_private_module_details response must not be empty")
+
+			// Verify against the TFE API directly.
+			expectedModuleAddress := strings.Join([]string{registryDetails.Namespace, registryDetails.Name, registryDetails.Provider}, "/")
+
+			// TODO: update this after MCP SKD migration
+			assert.Contains(t, resultText, expectedModuleAddress)
+			assert.Contains(t, resultText, fmt.Sprintf("version = %q", registryDetails.Version))
+			assert.Contains(t, resultText, "- Version: "+registryDetails.Version)
+
+			require.NotEmpty(t, registryDetails.Root.Inputs, "the root module should report inputs")
+			require.NotEmpty(t, registryDetails.Root.Outputs, "the root module should report outputs")
+			assert.Contains(t, resultText, "Root Module:")
+			assert.Contains(t, resultText, registryDetails.Root.Inputs[0].Name)
+			assert.Contains(t, resultText, registryDetails.Root.Inputs[0].Description)
+			assert.Contains(t, resultText, registryDetails.Root.Outputs[0].Name)
+			assert.Contains(t, resultText, registryDetails.Root.Outputs[0].Description)
+			assert.Contains(t, resultText, strings.TrimSpace(registryDetails.Root.Readme))
+
+			// Submodules must be reported the same way as the root module.
+			require.NotEmpty(t, registryDetails.Submodules, "the module should report submodules")
+			submodule := registryDetails.Submodules[0]
+			require.NotEmpty(t, submodule.Inputs, "the submodule should report inputs")
+			require.NotEmpty(t, submodule.Outputs, "the submodule should report outputs")
+			require.NotEmpty(t, submodule.ProviderDependencies, "the submodule should report provider dependencies")
+			require.NotEmpty(t, submodule.Resources, "the submodule should report resources")
+
+			assert.Contains(t, resultText, "Submodule: "+submodule.Name)
+			assert.Contains(t, resultText, submodule.Path)
+			assert.Contains(t, resultText, submodule.Inputs[0].Name)
+			assert.Contains(t, resultText, submodule.Outputs[0].Name)
+			assert.Contains(t, resultText, submodule.ProviderDependencies[0].Source)
+			assert.Contains(t, resultText, submodule.Resources[0].Type)
+			assert.Contains(t, resultText, strings.TrimSpace(submodule.Readme))
 		})
-
-		t.Logf("Get private module details: %v", resultText)
-
-		require.False(t, result.IsError, "get_private_module_details should not return an error")
-		require.NotEmpty(t, resultText, "get_private_module_details response must not be empty")
-
-		// Verify against the TFE API directly.
-		expectedModuleAddress := strings.Join([]string{registryDetails.Namespace, registryDetails.Name, registryDetails.Provider}, "/")
-
-		// TODO: update this after MCP SKD migration
-		assert.Contains(t, resultText, expectedModuleAddress)
-
-		require.NotEmpty(t, registryDetails.Root.Inputs, "the root module should report inputs")
-		require.NotEmpty(t, registryDetails.Root.Outputs, "the root module should report outputs")
-		assert.Contains(t, resultText, "Root Module:")
-		assert.Contains(t, resultText, registryDetails.Root.Inputs[0].Name)
-		assert.Contains(t, resultText, registryDetails.Root.Inputs[0].Description)
-		assert.Contains(t, resultText, registryDetails.Root.Outputs[0].Name)
-		assert.Contains(t, resultText, registryDetails.Root.Outputs[0].Description)
-		assert.Contains(t, resultText, strings.TrimSpace(registryDetails.Root.Readme))
-
-		// Submodules must be reported the same way as the root module.
-		require.NotEmpty(t, registryDetails.Submodules, "the module should report submodules")
-		submodule := registryDetails.Submodules[0]
-		require.NotEmpty(t, submodule.Inputs, "the submodule should report inputs")
-		require.NotEmpty(t, submodule.Outputs, "the submodule should report outputs")
-		require.NotEmpty(t, submodule.ProviderDependencies, "the submodule should report provider dependencies")
-		require.NotEmpty(t, submodule.Resources, "the submodule should report resources")
-
-		assert.Contains(t, resultText, "Submodule: "+submodule.Name)
-		assert.Contains(t, resultText, submodule.Path)
-		assert.Contains(t, resultText, submodule.Inputs[0].Name)
-		assert.Contains(t, resultText, submodule.Outputs[0].Name)
-		assert.Contains(t, resultText, submodule.ProviderDependencies[0].Source)
-		assert.Contains(t, resultText, submodule.Resources[0].Type)
-		assert.Contains(t, resultText, strings.TrimSpace(submodule.Readme))
-	})
+	}
 }
 
 func TestPrivateRegistryProviders(t *testing.T) {
