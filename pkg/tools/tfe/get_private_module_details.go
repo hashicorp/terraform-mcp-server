@@ -52,17 +52,14 @@ func GetPrivateModuleDetails(logger *log.Logger) server.ServerTool {
 }
 
 func getPrivateModuleDetailsHandler(ctx context.Context, request mcp.CallToolRequest, logger *log.Logger) (*mcp.CallToolResult, error) {
-	terraformOrgName, err := request.RequireString("terraform_org_name")
+	terraformOrgName, err := RequireTrimmedString(request, "terraform_org_name")
 	if err != nil {
 		return ToolError(logger, "missing required input: terraform_org_name", err)
 	}
-	terraformOrgName = strings.TrimSpace(terraformOrgName)
-
-	moduleID, err := request.RequireString("private_module_id")
+	moduleID, err := RequireTrimmedString(request, "private_module_id")
 	if err != nil {
 		return ToolError(logger, "missing required input: private_module_id", err)
 	}
-	moduleID = strings.TrimSpace(moduleID)
 
 	registryName := GetTrimmedString(request, "registry_name", "private")
 	moduleVersion := GetTrimmedString(request, "private_module_version", "")
