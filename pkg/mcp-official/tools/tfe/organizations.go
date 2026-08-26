@@ -7,7 +7,6 @@ import (
 
 	"github.com/hashicorp/go-tfe"
 	"github.com/hashicorp/terraform-mcp-server/pkg/mcp-official/client"
-	"github.com/hashicorp/terraform-mcp-server/pkg/mcp-official/utils"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -38,7 +37,7 @@ func ListTerraformOrganizationsTool() *mcp.Tool {
 		Annotations: &mcp.ToolAnnotations{
 			Title:           "List all Terraform organizations",
 			ReadOnlyHint:    true,
-			DestructiveHint: utils.Ptr(false),
+			DestructiveHint: ptr(false),
 		},
 	}
 }
@@ -76,4 +75,8 @@ func ListTerraformOrganizationsFunc(ctx context.Context, request *mcp.CallToolRe
 		Items:      summaries,
 		Pagination: orgs.Pagination,
 	}, nil
+}
+
+func ptr[T any](v T) *T {
+    return &v
 }

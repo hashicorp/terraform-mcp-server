@@ -8,7 +8,6 @@ import (
 
 	"github.com/hashicorp/go-tfe"
 	"github.com/hashicorp/terraform-mcp-server/pkg/mcp-official/client"
-	"github.com/hashicorp/terraform-mcp-server/pkg/mcp-official/utils"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -46,9 +45,9 @@ func ListWorkpsacesTool() *mcp.Tool {
 		Description: "Search and list Terraform workspaces within a specified organization. Returns all workspaces when no filters are applied, or filters results based on name patterns, tags, or search queries. Supports pagination for large result sets. Returns a truncated summary of the workspace, use get_workspace_details to get the full details for a specific workspace.",
 		Annotations: &mcp.ToolAnnotations{
 			Title:           "List Terraform workspaces with queries",
-			OpenWorldHint:   utils.Ptr(true),
+			OpenWorldHint:   ptr(true),
 			ReadOnlyHint:    true,
-			DestructiveHint: utils.Ptr(false),
+			DestructiveHint: ptr(false),
 		},
 	}
 }
