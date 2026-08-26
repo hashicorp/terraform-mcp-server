@@ -17,7 +17,6 @@ import (
 	"github.com/mark3labs/mcp-go/server"
 )
 
-// MatchingPolicySet represents a policy set that applies to a workspace.
 type MatchingPolicySet struct {
 	ID          string `json:"id"`
 	Name        string `json:"name"`
@@ -32,15 +31,21 @@ func AttachPolicySetToWorkspaces(logger *log.Logger) server.ServerTool {
 	return server.ServerTool{
 		Tool: mcp.NewTool("attach_policy_set_to_workspaces",
 			mcp.WithDescription("Attach a policy set to one or more workspaces. Note: Policy sets marked as global cannot be attached to individual workspaces."),
-			mcp.WithString("policy_set_id", mcp.Required(), mcp.Description("The ID of the policy set to attach (e.g., polset-3yVQZvHzf5j3WRJ1)")),
-			mcp.WithString("workspace_ids", mcp.Required(), mcp.Description("Comma-separated list of workspace IDs to attach the policy set to")),
+			mcp.WithString("policy_set_id",
+				mcp.Required(),
+				mcp.Description("The ID of the policy set to attach (e.g., polset-3yVQZvHzf5j3WRJ1)"),
+			),
+			mcp.WithString("workspace_ids",
+				mcp.Required(),
+				mcp.Description("Comma-separated list of workspace IDs to attach the policy set to"),
+			),
 		),
 		Handler: func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-			policySetID, err := request.RequireString("policy_set_id")
+			policySetID, err := RequireTrimmedString(request, "policy_set_id")
 			if err != nil {
 				return ToolError(logger, "missing required input: policy_set_id", err)
 			}
-			workspaceIDsStr, err := request.RequireString("workspace_ids")
+			workspaceIDsStr, err := RequireTrimmedString(request, "workspace_ids")
 			if err != nil {
 				return ToolError(logger, "missing required input: workspace_ids", err)
 			}
@@ -67,12 +72,12 @@ func AttachPolicySetToWorkspaces(logger *log.Logger) server.ServerTool {
 				Workspaces: workspaces,
 			})
 			if err != nil {
-				return ToolErrorf(logger, "failed to attach policy set '%s' to workspaces: %v", policySetID, err)
+				return ToolErrorf(logger, "failed to attach policy set %q to workspaces: %v", policySetID, err)
 			}
 
 			return &mcp.CallToolResult{
 				Content: []mcp.Content{
-					mcp.NewTextContent(fmt.Sprintf("Successfully attached policy set %s to %d workspace(s)", policySetID, len(workspaces))),
+					mcp.NewTextContent(fmt.Sprintf("Successfully attached policy set %q to %d workspace(s)", policySetID, len(workspaces))),
 				},
 			}, nil
 		},
@@ -85,8 +90,14 @@ func ListWorkspacePolicySets(logger *log.Logger) server.ServerTool {
 		Tool: mcp.NewTool("list_workspace_policy_sets",
 			mcp.WithDescription("Read all policy sets attached to a workspace. Returns both directly attached policy sets and global policy sets that apply to all workspaces."),
 			mcp.WithReadOnlyHintAnnotation(true),
-			mcp.WithString("terraform_org_name", mcp.Required(), mcp.Description(terraformOrgNameDescription)),
-			mcp.WithString("workspace_id", mcp.Required(), mcp.Description("The workspace ID to get policy sets for (e.g., ws-2HRvNs49EWPjDqT1)")),
+			mcp.WithString("terraform_org_name",
+				mcp.Required(),
+				mcp.Description(terraformOrgNameDescription),
+			),
+			mcp.WithString("workspace_id",
+				mcp.Required(),
+				mcp.Description("The workspace ID to get policy sets for (e.g., ws-2HRvNs49EWPjDqT1)"),
+			),
 		),
 		Handler: func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			return listWorkspacePolicySetsHandler(ctx, request, logger)
@@ -95,18 +106,30 @@ func ListWorkspacePolicySets(logger *log.Logger) server.ServerTool {
 }
 
 func listWorkspacePolicySetsHandler(ctx context.Context, request mcp.CallToolRequest, logger *log.Logger) (*mcp.CallToolResult, error) {
-	orgName, err := request.RequireString("terraform_org_name")
+	terraformOrgName, err := RequireTrimmedString(request, "terraform_org_name")
 	if err != nil {
 		return ToolError(logger, "missing required input: terraform_org_name", err)
 	}
-	workspaceID, err := request.RequireString("workspace_id")
+	workspaceID, err := RequireTrimmedString(request, "workspace_id")
 	if err != nil {
 		return ToolError(logger, "missing required input: workspace_id", err)
 	}
 
 	tfeClient, err := client.GetTfeClientFromContext(ctx, logger)
 	if err != nil {
-		return ToolError(logger, "failed to get Terraform client", err)
+		return ToolError(logger, "failed to get Terraform client - ensure TFE_TOKEN and TFE_ADDRESS are configured", err)
+	}
+
+	workspace, err := tfeClient.Workspaces.ReadByID(ctx, workspaceID)
+	if err != nil {
+		return ToolErrorf(logger, "workspace not found: %s", workspaceID)
+	}
+
+	// A workspace belongs to exactly one org and policy sets are org-scoped, so a
+	// mismatch would report this org's global policy sets against a foreign workspace.
+	if workspace.Organization != nil && !strings.EqualFold(workspace.Organization.Name, terraformOrgName) {
+		return ToolErrorf(logger, "workspace %q belongs to organization %q, not %q",
+			workspaceID, workspace.Organization.Name, terraformOrgName)
 	}
 
 	// Paginate through all policy sets with the workspaces included
@@ -114,7 +137,7 @@ func listWorkspacePolicySetsHandler(ctx context.Context, request mcp.CallToolReq
 	pageNumber := 1
 
 	for {
-		policySets, err := tfeClient.PolicySets.List(ctx, orgName, &tfe.PolicySetListOptions{
+		policySets, err := tfeClient.PolicySets.List(ctx, terraformOrgName, &tfe.PolicySetListOptions{
 			Include: []tfe.PolicySetIncludeOpt{tfe.PolicySetWorkspaces},
 			ListOptions: tfe.ListOptions{
 				PageNumber: pageNumber,
@@ -122,7 +145,7 @@ func listWorkspacePolicySetsHandler(ctx context.Context, request mcp.CallToolReq
 			},
 		})
 		if err != nil {
-			return ToolErrorf(logger, "failed to list policy sets for org '%s': %v", orgName, err)
+			return ToolErrorf(logger, "failed to list policy sets for org %q: %v", terraformOrgName, err)
 		}
 
 		// Filter policy sets that apply to this workspace
@@ -143,7 +166,6 @@ func listWorkspacePolicySetsHandler(ctx context.Context, request mcp.CallToolReq
 					}
 				}
 			}
-
 			if applies {
 				matchingPolicySets = append(matchingPolicySets, &MatchingPolicySet{
 					ID:          ps.ID,
@@ -166,7 +188,7 @@ func listWorkspacePolicySetsHandler(ctx context.Context, request mcp.CallToolReq
 	if len(matchingPolicySets) == 0 {
 		return &mcp.CallToolResult{
 			Content: []mcp.Content{
-				mcp.NewTextContent(fmt.Sprintf("No policy sets are attached to workspace %s", workspaceID)),
+				mcp.NewTextContent(fmt.Sprintf("No policy sets are attached to workspace %q", workspaceID)),
 			},
 		}, nil
 	}
@@ -175,7 +197,6 @@ func listWorkspacePolicySetsHandler(ctx context.Context, request mcp.CallToolReq
 	if err != nil {
 		return ToolError(logger, "failed to marshal policy sets", err)
 	}
-
 	return &mcp.CallToolResult{
 		Content: []mcp.Content{
 			mcp.NewTextContent(string(result)),
