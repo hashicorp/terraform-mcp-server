@@ -368,8 +368,8 @@ func streamableHTTPServerInit(ctx context.Context, hcServer *server.MCPServer, l
 
 	// Create the official go-sdk streamable server
 	if enableOfficialSDK := os.Getenv("TF_X_OFFICIAL_SDK_ENABLED"); enableOfficialSDK == "true" {
-		logger.Infof("TF_X_OFFICIAL_SDK_ENABLED set to true in env, enabling the official mcp go-sdk server")
-		officialStreamableServer := getOfficialStreamableServer(ctx, heartbeatInterval, isStateless, tlsConfig, corsConfig, logger, organizationAllowlist, enabledToolsets)
+		logger.Info("TF_X_OFFICIAL_SDK_ENABLED set to true in env, enabling the official mcp go-sdk server")
+		officialStreamableServer := getOfficialStreamableServer(ctx, heartbeatInterval, isStateless, corsConfig, logger, organizationAllowlist, enabledToolsets)
 		// Handle the /mcp endpoint with the official go-sdk streamable server (with security wrapper)
 		mux.Handle(endpointPath+"/official", officialStreamableServer)
 		mux.Handle(endpointPath+"/official/", officialStreamableServer)
@@ -458,13 +458,14 @@ func streamableHTTPServerInit(ctx context.Context, hcServer *server.MCPServer, l
 	return nil
 }
 
-func getOfficialStreamableServer(ctx context.Context, heartbeatInterval time.Duration, isStateless bool, tlsConfig *client.TLSConfig, corsConfig client.CORSConfig, logger *log.Logger, organizationAllowlist []string, enabledToolsets []string) http.Handler {
-	logger.Infof("Creating a go-sdk StreamableHTTP server...")
-	hcServer := mcpofficial.NewServer(heartbeatInterval, logger, enabledToolsets)
+func getOfficialStreamableServer(ctx context.Context, heartbeatInterval time.Duration, isStateless bool, corsConfig client.CORSConfig, logger *log.Logger, organizationAllowlist []string, enabledToolsets []string) http.Handler {
+	logger.Info("Creating a go-sdk StreamableHTTP server...")
+	hcServer := mcpofficial.NewServer(version.Version, instructions, heartbeatInterval, logger, enabledToolsets)
 
 	opts := &mcp.StreamableHTTPOptions{
 		Stateless:             isStateless,
-		CrossOriginProtection: nil, // disables the SDK's built-in cross-origin protection entirely.
+		Logger:                newSlogLogger(logger),
+		CrossOriginProtection: nil, // disables the SDK's built-in cross-origin protection entirely. CORS already enforced by client.NewSecurityHandler below.
 	}
 
 	// Create the base MCP handler
