@@ -28,13 +28,13 @@ func TestOrganizationAllowlistToolMiddleware(t *testing.T) {
 		{
 			name:        "allows organization in allowlist",
 			allowlist:   []string{"allowed-org"},
-			arguments:   map[string]any{orgNameArgument: "allowed-org"},
+			arguments:   map[string]any{OrgNameArgument: "allowed-org"},
 			wantAllowed: true,
 		},
 		{
 			name:        "rejects organization not in allowlist",
 			allowlist:   []string{"allowed-org"},
-			arguments:   map[string]any{orgNameArgument: "blocked-org"},
+			arguments:   map[string]any{OrgNameArgument: "blocked-org"},
 			wantAllowed: false,
 		},
 	}
