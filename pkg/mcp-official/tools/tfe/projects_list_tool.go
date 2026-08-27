@@ -1,4 +1,4 @@
-package mcpofficial
+package tools
 
 import (
 	"context"
@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/hashicorp/go-tfe"
+	"github.com/hashicorp/terraform-mcp-server/pkg/mcp-official/client"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	log "github.com/sirupsen/logrus"
 )
@@ -50,7 +51,7 @@ func ListProjectsFunc(ctx context.Context, request *mcp.CallToolRequest, input L
 	log.Info("ListProjects for official mcp go-sdk called...")
 	terraformOrgName := strings.TrimSpace(input.TerraformOrgName)
 
-	client, err := GetTfeClient(ctx)
+	tfeclient, err := client.GetTfeClient(ctx)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -63,7 +64,7 @@ func ListProjectsFunc(ctx context.Context, request *mcp.CallToolRequest, input L
 	}
 
 	// List(ctx context.Context, organization string, options *ProjectListOptions) (*ProjectList, error)
-	projects, err := client.Projects.List(ctx, terraformOrgName, opt)
+	projects, err := tfeclient.Projects.List(ctx, terraformOrgName, opt)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to list projects in org %q: %w", terraformOrgName, err)
 	}
