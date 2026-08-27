@@ -6,7 +6,6 @@ package client
 import (
 	"context"
 
-	"github.com/mark3labs/mcp-go/server"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -14,25 +13,25 @@ import (
 type contextKey string
 
 // NewSessionHandler initializes clients for the session
-func NewSessionHandler(ctx context.Context, session server.ClientSession, logger *log.Logger) {
-	if _, ok := activeTfeClients.Load(session.SessionID()); ok {
+func NewSessionHandler(ctx context.Context, sessionID string, logger *log.Logger) {
+	if _, ok := activeTfeClients.Load(sessionID); ok {
 		return
 	}
 
 	// Create both TFE and HTTP clients for the session
-	tfeClient, err := CreateTfeClientForSession(ctx, session, logger)
+	tfeClient, err := CreateTfeClientForSession(ctx, sessionID, logger)
 	if err != nil {
 		logger.WithError(err).Error("NewSessionHandler failed to create TFE client")
 	}
 
-	CreateHttpClientForSession(ctx, session, logger)
+	CreateHttpClientForSession(ctx, sessionID, logger)
 
 	// Check if the session has a valid TFE client and register with dynamic tool registry
 	if tfeClient != nil {
 		// Import the tools package to access the registry
 		// We need to avoid circular imports, so we'll use a callback approach
 		if registryCallback := getToolRegistryCallback(); registryCallback != nil {
-			registryCallback.RegisterSessionWithTFE(session.SessionID())
+			registryCallback.RegisterSessionWithTFE(sessionID)
 		}
 		logger.Info("Session has valid TFE client - registered with tool registry")
 	} else {
@@ -41,16 +40,16 @@ func NewSessionHandler(ctx context.Context, session server.ClientSession, logger
 }
 
 // EndSessionHandler cleans up clients when the session ends
-func EndSessionHandler(_ context.Context, session server.ClientSession, rateLimiter *RateLimitMiddleware, logger *log.Logger) {
+func EndSessionHandler(_ context.Context, sessionID string, rateLimiter *RateLimitMiddleware, logger *log.Logger) {
 	// Unregister from tool registry if it was registered
 	if registryCallback := getToolRegistryCallback(); registryCallback != nil {
-		registryCallback.UnregisterSessionWithTFE(session.SessionID())
+		registryCallback.UnregisterSessionWithTFE(sessionID)
 	}
 
-	DeleteTfeClient(session.SessionID())
-	DeleteHttpClient(session.SessionID())
+	DeleteTfeClient(sessionID)
+	DeleteHttpClient(sessionID)
 	if rateLimiter != nil {
-		rateLimiter.DeleteSession(session.SessionID())
+		rateLimiter.DeleteSession(sessionID)
 	}
 	logger.Info("Cleaned up clients for session")
 }
