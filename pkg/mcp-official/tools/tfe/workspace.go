@@ -42,7 +42,9 @@ type ListWorkspacesArguments struct {
 	WildcardName string `json:"wildcard_name,omitempty" jsonschema:"Wildcard pattern"`
 }
 
-func ListWorkpsacesTool() *mcp.Tool {
+func ListWorkspacesTool() *mcp.Tool {
+	trueVal := true
+	falseVal := false
 	return &mcp.Tool{
 		Name:        "list_workspaces",
 		Description: "Search and list Terraform workspaces within a specified organization. Returns all workspaces when no filters are applied, or filters results based on name patterns, tags, or search queries. Supports pagination for large result sets. Returns a truncated summary of the workspace, use get_workspace_details to get the full details for a specific workspace.",

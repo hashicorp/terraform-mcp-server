@@ -34,4 +34,8 @@ func RegisterTools(svr *mcp.Server, logger *log.Logger, filter toolsets.ToolFilt
 			register(svr)
 		}
 	}
+
+	if toolsets.IsToolEnabled("list_terraform_projects", enabledToolsets) {
+		mcp.AddTool(svr, tfeTools.ListProjectsTool(), tfeTools.ListProjectsFunc)
+	}
 }
