@@ -18,6 +18,8 @@ import (
 	"github.com/hashicorp/terraform-mcp-server/pkg/client"
 	"github.com/hashicorp/terraform-mcp-server/pkg/toolsets"
 	"github.com/hashicorp/terraform-mcp-server/version"
+	instana "github.com/instana/go-sensor"
+	ot "github.com/opentracing/opentracing-go"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp"
@@ -39,6 +41,10 @@ var sessionClientInfo sync.Map // map[string]client.ClientInfo
 func runHTTPServer(logger *log.Logger, host string, port string, endpointPath string, heartbeatInterval time.Duration, enabledToolsets []string, metricsConfig client.MetricsConfig, organizationAllowlist []string) error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+
+	// Initialize the Instana collector once (nil when disabled) so it can be
+	// shared by the tool-call tracing hooks and the HTTP handler wrap.
+	instanaCollector := setupInstana(logger)
 
 	// Create hooks for session management
 	hooks := &server.Hooks{}
@@ -88,8 +94,49 @@ func runHTTPServer(logger *log.Logger, host string, port string, endpointPath st
 		}
 	})
 	attachMetricsHooks(hooks, metricsConfig, logger)
+	attachInstanaTracingHooks(hooks, instanaCollector)
 
-	return streamableHTTPServerInit(ctx, hcServer, logger, host, port, endpointPath, heartbeatInterval, organizationAllowlist, enabledToolsets)
+	return streamableHTTPServerInit(ctx, hcServer, logger, host, port, endpointPath, heartbeatInterval, organizationAllowlist, enabledToolsets, instanaCollector)
+}
+
+// attachInstanaTracingHooks adds a span for each tool call. The http handler is
+// already traced but with streamable-http the tool calls all go over one long
+// lived connection, so we don't actually get a span per call that way. So we add
+// them here at the mcp layer using the hooks instead.
+func attachInstanaTracingHooks(hooks *server.Hooks, collector instana.TracerLogger) {
+	if collector == nil {
+		return
+	}
+
+	// keep the spans here by request id so we can start one in Before and
+	// close the same one out in After
+	var toolCallSpans sync.Map
+
+	hooks.AddBeforeCallTool(func(ctx context.Context, id any, message *mcp.CallToolRequest) {
+		opts := []ot.StartSpanOption{
+			ot.Tags{
+				"span.kind": "server",
+				"mcp.tool":  message.Params.Name,
+			},
+		}
+		if parent, ok := instana.SpanFromContext(ctx); ok {
+			opts = append(opts, ot.ChildOf(parent.Context()))
+		}
+		span := collector.StartSpan("mcp.tool_call", opts...)
+		toolCallSpans.Store(fmt.Sprintf("%v", id), span)
+	})
+
+	hooks.AddAfterCallTool(func(ctx context.Context, id any, message *mcp.CallToolRequest, result any) {
+		v, ok := toolCallSpans.LoadAndDelete(fmt.Sprintf("%v", id))
+		if !ok {
+			return
+		}
+		span := v.(ot.Span)
+		if r, ok := result.(*mcp.CallToolResult); ok && r.IsError {
+			span.SetTag("error", true)
+		}
+		span.Finish()
+	})
 }
 
 func attachMetricsHooks(hooks *server.Hooks, metricsConfig client.MetricsConfig, logger *log.Logger) {
