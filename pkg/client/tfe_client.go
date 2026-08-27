@@ -189,11 +189,11 @@ func GetTfeClientFromContext(ctx context.Context, logger *log.Logger) (*tfe.Clie
 		activeTfeClients.Delete(session.SessionID())
 	}
 	logger.Warnf("TFE client not found, creating a new one")
-	return CreateTfeClientForSession(ctx, session, logger)
+	return CreateTfeClientForSession(ctx, session.SessionID(), logger)
 }
 
 // CreateTfeClientForSession creates only a TFE client for the session
-func CreateTfeClientForSession(ctx context.Context, session server.ClientSession, logger *log.Logger) (*tfe.Client, error) {
+func CreateTfeClientForSession(ctx context.Context, sessionID string, logger *log.Logger) (*tfe.Client, error) {
 	var err error
 	terraformAddress, ok := ctx.Value(contextKey(TerraformAddress)).(string)
 	if !ok || terraformAddress == "" {
@@ -214,6 +214,6 @@ func CreateTfeClientForSession(ctx context.Context, session server.ClientSession
 
 	// Get client IP from context for X-Forwarded-For header
 	clientIP, _ := ctx.Value(contextKey(ClientIPKey)).(string)
-	client, err := NewTfeClient(session.SessionID(), terraformAddress, parseTerraformSkipTLSVerify(ctx), terraformToken, clientIP, logger)
+	client, err := NewTfeClient(sessionID, terraformAddress, parseTerraformSkipTLSVerify(ctx), terraformToken, clientIP, logger)
 	return client, err
 }
