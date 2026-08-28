@@ -1,4 +1,4 @@
-package mcpofficial
+package tools
 
 import (
 	"context"
@@ -7,10 +7,11 @@ import (
 	"time"
 
 	"github.com/hashicorp/go-tfe"
+	"github.com/hashicorp/terraform-mcp-server/pkg/mcp-official/client"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
-	log "github.com/sirupsen/logrus"
 )
 
+// WorkspaceSummary holds a trimmed view of a single Terraform workspace.
 type WorkspaceSummary struct {
 	ID            string    `json:"id"`
 	Name          string    `json:"workspace_name"`
@@ -25,6 +26,7 @@ type WorkspaceSummaryList struct {
 	Items []*WorkspaceSummary `json:"items"`
 }
 
+// ListWorkspacesArguments holds the input parameters for listing workspaces within an organization.
 type ListWorkspacesArguments struct {
 	// Required field
 	TerraformOrgName string `json:"terraform_org_name" jsonschema:"The Terraform organization name"`
@@ -38,22 +40,19 @@ type ListWorkspacesArguments struct {
 }
 
 func ListWorkpsacesTool() *mcp.Tool {
-	trueVal := true
-	falseVal := false
 	return &mcp.Tool{
 		Name:        "list_workspaces",
 		Description: "Search and list Terraform workspaces within a specified organization. Returns all workspaces when no filters are applied, or filters results based on name patterns, tags, or search queries. Supports pagination for large result sets. Returns a truncated summary of the workspace, use get_workspace_details to get the full details for a specific workspace.",
 		Annotations: &mcp.ToolAnnotations{
 			Title:           "List Terraform workspaces with queries",
-			OpenWorldHint:   &trueVal,
-			ReadOnlyHint:    trueVal,
-			DestructiveHint: &falseVal,
+			OpenWorldHint:   ptr(true),
+			ReadOnlyHint:    true,
+			DestructiveHint: ptr(false),
 		},
 	}
 }
 
 func ListWorkspacesFunc(ctx context.Context, request *mcp.CallToolRequest, input ListWorkspacesArguments) (*mcp.CallToolResult, *WorkspaceSummaryList, error) {
-	log.Info("ListWorkspaces for official mcp go-dk called..")
 	terraformOrgName := strings.TrimSpace(input.TerraformOrgName)
 	projectID := input.ProjectID
 	searchQuery := input.SearchQuery
@@ -77,7 +76,7 @@ func ListWorkspacesFunc(ctx context.Context, request *mcp.CallToolRequest, input
 		}
 	}
 
-	client, err := GetTfeClient(ctx)
+	client, err := client.GetTfeClient(ctx)
 	if err != nil {
 		return nil, nil, err
 	}
