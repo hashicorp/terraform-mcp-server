@@ -17,6 +17,7 @@ import (
 
 	"github.com/hashicorp/terraform-mcp-server/pkg/client"
 	mcpofficial "github.com/hashicorp/terraform-mcp-server/pkg/mcp-official"
+	"github.com/hashicorp/terraform-mcp-server/pkg/mcp-official/tools/middleware"
 	"github.com/hashicorp/terraform-mcp-server/pkg/resources"
 	"github.com/hashicorp/terraform-mcp-server/pkg/tools"
 	"github.com/hashicorp/terraform-mcp-server/pkg/toolsets"
@@ -461,17 +462,14 @@ func streamableHTTPServerInit(ctx context.Context, hcServer *server.MCPServer, l
 func getOfficialStreamableServer(ctx context.Context, heartbeatInterval time.Duration, isStateless bool, corsConfig client.CORSConfig, logger *log.Logger, organizationAllowlist []string, enabledToolsets []string, rateLimiter *client.RateLimitMiddleware) http.Handler {
 	logger.Info("Creating a go-sdk StreamableHTTP server...")
 	slogLogger := newSlogLogger(logger)
-	serverOpts := []mcpofficial.Option{
-		mcpofficial.WithMiddlewares(
-			mcpofficial.RateLimitMiddleware(rateLimiter),
-			mcpofficial.ToolLoggingMiddleware(slogLogger),
-		),
+	middlewares := []mcp.Middleware{
+		middleware.RateLimit(rateLimiter),
+		middleware.ToolLogging(slogLogger),
 	}
 	if len(organizationAllowlist) > 0 {
-		serverOpts = append(serverOpts, mcpofficial.WithMiddlewares(
-			mcpofficial.OrganizationAllowlistMiddleware(organizationAllowlist, slogLogger),
-		))
+		middlewares = append(middlewares, middleware.OrganizationAllowlist(organizationAllowlist, slogLogger))
 	}
+	serverOpts := []mcpofficial.Option{mcpofficial.WithMiddlewares(middlewares...)}
 	hcServer := mcpofficial.NewServer(version.Version, instructions, heartbeatInterval, logger, enabledToolsets, serverOpts...)
 
 	opts := &mcp.StreamableHTTPOptions{

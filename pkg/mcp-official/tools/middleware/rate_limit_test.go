@@ -1,7 +1,7 @@
 // Copyright IBM Corp. 2025
 // SPDX-License-Identifier: MPL-2.0
 
-package mcpofficial
+package middleware
 
 import (
 	"context"
@@ -44,7 +44,7 @@ func TestRateLimitMiddleware(t *testing.T) {
 		},
 	}
 
-	handler := RateLimitMiddleware(rl)(next)
+	handler := RateLimit(rl)(next)
 
 	// First call is within the burst of 1, so it should go through.
 	result, err := handler(context.Background(), "tools/call", request)
@@ -81,7 +81,7 @@ func TestRateLimitMiddleware_IgnoresNonToolCalls(t *testing.T) {
 		return &mcp.ListToolsResult{}, nil
 	}
 
-	handler := RateLimitMiddleware(rl)(next)
+	handler := RateLimit(rl)(next)
 	_, err := handler(context.Background(), "tools/list", &mcp.ListToolsRequest{})
 
 	require.NoError(t, err)

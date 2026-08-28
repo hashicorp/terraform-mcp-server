@@ -1,7 +1,7 @@
 // Copyright IBM Corp. 2025
 // SPDX-License-Identifier: MPL-2.0
 
-package mcpofficial
+package middleware
 
 import (
 	"context"
@@ -62,7 +62,7 @@ func TestOrganizationAllowlistMiddleware(t *testing.T) {
 				},
 			}
 
-			handler := OrganizationAllowlistMiddleware(test.allowlist, logger)(next)
+			handler := OrganizationAllowlist(test.allowlist, logger)(next)
 			result, err := handler(context.Background(), "tools/call", request)
 			require.NoError(t, err)
 
@@ -83,7 +83,7 @@ func TestOrganizationAllowlistMiddleware_IgnoresNonToolCalls(t *testing.T) {
 	}
 
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	handler := OrganizationAllowlistMiddleware([]string{"allowed-org"}, logger)(next)
+	handler := OrganizationAllowlist([]string{"allowed-org"}, logger)(next)
 	_, err := handler(context.Background(), "tools/list", &mcp.ListToolsRequest{})
 
 	require.NoError(t, err)

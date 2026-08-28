@@ -1,7 +1,7 @@
 // Copyright IBM Corp. 2025
 // SPDX-License-Identifier: MPL-2.0
 
-package mcpofficial
+package middleware
 
 import (
 	"bytes"
@@ -35,7 +35,7 @@ func TestToolLoggingMiddleware(t *testing.T) {
 		},
 	}
 
-	handler := ToolLoggingMiddleware(logger)(next)
+	handler := ToolLogging(logger)(next)
 	_, err = handler(context.Background(), "tools/call", request)
 	require.NoError(t, err)
 	assert.True(t, nextCalled)
@@ -58,7 +58,7 @@ func TestToolLoggingMiddleware_IgnoresNonToolCalls(t *testing.T) {
 		return &mcp.ListToolsResult{}, nil
 	}
 
-	handler := ToolLoggingMiddleware(logger)(next)
+	handler := ToolLogging(logger)(next)
 	_, err := handler(context.Background(), "tools/list", &mcp.ListToolsRequest{})
 	require.NoError(t, err)
 

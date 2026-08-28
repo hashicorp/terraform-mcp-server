@@ -1,7 +1,7 @@
 // Copyright IBM Corp. 2025
 // SPDX-License-Identifier: MPL-2.0
 
-package mcpofficial
+package middleware
 
 import (
 	"context"
@@ -14,9 +14,9 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-// OrganizationAllowlistMiddleware rejects a tools/call whose terraform_org_name argument is not in allowlist
+// OrganizationAllowlist rejects a tools/call whose terraform_org_name argument is not in allowlist
 // Tool calls without that argument are passed through unchecked
-func OrganizationAllowlistMiddleware(allowlist []string, logger *slog.Logger) mcp.Middleware {
+func OrganizationAllowlist(allowlist []string, logger *slog.Logger) mcp.Middleware {
 	allowedOrganizations := tfeclient.BuildAllowedOrganizationsMap(allowlist)
 
 	return func(next mcp.MethodHandler) mcp.MethodHandler {

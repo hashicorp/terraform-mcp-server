@@ -1,7 +1,7 @@
 // Copyright IBM Corp. 2025
 // SPDX-License-Identifier: MPL-2.0
 
-package mcpofficial
+package middleware
 
 import (
 	"context"
@@ -10,9 +10,9 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-// ToolLoggingMiddleware is the go-sdk equivalent of client.ToolLoggingMiddleware:
+// ToolLogging is the go-sdk equivalent of client.ToolLoggingMiddleware:
 // it logs the tool name and arguments for every tools/call request.
-func ToolLoggingMiddleware(logger *slog.Logger) mcp.Middleware {
+func ToolLogging(logger *slog.Logger) mcp.Middleware {
 	return func(next mcp.MethodHandler) mcp.MethodHandler {
 		return func(ctx context.Context, method string, req mcp.Request) (mcp.Result, error) {
 			if method != "tools/call" {

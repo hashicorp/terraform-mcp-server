@@ -1,7 +1,7 @@
 // Copyright IBM Corp. 2025
 // SPDX-License-Identifier: MPL-2.0
 
-package mcpofficial
+package middleware
 
 import (
 	"context"
@@ -10,9 +10,9 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-// RateLimitMiddleware is the go-sdk equivalent of client.RateLimitMiddleware.Middleware():
+// RateLimit is the go-sdk equivalent of client.RateLimitMiddleware.Middleware():
 // it enforces the same global and per-session limits via the shared rl.
-func RateLimitMiddleware(rl *tfeclient.RateLimitMiddleware) mcp.Middleware {
+func RateLimit(rl *tfeclient.RateLimitMiddleware) mcp.Middleware {
 	return func(next mcp.MethodHandler) mcp.MethodHandler {
 		return func(ctx context.Context, method string, req mcp.Request) (mcp.Result, error) {
 			if method != "tools/call" {
