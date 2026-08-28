@@ -27,6 +27,7 @@ type WorkspaceSummary struct {
 // WorkspaceSummaryList contains the list of workspace summaries and pagination details
 type WorkspaceSummaryList struct {
 	Items []*WorkspaceSummary `json:"items"`
+	*tfe.Pagination
 }
 
 // ListWorkspacesArguments holds the input parameters for listing workspaces within an organization.
@@ -40,6 +41,8 @@ type ListWorkspacesArguments struct {
 	Tags         string `json:"tags,omitempty" jsonschema:"Comma-separated tags"`
 	ExcludeTags  string `json:"exclude_tags,omitempty" jsonschema:"Tags to exclude"`
 	WildcardName string `json:"wildcard_name,omitempty" jsonschema:"Wildcard pattern"`
+	Page         int    `json:"page,omitempty" jsonschema:"Page number for pagination (min 1)"`
+	PageSize     int    `json:"pageSize,omitempty" jsonschema:"Results per page for pagination (min 1, max 100)"`
 }
 
 func ListWorkspacesTool() *mcp.Tool {
