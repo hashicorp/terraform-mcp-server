@@ -27,6 +27,7 @@ type WorkspaceSummary struct {
 // WorkspaceSummaryList contains the list of workspace summaries and pagination details
 type WorkspaceSummaryList struct {
 	Items []*WorkspaceSummary `json:"items"`
+	*tfe.Pagination
 }
 
 // ListWorkspacesArguments holds the input parameters for listing workspaces within an organization.
@@ -40,11 +41,11 @@ type ListWorkspacesArguments struct {
 	Tags         string `json:"tags,omitempty" jsonschema:"Comma-separated tags"`
 	ExcludeTags  string `json:"exclude_tags,omitempty" jsonschema:"Tags to exclude"`
 	WildcardName string `json:"wildcard_name,omitempty" jsonschema:"Wildcard pattern"`
+	Page         int    `json:"page,omitempty" jsonschema:"Page number for pagination (min 1)"`
+	PageSize     int    `json:"pageSize,omitempty" jsonschema:"Results per page for pagination (min 1, max 100)"`
 }
 
 func ListWorkspacesTool() *mcp.Tool {
-	trueVal := true
-	falseVal := false
 	return &mcp.Tool{
 		Name:        "list_workspaces",
 		Description: "Search and list Terraform workspaces within a specified organization. Returns all workspaces when no filters are applied, or filters results based on name patterns, tags, or search queries. Supports pagination for large result sets. Returns a truncated summary of the workspace, use get_workspace_details to get the full details for a specific workspace.",
@@ -81,12 +82,12 @@ func ListWorkspacesFunc(ctx context.Context, request *mcp.CallToolRequest, input
 		}
 	}
 
-	client, err := client.GetTfeClient(ctx, client.SessionIDFromRequest(request))
+	tfeClient, err := client.GetTfeClient(ctx)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	workspaces, err := client.Workspaces.List(ctx, terraformOrgName, &tfe.WorkspaceListOptions{
+	workspaces, err := tfeClient.Workspaces.List(ctx, terraformOrgName, &tfe.WorkspaceListOptions{
 		ProjectID:    projectID,
 		Search:       searchQuery,
 		Tags:         strings.Join(tags, ","),
