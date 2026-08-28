@@ -1,23 +1,36 @@
+// Copyright IBM Corp. 2025
+// SPDX-License-Identifier: MPL-2.0
+
 package mcpofficial
 
 import (
 	"time"
 
 	"github.com/hashicorp/terraform-mcp-server/pkg/mcp-official/tools"
-	log "github.com/sirupsen/logrus"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+	log "github.com/sirupsen/logrus"
 )
 
 // serverConfig holds all server config so future phases (middleware, hooks)
 // don't require changing NewServer's signature again.
 type serverConfig struct {
 	mcpOpts     mcp.ServerOptions
-	middlewares []mcp.Middleware           // consumed in Phase 2
+	middlewares []mcp.Middleware
 	onSession   []func(*mcp.ServerSession) // consumed in Phase 3
 }
 
 type Option func(*serverConfig)
+
+// WithMiddlewares attaches receiving middleware to the server. Middleware
+// runs on every incoming MCP request (tool calls, list calls, etc.) — each
+// middleware can inspect/reject a request before it reaches its handler, or
+// pass it through with next(ctx, method, req).
+func WithMiddlewares(mw ...mcp.Middleware) Option {
+	return func(cfg *serverConfig) {
+		cfg.middlewares = append(cfg.middlewares, mw...)
+	}
+}
 
 func NewServer(version, instructions string, heartbeatInterval time.Duration, logger *log.Logger, enabledToolsets []string, opts ...Option) *mcp.Server {
 	cfg := &serverConfig{mcpOpts: mcp.ServerOptions{Instructions: instructions}}

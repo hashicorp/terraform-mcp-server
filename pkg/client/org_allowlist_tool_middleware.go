@@ -13,15 +13,16 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-const orgNameArgument = "terraform_org_name"
+// OrgNameArgument is the tool argument holding the organization name for a tool call
+const OrgNameArgument = "terraform_org_name"
 
 func OrganizationAllowlistToolMiddleware(allowlist []string, logger *log.Logger) server.ToolHandlerMiddleware {
-	allowedOrganizations := buildAllowedOrganizationsMap(allowlist)
+	allowedOrganizations := BuildAllowedOrganizationsMap(allowlist)
 
 	return func(nextToolHandler server.ToolHandlerFunc) server.ToolHandlerFunc {
 		return func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			// Skip allowlist enforcement for tools without an organization argument.
-			organizationName := strings.ToLower(strings.TrimSpace(request.GetString(orgNameArgument, "")))
+			organizationName := strings.ToLower(strings.TrimSpace(request.GetString(OrgNameArgument, "")))
 			if organizationName == "" {
 				return nextToolHandler(ctx, request)
 			}
@@ -38,8 +39,8 @@ func OrganizationAllowlistToolMiddleware(allowlist []string, logger *log.Logger)
 	}
 }
 
-// builds a lookup set from allowlist
-func buildAllowedOrganizationsMap(allowlist []string) map[string]struct{} {
+// BuildAllowedOrganizationsMap builds a lookup set from allowlist
+func BuildAllowedOrganizationsMap(allowlist []string) map[string]struct{} {
 	allowedOrganizations := make(map[string]struct{}, len(allowlist))
 	for _, organizationName := range allowlist {
 		if organizationName != "" {
