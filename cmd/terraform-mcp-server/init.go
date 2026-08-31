@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	stdlog "log"
+	"log/slog"
 	"net/http"
 	"os"
 	"path"
@@ -38,6 +39,8 @@ type healthResponse struct {
 	Endpoint  string `json:"endpoint"`
 	Version   string `json:"version"`
 }
+
+const officialSlogOutputPath = "terraform-mcp-official.log"
 
 var (
 	rootCmd = &cobra.Command{
@@ -196,6 +199,31 @@ func getLogLevel(cmd *cobra.Command) log.Level {
 	return log.InfoLevel
 }
 
+// getSlogLevel determines the slog level from the environment or CLI flag.
+func getSlogLevel(cmd *cobra.Command) slog.Level {
+	configuredLevel := os.Getenv("LOG_LEVEL")
+	if configuredLevel == "" && cmd != nil {
+		flagLevel, err := cmd.Flags().GetString("log-level")
+		if err == nil {
+			configuredLevel = flagLevel
+		}
+	}
+
+	switch strings.ToLower(strings.TrimSpace(configuredLevel)) {
+	case "trace", "debug":
+		return slog.LevelDebug
+	case "", "info":
+		return slog.LevelInfo
+	case "warn":
+		return slog.LevelWarn
+	case "error", "fatal", "panic":
+		return slog.LevelError
+	default:
+		stdlog.Printf("Warning: invalid slog level %q, using default 'info' level\n", configuredLevel)
+		return slog.LevelInfo
+	}
+}
+
 // getLogFormat determines the log format from environment variable or CLI flag
 func getLogFormat(cmd *cobra.Command) string {
 	// Check environment variable first
@@ -247,6 +275,25 @@ func initLogger(outPath string, level log.Level, format string) (*log.Logger, er
 	logger.SetOutput(file)
 
 	return logger, nil
+}
+
+func initSlog(outPath string, level slog.Level, format string) (*slog.Logger, *os.File, error) {
+	file, err := os.OpenFile(outPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o666)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to open log file: %w", err)
+	}
+
+	opts := &slog.HandlerOptions{
+		Level: level,
+	}
+	var handler slog.Handler
+	// Set formatter based on format parameter
+	if strings.ToLower(format) == "json" {
+		handler = slog.NewJSONHandler(file, opts)
+	} else {
+		handler = slog.NewTextHandler(file, opts)
+	}
+	return slog.New(handler), file, nil
 }
 
 // registerToolsAndResources registers tools and resources with the MCP server
@@ -370,7 +417,20 @@ func streamableHTTPServerInit(ctx context.Context, hcServer *server.MCPServer, l
 	// Create the official go-sdk streamable server
 	if enableOfficialSDK := os.Getenv("TF_X_OFFICIAL_SDK_ENABLED"); enableOfficialSDK == "true" {
 		logger.Info("TF_X_OFFICIAL_SDK_ENABLED set to true in env, enabling the official mcp go-sdk server")
-		officialStreamableServer := getOfficialStreamableServer(ctx, heartbeatInterval, isStateless, corsConfig, logger, organizationAllowlist, enabledToolsets, rateLimiter)
+		slogLevel := getSlogLevel(rootCmd)
+		slogFormat := getLogFormat(rootCmd)
+		officialLogger, officialLogFile, err := initSlog(officialSlogOutputPath, slogLevel, slogFormat)
+		if err != nil {
+			return fmt.Errorf("failed to initialize official MCP slog logger at %s: %w", officialSlogOutputPath, err)
+		}
+		defer func() {
+			if err := officialLogFile.Close(); err != nil {
+				logger.Errorf("Failed to close official MCP log file at %s: %v", officialSlogOutputPath, err)
+			}
+		}()
+
+		officialLogger = officialLogger.With("component", "mcp-official")
+		officialStreamableServer := getOfficialStreamableServer(ctx, heartbeatInterval, isStateless, corsConfig, logger, officialLogger, organizationAllowlist, enabledToolsets, rateLimiter)
 		// Handle the /mcp endpoint with the official go-sdk streamable server (with security wrapper)
 		mux.Handle(endpointPath+"/official", officialStreamableServer)
 		mux.Handle(endpointPath+"/official/", officialStreamableServer)
@@ -459,22 +519,21 @@ func streamableHTTPServerInit(ctx context.Context, hcServer *server.MCPServer, l
 	return nil
 }
 
-func getOfficialStreamableServer(ctx context.Context, heartbeatInterval time.Duration, isStateless bool, corsConfig client.CORSConfig, logger *log.Logger, organizationAllowlist []string, enabledToolsets []string, rateLimiter *client.RateLimitMiddleware) http.Handler {
-	logger.Info("Creating a go-sdk StreamableHTTP server...")
-	slogLogger := newSlogLogger(logger)
+func getOfficialStreamableServer(ctx context.Context, heartbeatInterval time.Duration, isStateless bool, corsConfig client.CORSConfig, logger *log.Logger, officialLogger *slog.Logger, organizationAllowlist []string, enabledToolsets []string, rateLimiter *client.RateLimitMiddleware) http.Handler {
+	officialLogger.Info("Creating a go-sdk StreamableHTTP server...")
 	middlewares := []mcp.Middleware{
 		middleware.RateLimit(rateLimiter),
-		middleware.ToolLogging(slogLogger),
+		middleware.ToolLogging(officialLogger),
 	}
 	if len(organizationAllowlist) > 0 {
-		middlewares = append(middlewares, middleware.OrganizationAllowlist(organizationAllowlist, slogLogger))
+		middlewares = append(middlewares, middleware.OrganizationAllowlist(organizationAllowlist, officialLogger))
 	}
 	serverOpts := []mcpofficial.Option{mcpofficial.WithMiddlewares(middlewares...)}
-	hcServer := mcpofficial.NewServer(version.Version, instructions, heartbeatInterval, logger, enabledToolsets, serverOpts...)
+	hcServer := mcpofficial.NewServer(version.Version, instructions, heartbeatInterval, officialLogger, enabledToolsets, serverOpts...)
 
 	opts := &mcp.StreamableHTTPOptions{
 		Stateless:             isStateless,
-		Logger:                slogLogger,
+		Logger:                officialLogger,
 		CrossOriginProtection: nil, // disables the SDK's built-in cross-origin protection entirely. CORS already enforced by client.NewSecurityHandler below.
 	}
 
