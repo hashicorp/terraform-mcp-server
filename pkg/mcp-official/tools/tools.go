@@ -67,6 +67,15 @@ var officialFactories = map[string]func(svr *mcp.Server, logger *slog.Logger){
 	"get_team": func(svr *mcp.Server, _ *slog.Logger) {
 		mcp.AddTool(svr, tfeTools.GetTeamTool(), tfeTools.GetTeamFunc)
 	},
+	"create_team": func(svr *mcp.Server, _ *slog.Logger) {
+		mcp.AddTool(svr, tfeTools.CreateTeamTool(), tfeTools.CreateTeamFunc)
+	},
+	"add_team_member": func(svr *mcp.Server, _ *slog.Logger) {
+		mcp.AddTool(svr, tfeTools.AddTeamMemberTool(), tfeTools.AddTeamMemberFunc)
+	},
+	"grant_team_access": func(svr *mcp.Server, _ *slog.Logger) {
+		mcp.AddTool(svr, tfeTools.GrantTeamAccessTool(), tfeTools.GrantTeamAccessFunc)
+	},
 }
 
 func RegisterTools(svr *mcp.Server, logger *slog.Logger, filter toolsets.ToolFilter) {
