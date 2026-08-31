@@ -5,6 +5,8 @@ package main
 
 import (
 	"context"
+	"io"
+	"log/slog"
 	"net/http/httptest"
 	"reflect"
 	"sync"
@@ -64,6 +66,7 @@ func TestGetOfficialStreamableServer_SessionLifecycle(t *testing.T) {
 		false, // isStateless
 		client.CORSConfig{Mode: "disabled"},
 		logger,
+		slog.New(slog.NewTextHandler(io.Discard, nil)),
 		nil, // organizationAllowlist
 		toolsets.NewToolsetFilter([]string{"list_workspaces"}),
 		rateLimiter,
