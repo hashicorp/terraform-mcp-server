@@ -50,7 +50,7 @@ func ListTerraformOrganizationsFunc(ctx context.Context, request *mcp.CallToolRe
 
 	orgs, err := tfeClient.Organizations.List(ctx, &tfe.OrganizationListOptions{
 		ListOptions: tfe.ListOptions{
-			PageNumber: input.Page,
+			PageNumber: max(input.Page, 1),
 			PageSize:   input.PageSize,
 		},
 	})

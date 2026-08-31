@@ -68,31 +68,6 @@ type WorkspaceDetails struct {
 	Readme              string              `json:"readme,omitempty"`
 }
 
-func workspaceResult(toolType string, workspace *tfe.Workspace, variables []*tfe.Variable, readme string) *WorkspaceToolResult {
-	details := WorkspaceDetails{
-		ID: workspace.ID, Name: workspace.Name, Description: workspace.Description,
-		AutoApply: workspace.AutoApply, ExecutionMode: workspace.ExecutionMode,
-		TerraformVersion: workspace.TerraformVersion, WorkingDirectory: workspace.WorkingDirectory,
-		QueueAllRuns: workspace.QueueAllRuns, SpeculativeEnabled: workspace.SpeculativeEnabled,
-		FileTriggersEnabled: workspace.FileTriggersEnabled, TriggerPrefixes: workspace.TriggerPrefixes,
-		Locked: workspace.Locked, ResourceCount: workspace.ResourceCount,
-		Tags: workspace.TagNames, CreatedAt: workspace.CreatedAt, UpdatedAt: workspace.UpdatedAt, Readme: readme,
-	}
-	if workspace.Organization != nil {
-		details.OrganizationName = workspace.Organization.Name
-	}
-	if workspace.Project != nil {
-		details.ProjectID = workspace.Project.ID
-	}
-	if len(variables) > 0 {
-		details.Variables = make([]WorkspaceVariable, len(variables))
-		for i, variable := range variables {
-			details.Variables[i] = WorkspaceVariable{ID: variable.ID, Key: variable.Key, Value: variable.Value, Description: variable.Description, Category: variable.Category, HCL: variable.HCL, Sensitive: variable.Sensitive}
-		}
-	}
-	return &WorkspaceToolResult{Success: true, Type: toolType, WorkspaceID: workspace.ID, Workspace: details}
-}
-
 func GetWorkspaceDetailsTool() *mcp.Tool {
 	return &mcp.Tool{
 		Name:        "get_workspace_details",
@@ -129,4 +104,29 @@ func GetWorkspaceDetailsFunc(ctx context.Context, _ *mcp.CallToolRequest, input 
 		}
 	}
 	return nil, workspaceResult("get_workspace_details", workspace, workspaceVariables, readme), nil
+}
+
+func workspaceResult(toolType string, workspace *tfe.Workspace, variables []*tfe.Variable, readme string) *WorkspaceToolResult {
+	details := WorkspaceDetails{
+		ID: workspace.ID, Name: workspace.Name, Description: workspace.Description,
+		AutoApply: workspace.AutoApply, ExecutionMode: workspace.ExecutionMode,
+		TerraformVersion: workspace.TerraformVersion, WorkingDirectory: workspace.WorkingDirectory,
+		QueueAllRuns: workspace.QueueAllRuns, SpeculativeEnabled: workspace.SpeculativeEnabled,
+		FileTriggersEnabled: workspace.FileTriggersEnabled, TriggerPrefixes: workspace.TriggerPrefixes,
+		Locked: workspace.Locked, ResourceCount: workspace.ResourceCount,
+		Tags: workspace.TagNames, CreatedAt: workspace.CreatedAt, UpdatedAt: workspace.UpdatedAt, Readme: readme,
+	}
+	if workspace.Organization != nil {
+		details.OrganizationName = workspace.Organization.Name
+	}
+	if workspace.Project != nil {
+		details.ProjectID = workspace.Project.ID
+	}
+	if len(variables) > 0 {
+		details.Variables = make([]WorkspaceVariable, len(variables))
+		for i, variable := range variables {
+			details.Variables[i] = WorkspaceVariable{ID: variable.ID, Key: variable.Key, Value: variable.Value, Description: variable.Description, Category: variable.Category, HCL: variable.HCL, Sensitive: variable.Sensitive}
+		}
+	}
+	return &WorkspaceToolResult{Success: true, Type: toolType, WorkspaceID: workspace.ID, Workspace: details}
 }
