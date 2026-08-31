@@ -25,7 +25,7 @@ func DeleteWorkspaceSafelyTool() *mcp.Tool {
 	}
 }
 
-func DeleteWorkspaceSafelyFunc(ctx context.Context, _ *mcp.CallToolRequest, input DeleteWorkspaceSafelyArguments) (*mcp.CallToolResult, *WorkspaceToolResult, error) {
+func DeleteWorkspaceSafelyFunc(ctx context.Context, _ *mcp.CallToolRequest, input DeleteWorkspaceSafelyArguments) (*mcp.CallToolResult, *WorkspaceMutationResult, error) {
 	workspaceID := strings.TrimSpace(input.WorkspaceID)
 	if workspaceID == "" {
 		return nil, nil, fmt.Errorf("workspace_id is required")
@@ -41,5 +41,9 @@ func DeleteWorkspaceSafelyFunc(ctx context.Context, _ *mcp.CallToolRequest, inpu
 	if err := tfeClient.Workspaces.SafeDeleteByID(ctx, workspaceID); err != nil {
 		return nil, nil, fmt.Errorf("failed to delete workspace %q; it may still have managed resources: %w", workspaceID, err)
 	}
-	return nil, workspaceResult("delete_workspace_safely", workspace, nil, ""), nil
+	return nil, &WorkspaceMutationResult{
+		WorkspaceID:   workspace.ID,
+		WorkspaceName: workspace.Name,
+		Message:       "Workspace deleted successfully",
+	}, nil
 }

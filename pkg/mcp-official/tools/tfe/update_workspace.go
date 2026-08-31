@@ -27,7 +27,6 @@ type UpdateWorkspaceArguments struct {
 	SpeculativeEnabled  *bool  `json:"speculative_enabled,omitempty" jsonschema:"Whether speculative plans are enabled"`
 	TriggerPrefixes     string `json:"trigger_prefixes,omitempty" jsonschema:"Optional comma-separated list of trigger prefixes"`
 	FileTriggersEnabled *bool  `json:"file_triggers_enabled,omitempty" jsonschema:"Whether file triggers are enabled"`
-	Tags                string `json:"tags,omitempty" jsonschema:"Optional comma-separated list of tags; tag updates are not supported by this operation"`
 }
 
 func UpdateWorkspaceTool() *mcp.Tool {
@@ -38,7 +37,7 @@ func UpdateWorkspaceTool() *mcp.Tool {
 	}
 }
 
-func UpdateWorkspaceFunc(ctx context.Context, _ *mcp.CallToolRequest, input UpdateWorkspaceArguments) (*mcp.CallToolResult, *WorkspaceToolResult, error) {
+func UpdateWorkspaceFunc(ctx context.Context, _ *mcp.CallToolRequest, input UpdateWorkspaceArguments) (*mcp.CallToolResult, *WorkspaceMutationResult, error) {
 	orgName := strings.TrimSpace(input.TerraformOrgName)
 	workspaceName := strings.TrimSpace(input.WorkspaceName)
 	if orgName == "" || workspaceName == "" {
@@ -88,7 +87,11 @@ func UpdateWorkspaceFunc(ctx context.Context, _ *mcp.CallToolRequest, input Upda
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to update workspace %q in org %q: %w", workspaceName, orgName, err)
 	}
-	return nil, workspaceResult("update_workspace", workspace, nil, ""), nil
+	return nil, &WorkspaceMutationResult{
+		WorkspaceID:   workspace.ID,
+		WorkspaceName: workspace.Name,
+		Message:       "Workspace updated successfully",
+	}, nil
 }
 
 func parseTriggerPrefixes(value string) []string {

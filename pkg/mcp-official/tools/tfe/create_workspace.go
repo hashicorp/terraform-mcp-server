@@ -28,6 +28,13 @@ type CreateWorkspaceArguments struct {
 	Tags                string `json:"tags,omitempty" jsonschema:"Optional comma-separated list of tags to apply to the workspace"`
 }
 
+// WorkspaceMutationResult contains the identifying information and outcome of a workspace mutation.
+type WorkspaceMutationResult struct {
+	WorkspaceID   string `json:"workspace_id"`
+	WorkspaceName string `json:"workspace_name"`
+	Message       string `json:"message"`
+}
+
 func CreateWorkspaceTool() *mcp.Tool {
 	return &mcp.Tool{
 		Name:        "create_workspace",
@@ -41,7 +48,7 @@ func CreateWorkspaceTool() *mcp.Tool {
 	}
 }
 
-func CreateWorkspaceFunc(ctx context.Context, _ *mcp.CallToolRequest, input CreateWorkspaceArguments) (*mcp.CallToolResult, *WorkspaceToolResult, error) {
+func CreateWorkspaceFunc(ctx context.Context, _ *mcp.CallToolRequest, input CreateWorkspaceArguments) (*mcp.CallToolResult, *WorkspaceMutationResult, error) {
 	orgName := strings.TrimSpace(input.TerraformOrgName)
 	workspaceName := strings.TrimSpace(input.WorkspaceName)
 	if orgName == "" || workspaceName == "" {
@@ -94,7 +101,11 @@ func CreateWorkspaceFunc(ctx context.Context, _ *mcp.CallToolRequest, input Crea
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to create workspace %q in org %q: %w", workspaceName, orgName, err)
 	}
-	return nil, workspaceResult("create_workspace", workspace, nil, ""), nil
+	return nil, &WorkspaceMutationResult{
+		WorkspaceID:   workspace.ID,
+		WorkspaceName: workspace.Name,
+		Message:       "Workspace created successfully",
+	}, nil
 }
 
 func parseExecutionMode(value string, allowEmpty bool) (string, error) {
