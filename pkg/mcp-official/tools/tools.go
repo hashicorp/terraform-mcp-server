@@ -58,6 +58,12 @@ var officialFactories = map[string]func(svr *mcp.Server, logger *slog.Logger){
 	"get_provider_capabilities": func(svr *mcp.Server, logger *slog.Logger) {
 		mcp.AddTool(svr, registryTools.GetProviderCapabilitiesTool(), registryTools.GetProviderCapabilitiesFunc(logger))
 	},
+	"list_teams": func(svr *mcp.Server, _ *slog.Logger) {
+		mcp.AddTool(svr, tfeTools.ListTeamsTool(), tfeTools.ListTeamsFunc)
+	},
+	"get_team": func(svr *mcp.Server, _ *slog.Logger) {
+		mcp.AddTool(svr, tfeTools.GetTeamTool(), tfeTools.GetTeamFunc)
+	},
 }
 
 func RegisterTools(svr *mcp.Server, logger *slog.Logger, filter toolsets.ToolFilter) {
