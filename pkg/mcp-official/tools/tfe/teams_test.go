@@ -4,6 +4,7 @@
 package tools
 
 import (
+	"context"
 	"testing"
 
 	"github.com/hashicorp/go-tfe"
@@ -33,6 +34,48 @@ func TestGetTeamTool(t *testing.T) {
 
 	require.NotNil(t, tool.Annotations)
 	assert.True(t, tool.Annotations.ReadOnlyHint)
+	require.NotNil(t, tool.Annotations.DestructiveHint)
+	assert.False(t, *tool.Annotations.DestructiveHint)
+	require.NotNil(t, tool.Annotations.OpenWorldHint)
+	assert.True(t, *tool.Annotations.OpenWorldHint)
+}
+
+func TestCreateTeamTool(t *testing.T) {
+	tool := CreateTeamTool()
+
+	assert.Equal(t, "create_team", tool.Name)
+	assert.Contains(t, tool.Description, "Creates a new team")
+
+	require.NotNil(t, tool.Annotations)
+	assert.False(t, tool.Annotations.ReadOnlyHint)
+	require.NotNil(t, tool.Annotations.DestructiveHint)
+	assert.False(t, *tool.Annotations.DestructiveHint)
+	require.NotNil(t, tool.Annotations.OpenWorldHint)
+	assert.True(t, *tool.Annotations.OpenWorldHint)
+}
+
+func TestAddTeamMemberTool(t *testing.T) {
+	tool := AddTeamMemberTool()
+
+	assert.Equal(t, "add_team_member", tool.Name)
+	assert.Contains(t, tool.Description, "Adds a single member")
+
+	require.NotNil(t, tool.Annotations)
+	assert.False(t, tool.Annotations.ReadOnlyHint)
+	require.NotNil(t, tool.Annotations.DestructiveHint)
+	assert.False(t, *tool.Annotations.DestructiveHint)
+	require.NotNil(t, tool.Annotations.OpenWorldHint)
+	assert.True(t, *tool.Annotations.OpenWorldHint)
+}
+
+func TestGrantTeamAccessTool(t *testing.T) {
+	tool := GrantTeamAccessTool()
+
+	assert.Equal(t, "grant_team_access", tool.Name)
+	assert.Contains(t, tool.Description, "Grants a team permission")
+
+	require.NotNil(t, tool.Annotations)
+	assert.False(t, tool.Annotations.ReadOnlyHint)
 	require.NotNil(t, tool.Annotations.DestructiveHint)
 	assert.False(t, *tool.Annotations.DestructiveHint)
 	require.NotNil(t, tool.Annotations.OpenWorldHint)
@@ -118,5 +161,81 @@ func TestTeamToDetails(t *testing.T) {
 		require.Len(t, details.Users, 2)
 		assert.Equal(t, "user-1", details.Users[0].ID)
 		assert.Equal(t, "user-2", details.Users[1].ID)
+	})
+}
+
+// These validate before reaching the TFE client, so they run without one.
+
+func TestCreateTeamFuncValidation(t *testing.T) {
+	t.Run("rejects unknown visibility", func(t *testing.T) {
+		_, _, err := CreateTeamFunc(context.Background(), nil, CreateTeamArguments{
+			TerraformOrgName: "terraform-ai-ecosystem",
+			TeamName:         "platform-infra",
+			Visibility:       "public",
+		})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "invalid visibility")
+	})
+}
+
+func TestAddTeamMemberFuncValidation(t *testing.T) {
+	t.Run("rejects neither username nor membership id", func(t *testing.T) {
+		_, _, err := AddTeamMemberFunc(context.Background(), nil, AddTeamMemberArguments{
+			TeamID: "team-abc123",
+		})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "must be provided")
+	})
+
+	t.Run("rejects both username and membership id", func(t *testing.T) {
+		_, _, err := AddTeamMemberFunc(context.Background(), nil, AddTeamMemberArguments{
+			TeamID:                   "team-abc123",
+			Username:                 "jaylon",
+			OrganizationMembershipID: "ou-abc123",
+		})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "not both")
+	})
+}
+
+func TestGrantTeamAccessFuncValidation(t *testing.T) {
+	t.Run("rejects neither workspace nor project", func(t *testing.T) {
+		_, _, err := GrantTeamAccessFunc(context.Background(), nil, GrantTeamAccessArguments{
+			TeamID:      "team-abc123",
+			AccessLevel: "read",
+		})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "must be provided")
+	})
+
+	t.Run("rejects both workspace and project", func(t *testing.T) {
+		_, _, err := GrantTeamAccessFunc(context.Background(), nil, GrantTeamAccessArguments{
+			TeamID:      "team-abc123",
+			AccessLevel: "read",
+			WorkspaceID: "ws-abc123",
+			ProjectID:   "prj-abc123",
+		})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "not both")
+	})
+
+	t.Run("rejects plan on a project", func(t *testing.T) {
+		_, _, err := GrantTeamAccessFunc(context.Background(), nil, GrantTeamAccessArguments{
+			TeamID:      "team-abc123",
+			AccessLevel: "plan",
+			ProjectID:   "prj-abc123",
+		})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "invalid team project access level")
+	})
+
+	t.Run("rejects maintain on a workspace", func(t *testing.T) {
+		_, _, err := GrantTeamAccessFunc(context.Background(), nil, GrantTeamAccessArguments{
+			TeamID:      "team-abc123",
+			AccessLevel: "maintain",
+			WorkspaceID: "ws-abc123",
+		})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "invalid team access level")
 	})
 }

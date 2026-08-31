@@ -6,12 +6,19 @@ package tools
 import (
 	"context"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
 	"github.com/hashicorp/go-tfe"
 	"github.com/hashicorp/terraform-mcp-server/pkg/mcp-official/client"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+)
+
+var (
+	validTeamVisibilities        = []string{"secret", "organization"}
+	validTeamAccessLevels        = []string{"admin", "read", "write", "plan"}
+	validTeamProjectAccessLevels = []string{"admin", "read", "write", "maintain"}
 )
 
 // TeamSummary holds a trimmed view of a single Terraform team.
@@ -243,4 +250,231 @@ func teamToDetails(team *tfe.Team) *TeamDetails {
 	}
 
 	return details
+}
+
+// TeamCreateSummary is the response summary for a newly created team.
+type TeamCreateSummary struct {
+	ID         string `json:"team_id"`
+	Name       string `json:"team_name"`
+	Visibility string `json:"visibility"`
+	UserCount  int    `json:"user_count,omitempty"`
+}
+
+// CreateTeamArguments holds the input params for creating a team.
+type CreateTeamArguments struct {
+	// Required fields
+	TerraformOrgName string `json:"terraform_org_name" jsonschema:"The Terraform organization name"`
+	TeamName         string `json:"team_name" jsonschema:"The unique name of the team to create in the Terraform organization"`
+
+	// Optional fields
+	Visibility string `json:"visibility,omitempty" jsonschema:"Team visibility. One of: secret, organization. If omitted the API defaults to secret"`
+}
+
+func CreateTeamTool() *mcp.Tool {
+	return &mcp.Tool{
+		Name:        "create_team",
+		Description: "Creates a new team in a Terraform Cloud/Enterprise organization.",
+		Annotations: &mcp.ToolAnnotations{
+			Title:           "Create a new team in a Terraform organization",
+			OpenWorldHint:   ptr(true),
+			ReadOnlyHint:    false,
+			DestructiveHint: ptr(false),
+		},
+	}
+}
+
+func CreateTeamFunc(ctx context.Context, request *mcp.CallToolRequest, input CreateTeamArguments) (*mcp.CallToolResult, *TeamCreateSummary, error) {
+	terraformOrgName := strings.TrimSpace(input.TerraformOrgName)
+	teamName := strings.TrimSpace(input.TeamName)
+	visibility := strings.ToLower(strings.TrimSpace(input.Visibility))
+
+	if visibility != "" && !slices.Contains(validTeamVisibilities, visibility) {
+		return nil, nil, fmt.Errorf("invalid visibility %q - must be one of: %s", visibility, strings.Join(validTeamVisibilities, ", "))
+	}
+
+	tfeClient, err := client.GetTfeClient(ctx)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	options := tfe.TeamCreateOptions{
+		Name: tfe.String(teamName),
+	}
+	if visibility != "" {
+		options.Visibility = tfe.String(visibility)
+	}
+
+	team, err := tfeClient.Teams.Create(ctx, terraformOrgName, options)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to create team %q in org %q: %w", teamName, terraformOrgName, err)
+	}
+
+	return nil, &TeamCreateSummary{
+		ID:         team.ID,
+		Name:       team.Name,
+		Visibility: team.Visibility,
+		UserCount:  team.UserCount,
+	}, nil
+}
+
+// AddTeamMemberResult reports the outcome of adding a member to a team.
+type AddTeamMemberResult struct {
+	TeamID string `json:"team_id"`
+	Added  string `json:"added"`
+}
+
+// AddTeamMemberArguments holds the input params for adding a member to a team.
+// Exactly one of Username or OrganizationMembershipID must be provided.
+type AddTeamMemberArguments struct {
+	// Required field
+	TeamID string `json:"team_id" jsonschema:"The ID of the Terraform Cloud/Enterprise team to add members to (e.g. team-abc123def456)"`
+
+	// one of these must be provided
+	Username                 string `json:"username,omitempty" jsonschema:"Username of the member to add. Only works for users who have accepted the organization invite"`
+	OrganizationMembershipID string `json:"organization_membership_id,omitempty" jsonschema:"Organization membership ID of the member to add (e.g. ou-abc123). Works for both accepted and pending organization invites. Prefer this over username when the invitee has not yet accepted"`
+}
+
+func AddTeamMemberTool() *mcp.Tool {
+	return &mcp.Tool{
+		Name:        "add_team_member",
+		Description: "Adds a single member to a Terraform Cloud/Enterprise team. Provide either a username (accepted invites only) or an organization membership ID (accepted and pending invites), not both.",
+		Annotations: &mcp.ToolAnnotations{
+			Title:           "Add member to a Terraform team",
+			OpenWorldHint:   ptr(true),
+			ReadOnlyHint:    false,
+			DestructiveHint: ptr(false),
+		},
+	}
+}
+
+func AddTeamMemberFunc(ctx context.Context, request *mcp.CallToolRequest, input AddTeamMemberArguments) (*mcp.CallToolResult, *AddTeamMemberResult, error) {
+	teamID := strings.TrimSpace(input.TeamID)
+	username := strings.TrimSpace(input.Username)
+	orgMembershipID := strings.TrimSpace(input.OrganizationMembershipID)
+
+	if username == "" && orgMembershipID == "" {
+		return nil, nil, fmt.Errorf("one of 'username' or 'organization_membership_id' must be provided")
+	}
+	if username != "" && orgMembershipID != "" {
+		return nil, nil, fmt.Errorf("provide only one of 'username' or 'organization_membership_id', not both")
+	}
+
+	tfeClient, err := client.GetTfeClient(ctx)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	options := tfe.TeamMemberAddOptions{}
+	var memberID string
+	if username != "" {
+		options.Usernames = []string{username}
+		memberID = username
+	} else {
+		options.OrganizationMembershipIDs = []string{orgMembershipID}
+		memberID = orgMembershipID
+	}
+
+	if err := tfeClient.TeamMembers.Add(ctx, teamID, options); err != nil {
+		return nil, nil, fmt.Errorf("failed to add member %q to team %q: %w", memberID, teamID, err)
+	}
+
+	return nil, &AddTeamMemberResult{
+		TeamID: teamID,
+		Added:  memberID,
+	}, nil
+}
+
+// TeamAccessGrant is the response summary for a granted team access. Only one of
+// WorkspaceID or ProjectID is set, matching whichever target was requested.
+type TeamAccessGrant struct {
+	ID          string `json:"id"`
+	TeamID      string `json:"team_id"`
+	WorkspaceID string `json:"workspace_id,omitempty"`
+	ProjectID   string `json:"project_id,omitempty"`
+	Access      string `json:"access"`
+}
+
+// GrantTeamAccessArguments holds the input params for granting team access.
+type GrantTeamAccessArguments struct {
+	// Required fields
+	TeamID      string `json:"team_id" jsonschema:"The ID of the team to grant access. Team IDs begin with team- (e.g. team-abc123def456)"`
+	AccessLevel string `json:"access_level" jsonschema:"The permission level to grant the team. For workspace access: read, plan, write, admin. For project access: read, write, maintain, admin. plan is only valid for workspaces and maintain is only valid for projects"`
+
+	//one of these must be provided
+	WorkspaceID string `json:"workspace_id,omitempty" jsonschema:"The ID of the workspace to grant the team access to. Workspace IDs begin with ws- (e.g. ws-abc123def456). Mutually exclusive with project_id"`
+	ProjectID   string `json:"project_id,omitempty" jsonschema:"The ID of the project to grant the team access to. Project IDs begin with prj- (e.g. prj-abc123def456). Mutually exclusive with workspace_id"`
+}
+
+func GrantTeamAccessTool() *mcp.Tool {
+	return &mcp.Tool{
+		Name:        "grant_team_access",
+		Description: "Grants a team permission to access a workspace or a project in Terraform Cloud/Enterprise. Provide either workspace_id (for workspace-level access) or project_id (for project-level access), not both. Returns the created access grant including its ID, team ID, target resource ID, and access level.",
+		Annotations: &mcp.ToolAnnotations{
+			Title:           "Grant team access to a workspace or project",
+			OpenWorldHint:   ptr(true),
+			ReadOnlyHint:    false,
+			DestructiveHint: ptr(false),
+		},
+	}
+}
+
+func GrantTeamAccessFunc(ctx context.Context, request *mcp.CallToolRequest, input GrantTeamAccessArguments) (*mcp.CallToolResult, *TeamAccessGrant, error) {
+	teamID := strings.TrimSpace(input.TeamID)
+	accessLevel := strings.ToLower(strings.TrimSpace(input.AccessLevel))
+	workspaceID := strings.TrimSpace(input.WorkspaceID)
+	projectID := strings.TrimSpace(input.ProjectID)
+
+	if workspaceID == "" && projectID == "" {
+		return nil, nil, fmt.Errorf("one of workspace_id or project_id must be provided")
+	}
+	if workspaceID != "" && projectID != "" {
+		return nil, nil, fmt.Errorf("only one of workspace_id or project_id may be provided, not both")
+	}
+	// validate the access level up front so a bad one doesn't get as far as
+	// building a TFE client.
+	if workspaceID != "" && !slices.Contains(validTeamAccessLevels, accessLevel) {
+		return nil, nil, fmt.Errorf("invalid team access level %q - must be one of: %s", accessLevel, strings.Join(validTeamAccessLevels, ", "))
+	}
+	if projectID != "" && !slices.Contains(validTeamProjectAccessLevels, accessLevel) {
+		return nil, nil, fmt.Errorf("invalid team project access level %q - must be one of: %s", accessLevel, strings.Join(validTeamProjectAccessLevels, ", "))
+	}
+
+	tfeClient, err := client.GetTfeClient(ctx)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	if workspaceID != "" {
+		access, err := tfeClient.TeamAccess.Add(ctx, tfe.TeamAccessAddOptions{
+			Access:    tfe.Access(tfe.AccessType(accessLevel)),
+			Workspace: &tfe.Workspace{ID: workspaceID},
+			Team:      &tfe.Team{ID: teamID},
+		})
+		if err != nil {
+			return nil, nil, fmt.Errorf("failed to grant team access to workspace %q: %w", workspaceID, err)
+		}
+
+		return nil, &TeamAccessGrant{
+			ID:          access.ID,
+			TeamID:      access.Team.ID,
+			WorkspaceID: access.Workspace.ID,
+			Access:      string(access.Access),
+		}, nil
+	}
+
+	projectAccess, err := tfeClient.TeamProjectAccess.Add(ctx, tfe.TeamProjectAccessAddOptions{
+		Access:  tfe.TeamProjectAccessType(accessLevel),
+		Project: &tfe.Project{ID: projectID},
+		Team:    &tfe.Team{ID: teamID},
+	})
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to grant team project access to project %q: %w", projectID, err)
+	}
+
+	return nil, &TeamAccessGrant{
+		ID:        projectAccess.ID,
+		TeamID:    projectAccess.Team.ID,
+		ProjectID: projectAccess.Project.ID,
+		Access:    string(projectAccess.Access),
+	}, nil
 }
