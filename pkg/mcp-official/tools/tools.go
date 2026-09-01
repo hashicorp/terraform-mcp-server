@@ -15,4 +15,8 @@ func RegisterTools(svr *mcp.Server, logger *log.Logger, enabledToolsets []string
 	if toolsets.IsToolEnabled("list_terraform_orgs", enabledToolsets) {
 		mcp.AddTool(svr, tfeTools.ListTerraformOrganizationsTool(), tfeTools.ListTerraformOrganizationsFunc)
 	}
+
+	if toolsets.IsToolEnabled("whoami", enabledToolsets) {
+		mcp.AddTool(svr, tfeTools.WhoAmITool(), tfeTools.WhoAmIFunc)
+	}
 }
