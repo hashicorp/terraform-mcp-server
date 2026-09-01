@@ -43,8 +43,12 @@ func ListTerraformOrganizationsTool() *mcp.Tool {
 }
 
 func ListTerraformOrganizationsFunc(ctx context.Context, request *mcp.CallToolRequest, input ListOrganizationsArguments) (*mcp.CallToolResult, *OrganizationSummaryList, error) {
+	var sessionID string
+	if request.Session != nil {
+		sessionID = request.Session.ID()
+	}
 
-	tfeClient, err := client.GetTfeClient(ctx)
+	tfeClient, err := client.GetTfeClient(ctx, sessionID)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -78,5 +82,5 @@ func ListTerraformOrganizationsFunc(ctx context.Context, request *mcp.CallToolRe
 }
 
 func ptr[T any](v T) *T {
-    return &v
+	return &v
 }
