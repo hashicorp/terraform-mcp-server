@@ -21,11 +21,13 @@ type UpdateWorkspaceArguments struct {
 	Description         string `json:"description,omitempty" jsonschema:"Optional new description for the workspace"`
 	TerraformVersion    string `json:"terraform_version,omitempty" jsonschema:"Optional new Terraform version to use"`
 	WorkingDirectory    string `json:"working_directory,omitempty" jsonschema:"Optional new working directory for Terraform operations"`
-	AutoApply           *bool   `json:"auto_apply,omitempty" jsonschema:"Whether to automatically apply successful plans"`
 	ExecutionMode       string `json:"execution_mode,omitempty" jsonschema:"Execution mode: remote, local, or agent"`
+	TriggerPrefixes     string `json:"trigger_prefixes,omitempty" jsonschema:"Optional comma-separated list of trigger prefixes"`
+
+	// Following fields are *bool so that "no value provided" is treated differently than false.
+	AutoApply           *bool   `json:"auto_apply,omitempty" jsonschema:"Whether to automatically apply successful plans"`
 	QueueAllRuns        *bool   `json:"queue_all_runs,omitempty" jsonschema:"Whether to queue all runs"`
 	SpeculativeEnabled  *bool   `json:"speculative_enabled,omitempty" jsonschema:"Whether speculative plans are enabled"`
-	TriggerPrefixes     string `json:"trigger_prefixes,omitempty" jsonschema:"Optional comma-separated list of trigger prefixes"`
 	FileTriggersEnabled *bool   `json:"file_triggers_enabled,omitempty" jsonschema:"Whether file triggers are enabled"`
 }
 
