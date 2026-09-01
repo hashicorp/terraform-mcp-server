@@ -34,4 +34,8 @@ func RegisterTools(svr *mcp.Server, logger *log.Logger, filter toolsets.ToolFilt
 			register(svr)
 		}
 	}
+
+	if toolsets.IsToolEnabled("whoami", enabledToolsets) {
+		mcp.AddTool(svr, tfeTools.WhoAmITool(), tfeTools.WhoAmIFunc)
+	}
 }
