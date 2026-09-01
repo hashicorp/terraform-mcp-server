@@ -22,7 +22,7 @@ type CreateWorkspaceArguments struct {
 	Description         string `json:"description,omitempty" jsonschema:"Optional description for the workspace"`
 	TerraformVersion    string `json:"terraform_version,omitempty" jsonschema:"Optional Terraform version to use (for example, 1.5.0)"`
 	WorkingDirectory    string `json:"working_directory,omitempty" jsonschema:"Optional working directory for Terraform operations"`
-	AutoApply           bool  `json:"auto_apply,omitempty" jsonschema:"Whether to automatically apply successful plans (default: false)"`
+	AutoApply           bool   `json:"auto_apply,omitempty" jsonschema:"Whether to automatically apply successful plans (default: false)"`
 	ExecutionMode       string `json:"execution_mode,omitempty" jsonschema:"Execution mode: remote, local, or agent (default: remote)"`
 	ProjectID           string `json:"project_id,omitempty" jsonschema:"Optional project ID to associate the workspace with"`
 	VCSRepoIdentifier   string `json:"vcs_repo_identifier,omitempty" jsonschema:"Optional VCS repository identifier (for example, org/repo)"`

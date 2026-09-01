@@ -64,6 +64,8 @@ func GetWorkspaceDetailsFunc(ctx context.Context, _ *mcp.CallToolRequest, input 
 	}
 
 	payload := &tfeclient.WorkspaceToolResponse{
+		Type:        "get_workspace_details",
+		Success:     true,
 		WorkspaceID: workspace.ID,
 		Workspace:   workspace,
 		Variables:   workspaceVariables,

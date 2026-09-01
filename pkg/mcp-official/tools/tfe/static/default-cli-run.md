@@ -5,18 +5,17 @@
 Example code
 
 ```hcl
-terraform { 
-  cloud { 
-    
-    organization = "<<your-terraform-org>>" 
+terraform {
+  cloud {
 
-    workspaces { 
-      name = "<<your-terraform-workspace>>" 
-    } 
-  } 
+    organization = "<<your-terraform-org>>"
+
+    workspaces {
+      name = "<<your-terraform-workspace>>"
+    }
+  }
 }
 ```
-
 
 2. Run terraform init to initialize the workspace.
 3. Run terraform apply to start the first run for this workspace.

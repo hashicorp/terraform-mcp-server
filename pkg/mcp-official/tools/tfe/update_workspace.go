@@ -21,12 +21,12 @@ type UpdateWorkspaceArguments struct {
 	Description         string `json:"description,omitempty" jsonschema:"Optional new description for the workspace"`
 	TerraformVersion    string `json:"terraform_version,omitempty" jsonschema:"Optional new Terraform version to use"`
 	WorkingDirectory    string `json:"working_directory,omitempty" jsonschema:"Optional new working directory for Terraform operations"`
-	AutoApply           bool   `json:"auto_apply,omitempty" jsonschema:"Whether to automatically apply successful plans"`
+	AutoApply           *bool   `json:"auto_apply,omitempty" jsonschema:"Whether to automatically apply successful plans"`
 	ExecutionMode       string `json:"execution_mode,omitempty" jsonschema:"Execution mode: remote, local, or agent"`
-	QueueAllRuns        bool   `json:"queue_all_runs,omitempty" jsonschema:"Whether to queue all runs"`
-	SpeculativeEnabled  bool   `json:"speculative_enabled,omitempty" jsonschema:"Whether speculative plans are enabled"`
+	QueueAllRuns        *bool   `json:"queue_all_runs,omitempty" jsonschema:"Whether to queue all runs"`
+	SpeculativeEnabled  *bool   `json:"speculative_enabled,omitempty" jsonschema:"Whether speculative plans are enabled"`
 	TriggerPrefixes     string `json:"trigger_prefixes,omitempty" jsonschema:"Optional comma-separated list of trigger prefixes"`
-	FileTriggersEnabled bool   `json:"file_triggers_enabled,omitempty" jsonschema:"Whether file triggers are enabled"`
+	FileTriggersEnabled *bool   `json:"file_triggers_enabled,omitempty" jsonschema:"Whether file triggers are enabled"`
 }
 
 func UpdateWorkspaceTool() *mcp.Tool {
@@ -56,10 +56,18 @@ func UpdateWorkspaceFunc(ctx context.Context, _ *mcp.CallToolRequest, input Upda
 	if input.WorkingDirectory != "" {
 		options.WorkingDirectory = &input.WorkingDirectory
 	}
-	options.AutoApply = &input.AutoApply
-	options.QueueAllRuns = &input.QueueAllRuns
-	options.SpeculativeEnabled = &input.SpeculativeEnabled
-	options.FileTriggersEnabled = &input.FileTriggersEnabled
+	if input.AutoApply != nil{
+		options.AutoApply = input.AutoApply
+	}
+	if input.QueueAllRuns != nil{
+		options.QueueAllRuns = input.QueueAllRuns
+	}
+	if input.SpeculativeEnabled != nil{
+		options.SpeculativeEnabled = input.SpeculativeEnabled
+	}
+	if input.FileTriggersEnabled != nil{
+		options.FileTriggersEnabled = input.FileTriggersEnabled
+	}
 	if input.ExecutionMode != "" {
 		mode, err := parseExecutionMode(input.ExecutionMode, false)
 		if err != nil {
