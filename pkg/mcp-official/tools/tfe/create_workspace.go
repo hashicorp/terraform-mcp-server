@@ -51,7 +51,7 @@ func CreateWorkspaceTool() *mcp.Tool {
 	}
 }
 
-func CreateWorkspaceFunc(ctx context.Context, _ *mcp.CallToolRequest, input CreateWorkspaceArguments) (*mcp.CallToolResult, *WorkspaceMutationResult, error) {
+func CreateWorkspaceFunc(ctx context.Context, request *mcp.CallToolRequest, input CreateWorkspaceArguments) (*mcp.CallToolResult, *WorkspaceMutationResult, error) {
 	orgName := strings.TrimSpace(input.TerraformOrgName)
 	workspaceName := strings.TrimSpace(input.WorkspaceName)
 	if orgName == "" || workspaceName == "" {
@@ -96,7 +96,10 @@ func CreateWorkspaceFunc(ctx context.Context, _ *mcp.CallToolRequest, input Crea
 		}
 	}
 
-	tfeClient, err := client.GetTfeClient(ctx)
+	tfeClient, err := client.GetTfeClient(ctx, client.SessionIDFromRequest(request))
+	if err != nil {
+		return nil, nil, err
+	}
 	if err != nil {
 		return nil, nil, err
 	}

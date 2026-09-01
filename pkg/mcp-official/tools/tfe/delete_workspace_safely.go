@@ -25,12 +25,15 @@ func DeleteWorkspaceSafelyTool() *mcp.Tool {
 	}
 }
 
-func DeleteWorkspaceSafelyFunc(ctx context.Context, _ *mcp.CallToolRequest, input DeleteWorkspaceSafelyArguments) (*mcp.CallToolResult, *WorkspaceMutationResult, error) {
+func DeleteWorkspaceSafelyFunc(ctx context.Context, request *mcp.CallToolRequest, input DeleteWorkspaceSafelyArguments) (*mcp.CallToolResult, *WorkspaceMutationResult, error) {
 	workspaceID := strings.TrimSpace(input.WorkspaceID)
 	if workspaceID == "" {
 		return nil, nil, fmt.Errorf("workspace_id is required")
 	}
-	tfeClient, err := client.GetTfeClient(ctx)
+	tfeClient, err := client.GetTfeClient(ctx, client.SessionIDFromRequest(request))
+	if err != nil {
+		return nil, nil, err
+	}
 	if err != nil {
 		return nil, nil, err
 	}

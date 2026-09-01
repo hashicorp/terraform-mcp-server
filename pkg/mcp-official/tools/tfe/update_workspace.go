@@ -39,7 +39,7 @@ func UpdateWorkspaceTool() *mcp.Tool {
 	}
 }
 
-func UpdateWorkspaceFunc(ctx context.Context, _ *mcp.CallToolRequest, input UpdateWorkspaceArguments) (*mcp.CallToolResult, *WorkspaceMutationResult, error) {
+func UpdateWorkspaceFunc(ctx context.Context, request *mcp.CallToolRequest, input UpdateWorkspaceArguments) (*mcp.CallToolResult, *WorkspaceMutationResult, error) {
 	orgName := strings.TrimSpace(input.TerraformOrgName)
 	workspaceName := strings.TrimSpace(input.WorkspaceName)
 	if orgName == "" || workspaceName == "" {
@@ -81,7 +81,7 @@ func UpdateWorkspaceFunc(ctx context.Context, _ *mcp.CallToolRequest, input Upda
 		options.TriggerPrefixes = parseTriggerPrefixes(input.TriggerPrefixes)
 	}
 
-	tfeClient, err := client.GetTfeClient(ctx)
+	tfeClient, err := client.GetTfeClient(ctx, client.SessionIDFromRequest(request))
 	if err != nil {
 		return nil, nil, err
 	}
