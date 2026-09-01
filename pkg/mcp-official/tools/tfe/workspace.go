@@ -79,7 +79,7 @@ func ListWorkspacesFunc(ctx context.Context, request *mcp.CallToolRequest, input
 		}
 	}
 
-	client, err := client.GetTfeClient(ctx)
+	client, err := client.GetTfeClient(ctx, client.SessionIDFromRequest(request))
 	if err != nil {
 		return nil, nil, err
 	}
