@@ -15,7 +15,7 @@ import (
 func ToolLogging(logger *slog.Logger) mcp.Middleware {
 	return func(next mcp.MethodHandler) mcp.MethodHandler {
 		return func(ctx context.Context, method string, req mcp.Request) (mcp.Result, error) {
-			if method != "tools/call" {
+			if method != "tools/call" || logger == nil {
 				return next(ctx, method, req)
 			}
 
