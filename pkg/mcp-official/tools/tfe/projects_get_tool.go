@@ -1,3 +1,6 @@
+// Copyright IBM Corp. 2025
+// SPDX-License-Identifier: MPL-2.0
+
 package tools
 
 import (
@@ -22,8 +25,8 @@ type ProjectDetails struct {
 	DefaultAgentPoolName        string `json:"default_agent_pool_name,omitempty"`
 }
 
-// GetProjectsArguments holds the input parameters for fetching a project within an organization.
-type GetProjectsArguments struct {
+// GetProjectArguments holds the input parameters for fetching a single project.
+type GetProjectArguments struct {
 	// Required field
 	ProjectID string `json:"project_id" jsonschema:"The ID of the project to fetch (e.g., 'prj-abc123def456')"`
 }
@@ -41,17 +44,20 @@ func GetProjectTool() *mcp.Tool {
 	}
 }
 
-func GetProjectFunc(ctx context.Context, request *mcp.CallToolRequest, input GetProjectsArguments) (*mcp.CallToolResult, *ProjectDetails, error) {
+func GetProjectFunc(ctx context.Context, request *mcp.CallToolRequest, input GetProjectArguments) (*mcp.CallToolResult, *ProjectDetails, error) {
 	projectID := strings.TrimSpace(input.ProjectID)
+	if projectID == "" {
+		return nil, nil, fmt.Errorf("project_id must not be blank")
+	}
 
 	tfeClient, err := client.GetTfeClient(ctx)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, fmt.Errorf("getting Terraform client: %w", err)
 	}
 
 	project, err := tfeClient.Projects.Read(ctx, projectID)
 	if err != nil {
-		return nil, nil, fmt.Errorf("Failed to read project %q:  %w", projectID, err)
+		return nil, nil, fmt.Errorf("reading project %q: %w", projectID, err)
 	}
 
 	details := &ProjectDetails{
