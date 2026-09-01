@@ -1,3 +1,6 @@
+// Copyright IBM Corp. 2025
+// SPDX-License-Identifier: MPL-2.0
+
 package tools
 
 import (
@@ -19,23 +22,23 @@ type ProjectSummary struct {
 // ProjectSummaryList is a list of project summaries and pagination details
 type ProjectSummaryList struct {
 	Items []*ProjectSummary `json:"items"`
-	*tfe.Pagination
+	PaginationDetails
 }
 
 // ListProjectsArguments holds the input parameters for listing projects within an organization.
 type ListProjectsArguments struct {
 	// Required field
-	TerraformOrgName string `json:"terraform_org_name" jsonschema:"The Terraform organization name"`
+	TerraformOrgName string `json:"terraform_org_name" jsonschema:"The name of the Terraform Cloud/Enterprise organization"`
 
-	// Optional fields (will be empty strings if not provided)
-	Page     int `json:"page,omitempty" jsonschema:"Page number for pagination (min 1)"`
-	PageSize int `json:"pageSize,omitempty" jsonschema:"Results per page for pagination (min 1, max 100)"`
+	// Optional pagination fields (will be zero values if not provided)
+	Pagination
 }
 
 func ListProjectsTool() *mcp.Tool {
 	return &mcp.Tool{
 		Name:        "list_terraform_projects",
 		Description: `Search and list Terraform projects within a specified organization. Supports pagination for large result sets. Returns a truncated summary of the project, use "get_project" to get the full details for a specific project.`,
+		InputSchema: withPaginationConstraints(inferSchema[ListProjectsArguments]("list_terraform_projects")),
 		Annotations: &mcp.ToolAnnotations{
 			Title:           "List all Terraform projects",
 			OpenWorldHint:   ptr(true),
@@ -47,20 +50,20 @@ func ListProjectsTool() *mcp.Tool {
 
 func ListProjectsFunc(ctx context.Context, request *mcp.CallToolRequest, input ListProjectsArguments) (*mcp.CallToolResult, *ProjectSummaryList, error) {
 	terraformOrgName := strings.TrimSpace(input.TerraformOrgName)
+	if terraformOrgName == "" {
+		return nil, nil, fmt.Errorf("terraform_org_name must not be blank")
+	}
 
 	tfeClient, err := client.GetTfeClient(ctx)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, fmt.Errorf("getting Terraform client: %w", err)
 	}
 
 	projects, err := tfeClient.Projects.List(ctx, terraformOrgName, &tfe.ProjectListOptions{
-		ListOptions: tfe.ListOptions{
-			PageNumber: input.Page,
-			PageSize:   input.PageSize,
-		},
+		ListOptions: input.ListOptions(),
 	})
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to list projects in org %q: %w", terraformOrgName, err)
+		return nil, nil, fmt.Errorf("listing projects in organization %q: %w", terraformOrgName, err)
 	}
 	if len(projects.Items) == 0 {
 		return nil, nil, fmt.Errorf("no projects to list in organization %q", terraformOrgName)
@@ -73,8 +76,9 @@ func ListProjectsFunc(ctx context.Context, request *mcp.CallToolRequest, input L
 			Name: p.Name,
 		}
 	}
+
 	return nil, &ProjectSummaryList{
-		Items:      summaries,
-		Pagination: projects.Pagination,
+		Items:             summaries,
+		PaginationDetails: paginationDetails(projects.Pagination),
 	}, nil
 }
