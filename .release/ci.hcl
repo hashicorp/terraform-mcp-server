@@ -88,3 +88,20 @@ event "promote-production" {
   }
 
 }
+
+event "promote-production-helm" {
+  action "promote-production-helm" {
+    organization = "hashicorp"
+    repository   = "crt-workflows-common"
+    workflow     = "promote-production-helm"
+    depends      = null
+    config       = ""
+  }
+
+  depends = ["promote-production"]
+
+  notification {
+    on = "always"
+  }
+
+}
