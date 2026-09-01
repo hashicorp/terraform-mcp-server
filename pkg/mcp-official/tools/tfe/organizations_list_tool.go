@@ -46,7 +46,7 @@ func ListTerraformOrganizationsTool() *mcp.Tool {
 }
 
 func ListTerraformOrganizationsFunc(ctx context.Context, request *mcp.CallToolRequest, input ListOrganizationsArguments) (*mcp.CallToolResult, *OrganizationSummaryList, error) {
-	tfeClient, err := client.GetTfeClient(ctx)
+	tfeClient, err := client.GetTfeClient(ctx, client.SessionIDFromRequest(request))
 	if err != nil {
 		return nil, nil, fmt.Errorf("getting Terraform client: %w", err)
 	}
