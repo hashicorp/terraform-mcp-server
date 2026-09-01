@@ -66,7 +66,7 @@ func ListWorkspacesFunc(ctx context.Context, request *mcp.CallToolRequest, input
 		return nil, nil, fmt.Errorf("terraform_org_name must not be blank")
 	}
 
-	tfeClient, err := client.GetTfeClient(ctx)
+	tfeClient, err := client.GetTfeClient(ctx, client.SessionIDFromRequest(request))
 	if err != nil {
 		return nil, nil, fmt.Errorf("getting Terraform client: %w", err)
 	}

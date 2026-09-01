@@ -50,7 +50,7 @@ func GetProjectFunc(ctx context.Context, request *mcp.CallToolRequest, input Get
 		return nil, nil, fmt.Errorf("project_id must not be blank")
 	}
 
-	tfeClient, err := client.GetTfeClient(ctx)
+	tfeClient, err := client.GetTfeClient(ctx, client.SessionIDFromRequest(request))
 	if err != nil {
 		return nil, nil, fmt.Errorf("getting Terraform client: %w", err)
 	}
