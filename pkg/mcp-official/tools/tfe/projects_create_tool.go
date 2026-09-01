@@ -85,7 +85,7 @@ func CreateProjectFunc(ctx context.Context, request *mcp.CallToolRequest, input 
 		options.DefaultExecutionMode = tfe.String(mode)
 	}
 
-	tfeClient, err := client.GetTfeClient(ctx)
+	tfeClient, err := client.GetTfeClient(ctx, client.SessionIDFromRequest(request))
 	if err != nil {
 		return nil, nil, fmt.Errorf("getting Terraform client: %w", err)
 	}
