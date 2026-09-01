@@ -40,7 +40,7 @@ type healthResponse struct {
 	Version   string `json:"version"`
 }
 
-const officialSlogOutputPath = "terraform-mcp-official.log"
+const officialSlogOutputFileName = "terraform-mcp-official.log"
 
 var (
 	rootCmd = &cobra.Command{
@@ -419,13 +419,13 @@ func streamableHTTPServerInit(ctx context.Context, hcServer *server.MCPServer, l
 		logger.Info("TF_X_OFFICIAL_SDK_ENABLED set to true in env, enabling the official mcp go-sdk server")
 		slogLevel := getSlogLevel(rootCmd)
 		slogFormat := getLogFormat(rootCmd)
-		officialLogger, officialLogFile, err := initSlog(officialSlogOutputPath, slogLevel, slogFormat)
+		officialLogger, officialLogFile, err := initSlog(officialSlogOutputFileName, slogLevel, slogFormat)
 		if err != nil {
-			return fmt.Errorf("failed to initialize official MCP slog logger at %s: %w", officialSlogOutputPath, err)
+			return fmt.Errorf("failed to initialize official MCP slog logger at %s: %w", officialSlogOutputFileName, err)
 		}
 		defer func() {
 			if err := officialLogFile.Close(); err != nil {
-				logger.Errorf("Failed to close official MCP log file at %s: %v", officialSlogOutputPath, err)
+				logger.Errorf("Failed to close official MCP log file at %s: %v", officialSlogOutputFileName, err)
 			}
 		}()
 
