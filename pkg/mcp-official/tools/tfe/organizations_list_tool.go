@@ -1,3 +1,6 @@
+// Copyright IBM Corp. 2025
+// SPDX-License-Identifier: MPL-2.0
+
 package tools
 
 import (
@@ -20,22 +23,22 @@ type OrganizationSummary struct {
 // OrganizationSummaryList contains the list of organization summaries and pagination details
 type OrganizationSummaryList struct {
 	Items []*OrganizationSummary `json:"items"`
-	*tfe.Pagination
+	PaginationDetails
 }
 
 // ListOrganizationsArguments holds the optional pagination input for listing organizations.
 type ListOrganizationsArguments struct {
-	// Optional fields (will be zero values if not provided)
-	Page     int `json:"page,omitempty" jsonschema:"Page number for pagination (min 1)"`
-	PageSize int `json:"pageSize,omitempty" jsonschema:"Results per page for pagination (min 1, max 100)"`
+	Pagination
 }
 
 func ListTerraformOrganizationsTool() *mcp.Tool {
 	return &mcp.Tool{
 		Name:        "list_terraform_orgs",
 		Description: "Fetches a list of all Terraform organizations. Supports Pagination for large result sets.",
+		InputSchema: withPaginationConstraints(inferSchema[ListOrganizationsArguments]("list_terraform_orgs")),
 		Annotations: &mcp.ToolAnnotations{
 			Title:           "List all Terraform organizations",
+			OpenWorldHint:   ptr(true),
 			ReadOnlyHint:    true,
 			DestructiveHint: ptr(false),
 		},
@@ -43,19 +46,16 @@ func ListTerraformOrganizationsTool() *mcp.Tool {
 }
 
 func ListTerraformOrganizationsFunc(ctx context.Context, request *mcp.CallToolRequest, input ListOrganizationsArguments) (*mcp.CallToolResult, *OrganizationSummaryList, error) {
-	tfeClient, err := client.GetTfeClient(ctx, client.SessionIDFromRequest(request))
+	tfeClient, err := client.GetTfeClient(ctx)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, fmt.Errorf("getting Terraform client: %w", err)
 	}
 
 	orgs, err := tfeClient.Organizations.List(ctx, &tfe.OrganizationListOptions{
-		ListOptions: tfe.ListOptions{
-			PageNumber: input.Page,
-			PageSize:   input.PageSize,
-		},
+		ListOptions: input.ListOptions(),
 	})
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to list Terraform organizations: %w", err)
+		return nil, nil, fmt.Errorf("listing Terraform organizations: %w", err)
 	}
 	if len(orgs.Items) == 0 {
 		return nil, nil, fmt.Errorf("no organizations to list")
@@ -71,11 +71,7 @@ func ListTerraformOrganizationsFunc(ctx context.Context, request *mcp.CallToolRe
 	}
 
 	return nil, &OrganizationSummaryList{
-		Items:      summaries,
-		Pagination: orgs.Pagination,
+		Items:             summaries,
+		PaginationDetails: paginationDetails(orgs.Pagination),
 	}, nil
-}
-
-func ptr[T any](v T) *T {
-	return &v
 }
