@@ -11,8 +11,8 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-// accountDetails is the response shape returned by the whoami tool.
-type accountDetails struct {
+// AccountDetails is the response shape returned by the whoami tool.
+type AccountDetails struct {
 	Username         string `json:"username"`
 	Email            string `json:"email"`
 	IsServiceAccount bool   `json:"is_service_account"`
@@ -33,7 +33,7 @@ func WhoAmITool() *mcp.Tool {
 	}
 }
 
-func WhoAmIFunc(ctx context.Context, request *mcp.CallToolRequest, _ WhoAmIArguments) (*mcp.CallToolResult, *accountDetails, error) {
+func WhoAmIFunc(ctx context.Context, request *mcp.CallToolRequest, _ WhoAmIArguments) (*mcp.CallToolResult, *AccountDetails, error) {
 	tfeClient, err := client.GetTfeClient(ctx, client.SessionIDFromRequest(request))
 	if err != nil {
 		return nil, nil, fmt.Errorf("getting Terraform client: %w", err)
@@ -44,7 +44,7 @@ func WhoAmIFunc(ctx context.Context, request *mcp.CallToolRequest, _ WhoAmIArgum
 		return nil, nil, fmt.Errorf("failed to read account details: %w", err)
 	}
 
-	result := &accountDetails{
+	result := &AccountDetails{
 		Username:         user.Username,
 		Email:            user.Email,
 		IsServiceAccount: user.IsServiceAccount,

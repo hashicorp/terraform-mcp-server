@@ -18,11 +18,6 @@ type GetTokenPermissionsArguments struct {
 	TerraformOrgName string `json:"terraform_org_name" jsonschema:"The name of the Terraform Cloud/Enterprise organization"`
 }
 
-// TokenPermissionsResult holds the list of permissions the current token has in an organization.
-type TokenPermissionsResult struct {
-	Permissions []string `json:"permissions"`
-}
-
 func GetTokenPermissionsTool() *mcp.Tool {
 	return &mcp.Tool{
 		Name:        "get_token_permissions",
@@ -35,7 +30,7 @@ func GetTokenPermissionsTool() *mcp.Tool {
 	}
 }
 
-func GetTokenPermissionsFunc(ctx context.Context, request *mcp.CallToolRequest, input GetTokenPermissionsArguments) (*mcp.CallToolResult, *TokenPermissionsResult, error) {
+func GetTokenPermissionsFunc(ctx context.Context, request *mcp.CallToolRequest, input GetTokenPermissionsArguments) (*mcp.CallToolResult, []string, error) {
 	tfeClient, err := client.GetTfeClient(ctx, client.SessionIDFromRequest(request))
 	if err != nil {
 		return nil, nil, fmt.Errorf("getting Terraform client: %w", err)
@@ -43,10 +38,8 @@ func GetTokenPermissionsFunc(ctx context.Context, request *mcp.CallToolRequest, 
 
 	org, err := tfeClient.Organizations.Read(ctx, input.TerraformOrgName)
 	if err != nil {
-		return nil, nil, fmt.Errorf("organization not found: %q", input.TerraformOrgName)
+		return nil, nil, fmt.Errorf("failed to read organization %q: %w", input.TerraformOrgName, err)
 	}
 
-	return nil, &TokenPermissionsResult{
-		Permissions: tfeclient.HumanReadableTokenPermissions(org.Permissions),
-	}, nil
+	return nil, tfeclient.HumanReadableTokenPermissions(org.Permissions), nil
 }
