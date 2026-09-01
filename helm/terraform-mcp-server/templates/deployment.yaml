@@ -1,0 +1,119 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "terraform-mcp-server.fullname" . }}
+  labels:
+    {{- include "terraform-mcp-server.labels" . | nindent 4 }}
+spec:
+  {{- if not .Values.autoscaling.enabled }}
+  replicas: {{ .Values.replicaCount }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "terraform-mcp-server.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        {{- include "terraform-mcp-server.labels" . | nindent 8 }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "terraform-mcp-server.serviceAccountName" . }}
+      {{- with .Values.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: {{ .Chart.Name }}
+          {{- with .Values.securityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args:
+            - "streamable-http"
+            - "--transport-port={{ .Values.service.port }}"
+            - "--transport-host=0.0.0.0"
+          env:
+            - name: MCP_HEARTBEAT_INTERVAL
+              value: {{ .Values.mcpServer.heartbeatInterval | default "0" | quote }}
+            - name: LOG_LEVEL
+              value: {{ .Values.mcpServer.logLevel | default "info" | quote }}
+            - name: LOG_FORMAT
+              value: {{ .Values.mcpServer.logFormat | default "json" | quote }}
+            {{- if .Values.mcpServer.tfeAddress }}
+            - name: TFE_ADDRESS
+              value: {{ .Values.mcpServer.tfeAddress | quote }}
+            {{- end }}
+            {{- if .Values.mcpServer.allowedOrigins }}
+            - name: MCP_ALLOWED_ORIGINS
+              value: {{ .Values.mcpServer.allowedOrigins | quote }}
+            {{- end }}
+            {{- if .Values.mcpServer.corsMode }}
+            - name: MCP_CORS_MODE
+              value: {{ .Values.mcpServer.corsMode | quote }}
+            {{- end }}
+            {{- if .Values.mcpServer.sharedSecret }}
+            - name: TF_MCP_SHARED_SECRET
+              value: {{ .Values.mcpServer.sharedSecret | quote }}
+            {{- end }}
+            - name: HOST_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.hostIP
+            - name: OTEL_METRICS_ENABLED
+              value: {{ .Values.otel.enabled | quote }}
+            {{- if .Values.otel.metricsEndpoint }}
+            - name: OTEL_METRICS_ENDPOINT
+              value: {{ .Values.otel.metricsEndpoint | quote }}
+            {{- end }}
+            - name: OTEL_METRICS_SERVICE_NAME
+              value: {{ .Values.otel.serviceName | default "terraform-mcp-server" | quote }}
+            - name: OTEL_SERVICE_VERSION
+              value: {{ .Values.image.tag | default .Chart.AppVersion | quote }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.service.port }}
+              protocol: TCP
+          {{- with .Values.livenessProbe }}
+          livenessProbe:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.readinessProbe }}
+          readinessProbe:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.volumeMounts }}
+          volumeMounts:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+      {{- with .Values.volumes }}
+      volumes:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
