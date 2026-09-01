@@ -55,10 +55,22 @@ The server is configured through the `mcpServer` values, which map to the server
 | `mcpServer.corsMode` | CORS mode: `strict`, `development`, or `disabled` | `strict` |
 | `mcpServer.allowedOrganizations` | Restrict tool calls to these Terraform organizations. Empty allows any organization the token can reach. | `[]` |
 | `mcpServer.sessionMode` | `stateful` or `stateless`. Use `stateless` when running multiple replicas behind a load balancer without session affinity. | `stateful` |
-| `mcpServer.sharedSecret` | Optional shared secret sent as the `X-Tf-Mcp-Secret` header to identify a hosted deployment. Treat as a credential. | `""` |
+| `mcpServer.existingSecret` | Name of an existing Secret holding the shared secret sent as the `X-Tf-Mcp-Secret` header. Preferred over `sharedSecret`. | `""` |
+| `mcpServer.existingSecretKey` | Key within `existingSecret` holding the shared secret. | `shared-secret` |
+| `mcpServer.sharedSecret` | Shared secret as a plaintext value. Only used when `existingSecret` is unset. Treat as a credential. | `""` |
 | `mcpServer.logLevel` | Log level | `info` |
 | `mcpServer.logFormat` | Log format: `text` or `json` | `json` |
 | `mcpServer.heartbeatInterval` | Heartbeat interval for streamable-http; `0` disables | `"0"` |
+
+To supply the shared secret from an existing Secret:
+
+```bash
+kubectl create secret generic terraform-mcp-server \
+  --from-literal=shared-secret=<value>
+
+helm install terraform-mcp-server ./helm/terraform-mcp-server \
+  --set mcpServer.existingSecret=terraform-mcp-server
+```
 
 ### Ingress
 
@@ -89,4 +101,4 @@ The chart sets `OTEL_INSTANCE_ID` from the pod UID so each replica reports a dis
 - **CORS defaults to strict.** With no `allowedOrigins` set, all cross-origin requests are rejected. Set `mcpServer.allowedOrigins` to your client origin(s).
 - **The Terraform address is server-side only.** Clients cannot override `TFE_ADDRESS` via header or query parameter in streamable-http mode; it is fixed by `mcpServer.tfeAddress`.
 - **Use TLS in front of the server.** Deploy behind an ingress or service that terminates TLS. The shared secret and any tokens are sent in headers and must not traverse plaintext connections.
-- **`mcpServer.sharedSecret` is rendered into the pod environment.** For sensitive deployments, prefer supplying it via a values file you keep out of source control, or set it with `--set` at install time.
+- **Use (preffered over sharedSecret) `mcpServer.existingSecret` for the shared secret.** Create a Kubernetes Secret and reference it by name; the chart reads the key named by `mcpServer.existingSecretKey` (default `shared-secret`). `mcpServer.sharedSecret` puts the value straight into your values file and the pod spec, so it's only appropriate for local testing.

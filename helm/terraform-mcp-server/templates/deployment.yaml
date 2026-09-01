@@ -69,7 +69,13 @@ spec:
             - name: MCP_ORGANIZATION_ALLOWLIST
               value: {{ .Values.mcpServer.allowedOrganizations | join "," | quote }}
             {{- end }}
-            {{- if .Values.mcpServer.sharedSecret }}
+            {{- if .Values.mcpServer.existingSecret }}
+            - name: TF_MCP_SHARED_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.mcpServer.existingSecret }}
+                  key: {{ .Values.mcpServer.existingSecretKey | default "shared-secret" }}
+            {{- else if .Values.mcpServer.sharedSecret }}
             - name: TF_MCP_SHARED_SECRET
               value: {{ .Values.mcpServer.sharedSecret | quote }}
             {{- end }}

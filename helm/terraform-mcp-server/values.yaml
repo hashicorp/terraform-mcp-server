@@ -76,7 +76,10 @@ mcpServer:
   corsMode: "strict"
   # restrict tool calls to these orgs. empty allows any org the token can reach.
   allowedOrganizations: []
-  # sent as the X-Tf-Mcp-Secret header. treat as a credential.
+  # the shared secret sent as the X-Tf-Mcp-Secret header. prefer existingSecret,
+  # sharedSecret renders the value straight into the pod env.
+  existingSecret: ""
+  existingSecretKey: "shared-secret"
   sharedSecret: ""
 
 otel:
