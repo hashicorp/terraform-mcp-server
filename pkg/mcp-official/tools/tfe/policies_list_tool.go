@@ -13,7 +13,8 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-// ListWorkspacePolicySetsSummary holds a trimmed view of a single Terraform organization.
+// ListWorkspacePolicySetsSummary holds a trimmed view of a single policy set that
+// applies to a workspace, along with the reason it applies.
 type ListWorkspacePolicySetsSummary struct {
 	ID          string `json:"id"`
 	Name        string `json:"name"`
@@ -23,14 +24,15 @@ type ListWorkspacePolicySetsSummary struct {
 	Reason      string `json:"reason"`
 }
 
-// ListWorkspacePolicySetsSummaryList contains the list of organization summaries and pagination details
+// ListWorkspacePolicySetsSummaryList contains the policy sets that apply to a workspace.
+// The handler aggregates every page into one list, so no pagination details are reported.
 type ListWorkspacePolicySetsSummaryList struct {
 	Items []*ListWorkspacePolicySetsSummary `json:"items"`
-	*tfe.Pagination
 }
 
 // ListWorkspacePolicySetsArguments holds the required inputs for listing policy sets attached to a workspace.
 type ListWorkspacePolicySetsArguments struct {
+	// Required field
 	TerraformOrgName string `json:"terraform_org_name" jsonschema:"The name of the Terraform Cloud/Enterprise organization"`
 	WorkspaceID      string `json:"workspace_id" jsonschema:"The workspace ID to get policy sets for (e.g., ws-2HRvNs49EWPjDqT1)"`
 }
@@ -119,8 +121,14 @@ func ListWorkspacePolicySetsFunc(ctx context.Context, request *mcp.CallToolReque
 		pageNumber++
 	}
 
+	// Explicit Content suppresses the SDK's marshalled-JSON fallback text, and the empty
+	// (non-nil) slice serializes as [] rather than null.
 	if len(matchingSets) == 0 {
-		return nil, nil, fmt.Errorf("no policy sets are attached to workspace %q", workspaceID)
+		return &mcp.CallToolResult{
+			Content: []mcp.Content{&mcp.TextContent{
+				Text: fmt.Sprintf("No policy sets are attached to workspace %q", workspaceID),
+			}},
+		}, &ListWorkspacePolicySetsSummaryList{Items: []*ListWorkspacePolicySetsSummary{}}, nil
 	}
 
 	return nil, &ListWorkspacePolicySetsSummaryList{Items: matchingSets}, nil
