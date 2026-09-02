@@ -64,7 +64,9 @@ func ExecuteQuery(logger *log.Logger) server.ServerTool {
 				mcp.Required(),
 				mcp.Description(
 					"JSON object containing no_code_query_providers and optional generate_config_out. "+
-						"Use generate_query_configuration to construct this value. The tool adds the JSON:API "+
+						"Use provider_list_schema_list and generate_query_configuration to construct this value. "+
+						"Every resource_type must be an exact list_resource_schemas key; ordinary managed "+
+						"resource names are not necessarily supported list resources. The tool adds the JSON:API "+
 						"envelope and workspace relationship automatically.",
 				),
 			),
@@ -217,8 +219,13 @@ func executeQueryToolErrorf(logger *log.Logger, format string, args ...any) (*mc
 
 const executeQueryDescription = `Creates and immediately executes an HCP Terraform Search query.
 
-Pass an organization name, workspace name, and the provider/resource configuration produced
-from the guidance returned by generate_query_configuration. The tool resolves the workspace
+MANDATORY WORKFLOW: Before calling this tool, call provider_list_schema_list and then
+generate_query_configuration. Do not skip generate_query_configuration or construct the payload
+directly. Pass an organization name, workspace name, and the provider/resource configuration
+produced from its guidance.
+Never construct resource_type from an ordinary managed resource name: it must be an exact key
+in list_resource_schemas for the selected provider version. If no matching key exists, do not
+call this tool. The tool resolves the workspace
 with go-tfe, constructs the JSON:API request, and
 calls POST /api/v2/search/no-code-query, which persists the selections, uploads generated
 Terraform query configuration, and starts a query run. It does not create or modify

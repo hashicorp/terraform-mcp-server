@@ -29,7 +29,7 @@ import (
 //	GET /api/v2/search/provider-versions/:namespace/:name/:version
 //	    → full schema for that provider, including list_resource_schemas
 //
-// When the caller supplies namespace + name (+ optional version), the tool
+// When the caller supplies namespace + name, the tool
 // fetches the schema for that specific provider directly.
 // When neither is supplied, it lists all supported providers for the required
 // organization context so the agent can pick one and call the tool again.
@@ -52,12 +52,6 @@ func ProviderListSchemaList(logger *log.Logger) server.ServerTool {
 				mcp.Description(
 					"Short provider name, e.g. \"aws\", \"azurerm\", \"google\". "+
 						"Required together with provider_namespace to fetch a schema directly.",
-				),
-			),
-			mcp.WithString("provider_version",
-				mcp.Description(
-					"Specific provider version to fetch, e.g. \"6.33.0\". "+
-						"When omitted the latest version available in the stub catalog is used.",
 				),
 			),
 			mcp.WithString("organization_name",
@@ -84,7 +78,6 @@ func ProviderListSchemaList(logger *log.Logger) server.ServerTool {
 func providerListSchemaListHandler(ctx context.Context, request mcp.CallToolRequest, logger *log.Logger) (*mcp.CallToolResult, error) {
 	providerNamespace := strings.TrimSpace(request.GetString("provider_namespace", ""))
 	providerName := strings.TrimSpace(strings.ToLower(request.GetString("provider_name", "")))
-	providerVersion := strings.TrimSpace(request.GetString("provider_version", ""))
 	orgName := strings.TrimSpace(request.GetString("organization_name", ""))
 	workspaceName := strings.TrimSpace(request.GetString("workspace_name", ""))
 	if orgName == "" || workspaceName == "" {
@@ -121,13 +114,11 @@ func providerListSchemaListHandler(ctx context.Context, request mcp.CallToolRequ
 
 	// ── Branch: fetch schema for a specific provider ──────────────────────────
 
-	// If no version was given, discover it from the index endpoint first.
-	if providerVersion == "" {
-		discovered, err := discoverProviderVersion(ctx, baseURL, orgName, providerNamespace, providerName, token, httpClient, logger)
-		if err != nil {
-			return searchToolErrorf(logger, "%v", err)
-		}
-		providerVersion = discovered
+	// The catalog is authoritative for the version. Do not accept a caller- or
+	// model-supplied version because it may not have list-resource schemas.
+	providerVersion, err := discoverProviderVersion(ctx, baseURL, orgName, providerNamespace, providerName, token, httpClient, logger)
+	if err != nil {
+		return searchToolErrorf(logger, "%v", err)
 	}
 
 	return fetchProviderSchema(ctx, baseURL, orgName, providerNamespace, providerName, providerVersion, token, httpClient, logger)
@@ -282,7 +273,8 @@ func fetchProviderSchema(ctx context.Context, baseURL, orgName, namespace, name,
 		"note": fmt.Sprintf(
 			"Pass list_resource_schemas to generate_query_configuration "+
 				"(with provider_namespace=%q, provider_name=%q, provider_version=%q) "+
-				"to get a full schema guide and example configuration, then pass it with organization_name and workspace_name to execute_query.",
+				"to get a full schema guide and example configuration. Use only exact resource type keys present in list_resource_schemas; "+
+				"ordinary managed resource names are not automatically supported list resources. Then pass the configuration with organization_name and workspace_name to execute_query.",
 			resp.Data.Attributes.Namespace,
 			resp.Data.Attributes.Name,
 			resp.Data.Attributes.Version,
@@ -357,10 +349,11 @@ LIST mode (organization_name and workspace_name supplied; no provider identifier
   Returns all providers currently in the search-compatible catalog so the agent
   can choose one. Each entry includes namespace, name, and version.
 
-FETCH mode (organization_name, workspace_name, provider_namespace, and provider_name supplied):
+  FETCH mode (organization_name, workspace_name, provider_namespace, and provider_name supplied):
   Returns the full list_resource_schemas for the requested provider, ready to
   pass directly into generate_query_configuration.
-  - If provider_version is omitted, the latest version in the catalog is used.
+  - The provider version is always read from the provider catalog response. Never infer or
+    supply a version from model knowledge, examples, or the public Terraform Registry.
   - If the provider is not found in the catalog, an error is returned with a hint
     to use search_providers to find the provider in the public Terraform Registry.
 
@@ -369,10 +362,13 @@ Typical agent workflow:
      ask the user for both and wait for their response.
   2. Call provider_list_schema_list(organization_name, workspace_name) to discover available providers.
   3. Call provider_list_schema_list(organization_name, workspace_name, provider_namespace,
-     provider_name) to fetch the schema.
+     provider_name) to fetch the catalog-selected version and its schema.
   4. Pass the returned list_resource_schemas to generate_query_configuration to get
      a full guide and example query configuration.
-  5. Fill in the configuration and pass it with organization_name and workspace_name to execute_query.
+  5. Select only an exact resource type key present in list_resource_schemas. Never infer list
+     support from an ordinary managed resource name. If no key matches the user's request,
+     explain that the selected provider version cannot list that resource and stop.
+  6. Fill in the configuration and pass it with organization_name and workspace_name to execute_query.
 
 Requires TFE_TOKEN and TFE_ADDRESS to be configured (same credentials used for
 other HCP Terraform tools).`
