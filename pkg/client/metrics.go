@@ -88,7 +88,7 @@ func LoadMetricsConfigFromEnv(logger *log.Logger) MetricsConfig {
 	return config
 }
 
-// RecordToolCallByName is the transport-agnostic core of RecordToolCall,
+// RecordToolCallByName is the common core of RecordToolCall,
 // shared by the mark3labs before/after-hook path and the go-sdk middleware
 // path (pkg/mcp-official/tools/middleware.Metrics).
 func RecordToolCallByName(ctx context.Context, startTime time.Time, toolErr bool, toolName string, config MetricsConfig, logger *log.Logger) {
