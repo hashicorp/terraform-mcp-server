@@ -301,7 +301,7 @@ func setupInstana(logger *log.Logger) instana.TracerLogger {
 	})
 }
 
-func streamableHTTPServerInit(ctx context.Context, hcServer *server.MCPServer, logger *log.Logger, host string, port string, endpointPath string, heartbeatInterval time.Duration, organizationAllowlist []string, enabledToolsets []string, rateLimiter *client.RateLimitMiddleware) error {
+func streamableHTTPServerInit(ctx context.Context, hcServer *server.MCPServer, logger *log.Logger, host string, port string, endpointPath string, heartbeatInterval time.Duration, organizationAllowlist []string, enabledToolsets []string, rateLimiter *client.RateLimitMiddleware, metricsConfig client.MetricsConfig) error {
 	// Ensure endpoint path starts with /
 	endpointPath = path.Join("/", endpointPath)
 	var handler http.Handler
@@ -370,7 +370,7 @@ func streamableHTTPServerInit(ctx context.Context, hcServer *server.MCPServer, l
 	// Create the official go-sdk streamable server
 	if enableOfficialSDK := os.Getenv("TF_X_OFFICIAL_SDK_ENABLED"); enableOfficialSDK == "true" {
 		logger.Info("TF_X_OFFICIAL_SDK_ENABLED set to true in env, enabling the official mcp go-sdk server")
-		officialStreamableServer := getOfficialStreamableServer(ctx, heartbeatInterval, isStateless, corsConfig, logger, organizationAllowlist, enabledToolsets, rateLimiter)
+		officialStreamableServer := getOfficialStreamableServer(ctx, heartbeatInterval, isStateless, corsConfig, logger, organizationAllowlist, enabledToolsets, rateLimiter, metricsConfig)
 		// Handle the /mcp endpoint with the official go-sdk streamable server (with security wrapper)
 		mux.Handle(endpointPath+"/official", officialStreamableServer)
 		mux.Handle(endpointPath+"/official/", officialStreamableServer)
@@ -459,17 +459,42 @@ func streamableHTTPServerInit(ctx context.Context, hcServer *server.MCPServer, l
 	return nil
 }
 
-func getOfficialStreamableServer(ctx context.Context, heartbeatInterval time.Duration, isStateless bool, corsConfig client.CORSConfig, logger *log.Logger, organizationAllowlist []string, enabledToolsets []string, rateLimiter *client.RateLimitMiddleware) http.Handler {
+func getOfficialStreamableServer(ctx context.Context, heartbeatInterval time.Duration, isStateless bool, corsConfig client.CORSConfig, logger *log.Logger, organizationAllowlist []string, enabledToolsets []string, rateLimiter *client.RateLimitMiddleware, metricsConfig client.MetricsConfig) http.Handler {
 	logger.Info("Creating a go-sdk StreamableHTTP server...")
 	slogLogger := newSlogLogger(logger)
+
+	// Metrics is added first so it wraps every other middleware, measuring
+	// the full round trip and always recording the result — the go-sdk
+	// equivalent of AddBeforeCallTool/AddAfterCallTool wrapping the whole
+	// mark3labs middleware chain in attachMetricsHooks
 	middlewares := []mcp.Middleware{
+		middleware.Metrics(metricsConfig, logger),
 		middleware.RateLimit(rateLimiter),
 		middleware.ToolLogging(slogLogger),
 	}
 	if len(organizationAllowlist) > 0 {
 		middlewares = append(middlewares, middleware.OrganizationAllowlist(organizationAllowlist, slogLogger))
 	}
-	serverOpts := []mcpofficial.Option{mcpofficial.WithMiddlewares(middlewares...)}
+	serverOpts := []mcpofficial.Option{
+		mcpofficial.WithMiddlewares(middlewares...),
+		// Runs once per session: creates the session's TFE/HTTP clients right
+		// away, then waits in the background for the client to disconnect so we
+		// can clean up (cached clients, rate-limit state, dynamic tool registry).
+		// This replaces the old session-registration/cleanup hooks so its basically
+		// the go-sdk equivalent of AddOnRegisterSession + AddOnUnregisterSession
+		// (and the BeforeListTools/BeforeCallTool safety net)
+		mcpofficial.WithOnSession(func(ctx context.Context, session *mcp.ServerSession) {
+			if session == nil {
+				return
+			}
+			sessionID := session.ID()
+			client.NewSessionHandler(ctx, sessionID, logger)
+			go func() {
+				_ = session.Wait()
+				client.EndSessionHandler(context.Background(), sessionID, rateLimiter, logger)
+			}()
+		}),
+	}
 	hcServer := mcpofficial.NewServer(version.Version, instructions, heartbeatInterval, logger, enabledToolsets, serverOpts...)
 
 	opts := &mcp.StreamableHTTPOptions{

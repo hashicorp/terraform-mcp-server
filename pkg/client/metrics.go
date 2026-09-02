@@ -88,17 +88,18 @@ func LoadMetricsConfigFromEnv(logger *log.Logger) MetricsConfig {
 	return config
 }
 
-func RecordToolCall(ctx context.Context, startTime time.Time, toolErr bool, id any, message *mcp.CallToolRequest, config MetricsConfig, logger *log.Logger) {
-	logger.Infof("Recording tool call for tool: %s id: %v", message.Params.Name, id)
+// RecordToolCallByName is the common core of RecordToolCall,
+// shared by the mark3labs before/after-hook path and the go-sdk middleware
+// path (pkg/mcp-official/tools/middleware.Metrics).
+func RecordToolCallByName(ctx context.Context, startTime time.Time, toolErr bool, toolName string, config MetricsConfig, logger *log.Logger) {
 	if !config.Enabled || config.ToolCounter == nil {
 		logger.Debugf("Either metrics are not enabled or ToolCounter is NIL! Initialization failed.")
 		return
 	}
 	// Calculate latency
 	elapsed := time.Since(startTime).Seconds()
-
 	attrs := metric.WithAttributes(
-		attribute.String("tool.name", message.Params.Name),
+		attribute.String("tool.name", toolName),
 		attribute.String("service.name", config.ServiceName),
 		attribute.String("service.version", config.ServiceVersion),
 	)
@@ -107,10 +108,15 @@ func RecordToolCall(ctx context.Context, startTime time.Time, toolErr bool, id a
 	// Record Latency (Histogram)
 	config.ToolCallLatencyBucket.Record(ctx, elapsed, attrs)
 	// Record errors if any
-	if toolErr == true {
+	if toolErr {
 		config.ErrorCounter.Add(ctx, 1, attrs)
-		logger.Errorf("Recorded error for tool %s", message.Params.Name)
+		logger.Errorf("Recorded error for tool %s", toolName)
 	}
+}
+
+func RecordToolCall(ctx context.Context, startTime time.Time, toolErr bool, id any, message *mcp.CallToolRequest, config MetricsConfig, logger *log.Logger) {
+	logger.Infof("Recording tool call for tool: %s id: %v", message.Params.Name, id)
+	RecordToolCallByName(ctx, startTime, toolErr, message.Params.Name, config, logger)
 }
 
 // RecordClientType records the type and version of the client making the tool call (e.g., CLI, VSCode, Web, etc.)

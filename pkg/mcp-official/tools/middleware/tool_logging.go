@@ -20,8 +20,7 @@ func ToolLogging(logger *slog.Logger) mcp.Middleware {
 			}
 
 			if params, ok := req.GetParams().(*mcp.CallToolParamsRaw); ok && logger != nil {
-				logger.InfoContext(ctx, "tool call executed",
-					"tool", params.Name, "arguments", string(params.Arguments))
+				logger.InfoContext(ctx, "tool call executed", "tool", params.Name, "arguments", string(params.Arguments))
 			}
 
 			return next(ctx, method, req)
