@@ -314,6 +314,8 @@ func TestWriteInstructions_ContainsPreConditions(t *testing.T) {
 		"nesting_mode",
 		"list` or `set",
 		"100",
+		"ordinary managed resources are not automatically list resources",
+		"never infer or substitute a provider version",
 	}
 	for _, want := range checks {
 		if !strings.Contains(out, want) {
@@ -378,6 +380,7 @@ func TestWriteVariableNotes_ContainsMistakeRows(t *testing.T) {
 		"generate_config_out",
 		"nesting_mode",
 		"UI default is 100",
+		"assuming an S3 bucket can use `aws_s3_bucket`",
 	}
 	for _, want := range checks {
 		if !strings.Contains(out, want) {
