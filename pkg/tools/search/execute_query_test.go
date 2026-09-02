@@ -48,6 +48,9 @@ func TestExecuteQueryDefinition(t *testing.T) {
 	assert.Contains(t, tool.Tool.Description, "get_query_status")
 	assert.Contains(t, tool.Tool.Description, "get_query_summary")
 	assert.Contains(t, tool.Tool.Description, "Do not use curl")
+	assert.Contains(t, tool.Tool.Description, "exact key")
+	assert.Contains(t, tool.Tool.Description, "ordinary managed resource name")
+	assert.Contains(t, tool.Tool.Description, "MANDATORY WORKFLOW")
 }
 
 func TestParseExecuteQueryConfiguration(t *testing.T) {
