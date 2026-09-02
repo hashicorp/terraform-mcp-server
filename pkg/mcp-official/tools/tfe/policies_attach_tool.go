@@ -15,6 +15,7 @@ import (
 
 // AttachPolicySetToWorkspacesArguments holds the required inputs for attaching a policy set to workspaces.
 type AttachPolicySetToWorkspacesArguments struct {
+	// Required field
 	PolicySetID  string `json:"policy_set_id" jsonschema:"The ID of the policy set to attach (e.g., polset-3yVQZvHzf5j3WRJ1)"`
 	WorkspaceIDs string `json:"workspace_ids" jsonschema:"Comma-separated list of workspace IDs to attach the policy set to"`
 }
