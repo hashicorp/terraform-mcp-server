@@ -16,13 +16,17 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/hashicorp/go-tfe"
+	"github.com/hashicorp/hcl/v2"
+	"github.com/hashicorp/hcl/v2/hclsyntax"
 	"github.com/hashicorp/terraform-mcp-server/pkg/client"
 	"github.com/hashicorp/terraform-mcp-server/pkg/utils"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 	log "github.com/sirupsen/logrus"
+	"github.com/zclconf/go-cty/cty"
 )
 
 const (
@@ -30,6 +34,8 @@ const (
 	maxImportResultLimit     = 100
 	maxModuleContextBytes    = 512 * 1024
 	maxProviderDocBytes      = 32 * 1024
+	importPlanPollInterval   = 3 * time.Second
+	importPlanTimeout        = 10 * time.Minute
 )
 
 type importCandidate struct {
@@ -72,6 +78,16 @@ type moduleLayout struct {
 	Warning    string
 }
 
+type importBinding struct {
+	Target   string
+	Identity cty.Value
+}
+
+type terraformConfigurationShape struct {
+	Resources map[string]struct{}
+	Imports   []importBinding
+}
+
 // ImportQueryResults creates a two-phase tool for preparing and verifying bulk imports.
 func ImportQueryResults(logger *log.Logger, mcpServer *server.MCPServer) server.ServerTool {
 	return server.ServerTool{
@@ -90,6 +106,7 @@ func ImportQueryResults(logger *log.Logger, mcpServer *server.MCPServer) server.
 			mcp.WithString("workspace_name", mcp.Required(), mcp.Description("HCP Terraform workspace that will own the imported resources.")),
 			mcp.WithString("query_run_id", mcp.Required(), mcp.Description("Finished query run whose discovered resources should be imported.")),
 			mcp.WithString("configuration_path", mcp.Description("Absolute local path to the workspace configuration upload root. When omitted, the tool asks the user.")),
+			mcp.WithString("query_configuration", mcp.Description("Exact query_configuration JSON previously passed to execute_query. When provided, its provider versions are used instead of requiring Explorer metadata from the target workspace.")),
 			mcp.WithNumber("max_resources", mcp.Min(1), mcp.Max(maxImportResultLimit), mcp.Description("Maximum query results to prepare. Defaults to 20.")),
 			mcp.WithString("generated_configuration", mcp.Description("For verify: shaped HCL containing resource and import blocks for the selected results.")),
 			mcp.WithString("output_file", mcp.Description("For verify: new .tf filename in the target module. Defaults to imports.generated.tf.")),
@@ -138,8 +155,8 @@ func importQueryResultsHandler(ctx context.Context, request mcp.CallToolRequest,
 	if queryRun.Status != tfe.QueryRunFinished {
 		return importQueryToolErrorf(logger, "query run %q must be finished; current status is %q", queryRunID, queryRun.Status)
 	}
-	if queryRun.Workspace != nil && queryRun.Workspace.ID != "" && queryRun.Workspace.ID != workspace.ID {
-		return importQueryToolErrorf(logger, "query run %q belongs to a different workspace", queryRunID)
+	if err := validateQueryRunWorkspace(queryRun, workspace); err != nil {
+		return importQueryToolErrorf(logger, "query run %q: %v", queryRunID, err)
 	}
 
 	limit := request.GetInt("max_resources", defaultImportResultLimit)
@@ -175,8 +192,27 @@ func importQueryResultsHandler(ctx context.Context, request mcp.CallToolRequest,
 	if err != nil {
 		return importQueryToolErrorf(logger, "failed to read target module: %v", err)
 	}
-	providers, providerErr := readWorkspaceProviders(ctx, tfeClient, organizationName, workspaceName)
+	providers, err := providersFromQueryConfiguration(request.GetString("query_configuration", ""))
+	if err != nil {
+		return importQueryToolErrorf(logger, "invalid query_configuration: %v", err)
+	}
+	providerSource := "query_configuration"
+	if len(providers) == 0 {
+		providers, err = readWorkspaceProviders(ctx, tfeClient, organizationName, workspaceName)
+		if err != nil {
+			return importQueryToolErrorf(logger, "failed to discover exact workspace provider versions: %v", err)
+		}
+		providerSource = "explorer"
+	}
+	if len(providers) == 0 {
+		return importQueryToolErrorf(logger, "Explorer returned no providers for workspace %q; retry with the exact query_configuration passed to execute_query", workspaceName)
+	}
 	documentation := readProviderDocumentation(ctx, candidates, providers, logger)
+	for _, doc := range documentation {
+		if doc.Error != "" {
+			return importQueryToolErrorf(logger, "failed to fetch provider documentation for %s: %s", doc.ResourceType, doc.Error)
+		}
+	}
 
 	response := map[string]any{
 		"phase":                       "prepare",
@@ -186,6 +222,7 @@ func importQueryResultsHandler(ctx context.Context, request mcp.CallToolRequest,
 		"target_module":               layout.ModuleDir,
 		"module_context":              moduleContext,
 		"provider_versions":           providers,
+		"provider_version_source":     providerSource,
 		"provider_documentation":      documentation,
 		"import_candidates":           candidates,
 		"next_step":                   "Shape only these candidates into one HCL document. Keep required provider attributes, remove computed-only values, and prefer existing var.*, local.*, module.*, data.*, and resource references from module_context over repeated literals. Do not reference symbols from sibling or parent modules. Then call this tool with phase=verify, generated_configuration, and confirm_speculative_run=true.",
@@ -193,10 +230,17 @@ func importQueryResultsHandler(ctx context.Context, request mcp.CallToolRequest,
 	if layout.Warning != "" {
 		response["configuration_path_warning"] = layout.Warning
 	}
-	if providerErr != nil {
-		response["provider_version_warning"] = providerErr.Error()
-	}
 	return importQueryJSONResult(response, logger)
+}
+
+func validateQueryRunWorkspace(queryRun *tfe.QueryRun, workspace *tfe.Workspace) error {
+	if queryRun.Workspace == nil || queryRun.Workspace.ID == "" {
+		return fmt.Errorf("did not identify its workspace; refusing to import without proving workspace ownership")
+	}
+	if queryRun.Workspace.ID != workspace.ID {
+		return fmt.Errorf("belongs to a different workspace")
+	}
+	return nil
 }
 
 func requestConfigurationPath(ctx context.Context, mcpServer *server.MCPServer, organizationName, workspaceName string) (string, error) {
@@ -367,10 +411,33 @@ func readWorkspaceProviders(ctx context.Context, tfeClient *tfe.Client, organiza
 		if !commaSeparatedContains(workspaces, workspaceName) {
 			continue
 		}
-		providers = append(providers, workspaceProvider{
+		provider := workspaceProvider{
 			Source:  stringAttribute(item.Attributes, "source"),
 			Name:    stringAttribute(item.Attributes, "name"),
 			Version: stringAttribute(item.Attributes, "version"),
+		}
+		if provider.Source == "" || provider.Name == "" || provider.Version == "" {
+			return nil, fmt.Errorf("Explorer returned incomplete provider metadata for workspace %q", workspaceName)
+		}
+		providers = append(providers, provider)
+	}
+	return providers, nil
+}
+
+func providersFromQueryConfiguration(raw string) ([]workspaceProvider, error) {
+	if strings.TrimSpace(raw) == "" {
+		return nil, nil
+	}
+	configuration, err := parseExecuteQueryConfiguration(raw)
+	if err != nil {
+		return nil, err
+	}
+	providers := make([]workspaceProvider, 0, len(configuration.Providers))
+	for _, provider := range configuration.Providers {
+		providers = append(providers, workspaceProvider{
+			Source:  fmt.Sprintf("registry.terraform.io/%s/%s", provider.Namespace, provider.Name),
+			Name:    provider.Name,
+			Version: provider.Version,
 		})
 	}
 	return providers, nil
@@ -485,11 +552,8 @@ func verifyQueryImport(ctx context.Context, request mcp.CallToolRequest, tfeClie
 	if configuration == "" {
 		return importQueryToolErrorf(logger, "generated_configuration is required for verify")
 	}
-	if !strings.Contains(configuration, "resource ") || !strings.Contains(configuration, "import ") {
-		return importQueryToolErrorf(logger, "generated_configuration must contain resource and import blocks")
-	}
-	if count := strings.Count(configuration, "import {"); count == 0 || count > len(candidates) {
-		return importQueryToolErrorf(logger, "generated_configuration contains %d import blocks; expected between 1 and %d", count, len(candidates))
+	if err := validateGeneratedConfiguration(configuration, candidates); err != nil {
+		return importQueryToolErrorf(logger, "generated_configuration is invalid: %v", err)
 	}
 
 	outputFile := strings.TrimSpace(request.GetString("output_file", "imports.generated.tf"))
@@ -533,14 +597,187 @@ func verifyQueryImport(ctx context.Context, request mcp.CallToolRequest, tfeClie
 		return importQueryToolErrorf(logger, "wrote %s and uploaded configuration version %s, but failed to create speculative run: %v", outputPath, configurationVersion.ID, err)
 	}
 
+	planCtx, cancel := context.WithTimeout(ctx, importPlanTimeout)
+	defer cancel()
+	plan, err := waitForImportPlan(planCtx, tfeClient, run.ID, importPlanPollInterval)
+	if err != nil {
+		return importQueryToolErrorf(logger, "speculative run %s did not produce a verifiable plan: %v", run.ID, err)
+	}
+	if err := validateImportPlan(plan, len(candidates)); err != nil {
+		return importQueryToolErrorf(logger, "%v", err)
+	}
+
 	return importQueryJSONResult(map[string]any{
 		"phase":                    "verify",
 		"output_file":              outputPath,
 		"configuration_version_id": configurationVersion.ID,
 		"run_id":                   run.ID,
+		"plan_id":                  plan.ID,
 		"plan_only":                true,
-		"expected_result":          fmt.Sprintf("A safe import plan with up to %d import actions and zero add, change, or destroy actions. Use get_run_details and get_plan_details to monitor it.", len(candidates)),
+		"verified_result":          fmt.Sprintf("Import-only plan with %d import actions and zero add, change, or destroy actions.", len(candidates)),
 	}, logger)
+}
+
+func validateImportPlan(plan *tfe.Plan, expectedImports int) error {
+	if plan.ResourceImports != expectedImports || plan.ResourceAdditions != 0 || plan.ResourceChanges != 0 || plan.ResourceDestructions != 0 {
+		return fmt.Errorf(
+			"speculative plan %s is not import-only: imports=%d (expected %d), additions=%d, changes=%d, destructions=%d",
+			plan.ID, plan.ResourceImports, expectedImports, plan.ResourceAdditions, plan.ResourceChanges, plan.ResourceDestructions,
+		)
+	}
+	return nil
+}
+
+func validateGeneratedConfiguration(configuration string, candidates []importCandidate) error {
+	actual, err := parseTerraformConfigurationShape(configuration, "generated_configuration.tf")
+	if err != nil {
+		return err
+	}
+	if len(actual.Imports) != len(candidates) {
+		return fmt.Errorf("contains %d import blocks; expected exactly %d", len(actual.Imports), len(candidates))
+	}
+
+	expectedImports := make(map[string]cty.Value, len(candidates))
+	for index, candidate := range candidates {
+		candidateHCL := strings.TrimSpace(candidate.Configuration) + "\n" + strings.TrimSpace(candidate.ImportConfig)
+		expected, err := parseTerraformConfigurationShape(candidateHCL, fmt.Sprintf("query_candidate_%d.tf", index+1))
+		if err != nil {
+			return fmt.Errorf("query candidate %d contains invalid generated HCL: %w", index+1, err)
+		}
+		if len(expected.Resources) != 1 || len(expected.Imports) != 1 {
+			return fmt.Errorf("query candidate %d must contain exactly one resource and one import block", index+1)
+		}
+		for address := range expected.Resources {
+			if _, ok := actual.Resources[address]; !ok {
+				return fmt.Errorf("missing resource block %s selected by query candidate %d", address, index+1)
+			}
+		}
+		binding := expected.Imports[0]
+		if _, duplicate := expectedImports[binding.Target]; duplicate {
+			return fmt.Errorf("query results contain duplicate import target %s", binding.Target)
+		}
+		expectedImports[binding.Target] = binding.Identity
+	}
+
+	seen := make(map[string]struct{}, len(actual.Imports))
+	for _, binding := range actual.Imports {
+		expectedIdentity, ok := expectedImports[binding.Target]
+		if !ok {
+			return fmt.Errorf("import target %s was not selected by the query", binding.Target)
+		}
+		if _, duplicate := seen[binding.Target]; duplicate {
+			return fmt.Errorf("duplicate import target %s", binding.Target)
+		}
+		if !binding.Identity.RawEquals(expectedIdentity) {
+			return fmt.Errorf("import identity for %s does not match the query result", binding.Target)
+		}
+		seen[binding.Target] = struct{}{}
+	}
+	return nil
+}
+
+func parseTerraformConfigurationShape(configuration, filename string) (terraformConfigurationShape, error) {
+	file, diagnostics := hclsyntax.ParseConfig([]byte(configuration), filename, hcl.Pos{Line: 1, Column: 1})
+	if diagnostics.HasErrors() {
+		return terraformConfigurationShape{}, fmt.Errorf("invalid Terraform HCL: %s", diagnostics.Error())
+	}
+	body, ok := file.Body.(*hclsyntax.Body)
+	if !ok {
+		return terraformConfigurationShape{}, fmt.Errorf("configuration did not parse as Terraform HCL")
+	}
+	shape := terraformConfigurationShape{Resources: make(map[string]struct{})}
+	for _, block := range body.Blocks {
+		switch block.Type {
+		case "resource":
+			if len(block.Labels) != 2 {
+				return terraformConfigurationShape{}, fmt.Errorf("resource block must have type and name labels")
+			}
+			address := block.Labels[0] + "." + block.Labels[1]
+			if _, duplicate := shape.Resources[address]; duplicate {
+				return terraformConfigurationShape{}, fmt.Errorf("duplicate resource block %s", address)
+			}
+			shape.Resources[address] = struct{}{}
+		case "import":
+			binding, err := parseImportBinding(block)
+			if err != nil {
+				return terraformConfigurationShape{}, err
+			}
+			shape.Imports = append(shape.Imports, binding)
+		}
+	}
+	return shape, nil
+}
+
+func parseImportBinding(block *hclsyntax.Block) (importBinding, error) {
+	to, ok := block.Body.Attributes["to"]
+	if !ok {
+		return importBinding{}, fmt.Errorf("import block is missing to")
+	}
+	target, err := simpleResourceAddress(to.Expr)
+	if err != nil {
+		return importBinding{}, fmt.Errorf("invalid import target: %w", err)
+	}
+
+	id, hasID := block.Body.Attributes["id"]
+	identity, hasIdentity := block.Body.Attributes["identity"]
+	if hasID == hasIdentity {
+		return importBinding{}, fmt.Errorf("import block for %s must contain exactly one of id or identity", target)
+	}
+	attribute := id
+	if hasIdentity {
+		attribute = identity
+	}
+	value, diagnostics := attribute.Expr.Value(nil)
+	if diagnostics.HasErrors() || !value.IsWhollyKnown() {
+		return importBinding{}, fmt.Errorf("import identity for %s must be a literal value", target)
+	}
+	return importBinding{Target: target, Identity: value}, nil
+}
+
+func simpleResourceAddress(expression hclsyntax.Expression) (string, error) {
+	traversal, diagnostics := hcl.AbsTraversalForExpr(expression)
+	if diagnostics.HasErrors() || len(traversal) != 2 {
+		return "", fmt.Errorf("must be a direct resource address in the target module")
+	}
+	root, rootOK := traversal[0].(hcl.TraverseRoot)
+	attribute, attributeOK := traversal[1].(hcl.TraverseAttr)
+	if !rootOK || !attributeOK {
+		return "", fmt.Errorf("must be a direct resource address in the target module")
+	}
+	return root.Name + "." + attribute.Name, nil
+}
+
+func waitForImportPlan(ctx context.Context, tfeClient *tfe.Client, runID string, pollInterval time.Duration) (*tfe.Plan, error) {
+	for {
+		run, err := tfeClient.Runs.ReadWithOptions(ctx, runID, &tfe.RunReadOptions{Include: []tfe.RunIncludeOpt{tfe.RunPlan}})
+		if err != nil {
+			return nil, err
+		}
+		switch run.Status {
+		case tfe.RunCanceled, tfe.RunDiscarded, tfe.RunErrored:
+			return nil, fmt.Errorf("run reached terminal status %q", run.Status)
+		}
+		if run.Plan != nil && run.Plan.ID != "" {
+			plan, err := tfeClient.Plans.Read(ctx, run.Plan.ID)
+			if err != nil {
+				return nil, err
+			}
+			switch plan.Status {
+			case tfe.PlanFinished:
+				return plan, nil
+			case tfe.PlanCanceled, tfe.PlanErrored, tfe.PlanUnreachable:
+				return nil, fmt.Errorf("plan %s reached terminal status %q", plan.ID, plan.Status)
+			}
+		}
+
+		timer := time.NewTimer(pollInterval)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return nil, fmt.Errorf("timed out waiting for import plan: %w", ctx.Err())
+		case <-timer.C:
+		}
+	}
 }
 
 func importQueryJSONResult(value any, logger *log.Logger) (*mcp.CallToolResult, error) {
@@ -561,16 +798,18 @@ func importQueryToolErrorf(logger *log.Logger, format string, args ...any) (*mcp
 
 const importQueryResultsDescription = `Prepares and verifies bulk imports from a finished HCP Terraform query run.
 
-Call phase=prepare first. The tool reads the target workspace, asks for configuration_path
+Call phase=prepare first. Pass the exact query_configuration JSON used with execute_query so a new,
+empty target workspace does not need pre-existing Explorer provider metadata. The tool reads the target workspace, asks for configuration_path
 when it is absent, reads only the root module selected by the workspace working directory,
 extracts generated resource/import blocks from query results, discovers exact provider versions
-through the Explorer API, and fetches matching public Registry resource documentation. Shape the
+from query_configuration (or the Explorer API as a fallback), and fetches matching public Registry resource documentation. Shape the
 returned HCL to the module's conventions, preferring existing variables, locals, module outputs,
 data sources, and resource references over raw literals. Symbols in parent, sibling, or child
 modules are out of scope unless exposed through that module's inputs or outputs.
 
 Then call phase=verify with the shaped generated_configuration. Verification requires
-confirm_speculative_run=true, refuses to overwrite files, writes the HCL into the target module,
-uploads a speculative and provisional configuration version, and creates a plan-only run. The
-safe target is import actions only, with zero add, change, or destroy actions. This tool never
-applies a run or imports resources into state.`
+confirm_speculative_run=true, validates that every resource and literal import identity matches
+the selected query results, refuses to overwrite files, writes the HCL into the target module,
+uploads a speculative and provisional configuration version, and creates a plan-only run. It
+waits for the plan and succeeds only when it contains exactly the selected import actions with
+zero add, change, or destroy actions. This tool never applies a run or imports resources into state.`

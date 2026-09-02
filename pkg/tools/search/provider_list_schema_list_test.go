@@ -332,6 +332,7 @@ func TestFetchProviderSchema_Success(t *testing.T) {
 	assert.Equal(t, "5.0.0", out["version"])
 	assert.NotNil(t, out["list_resource_schemas"])
 	assert.Contains(t, out["note"].(string), "generate_query_configuration")
+	assert.Contains(t, out["note"].(string), "exact resource type keys")
 }
 
 func TestFetchProviderSchema_NotInCatalog(t *testing.T) {
@@ -410,11 +411,12 @@ func TestProviderListSchemaList_ToolDefinition(t *testing.T) {
 	props := tool.Tool.InputSchema.Properties
 	assert.Contains(t, props, "provider_namespace")
 	assert.Contains(t, props, "provider_name")
-	assert.Contains(t, props, "provider_version")
+	assert.NotContains(t, props, "provider_version")
 	assert.Contains(t, props, "organization_name")
 	assert.Contains(t, props, "workspace_name")
 	assert.ElementsMatch(t, []string{"organization_name", "workspace_name"}, tool.Tool.InputSchema.Required)
 	assert.Contains(t, tool.Tool.Description, "Do not attempt an unscoped request first")
+	assert.Contains(t, tool.Tool.Description, "always read from the provider catalog response")
 }
 
 func TestProviderListSchemaList_RejectsMissingScopeBeforeRequest(t *testing.T) {
