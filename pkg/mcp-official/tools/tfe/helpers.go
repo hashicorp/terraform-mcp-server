@@ -98,6 +98,17 @@ func withPaginationConstraints(schema *jsonschema.Schema) *jsonschema.Schema {
 	return schema
 }
 
+// enumOf converts string values into the []any form jsonschema.Schema.Enum expects.
+// Lets a tool reuse its package-level list of valid values as the schema constraint,
+// so the two can't drift apart.
+func enumOf(values ...string) []any {
+	out := make([]any, len(values))
+	for i, v := range values {
+		out[i] = v
+	}
+	return out
+}
+
 // ptr is a convenience helper for taking the address of a literal value,
 // needed wherever the SDK or schema types expect a *bool, *float64, etc.
 func ptr[T any](v T) *T {

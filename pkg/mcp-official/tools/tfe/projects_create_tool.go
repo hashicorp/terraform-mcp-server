@@ -45,11 +45,7 @@ func CreateProjectTool() *mcp.Tool {
 	schema.Properties["project_name"].MaxLength = ptr(40)
 	schema.Properties["project_name"].Pattern = `^[A-Za-z0-9_-][A-Za-z0-9 _-]*[A-Za-z0-9_-]$`
 	schema.Properties["description"].MaxLength = ptr(256)
-	enumVals := make([]any, len(validExecutionModes))
-	for i, m := range validExecutionModes {
-		enumVals[i] = m
-	}
-	schema.Properties["default_execution_mode"].Enum = enumVals
+	schema.Properties["default_execution_mode"].Enum = enumOf(validExecutionModes...)
 
 	return &mcp.Tool{
 		Name:        "create_project",
@@ -68,7 +64,13 @@ func CreateProjectFunc(ctx context.Context, request *mcp.CallToolRequest, input 
 	terraformOrgName := strings.TrimSpace(input.TerraformOrgName)
 	projectName := strings.TrimSpace(input.ProjectName)
 
-	// Build and validate the request options before doing any I/O.
+	if terraformOrgName == "" {
+		return nil, nil, fmt.Errorf("terraform_org_name must not be blank")
+	}
+	if projectName == "" {
+		return nil, nil, fmt.Errorf("project_name must not be blank")
+	}
+
 	options := tfe.ProjectCreateOptions{Name: projectName}
 
 	if description := strings.TrimSpace(input.Description); description != "" {
