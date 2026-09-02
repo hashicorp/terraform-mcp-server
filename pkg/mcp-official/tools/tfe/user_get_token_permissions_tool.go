@@ -6,6 +6,7 @@ package tools
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	tfeclient "github.com/hashicorp/terraform-mcp-server/pkg/client"
 	"github.com/hashicorp/terraform-mcp-server/pkg/mcp-official/client"
@@ -31,14 +32,19 @@ func GetTokenPermissionsTool() *mcp.Tool {
 }
 
 func GetTokenPermissionsFunc(ctx context.Context, request *mcp.CallToolRequest, input GetTokenPermissionsArguments) (*mcp.CallToolResult, []string, error) {
+	terraformOrgName := strings.TrimSpace(input.TerraformOrgName)
+	if terraformOrgName == "" {
+		return nil, nil, fmt.Errorf("terraform_org_name must not be blank")
+	}
+
 	tfeClient, err := client.GetTfeClient(ctx, client.SessionIDFromRequest(request))
 	if err != nil {
 		return nil, nil, fmt.Errorf("getting Terraform client: %w", err)
 	}
 
-	org, err := tfeClient.Organizations.Read(ctx, input.TerraformOrgName)
+	org, err := tfeClient.Organizations.Read(ctx, terraformOrgName)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to read organization %q: %w", input.TerraformOrgName, err)
+		return nil, nil, fmt.Errorf("failed to read organization %q: %w", terraformOrgName, err)
 	}
 
 	return nil, tfeclient.HumanReadableTokenPermissions(org.Permissions), nil
