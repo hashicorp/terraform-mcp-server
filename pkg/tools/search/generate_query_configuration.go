@@ -100,12 +100,13 @@ func GenerateQueryConfiguration(logger *log.Logger) server.ServerTool {
 			),
 			mcp.WithString("provider_version",
 				mcp.Required(),
-				mcp.Description("Provider version string, e.g. \"6.33.0\"."),
+				mcp.Description("Exact provider version returned by provider_list_schema_list. Do not infer or substitute a version."),
 			),
 			mcp.WithString("resource_types",
 				mcp.Description(
 					"Optional comma-separated list of resource type names to include in the "+
-						"output (e.g. \"aws_instance,aws_s3_bucket\"). "+
+						"output. Every name must be an exact key from list_resource_schemas; "+
+						"do not infer names from ordinary managed resources. "+
 						"When omitted all resource types in the schema are described.",
 				),
 			),
@@ -331,8 +332,8 @@ func writeInstructions(b *strings.Builder, namespace, name, version string) {
 	b.WriteString("## Rules for building the payload\n\n")
 	b.WriteString("1. **`organization_name` / `workspace_name`** — pass these separately to `execute_query`; do not include them in this JSON object.\n")
 	b.WriteString("2. **`generate_config_out`** — optional boolean. Omit it (or set to `false`) to skip HCL scaffolding. Set to `true` to instruct Terraform to emit a `generated_config.tf` file containing importable HCL for each discovered resource.\n")
-	b.WriteString("3. **`namespace` / `name` / `version`** — must match a provider returned by `provider_list_schema_list`.\n")
-	b.WriteString("4. **`resource_type`** — must be one of the resource type keys listed in the schema catalog below.\n")
+	b.WriteString("3. **`namespace` / `name` / `version`** — copy these exact values from `provider_list_schema_list`; never infer or substitute a provider version.\n")
+	b.WriteString("4. **`resource_type`** — must be an exact resource type key listed in the schema catalog below. A provider's ordinary managed resources are not automatically list resources; never infer or substitute a type that is absent from this catalog.\n")
 	b.WriteString("5. **`attributes`** — include only attributes that appear in the schema for that resource type.\n")
 	b.WriteString("   - Omit optional attributes that you do not need to filter on.\n")
 	b.WriteString("   - Required attributes MUST be included.\n")
@@ -597,6 +598,7 @@ func writeVariableNotes(b *strings.Builder) {
 	b.WriteString("## Common Mistakes to Avoid\n\n")
 	b.WriteString("| Mistake | Correct approach |\n")
 	b.WriteString("|---------|------------------|\n")
+	b.WriteString("| Inferring a list type from a managed resource name (for example, assuming an S3 bucket can use `aws_s3_bucket`) | Use only an exact key returned in `list_resource_schemas`; if no matching key exists, this provider version cannot perform that query |\n")
 	b.WriteString("| Using an attribute name not in the schema for that resource type | Only include attributes listed in the catalog above |\n")
 	b.WriteString("| Setting `resource_type` to a data source (e.g. `aws_ami`) | Only list-resource types (found in `list_resource_schemas`) are valid |\n")
 	b.WriteString("| Omitting a **required** attribute | Required attributes must always be present |\n")
@@ -637,10 +639,13 @@ or produced by 'terraform providers schema -json'), this tool:
 7. Documents variable injection syntax (${var.<name>}) and common mistakes.
 8. Directs the agent to pass organization_name and workspace_name separately when calling execute_query.
 
-Use this tool before constructing a no-code query payload whenever you have
-access to a provider's list_resource_schemas data. The output is self-contained
-guidance — the agent should use it to generate a correct, schema-validated query
+Always use this tool before constructing a no-code query payload. The output is self-contained
+guidance — the agent must use it to generate a correct, schema-validated query
 configuration without needing to consult external documentation.
 
-IMPORTANT: Only attributes present in the schema for the chosen resource type
-may appear in 'attributes'. Required attributes must always be included.`
+IMPORTANT: provider_version must be copied from provider_list_schema_list, not inferred.
+resource_type must be an exact key present in list_resource_schemas.
+Do not infer list support from a provider's ordinary managed resources or data sources.
+If the user's requested resource has no matching key, explain that this provider version
+cannot list it and do not call execute_query. Only attributes present in the schema for
+the chosen resource type may appear in 'attributes'. Required attributes must always be included.`
