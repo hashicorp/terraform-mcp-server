@@ -34,9 +34,6 @@ func DeleteWorkspaceSafelyFunc(ctx context.Context, request *mcp.CallToolRequest
 	if err != nil {
 		return nil, nil, err
 	}
-	if err != nil {
-		return nil, nil, err
-	}
 	workspace, err := tfeClient.Workspaces.ReadByID(ctx, workspaceID)
 	if err != nil {
 		return nil, nil, fmt.Errorf("workspace not found: %s: %w", workspaceID, err)

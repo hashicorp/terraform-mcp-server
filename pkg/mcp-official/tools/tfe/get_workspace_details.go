@@ -38,8 +38,11 @@ func GetWorkspaceDetailsTool() *mcp.Tool {
 func GetWorkspaceDetailsFunc(ctx context.Context, request *mcp.CallToolRequest, input GetWorkspaceDetailsArguments) (*mcp.CallToolResult, any, error) {
 	orgName := strings.TrimSpace(input.TerraformOrgName)
 	workspaceName := strings.TrimSpace(input.WorkspaceName)
-	if orgName == "" || workspaceName == "" {
-		return nil, nil, fmt.Errorf("terraform_org_name and workspace_name are required")
+	if orgName == "" {
+		return nil, nil, fmt.Errorf("terraform_org_name is required")
+	}
+	if workspaceName == "" {
+		return nil, nil, fmt.Errorf("workspace_name is required")
 	}
 	tfeClient, err := client.GetTfeClient(ctx, client.SessionIDFromRequest(request))
 	if err != nil {

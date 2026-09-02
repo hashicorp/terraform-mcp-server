@@ -54,14 +54,14 @@ func CreateWorkspaceTool() *mcp.Tool {
 func CreateWorkspaceFunc(ctx context.Context, request *mcp.CallToolRequest, input CreateWorkspaceArguments) (*mcp.CallToolResult, *WorkspaceMutationResult, error) {
 	orgName := strings.TrimSpace(input.TerraformOrgName)
 	workspaceName := strings.TrimSpace(input.WorkspaceName)
-	if orgName == "" || workspaceName == "" {
-		return nil, nil, fmt.Errorf("terraform_org_name and workspace_name are required")
+
+	if orgName == "" {
+		return nil, nil, fmt.Errorf("terraform_org_name is required")
+	}
+	if workspaceName == "" {
+		return nil, nil, fmt.Errorf("workspace_name is required")
 	}
 
-	executionMode, err := parseExecutionMode(input.ExecutionMode, true)
-	if err != nil {
-		return nil, nil, err
-	}
 	options := tfe.WorkspaceCreateOptions{
 		Name:       &workspaceName,
 		AutoApply:  ptr(input.AutoApply),
@@ -81,7 +81,11 @@ func CreateWorkspaceFunc(ctx context.Context, request *mcp.CallToolRequest, inpu
 		options.Project = &tfe.Project{ID: input.ProjectID}
 	}
 	if input.ExecutionMode != "" {
-		options.ExecutionMode = &executionMode
+		mode, err := parseExecutionMode(input.ExecutionMode, false)
+		if err != nil {
+			return nil, nil, err
+		}
+		options.ExecutionMode = &mode
 	}
 	if input.VCSRepoIdentifier != "" {
 		if input.VCSRepoOAuthTokenID == "" {
@@ -97,9 +101,6 @@ func CreateWorkspaceFunc(ctx context.Context, request *mcp.CallToolRequest, inpu
 	}
 
 	tfeClient, err := client.GetTfeClient(ctx, client.SessionIDFromRequest(request))
-	if err != nil {
-		return nil, nil, err
-	}
 	if err != nil {
 		return nil, nil, err
 	}
