@@ -33,9 +33,10 @@ type ListOrganizationsArguments struct {
 
 func ListTerraformOrganizationsTool() *mcp.Tool {
 	return &mcp.Tool{
-		Name:        "list_terraform_orgs",
-		Description: "Fetches a list of all Terraform organizations. Supports Pagination for large result sets.",
-		InputSchema: withPaginationConstraints(inferSchema[ListOrganizationsArguments]("list_terraform_orgs")),
+		Name:         "list_terraform_orgs",
+		Description:  "Fetches a list of all Terraform organizations. Supports Pagination for large result sets.",
+		InputSchema:  withPaginationConstraints(inferSchema[ListOrganizationsArguments]("list_terraform_orgs")),
+		OutputSchema: outputSchema[OrganizationSummaryList]("list_terraform_orgs"),
 		Annotations: &mcp.ToolAnnotations{
 			Title:           "List all Terraform organizations",
 			OpenWorldHint:   ptr(true),
@@ -71,7 +72,7 @@ func ListTerraformOrganizationsFunc(ctx context.Context, request *mcp.CallToolRe
 	}
 
 	return nil, &OrganizationSummaryList{
-		Items:             summaries,
+		Items:             nonNilSlice(summaries),
 		PaginationDetails: paginationDetails(orgs.Pagination),
 	}, nil
 }
