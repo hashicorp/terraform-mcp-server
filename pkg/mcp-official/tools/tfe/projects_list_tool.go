@@ -36,9 +36,10 @@ type ListProjectsArguments struct {
 
 func ListProjectsTool() *mcp.Tool {
 	return &mcp.Tool{
-		Name:        "list_terraform_projects",
-		Description: `Search and list Terraform projects within a specified organization. Supports pagination for large result sets. Returns a truncated summary of the project, use "get_project" to get the full details for a specific project.`,
-		InputSchema: withPaginationConstraints(inferSchema[ListProjectsArguments]("list_terraform_projects")),
+		Name:         "list_terraform_projects",
+		Description:  `Search and list Terraform projects within a specified organization. Supports pagination for large result sets. Returns a truncated summary of the project, use "get_project" to get the full details for a specific project.`,
+		InputSchema:  withPaginationConstraints(inferSchema[ListProjectsArguments]("list_terraform_projects")),
+		OutputSchema: outputSchema[ProjectSummaryList]("list_terraform_projects"),
 		Annotations: &mcp.ToolAnnotations{
 			Title:           "List all Terraform projects",
 			OpenWorldHint:   ptr(true),
@@ -78,7 +79,7 @@ func ListProjectsFunc(ctx context.Context, request *mcp.CallToolRequest, input L
 	}
 
 	return nil, &ProjectSummaryList{
-		Items:             summaries,
+		Items:             nonNilSlice(summaries),
 		PaginationDetails: paginationDetails(projects.Pagination),
 	}, nil
 }
