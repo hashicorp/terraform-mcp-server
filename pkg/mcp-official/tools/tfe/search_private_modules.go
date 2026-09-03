@@ -38,8 +38,11 @@ It retrieves a list of private modules that match the search criteria. This tool
 	}
 }
 
-func SearchPrivateModulesFunc(ctx context.Context, request *mcp.CallToolRequest, input SearchPrivateModulesArguments) (*mcp.CallToolResult, *string, error) {
+func SearchPrivateModulesFunc(ctx context.Context, request *mcp.CallToolRequest, input SearchPrivateModulesArguments) (*mcp.CallToolResult, any, error) {
 	terraformOrgName := strings.TrimSpace(input.TerraformOrgName)
+	if terraformOrgName == "" {
+		return nil, nil, fmt.Errorf("terraform_org_name is required")
+	}
 	searchQuery := strings.TrimSpace(input.SearchQuery)
 	pageSize := input.PageSize
 	if pageSize == 0 {
@@ -95,7 +98,7 @@ func SearchPrivateModulesFunc(ctx context.Context, request *mcp.CallToolRequest,
 			builder.WriteString("- Verifying that private modules exist in this organization\n")
 		}
 		result := builder.String()
-		return nil, &result, nil
+		return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: result}}}, nil, nil
 	}
 
 	builder.WriteString(fmt.Sprintf("Found %d module(s):\n", len(moduleList.Items)))
@@ -136,5 +139,5 @@ func SearchPrivateModulesFunc(ctx context.Context, request *mcp.CallToolRequest,
 	}
 
 	result := builder.String()
-	return nil, &result, nil
+	return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: result}}}, nil, nil
 }

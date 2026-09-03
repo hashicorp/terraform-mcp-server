@@ -40,10 +40,19 @@ It provides details on how to use the provider, permissions, available versions,
 	}
 }
 
-func GetPrivateProviderDetailsFunc(ctx context.Context, request *mcp.CallToolRequest, input GetPrivateProviderDetailsArguments) (*mcp.CallToolResult, *string, error) {
+func GetPrivateProviderDetailsFunc(ctx context.Context, request *mcp.CallToolRequest, input GetPrivateProviderDetailsArguments) (*mcp.CallToolResult, any, error) {
 	terraformOrgName := strings.TrimSpace(input.TerraformOrgName)
+	if terraformOrgName == "" {
+		return nil, nil, fmt.Errorf("terraform_org_name is required")
+	}
 	privateProviderNamespace := strings.TrimSpace(input.PrivateProviderNamespace)
+	if privateProviderNamespace == "" {
+		return nil, nil, fmt.Errorf("private_provider_namespace is required")
+	}
 	privateProviderName := strings.TrimSpace(input.PrivateProviderName)
+	if privateProviderName == "" {
+		return nil, nil, fmt.Errorf("private_provider_name is required")
+	}
 
 	registryName := strings.TrimSpace(input.RegistryName)
 	if registryName == "" {
@@ -170,5 +179,5 @@ func GetPrivateProviderDetailsFunc(ctx context.Context, request *mcp.CallToolReq
 	}
 
 	result := builder.String()
-	return nil, &result, nil
+	return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: result}}}, nil, nil
 }

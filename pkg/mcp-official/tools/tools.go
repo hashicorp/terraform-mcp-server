@@ -27,4 +27,8 @@ func RegisterTools(svr *mcp.Server, logger *log.Logger, enabledToolsets []string
 	if toolsets.IsToolEnabled("get_private_provider_details", enabledToolsets) {
 		mcp.AddTool(svr, tfeTools.GetPrivateProviderDetailsTool(), tfeTools.GetPrivateProviderDetailsFunc)
 	}
+
+	if toolsets.IsToolEnabled("get_private_module_details", enabledToolsets) {
+		mcp.AddTool(svr, tfeTools.GetPrivateModuleDetailsTool(), tfeTools.GetPrivateModuleDetailsFunc)
+	}
 }
