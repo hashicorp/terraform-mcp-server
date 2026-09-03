@@ -48,9 +48,10 @@ type ListWorkspacesArguments struct {
 
 func ListWorkspacesTool() *mcp.Tool {
 	return &mcp.Tool{
-		Name:        "list_workspaces",
-		Description: "Search and list Terraform workspaces within a specified organization. Returns all workspaces when no filters are applied, or filters results based on name patterns, tags, or search queries. Supports pagination for large result sets. Returns a truncated summary of the workspace, use get_workspace_details to get the full details for a specific workspace.",
-		InputSchema: withPaginationConstraints(inferSchema[ListWorkspacesArguments]("list_workspaces")),
+		Name:         "list_workspaces",
+		Description:  "Search and list Terraform workspaces within a specified organization. Returns all workspaces when no filters are applied, or filters results based on name patterns, tags, or search queries. Supports pagination for large result sets. Returns a truncated summary of the workspace, use get_workspace_details to get the full details for a specific workspace.",
+		InputSchema:  withPaginationConstraints(inferSchema[ListWorkspacesArguments]("list_workspaces")),
+		OutputSchema: outputSchema[WorkspaceSummaryList]("list_workspaces"),
 		Annotations: &mcp.ToolAnnotations{
 			Title:           "List Terraform workspaces with queries",
 			OpenWorldHint:   ptr(true),
@@ -99,7 +100,7 @@ func ListWorkspacesFunc(ctx context.Context, request *mcp.CallToolRequest, input
 	}
 
 	return nil, &WorkspaceSummaryList{
-		Items:             summaries,
+		Items:             nonNilSlice(summaries),
 		PaginationDetails: paginationDetails(workspaces.Pagination),
 	}, nil
 }

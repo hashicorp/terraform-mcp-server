@@ -5,6 +5,7 @@ package tools
 
 import (
 	"fmt"
+	"slices"
 
 	"github.com/google/jsonschema-go/jsonschema"
 	"github.com/hashicorp/go-tfe"
@@ -82,6 +83,91 @@ func inferSchema[T any](toolName string) *jsonschema.Schema {
 		panic(fmt.Sprintf("%s: inferring input schema: %v", toolName, err))
 	}
 	return schema
+}
+
+// outputSchema builds the JSON schema for a tool's result type.
+//
+// It narrows the nullable type unions that inference produces (see
+// narrowNullableTypes) and is deliberately kept separate from inferSchema:
+// outputs are values we produce, so promising "never null" is a promise we can
+// keep, whereas inputs come from the caller and should stay permissive.
+func outputSchema[T any](toolName string) *jsonschema.Schema {
+	return narrowNullableTypes(inferSchema[T](toolName))
+}
+
+// narrowNullableTypes rewrites `"type": ["null", X]` unions to a plain
+// `"type": X` throughout schema, in place.
+//
+// jsonschema-go emits the union for every slice and every pointer-following
+// field, because a nil slice or nil pointer marshals to JSON null. That is
+// accurate for the Go type and is an intentional upstream default (see the
+// typeschemasnull note in jsonschema's doc.go), not a bug. We narrow it anyway
+// for two reasons:
+//
+//  1. The array form of `type` is legal JSON Schema, but some MCP clients read
+//     `type` as a single string and either reject the tool or silently drop the
+//     constraint.
+//  2. Our list tools never emit null: they return an error rather than an empty
+//     result, build their slice with make, and assign every element. The
+//     nonNilSlice guard keeps that true, so the narrower schema is the honest
+//     contract.
+//
+// Narrowing only applies when removing "null" leaves exactly one type, which is
+// the only case that resolves the portability problem. A genuine multi-type
+// union (or a bare ["null"]) is left exactly as-is: it would still marshal to
+// the array form, so rewriting it would change the accepted values without
+// fixing anything. Neither case occurs in our current result types.
+func narrowNullableTypes(schema *jsonschema.Schema) *jsonschema.Schema {
+	if schema == nil {
+		return nil
+	}
+
+	// Recurse first so nested nodes are narrowed regardless of this node's type.
+	for _, property := range schema.Properties {
+		narrowNullableTypes(property)
+	}
+	for _, item := range schema.PrefixItems {
+		narrowNullableTypes(item)
+	}
+	for _, def := range schema.Defs {
+		narrowNullableTypes(def)
+	}
+	for _, branch := range [][]*jsonschema.Schema{schema.AnyOf, schema.AllOf, schema.OneOf} {
+		for _, sub := range branch {
+			narrowNullableTypes(sub)
+		}
+	}
+	narrowNullableTypes(schema.Items)
+	narrowNullableTypes(schema.AdditionalProperties)
+	narrowNullableTypes(schema.Not)
+
+	if len(schema.Types) == 0 {
+		return schema
+	}
+
+	remaining := slices.DeleteFunc(slices.Clone(schema.Types), func(t string) bool {
+		return t == "null"
+	})
+
+	// Type and Types are mutually exclusive on the wire: the marshaller emits
+	// Type when it is set and Types otherwise, so Types must be cleared here.
+	if len(remaining) == 1 {
+		schema.Type = remaining[0]
+		schema.Types = nil
+	}
+	return schema
+}
+
+// nonNilSlice returns an empty slice in place of a nil one, so a list tool's
+// result marshals as [] rather than null. This is what makes the narrowed
+// output schema structurally true instead of merely intended: without it, a
+// future refactor to `var items []*T` plus append would emit null against a
+// schema that no longer permits it.
+func nonNilSlice[T any](values []T) []T {
+	if values == nil {
+		return []T{}
+	}
+	return values
 }
 
 // withPaginationConstraints adds the numeric min/max bounds to page and pageSize.
