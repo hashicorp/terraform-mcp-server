@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"testing"
 
@@ -43,9 +44,61 @@ func TestToolLoggingMiddleware(t *testing.T) {
 	logOutput := buf.String()
 	t.Logf("Captured log output:\n%s", logOutput)
 	assert.Contains(t, logOutput, "level=INFO")
+	assert.Contains(t, logOutput, "msg=\"tool call completed\"")
 	assert.Contains(t, logOutput, "list_workspaces")
 	assert.Contains(t, logOutput, "terraform_org_name")
 	assert.Contains(t, logOutput, "my-org")
+}
+
+func TestToolLoggingMiddleware_ToolError(t *testing.T) {
+	var buf bytes.Buffer
+	logger := slog.New(slog.NewTextHandler(&buf, nil))
+
+	toolErr := errors.New("listing workspaces: permission denied")
+	next := func(ctx context.Context, method string, req mcp.Request) (mcp.Result, error) {
+		result := &mcp.CallToolResult{}
+		result.SetError(toolErr)
+		return result, nil
+	}
+
+	request := &mcp.CallToolRequest{
+		Params: &mcp.CallToolParamsRaw{Name: "list_workspaces"},
+	}
+
+	handler := ToolLogging(logger)(next)
+	result, err := handler(context.Background(), "tools/call", request)
+	require.NoError(t, err)
+	assert.True(t, result.(*mcp.CallToolResult).IsError)
+
+	logOutput := buf.String()
+	assert.Contains(t, logOutput, "level=ERROR")
+	assert.Contains(t, logOutput, "msg=\"tool call failed\"")
+	assert.Contains(t, logOutput, "list_workspaces")
+	assert.Contains(t, logOutput, "listing workspaces: permission denied")
+}
+
+func TestToolLoggingMiddleware_MethodError(t *testing.T) {
+	var buf bytes.Buffer
+	logger := slog.New(slog.NewTextHandler(&buf, nil))
+
+	methodErr := errors.New("method handler unavailable")
+	next := func(ctx context.Context, method string, req mcp.Request) (mcp.Result, error) {
+		return nil, methodErr
+	}
+
+	request := &mcp.CallToolRequest{
+		Params: &mcp.CallToolParamsRaw{Name: "list_workspaces"},
+	}
+
+	handler := ToolLogging(logger)(next)
+	_, err := handler(context.Background(), "tools/call", request)
+	require.ErrorIs(t, err, methodErr)
+
+	logOutput := buf.String()
+	assert.Contains(t, logOutput, "level=ERROR")
+	assert.Contains(t, logOutput, "msg=\"tool call failed\"")
+	assert.Contains(t, logOutput, "list_workspaces")
+	assert.Contains(t, logOutput, "method handler unavailable")
 }
 
 func TestToolLoggingMiddleware_IgnoresNonToolCalls(t *testing.T) {

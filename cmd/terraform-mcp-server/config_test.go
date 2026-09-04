@@ -4,7 +4,10 @@
 package main
 
 import (
+	"context"
+	"log/slog"
 	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -12,6 +15,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestGetHTTPHost(t *testing.T) {
@@ -383,6 +387,135 @@ func TestGetLogLevelWithNilCommand(t *testing.T) {
 	}
 }
 
+func TestGetSlogLevel(t *testing.T) {
+	tests := []struct {
+		name        string
+		envValue    string
+		flagValue   string
+		expected    slog.Level
+		description string
+	}{
+		{
+			name:        "env var takes precedence",
+			envValue:    "debug",
+			flagValue:   "error",
+			expected:    slog.LevelDebug,
+			description: "when both are set, LOG_LEVEL=debug should take precedence over --log-level=error",
+		},
+		{
+			name:        "flag used when env not set",
+			envValue:    "",
+			flagValue:   "warn",
+			expected:    slog.LevelWarn,
+			description: "when LOG_LEVEL is unset, --log-level=warn should select the warn level",
+		},
+		{
+			name:        "default when neither set",
+			envValue:    "",
+			flagValue:   "",
+			expected:    slog.LevelInfo,
+			description: "when neither LOG_LEVEL nor --log-level is set, the level should default to info",
+		},
+		{
+			name:        "trace maps to debug",
+			envValue:    "trace",
+			flagValue:   "",
+			expected:    slog.LevelDebug,
+			description: "because slog has no trace level, LOG_LEVEL=trace should use the debug level",
+		},
+		{
+			name:        "level is case insensitive and trimmed",
+			envValue:    " WARN ",
+			flagValue:   "",
+			expected:    slog.LevelWarn,
+			description: "LOG_LEVEL should ignore letter case and surrounding whitespace, so ' WARN ' should select warn",
+		},
+		{
+			name:        "fatal maps to error",
+			envValue:    "fatal",
+			flagValue:   "",
+			expected:    slog.LevelError,
+			description: "because slog has no fatal level, LOG_LEVEL=fatal should use the error level",
+		},
+		{
+			name:        "panic maps to error",
+			envValue:    "panic",
+			flagValue:   "",
+			expected:    slog.LevelError,
+			description: "because slog has no panic level, LOG_LEVEL=panic should use the error level",
+		},
+		{
+			name:        "invalid env falls back to default",
+			envValue:    "invalid",
+			flagValue:   "",
+			expected:    slog.LevelInfo,
+			description: "when LOG_LEVEL contains an unsupported value, the level should fall back to info",
+		},
+		{
+			name:        "invalid flag falls back to default",
+			envValue:    "",
+			flagValue:   "invalid",
+			expected:    slog.LevelInfo,
+			description: "when LOG_LEVEL is unset and --log-level is unsupported, the level should fall back to info",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Save and restore original env var
+			originalEnv := os.Getenv("LOG_LEVEL")
+			defer func() {
+				if originalEnv != "" {
+					os.Setenv("LOG_LEVEL", originalEnv)
+				} else {
+					os.Unsetenv("LOG_LEVEL")
+				}
+			}()
+
+			// Set up test environment
+			if tt.envValue != "" {
+				os.Setenv("LOG_LEVEL", tt.envValue)
+			} else {
+				os.Unsetenv("LOG_LEVEL")
+			}
+
+			cmd := &cobra.Command{}
+			cmd.Flags().String("log-level", tt.flagValue, "test flag")
+
+			level := getSlogLevel(cmd)
+			if level != tt.expected {
+				t.Errorf("%s: expected level %v, got %v", tt.description, tt.expected, level)
+			}
+		})
+	}
+}
+
+func TestGetSlogLevelWithNilCommand(t *testing.T) {
+	// Save and restore original env var
+	originalEnv := os.Getenv("LOG_LEVEL")
+	defer func() {
+		if originalEnv != "" {
+			os.Setenv("LOG_LEVEL", originalEnv)
+		} else {
+			os.Unsetenv("LOG_LEVEL")
+		}
+	}()
+
+	// Test with nil command and no env var
+	os.Unsetenv("LOG_LEVEL")
+	level := getSlogLevel(nil)
+	if level != slog.LevelInfo {
+		t.Errorf("expected default info level with nil command, got %v", level)
+	}
+
+	// Test with nil command but env var set
+	os.Setenv("LOG_LEVEL", "debug")
+	level = getSlogLevel(nil)
+	if level != slog.LevelDebug {
+		t.Errorf("expected debug level from env var with nil command, got %v", level)
+	}
+}
+
 func TestInitLoggerWithLevel(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -439,6 +572,65 @@ func TestInitLoggerWithFormat(t *testing.T) {
 				if _, ok := logger.Formatter.(*log.TextFormatter); !ok {
 					t.Errorf("expected TextFormatter, got %T", logger.Formatter)
 				}
+			}
+		})
+	}
+}
+
+func TestInitSlogWithLevel(t *testing.T) {
+	tests := []struct {
+		name  string
+		level slog.Level
+	}{
+		{"debug level", slog.LevelDebug},
+		{"info level", slog.LevelInfo},
+		{"warn level", slog.LevelWarn},
+		{"error level", slog.LevelError},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			logPath := filepath.Join(t.TempDir(), "official.log")
+			logger, logFile, err := initSlog(logPath, tt.level, "")
+			require.NoError(t, err)
+			t.Cleanup(func() {
+				require.NoError(t, logFile.Close())
+			})
+
+			assert.True(t, logger.Enabled(context.Background(), tt.level))
+			assert.False(t, logger.Enabled(context.Background(), tt.level-4))
+		})
+	}
+}
+
+func TestInitSlogWithFormat(t *testing.T) {
+	tests := []struct {
+		name      string
+		logFormat string
+		wantJSON  bool
+	}{
+		{"empty format", "", false},
+		{"text format", "text", false},
+		{"json format", "json", true},
+		{"TEXT format", "TEXT", false},
+		{"JSON format", "JSON", true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			logPath := filepath.Join(t.TempDir(), "official.log")
+			logger, logFile, err := initSlog(logPath, slog.LevelInfo, tt.logFormat)
+			require.NoError(t, err)
+			t.Cleanup(func() {
+				require.NoError(t, logFile.Close())
+			})
+
+			if tt.wantJSON {
+				_, ok := logger.Handler().(*slog.JSONHandler)
+				assert.True(t, ok, "expected JSONHandler, got %T", logger.Handler())
+			} else {
+				_, ok := logger.Handler().(*slog.TextHandler)
+				assert.True(t, ok, "expected TextHandler, got %T", logger.Handler())
 			}
 		})
 	}
