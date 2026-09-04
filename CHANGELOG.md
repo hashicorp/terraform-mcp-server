@@ -11,6 +11,10 @@ FEATURES
 * [New Tool] `grant_team_access` Grants a team access to a workspace or project by ID. Requires `team_id`, `access_level`, and either `workspace_id` or `project_id` (mutually exclusive). Valid access levels for workspaces: `admin`, `read`, `write`, `plan`, `custom`. Valid access levels for projects: `admin`, `read`, `write`, `maintain`, `custom`.
 * [New Tool] `delete_team` Permanently deletes a Terraform team by its `team_id`. Requires `team_id` (e.g. `team-abc123def456`). This is a destructive operation and must set `ENABLE_TF_OPERATIONS=true`.
 
+IMPROVEMENTS
+
+* Add a Helm chart for deploying the server on Kubernetes, under `helm/terraform-mcp-server`
+
 FIXES
 
 * `get_apply_logs` now checks the apply status before attempting to stream logs. If the apply is not yet in a terminal state (`finished`, `errored`, `canceled`), the tool returns an informative message instead of timing out. [468](https://github.com/hashicorp/terraform-mcp-server/pull/468)
