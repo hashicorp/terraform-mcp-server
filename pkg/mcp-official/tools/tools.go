@@ -10,7 +10,7 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-func areDestructiveOperationsPrevented() bool {
+func areDestructiveOperationsAllowed() bool {
 	envVar := utils.GetEnv("PREVENT_DESTRUCTIVE_OPERATIONS", "true")
 	return strings.ToLower(envVar) == "false"
 }
@@ -36,7 +36,7 @@ func RegisterTools(svr *mcp.Server, logger *log.Logger, enabledToolsets []string
 		mcp.AddTool(svr, tfeTools.GetProjectTool(), tfeTools.GetProjectFunc)
 	}
 
-	if areDestructiveOperationsPrevented() {
+	if areDestructiveOperationsAllowed() {
 		if toolsets.IsToolEnabled("delete_project", enabledToolsets) {
 			mcp.AddTool(svr, tfeTools.DeleteProjectTool(), tfeTools.DeleteProjectFunc)
 		}
