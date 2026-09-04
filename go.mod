@@ -24,7 +24,7 @@ require (
 	golang.org/x/time v0.15.0
 )
 
-require github.com/google/jsonschema-go v0.4.3 // indirect
+require github.com/google/jsonschema-go v0.4.3
 
 require (
 	github.com/cenkalti/backoff/v5 v5.0.3 // indirect
