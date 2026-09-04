@@ -69,16 +69,23 @@ spec:
             - name: MCP_ORGANIZATION_ALLOWLIST
               value: {{ .Values.mcpServer.allowedOrganizations | join "," | quote }}
             {{- end }}
-            {{- if .Values.mcpServer.existingSecret }}
-            - name: TF_MCP_SHARED_SECRET
-              valueFrom:
-                secretKeyRef:
-                  name: {{ .Values.mcpServer.existingSecret }}
-                  key: {{ .Values.mcpServer.existingSecretKey | default "shared-secret" }}
-            {{- else if .Values.mcpServer.sharedSecret }}
-            - name: TF_MCP_SHARED_SECRET
-              value: {{ .Values.mcpServer.sharedSecret | quote }}
+            - name: ENABLE_TF_OPERATIONS
+              value: {{ .Values.mcpServer.enableTfOperations | default false | quote }}
+            {{- if .Values.mcpServer.redirectRootURL }}
+            - name: MCP_REDIRECT_ROOT_URL
+              value: {{ .Values.mcpServer.redirectRootURL | quote }}
             {{- end }}
+            {{- if .Values.mcpServer.tls.certFile }}
+            - name: MCP_TLS_CERT_FILE
+              value: {{ .Values.mcpServer.tls.certFile | quote }}
+            {{- end }}
+            {{- if .Values.mcpServer.tls.keyFile }}
+            - name: MCP_TLS_KEY_FILE
+              value: {{ .Values.mcpServer.tls.keyFile | quote }}
+            {{- end }}
+            {{- if .Values.otel.enabled }}
+            - name: OTEL_METRICS_ENABLED
+              value: "true"
             - name: HOST_IP
               valueFrom:
                 fieldRef:
@@ -87,14 +94,13 @@ spec:
               valueFrom:
                 fieldRef:
                   fieldPath: metadata.uid
-            - name: OTEL_METRICS_ENABLED
-              value: {{ .Values.otel.enabled | quote }}
             {{- if .Values.otel.metricsEndpoint }}
             - name: OTEL_METRICS_ENDPOINT
               value: {{ .Values.otel.metricsEndpoint | quote }}
             {{- end }}
             - name: OTEL_METRICS_SERVICE_NAME
               value: {{ .Values.otel.serviceName | default "terraform-mcp-server" | quote }}
+            {{- end }}
           ports:
             - name: http
               containerPort: {{ .Values.service.port }}

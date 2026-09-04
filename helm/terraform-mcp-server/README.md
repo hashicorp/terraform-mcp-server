@@ -45,6 +45,8 @@ The server is configured through the `mcpServer` values, which map to the server
 | `service.port` | Service port | `8080` |
 | `resources` | Pod resource requests/limits | see values.yaml |
 | `autoscaling.enabled` | Enable a HorizontalPodAutoscaler | `false` |
+| `volumes` | Extra volumes for the pod | `[]` |
+| `volumeMounts` | Extra volume mounts for the container | `[]` |
 
 ### Server configuration (`mcpServer`)
 
@@ -55,21 +57,33 @@ The server is configured through the `mcpServer` values, which map to the server
 | `mcpServer.corsMode` | CORS mode: `strict`, `development`, or `disabled` | `strict` |
 | `mcpServer.allowedOrganizations` | Restrict tool calls to these Terraform organizations. Empty allows any organization the token can reach. | `[]` |
 | `mcpServer.sessionMode` | `stateful` or `stateless`. Use `stateless` when running multiple replicas behind a load balancer without session affinity. | `stateful` |
-| `mcpServer.existingSecret` | Name of an existing Secret holding the shared secret sent as the `X-Tf-Mcp-Secret` header. Preferred over `sharedSecret`. | `""` |
-| `mcpServer.existingSecretKey` | Key within `existingSecret` holding the shared secret. | `shared-secret` |
-| `mcpServer.sharedSecret` | Shared secret as a plaintext value. Only used when `existingSecret` is unset. Treat as a credential. | `""` |
+| `mcpServer.enableTfOperations` | Enables the destructive tools (`delete_team`, `force_unlock_workspace`, and similar). | `false` |
+| `mcpServer.redirectRootURL` | Where to redirect a browser that hits `/`. Defaults to the Terraform MCP docs page when unset. | `""` |
+| `mcpServer.tls.certFile` | Path to a TLS certificate inside the container. Mount it with `volumes` and `volumeMounts`. | `""` |
+| `mcpServer.tls.keyFile` | Path to the matching TLS key inside the container. | `""` |
 | `mcpServer.logLevel` | Log level | `info` |
 | `mcpServer.logFormat` | Log format: `text` or `json` | `json` |
 | `mcpServer.heartbeatInterval` | Heartbeat interval for streamable-http; `0` disables | `"0"` |
 
-To supply the shared secret from an existing Secret:
+### TLS
 
-```bash
-kubectl create secret generic terraform-mcp-server \
-  --from-literal=shared-secret=<value>
+The server can terminate TLS itself rather than relying on an ingress. Mount a certificate and key, then point the server at the mount paths:
 
-helm install terraform-mcp-server ./helm/terraform-mcp-server \
-  --set mcpServer.existingSecret=terraform-mcp-server
+```yaml
+volumes:
+  - name: tls
+    secret:
+      secretName: terraform-mcp-server-tls
+
+volumeMounts:
+  - name: tls
+    mountPath: /tls
+    readOnly: true
+
+mcpServer:
+  tls:
+    certFile: /tls/tls.crt
+    keyFile: /tls/tls.key
 ```
 
 ### Ingress
@@ -92,7 +106,7 @@ Ingress is disabled by default and has no cloud-specific annotations. Set the an
 | `otel.metricsEndpoint` | OTLP metrics endpoint. If unset, the server uses its own default. Set this to your OTLP collector. | `""` |
 | `otel.serviceName` | Service name reported in metrics | `terraform-mcp-server` |
 
-Metrics are disabled by default. If you enable them, set `otel.metricsEndpoint` to your OTLP collector endpoint.
+Metrics are disabled by default, and none of the `OTEL_` environment variables are set on the container unless `otel.enabled` is true. If you enable them, set `otel.metricsEndpoint` to your OTLP collector endpoint.
 
 The chart sets `OTEL_INSTANCE_ID` from the pod UID so each replica reports a distinct `service.instance.id`. Without it, telemetry from every replica is attributed to a single instance.
 
@@ -100,5 +114,5 @@ The chart sets `OTEL_INSTANCE_ID` from the pod UID so each replica reports a dis
 
 - **CORS defaults to strict.** With no `allowedOrigins` set, all cross-origin requests are rejected. Set `mcpServer.allowedOrigins` to your client origin(s).
 - **The Terraform address is server-side only.** Clients cannot override `TFE_ADDRESS` via header or query parameter in streamable-http mode; it is fixed by `mcpServer.tfeAddress`.
-- **Use TLS in front of the server.** Deploy behind an ingress or service that terminates TLS. The shared secret and any tokens are sent in headers and must not traverse plaintext connections.
-- **Use (preffered over sharedSecret) `mcpServer.existingSecret` for the shared secret.** Create a Kubernetes Secret and reference it by name; the chart reads the key named by `mcpServer.existingSecretKey` (default `shared-secret`). `mcpServer.sharedSecret` puts the value straight into your values file and the pod spec, so it's only appropriate for local testing.
+- **Use TLS.** Either terminate at an ingress or configure `mcpServer.tls` so the server serves TLS itself. Terraform tokens are sent in request headers and must not traverse plaintext connections.
+- **Destructive tools are off by default.** `mcpServer.enableTfOperations` gates the tools that delete or force-unlock Terraform resources. Leave it `false` unless you specifically want those available.

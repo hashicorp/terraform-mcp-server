@@ -56,6 +56,11 @@ nodeSelector: {}
 tolerations: []
 affinity: {}
 
+# Mount a cert and key here to serve TLS directly, then point
+# mcpServer.tls.certFile and keyFile at the mount paths.
+volumes: []
+volumeMounts: []
+
 # Maps to the server's environment variables.
 mcpServer:
   # stateful or stateless. stateless is useful with multiple replicas behind a
@@ -76,11 +81,15 @@ mcpServer:
   corsMode: "strict"
   # restrict tool calls to these orgs. empty allows any org the token can reach.
   allowedOrganizations: []
-  # the shared secret sent as the X-Tf-Mcp-Secret header. prefer existingSecret,
-  # sharedSecret renders the value straight into the pod env.
-  existingSecret: ""
-  existingSecretKey: "shared-secret"
-  sharedSecret: ""
+  # enables the destructive tools (delete_team, force_unlock_workspace, etc).
+  enableTfOperations: false
+  # where to send a browser that hits /. defaults to the terraform mcp docs page.
+  redirectRootURL: ""
+  # paths to a cert and key inside the container. mount them via volumes and
+  # volumeMounts above.
+  tls:
+    certFile: ""
+    keyFile: ""
 
 otel:
   enabled: false
