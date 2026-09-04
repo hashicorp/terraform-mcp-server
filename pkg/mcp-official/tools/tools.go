@@ -47,7 +47,7 @@ func RegisterTools(svr *mcp.Server, logger *log.Logger, filter toolsets.ToolFilt
 		mcp.AddTool(svr, tfeTools.GetProjectTool(), tfeTools.GetProjectFunc)
 	}
 
-	if areDestructiveOperationsPrevented() {
+	if areDestructiveOperationsAllowed() {
 		if toolsets.IsToolEnabled("delete_project", enabledToolsets) {
 			mcp.AddTool(svr, tfeTools.DeleteProjectTool(), tfeTools.DeleteProjectFunc)
 		}
