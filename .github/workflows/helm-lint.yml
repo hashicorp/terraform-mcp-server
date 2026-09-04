@@ -28,6 +28,16 @@ jobs:
       - name: Lint chart
         run: helm lint helm/terraform-mcp-server
 
+      - name: Check chart version matches appVersion
+        run: |
+          version=$(helm show chart helm/terraform-mcp-server | grep '^version:' | awk '{print $2}')
+          app_version=$(helm show chart helm/terraform-mcp-server | grep '^appVersion:' | awk '{print $2}' | tr -d '"')
+          if [ "$version" != "$app_version" ]; then
+            echo "Chart.yaml version ($version) must match appVersion ($app_version)."
+            echo "The release pipeline pulls the published chart by the release tag, so they have to be equal."
+            exit 1
+          fi
+
       - name: Template chart (defaults)
         run: helm template helm/terraform-mcp-server
 
@@ -37,6 +47,7 @@ jobs:
             --set mcpServer.tfeAddress=https://tfe.example.com \
             --set mcpServer.allowedOrigins=https://ide.example.com \
             --set mcpServer.sessionMode=stateless \
+            --set mcpServer.enableTfOperations=true \
             --set otel.enabled=true \
             --set otel.metricsEndpoint=http://collector:4318 \
             --set ingress.enabled=true
