@@ -1,38 +1,80 @@
-# End To End (e2e) Tests
+# End-to-End Tests
 
-The purpose of the E2E tests is to have a simple (currently) test that gives maintainers some confidence when adding new resources/tools. It does this by:
- * Building the `terraform-mcp-server` docker image
- * Running the image
- * Interacting with the server via stdio
- * Issuing requests that interact with the existing Resources/Tools
+The E2E tests build and run the `terraform-mcp-server` Docker image, then test
+the server through both supported MCP transports:
+
+- Stdio
+- Streamable HTTP
+
+The tests use the official MCP Go SDK and call the real registry-backed tools.
+
+## Test Organization
+
+The E2E tests are organized by tool:
+
+- `search_providers_test.go`
+- `provider_details_test.go`
+- `search_modules_test.go`
+- `module_details_test.go`
+- `search_policies_test.go`
+- `policy_details_test.go`
+- `latest_module_version_test.go`
+- `latest_provider_version_test.go`
+- `cors_e2e_test.go`
+
+Each tool test runs against both Stdio and HTTP using a fresh MCP session.
 
 ## Running the Tests
 
-A service must be running that supports image building and container creation via the `docker` CLI.
+Docker must be running because the tests build and start the server image.
 
-```
+Run the complete E2E suite:
+
+```bash
 make test-e2e
 ```
 
-Running the tests:
+Run all E2E tests directly:
 
-```
-make test-e2e
-=== RUN   TestE2E
-    e2e_test.go:92: Building Docker image for e2e tests...
-    e2e_test.go:38: Starting Stdio MCP client...
-=== RUN   TestE2E/Initialize
-Initialized with server: terraform-mcp-server test-e2e
-
-=== RUN   TestE2E/CallTool_list_providers
-    e2e_test.go:83: Raw response content: aws, google, azurerm, kubernetes, github, docker, null, random
---- PASS: TestE2E (2.30s)
-    --- PASS: TestE2E/Initialize (0.55s)
-    --- PASS: TestE2E/CallTool_list_providers (0.00s)
-PASS
-ok      terraform-mcp-server/e2e    2.771s
+```bash
+go test ./e2e -v -count=1
 ```
 
-# TFE testing
+Run the provider search tests:
 
-The tools were tested manually for TFE version 2.0.1. Check [TFECO-12306](https://hashicorp.atlassian.net/browse/TFECO-12306) for details
+```bash
+go test ./e2e -run 'TestSearchProviders' -v -count=1
+```
+
+Run the CORS tests:
+
+```bash
+go test ./e2e -run '^TestCORSE2E$' -v -count=1
+```
+
+## Test Lifecycle
+
+`TestMain` performs package-level setup and cleanup:
+
+1. Builds `terraform-mcp-server:test-e2e` once.
+2. Runs all E2E tests.
+3. Stops any remaining test containers.
+
+Each transport test creates and closes its own MCP session. HTTP tests also
+create and stop their own Docker container.
+
+## CORS Testing
+
+CORS tests use direct HTTP requests instead of the MCP SDK so they can verify:
+
+- `Origin` request handling
+- `Access-Control-Allow-Origin`
+- `Access-Control-Allow-Methods`
+- HTTP status codes
+- `OPTIONS` preflight behavior
+
+## Requirements
+
+- Docker
+- Go
+- Network access to the Terraform Registry
