@@ -36,20 +36,20 @@ func RegisterTools(svr *mcp.Server, logger *log.Logger, filter toolsets.ToolFilt
 	}
 
 	if toolsets.IsToolEnabled("list_terraform_projects", enabledToolsets) {
-		mcp.AddTool(svr, tfeTools.ListProjectsTool(), tfeTools.ListProjectsFunc)
+		mcp.AddTool(svr, tfeTools.ListProjectsTool(), tfeTools.ListProjectsFunc(logger))
 	}
 
 	if toolsets.IsToolEnabled("create_project", enabledToolsets) {
-		mcp.AddTool(svr, tfeTools.CreateProjectTool(), tfeTools.CreateProjectFunc)
+		mcp.AddTool(svr, tfeTools.CreateProjectTool(), tfeTools.CreateProjectFunc(logger))
 	}
 
 	if toolsets.IsToolEnabled("get_project", enabledToolsets) {
-		mcp.AddTool(svr, tfeTools.GetProjectTool(), tfeTools.GetProjectFunc)
+		mcp.AddTool(svr, tfeTools.GetProjectTool(), tfeTools.GetProjectFunc(logger))
 	}
 
 	if areDestructiveOperationsAllowed() {
 		if toolsets.IsToolEnabled("delete_project", enabledToolsets) {
-			mcp.AddTool(svr, tfeTools.DeleteProjectTool(), tfeTools.DeleteProjectFunc)
+			mcp.AddTool(svr, tfeTools.DeleteProjectTool(), tfeTools.DeleteProjectFunc(logger))
 		}
 	}
 }

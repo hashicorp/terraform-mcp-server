@@ -5,11 +5,11 @@ package tools
 
 import (
 	"context"
-	"fmt"
 	"strings"
 
 	"github.com/hashicorp/terraform-mcp-server/pkg/mcp-official/client"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+	log "github.com/sirupsen/logrus"
 )
 
 // DeleteProjectArguments holds the input parameters for deleting a project.
@@ -39,20 +39,22 @@ func DeleteProjectTool() *mcp.Tool {
 	}
 }
 
-func DeleteProjectFunc(ctx context.Context, request *mcp.CallToolRequest, input DeleteProjectArguments) (*mcp.CallToolResult, *DeleteProjectResponse, error) {
-	projectID := strings.TrimSpace(input.ProjectID)
-	if projectID == "" {
-		return nil, nil, fmt.Errorf("project_id must not be blank")
-	}
+func DeleteProjectFunc(logger *log.Logger) mcp.ToolHandlerFor[DeleteProjectArguments, *DeleteProjectResponse] {
+	return func(ctx context.Context, request *mcp.CallToolRequest, input DeleteProjectArguments) (*mcp.CallToolResult, *DeleteProjectResponse, error) {
+		projectID := strings.TrimSpace(input.ProjectID)
+		if projectID == "" {
+			return nil, nil, toolError(logger, "project_id must not be blank", nil)
+		}
 
-	tfeClient, err := client.GetTfeClient(ctx, client.SessionIDFromRequest(request))
-	if err != nil {
-		return nil, nil, fmt.Errorf("getting Terraform client: %w", err)
-	}
+		tfeClient, err := client.GetTfeClient(ctx, client.SessionIDFromRequest(request))
+		if err != nil {
+			return nil, nil, toolError(logger, "getting Terraform client", err)
+		}
 
-	if err := tfeClient.Projects.Delete(ctx, projectID); err != nil {
-		return nil, nil, fmt.Errorf("deleting project %q: %w", projectID, err)
-	}
+		if err := tfeClient.Projects.Delete(ctx, projectID); err != nil {
+			return nil, nil, toolError(logger, "deleting project "+projectID, err)
+		}
 
-	return nil, &DeleteProjectResponse{ID: projectID, Deleted: true}, nil
+		return nil, &DeleteProjectResponse{ID: projectID, Deleted: true}, nil
+	}
 }
