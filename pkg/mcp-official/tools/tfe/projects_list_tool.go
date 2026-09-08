@@ -7,6 +7,7 @@ import (
 	"context"
 	"strings"
 
+	"github.com/google/jsonschema-go/jsonschema"
 	"github.com/hashicorp/go-tfe"
 	"github.com/hashicorp/terraform-mcp-server/pkg/mcp-official/client"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -28,17 +29,29 @@ type ProjectSummaryList struct {
 // ListProjectsArguments holds the input parameters for listing projects within an organization.
 type ListProjectsArguments struct {
 	// Required field
-	TerraformOrgName string `json:"terraform_org_name" jsonschema:"The name of the Terraform Cloud/Enterprise organization"`
+	TerraformOrgName string `json:"terraform_org_name"`
 
 	// Optional pagination fields (will be zero values if not provided)
 	Pagination
 }
 
 func ListProjectsTool() *mcp.Tool {
+	properties := paginationSchemaProperties()
+	properties["terraform_org_name"] = &jsonschema.Schema{
+		Type:        "string",
+		Description: "The name of the Terraform Cloud/Enterprise organization",
+	}
+
 	return &mcp.Tool{
-		Name:         "list_terraform_projects",
-		Description:  `Search and list Terraform projects within a specified organization. Supports pagination for large result sets. Returns a truncated summary of the project, use "get_project" to get the full details for a specific project.`,
-		InputSchema:  withPaginationConstraints(inferSchema[ListProjectsArguments]("list_terraform_projects")),
+		Name:        "list_terraform_projects",
+		Description: `Search and list Terraform projects within a specified organization. Supports pagination for large result sets. Returns a truncated summary of the project, use "get_project" to get the full details for a specific project.`,
+		InputSchema: &jsonschema.Schema{
+			Type:                 "object",
+			Properties:           properties,
+			PropertyOrder:        []string{"terraform_org_name", "page", "pageSize"},
+			Required:             []string{"terraform_org_name"},
+			AdditionalProperties: &jsonschema.Schema{Not: &jsonschema.Schema{}},
+		},
 		OutputSchema: outputSchema[ProjectSummaryList]("list_terraform_projects"),
 		Annotations: &mcp.ToolAnnotations{
 			Title:           "List all Terraform projects",

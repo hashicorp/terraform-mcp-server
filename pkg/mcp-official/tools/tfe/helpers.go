@@ -23,8 +23,8 @@ const (
 // Pagination holds the page/pageSize inputs used by all list tools.
 // Embed it anonymously in an arguments struct and the fields are promoted automatically.
 type Pagination struct {
-	Page     int `json:"page,omitempty" jsonschema:"Page number for pagination (min 1)"`
-	PageSize int `json:"pageSize,omitempty" jsonschema:"Results per page for pagination (min 1, max 100)"`
+	Page     int `json:"page,omitempty"`
+	PageSize int `json:"pageSize,omitempty"`
 }
 
 // ListOptions converts the pagination inputs into what the TFE client expects.
@@ -73,26 +73,17 @@ func paginationDetails(p *tfe.Pagination) PaginationDetails {
 	}
 }
 
-// inferSchema builds the JSON schema for T from its struct tags.
-// Panics on failure — this only runs at startup during tool registration,
-// and an error here means T has a field type or tag that can't be represented
-// as JSON Schema
-func inferSchema[T any](toolName string) *jsonschema.Schema {
-	schema, err := jsonschema.For[T](nil)
-	if err != nil {
-		panic(fmt.Sprintf("%s: inferring input schema: %v", toolName, err))
-	}
-	return schema
-}
-
 // outputSchema builds the JSON schema for a tool's result type.
 //
 // It narrows the nullable type unions that inference produces (see
-// narrowNullableTypes) and is deliberately kept separate from inferSchema:
-// outputs are values we produce, so promising "never null" is a promise we can
-// keep, whereas inputs come from the caller and should stay permissive.
+// narrowNullableTypes). Input schemas are built manually in each tool so all
+// input constraints remain visible in one place.
 func outputSchema[T any](toolName string) *jsonschema.Schema {
-	return narrowNullableTypes(inferSchema[T](toolName))
+	schema, err := jsonschema.For[T](nil)
+	if err != nil {
+		panic(fmt.Sprintf("%s: inferring output schema: %v", toolName, err))
+	}
+	return narrowNullableTypes(schema)
 }
 
 // narrowNullableTypes rewrites `"type": ["null", X]` unions to a plain
@@ -170,29 +161,22 @@ func nonNilSlice[T any](values []T) []T {
 	return values
 }
 
-// withPaginationConstraints adds the numeric min/max bounds to page and pageSize.
-// Struct tags can only set a field description, so the bounds have to be patched
-// onto the schema separately.
-func withPaginationConstraints(schema *jsonschema.Schema) *jsonschema.Schema {
-	if page, ok := schema.Properties["page"]; ok {
-		page.Minimum = ptr(float64(defaultPage))
+// paginationSchemaProperties returns a fresh property map for list-tool input
+// schemas. Callers may add tool-specific properties without affecting others.
+func paginationSchemaProperties() map[string]*jsonschema.Schema {
+	return map[string]*jsonschema.Schema{
+		"page": {
+			Type:        "integer",
+			Description: "Page number for pagination (min 1)",
+			Minimum:     ptr(float64(defaultPage)),
+		},
+		"pageSize": {
+			Type:        "integer",
+			Description: "Results per page for pagination (min 1, max 100)",
+			Minimum:     ptr(float64(minPageSize)),
+			Maximum:     ptr(float64(maxPageSize)),
+		},
 	}
-	if pageSize, ok := schema.Properties["pageSize"]; ok {
-		pageSize.Minimum = ptr(float64(minPageSize))
-		pageSize.Maximum = ptr(float64(maxPageSize))
-	}
-	return schema
-}
-
-// enumOf converts string values into the []any form jsonschema.Schema.Enum expects.
-// Lets a tool reuse its package-level list of valid values as the schema constraint,
-// so the two can't drift apart.
-func enumOf(values ...string) []any {
-	out := make([]any, len(values))
-	for i, v := range values {
-		out[i] = v
-	}
-	return out
 }
 
 // ptr is a convenience helper for taking the address of a literal value,
