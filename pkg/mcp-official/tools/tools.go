@@ -1,10 +1,10 @@
 package tools
 
 import (
+	tfeTools "github.com/hashicorp/terraform-mcp-server/pkg/mcp-official/tools/tfe"
 	"github.com/hashicorp/terraform-mcp-server/pkg/toolsets"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	log "github.com/sirupsen/logrus"
-	tfeTools "github.com/hashicorp/terraform-mcp-server/pkg/mcp-official/tools/tfe"
 )
 
 func RegisterTools(svr *mcp.Server, logger *log.Logger, enabledToolsets []string) {
@@ -14,5 +14,12 @@ func RegisterTools(svr *mcp.Server, logger *log.Logger, enabledToolsets []string
 
 	if toolsets.IsToolEnabled("list_terraform_orgs", enabledToolsets) {
 		mcp.AddTool(svr, tfeTools.ListTerraformOrganizationsTool(), tfeTools.ListTerraformOrganizationsFunc)
+	}
+
+	if toolsets.IsToolEnabled("list_teams", enabledToolsets) {
+		mcp.AddTool(svr, tfeTools.ListTeamsTool(), tfeTools.ListTeamsFunc)
+	}
+	if toolsets.IsToolEnabled("get_team", enabledToolsets) {
+		mcp.AddTool(svr, tfeTools.GetTeamTool(), tfeTools.GetTeamFunc)
 	}
 }
