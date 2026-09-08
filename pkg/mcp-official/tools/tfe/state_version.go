@@ -119,7 +119,7 @@ func GetStateVersionFunc(ctx context.Context, request *mcp.CallToolRequest, inpu
 	stateVersionID := strings.TrimSpace(input.StateVersionID)
 
 	if workspaceID == "" && stateVersionID == "" {
-		return nil, nil, fmt.Errorf("one of state_version_id or workspace_id must be provided")
+		return nil, nil, fmt.Errorf("One of state_version_id or workspace_id must be provided")
 	}
 
 	tfeClient, err := client.GetTfeClient(ctx, client.SessionIDFromRequest(request))

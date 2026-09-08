@@ -233,7 +233,7 @@ func TestGetStateVersionErrorPaths(t *testing.T) {
 	t.Run("requires a state version or workspace ID", func(t *testing.T) {
 		result, resultText := callTool(t, s, "get_state_version", map[string]any{})
 		require.True(t, result.IsError, "get_state_version without an identifier should return an error")
-		assert.Contains(t, resultText, "one of state_version_id or workspace_id must be provided")
+		assert.Contains(t, resultText, "One of state_version_id or workspace_id must be provided")
 	})
 
 	t.Run("rejects a non-existent state version", func(t *testing.T) {
