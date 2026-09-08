@@ -7,6 +7,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/google/jsonschema-go/jsonschema"
 	"github.com/hashicorp/go-tfe"
 	"github.com/hashicorp/terraform-mcp-server/pkg/mcp-official/client"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -33,9 +34,14 @@ type ListOrganizationsArguments struct {
 
 func ListTerraformOrganizationsTool() *mcp.Tool {
 	return &mcp.Tool{
-		Name:         "list_terraform_orgs",
-		Description:  "Fetches a list of all Terraform organizations. Supports Pagination for large result sets.",
-		InputSchema:  withPaginationConstraints(inferSchema[ListOrganizationsArguments]("list_terraform_orgs")),
+		Name:        "list_terraform_orgs",
+		Description: "Fetches a list of all Terraform organizations. Supports Pagination for large result sets.",
+		InputSchema: &jsonschema.Schema{
+			Type:                 "object",
+			Properties:           paginationSchemaProperties(),
+			PropertyOrder:        []string{"page", "pageSize"},
+			AdditionalProperties: &jsonschema.Schema{Not: &jsonschema.Schema{}},
+		},
 		OutputSchema: outputSchema[OrganizationSummaryList]("list_terraform_orgs"),
 		Annotations: &mcp.ToolAnnotations{
 			Title:           "List all Terraform organizations",

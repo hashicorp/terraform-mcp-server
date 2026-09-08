@@ -7,6 +7,7 @@ import (
 	"context"
 	"strings"
 
+	"github.com/google/jsonschema-go/jsonschema"
 	"github.com/hashicorp/terraform-mcp-server/pkg/mcp-official/client"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	log "github.com/sirupsen/logrus"
@@ -15,7 +16,7 @@ import (
 // DeleteProjectArguments holds the input parameters for deleting a project.
 type DeleteProjectArguments struct {
 	// Required field
-	ProjectID string `json:"project_id" jsonschema:"The ID of the project to delete (e.g., 'prj-abc123def456')"`
+	ProjectID string `json:"project_id"`
 }
 
 // DeleteProjectResponse is the response shape returned by the delete_project tool.
@@ -30,6 +31,18 @@ func DeleteProjectTool() *mcp.Tool {
 	return &mcp.Tool{
 		Name:        "delete_project",
 		Description: `Deletes a Terraform project by ID. This is a destructive operation. The request will fail if the project still contains workspaces or stacks. If the project ID isn't already known, call list_terraform_projects first to look it up rather than asking the user to find it themselves.`,
+		InputSchema: &jsonschema.Schema{
+			Type: "object",
+			Properties: map[string]*jsonschema.Schema{
+				"project_id": {
+					Type:        "string",
+					Description: "The ID of the project to delete (e.g., 'prj-abc123def456')",
+				},
+			},
+			PropertyOrder:        []string{"project_id"},
+			Required:             []string{"project_id"},
+			AdditionalProperties: &jsonschema.Schema{Not: &jsonschema.Schema{}},
+		},
 		Annotations: &mcp.ToolAnnotations{
 			Title:           "Delete a Terraform project by ID",
 			OpenWorldHint:   ptr(true),

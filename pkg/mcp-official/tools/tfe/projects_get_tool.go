@@ -7,6 +7,7 @@ import (
 	"context"
 	"strings"
 
+	"github.com/google/jsonschema-go/jsonschema"
 	"github.com/hashicorp/terraform-mcp-server/pkg/mcp-official/client"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	log "github.com/sirupsen/logrus"
@@ -28,13 +29,25 @@ type ProjectDetails struct {
 // GetProjectArguments holds the input parameters for fetching a single project.
 type GetProjectArguments struct {
 	// Required field
-	ProjectID string `json:"project_id" jsonschema:"The ID of the project to fetch (e.g., 'prj-abc123def456')"`
+	ProjectID string `json:"project_id"`
 }
 
 func GetProjectTool() *mcp.Tool {
 	return &mcp.Tool{
 		Name:        "get_project",
 		Description: `Fetches detailed information about a Terraform project by its ID. If the project ID isn't already known, call "list_terraform_projects" first.`,
+		InputSchema: &jsonschema.Schema{
+			Type: "object",
+			Properties: map[string]*jsonschema.Schema{
+				"project_id": {
+					Type:        "string",
+					Description: "The ID of the project to fetch (e.g., 'prj-abc123def456')",
+				},
+			},
+			PropertyOrder:        []string{"project_id"},
+			Required:             []string{"project_id"},
+			AdditionalProperties: &jsonschema.Schema{Not: &jsonschema.Schema{}},
+		},
 		Annotations: &mcp.ToolAnnotations{
 			Title:           "Get a Terraform project by ID",
 			OpenWorldHint:   ptr(true),

@@ -8,13 +8,20 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/google/jsonschema-go/jsonschema"
 	"github.com/hashicorp/go-tfe"
 	"github.com/hashicorp/terraform-mcp-server/pkg/mcp-official/client"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	log "github.com/sirupsen/logrus"
 )
 
-var validExecutionModes = []string{"local", "agent", "remote"}
+const (
+	executionModeLocal  = "local"
+	executionModeAgent  = "agent"
+	executionModeRemote = "remote"
+)
+
+var validExecutionModes = []string{executionModeLocal, executionModeAgent, executionModeRemote}
 
 // CreateProjectResponse is the response shape returned by the create_project tool.
 type CreateProjectResponse struct {
@@ -29,28 +36,52 @@ type CreateProjectResponse struct {
 // CreateProjectArguments holds the input parameters for creating a project within an organization.
 type CreateProjectArguments struct {
 	// Required fields
-	TerraformOrgName string `json:"terraform_org_name" jsonschema:"The name of the Terraform Cloud/Enterprise organization to create the project in"`
-	ProjectName      string `json:"project_name" jsonschema:"The project name. Must be 3-40 characters and may contain letters, numbers, spaces, hyphens, and underscores. It cannot start or end with a space."`
+	TerraformOrgName string `json:"terraform_org_name"`
+	ProjectName      string `json:"project_name"`
 
 	// Optional fields (will be empty strings if not provided)
-	Description          string `json:"description,omitempty" jsonschema:"Optional project description. Must be no more than 256 characters"`
-	DefaultExecutionMode string `json:"default_execution_mode,omitempty" jsonschema:"Optional default execution mode for workspaces in the project: local, agent, remote. If not set, workspaces inherit the organization's default execution mode."`
+	Description          string `json:"description,omitempty"`
+	DefaultExecutionMode string `json:"default_execution_mode,omitempty"`
 }
 
 func CreateProjectTool() *mcp.Tool {
-	// The `jsonschema` struct tag can only set a property description, so the
-	// length, pattern and enum constraints are patched onto the inferred schema.
-	schema := inferSchema[CreateProjectArguments]("create_project")
-	schema.Properties["project_name"].MinLength = ptr(3)
-	schema.Properties["project_name"].MaxLength = ptr(40)
-	schema.Properties["project_name"].Pattern = `^[A-Za-z0-9_-][A-Za-z0-9 _-]*[A-Za-z0-9_-]$`
-	schema.Properties["description"].MaxLength = ptr(256)
-	schema.Properties["default_execution_mode"].Enum = enumOf(validExecutionModes...)
-
 	return &mcp.Tool{
 		Name:        "create_project",
 		Description: "Creates a new Terraform project in the specified organization.",
-		InputSchema: schema,
+		InputSchema: &jsonschema.Schema{
+			Type: "object",
+			Properties: map[string]*jsonschema.Schema{
+				"terraform_org_name": {
+					Type:        "string",
+					Description: "The name of the Terraform Cloud/Enterprise organization to create the project in",
+				},
+				"project_name": {
+					Type:        "string",
+					Description: "The project name. Must be 3-40 characters and may contain letters, numbers, spaces, hyphens, and underscores. It cannot start or end with a space.",
+					MinLength:   ptr(3),
+					MaxLength:   ptr(40),
+					Pattern:     `^[A-Za-z0-9_-][A-Za-z0-9 _-]*[A-Za-z0-9_-]$`,
+				},
+				"description": {
+					Type:        "string",
+					Description: "Optional project description. Must be no more than 256 characters",
+					MaxLength:   ptr(256),
+				},
+				"default_execution_mode": {
+					Type:        "string",
+					Description: "Optional default execution mode for workspaces in the project: local, agent, remote. If not set, workspaces inherit the organization's default execution mode.",
+					Enum:        []any{executionModeLocal, executionModeAgent, executionModeRemote},
+				},
+			},
+			PropertyOrder: []string{
+				"terraform_org_name",
+				"project_name",
+				"description",
+				"default_execution_mode",
+			},
+			Required:             []string{"terraform_org_name", "project_name"},
+			AdditionalProperties: &jsonschema.Schema{Not: &jsonschema.Schema{}},
+		},
 		Annotations: &mcp.ToolAnnotations{
 			Title:           "Create a new Terraform project",
 			OpenWorldHint:   ptr(true),
