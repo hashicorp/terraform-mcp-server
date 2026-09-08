@@ -89,7 +89,7 @@ func runHTTPServer(logger *log.Logger, host string, port string, endpointPath st
 	})
 	attachMetricsHooks(hooks, metricsConfig, logger)
 
-	return streamableHTTPServerInit(ctx, hcServer, logger, host, port, endpointPath, heartbeatInterval, organizationAllowlist, enabledToolsets, rateLimiter)
+	return streamableHTTPServerInit(ctx, hcServer, logger, host, port, endpointPath, heartbeatInterval, organizationAllowlist, enabledToolsets, rateLimiter, metricsConfig)
 }
 
 func attachMetricsHooks(hooks *server.Hooks, metricsConfig client.MetricsConfig, logger *log.Logger) {
