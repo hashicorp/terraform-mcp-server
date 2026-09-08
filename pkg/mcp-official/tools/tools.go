@@ -35,4 +35,11 @@ func RegisterTools(svr *mcp.Server, logger *slog.Logger, filter toolsets.ToolFil
 			register(svr)
 		}
 	}
+
+	if toolsets.IsToolEnabled("list_state_versions", enabledToolsets) {
+		mcp.AddTool(svr, tfeTools.ListStateVersionsTool(), tfeTools.ListStateVersionsFunc)
+	}
+	if toolsets.IsToolEnabled("get_state_version", enabledToolsets) {
+		mcp.AddTool(svr, tfeTools.GetStateVersionTool(), tfeTools.GetStateVersionFunc)
+	}
 }
