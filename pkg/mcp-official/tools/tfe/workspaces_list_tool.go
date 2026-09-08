@@ -5,13 +5,13 @@ package tools
 
 import (
 	"context"
-	"fmt"
 	"strings"
 	"time"
 
 	"github.com/hashicorp/go-tfe"
 	"github.com/hashicorp/terraform-mcp-server/pkg/mcp-official/client"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+	log "github.com/sirupsen/logrus"
 )
 
 // WorkspaceSummary holds a trimmed view of a single Terraform workspace.
@@ -61,48 +61,50 @@ func ListWorkspacesTool() *mcp.Tool {
 	}
 }
 
-func ListWorkspacesFunc(ctx context.Context, request *mcp.CallToolRequest, input ListWorkspacesArguments) (*mcp.CallToolResult, *WorkspaceSummaryList, error) {
-	terraformOrgName := strings.TrimSpace(input.TerraformOrgName)
-	if terraformOrgName == "" {
-		return nil, nil, fmt.Errorf("terraform_org_name must not be blank")
-	}
-
-	tfeClient, err := client.GetTfeClient(ctx, client.SessionIDFromRequest(request))
-	if err != nil {
-		return nil, nil, fmt.Errorf("getting Terraform client: %w", err)
-	}
-
-	workspaces, err := tfeClient.Workspaces.List(ctx, terraformOrgName, &tfe.WorkspaceListOptions{
-		ProjectID:    input.ProjectID,
-		Search:       input.SearchQuery,
-		Tags:         joinTrimmedCSV(input.Tags),
-		ExcludeTags:  joinTrimmedCSV(input.ExcludeTags),
-		WildcardName: input.WildcardName,
-		ListOptions:  input.ListOptions(),
-	})
-	if err != nil {
-		return nil, nil, fmt.Errorf("listing workspaces in organization %q: %w", terraformOrgName, err)
-	}
-	if len(workspaces.Items) == 0 {
-		return nil, nil, fmt.Errorf("no workspaces to list in organization %q", terraformOrgName)
-	}
-
-	summaries := make([]*WorkspaceSummary, len(workspaces.Items))
-	for i, w := range workspaces.Items {
-		summaries[i] = &WorkspaceSummary{
-			ID:            w.ID,
-			Name:          w.Name,
-			Description:   w.Description,
-			Environment:   w.Environment,
-			CreatedAt:     w.CreatedAt,
-			ExecutionMode: w.ExecutionMode,
+func ListWorkspacesFunc(logger *log.Logger) mcp.ToolHandlerFor[ListWorkspacesArguments, *WorkspaceSummaryList] {
+	return func(ctx context.Context, request *mcp.CallToolRequest, input ListWorkspacesArguments) (*mcp.CallToolResult, *WorkspaceSummaryList, error) {
+		terraformOrgName := strings.TrimSpace(input.TerraformOrgName)
+		if terraformOrgName == "" {
+			return nil, nil, toolError(logger, "terraform_org_name must not be blank", nil)
 		}
-	}
 
-	return nil, &WorkspaceSummaryList{
-		Items:             nonNilSlice(summaries),
-		PaginationDetails: paginationDetails(workspaces.Pagination),
-	}, nil
+		tfeClient, err := client.GetTfeClient(ctx, client.SessionIDFromRequest(request))
+		if err != nil {
+			return nil, nil, toolError(logger, "getting Terraform client", err)
+		}
+
+		workspaces, err := tfeClient.Workspaces.List(ctx, terraformOrgName, &tfe.WorkspaceListOptions{
+			ProjectID:    input.ProjectID,
+			Search:       input.SearchQuery,
+			Tags:         joinTrimmedCSV(input.Tags),
+			ExcludeTags:  joinTrimmedCSV(input.ExcludeTags),
+			WildcardName: input.WildcardName,
+			ListOptions:  input.ListOptions(),
+		})
+		if err != nil {
+			return nil, nil, toolError(logger, "listing workspaces in organization "+terraformOrgName, err)
+		}
+		if len(workspaces.Items) == 0 {
+			return nil, nil, toolError(logger, "no workspaces to list in organization "+terraformOrgName, nil)
+		}
+
+		summaries := make([]*WorkspaceSummary, len(workspaces.Items))
+		for i, w := range workspaces.Items {
+			summaries[i] = &WorkspaceSummary{
+				ID:            w.ID,
+				Name:          w.Name,
+				Description:   w.Description,
+				Environment:   w.Environment,
+				CreatedAt:     w.CreatedAt,
+				ExecutionMode: w.ExecutionMode,
+			}
+		}
+
+		return nil, &WorkspaceSummaryList{
+			Items:             nonNilSlice(summaries),
+			PaginationDetails: paginationDetails(workspaces.Pagination),
+		}, nil
+	}
 }
 
 // joinTrimmedCSV normalizes a comma-separated list by trimming whitespace around
