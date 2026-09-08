@@ -18,9 +18,6 @@ type AccountDetails struct {
 	IsServiceAccount bool   `json:"is_service_account"`
 }
 
-// WhoAmIArguments holds the (empty) input for the whoami tool.
-type WhoAmIArguments struct{}
-
 func WhoAmITool() *mcp.Tool {
 	return &mcp.Tool{
 		Name:        "whoami",
@@ -33,7 +30,7 @@ func WhoAmITool() *mcp.Tool {
 	}
 }
 
-func WhoAmIFunc(ctx context.Context, request *mcp.CallToolRequest, _ WhoAmIArguments) (*mcp.CallToolResult, *AccountDetails, error) {
+func WhoAmIFunc(ctx context.Context, request *mcp.CallToolRequest, _ any) (*mcp.CallToolResult, *AccountDetails, error) {
 	tfeClient, err := client.GetTfeClient(ctx, client.SessionIDFromRequest(request))
 	if err != nil {
 		return nil, nil, fmt.Errorf("getting Terraform client: %w", err)
