@@ -19,9 +19,15 @@ type GetTokenPermissionsArguments struct {
 	TerraformOrgName string `json:"terraform_org_name" jsonschema:"The name of the Terraform Cloud/Enterprise organization"`
 }
 
+// TokenPermissionsResult is the response shape returned by the get_token_permissions tool.
+type TokenPermissionsResult struct {
+	Permissions []string `json:"permissions"`
+}
+
 func GetTokenPermissionsTool() *mcp.Tool {
 	return &mcp.Tool{
-		Name:        "get_token_permissions",
+		Name: "get_token_permissions",
+		// TODO: Add output schema helper
 		Description: "Fetches the permissions the current token has for the specified terraform organization.",
 		Annotations: &mcp.ToolAnnotations{
 			Title:           "Get permissions for current token",
@@ -31,7 +37,7 @@ func GetTokenPermissionsTool() *mcp.Tool {
 	}
 }
 
-func GetTokenPermissionsFunc(ctx context.Context, request *mcp.CallToolRequest, input GetTokenPermissionsArguments) (*mcp.CallToolResult, []string, error) {
+func GetTokenPermissionsFunc(ctx context.Context, request *mcp.CallToolRequest, input GetTokenPermissionsArguments) (*mcp.CallToolResult, *TokenPermissionsResult, error) {
 	terraformOrgName := strings.TrimSpace(input.TerraformOrgName)
 	if terraformOrgName == "" {
 		return nil, nil, fmt.Errorf("terraform_org_name must not be blank")
@@ -47,5 +53,8 @@ func GetTokenPermissionsFunc(ctx context.Context, request *mcp.CallToolRequest, 
 		return nil, nil, fmt.Errorf("failed to read organization %q: %w", terraformOrgName, err)
 	}
 
-	return nil, tfeclient.HumanReadableTokenPermissions(org.Permissions), nil
+	// TODO: Add nonNilSlice helper
+	return nil, &TokenPermissionsResult{
+		Permissions: tfeclient.HumanReadableTokenPermissions(org.Permissions),
+	}, nil
 }
