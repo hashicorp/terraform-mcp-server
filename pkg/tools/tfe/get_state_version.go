@@ -50,36 +50,41 @@ func getStateVersionWithIDHandler(ctx context.Context, request mcp.CallToolReque
 		return ToolError(logger, "Failed to get Terraform client - ensure TFE_TOKEN and TFE_ADDRESS are configured", nil)
 	}
 
-	var sv *tfe.StateVersion
 	if stateVersionID == "" && workspaceID == "" {
 		return ToolError(logger, "One of state_version_id or workspace_id must be provided", nil)
 	}
-	if stateVersionID != "" {
+
+	var sv *tfe.StateVersion
+	if workspaceID != "" {
+		workspace, err := tfeClient.Workspaces.ReadByID(ctx, workspaceID)
+		if err != nil {
+			return ToolErrorf(logger, "workspace not found: %s", workspaceID)
+		}
+		if res, err := checkOrganizationAllowed(ctx, logger, "workspace", workspaceID, workspace.Organization); res != nil {
+			return res, err
+		}
+		sv, err = tfeClient.StateVersions.ReadCurrent(ctx, workspaceID)
+		if err != nil {
+			return ToolError(logger, "Failed to get state version", err)
+		}
+	} else {
 		sv, err = tfeClient.StateVersions.ReadWithOptions(ctx, stateVersionID, &tfe.StateVersionReadOptions{
 			Include: []tfe.StateVersionIncludeOpt{tfe.SVrun},
 		})
-	} else {
-		sv, err = tfeClient.StateVersions.ReadCurrent(ctx, workspaceID)
-	}
-	if err != nil {
-		return ToolError(logger, "Failed to get state version", err)
-	}
-
-	// Enforce MCP_ORGANIZATION_ALLOWLIST against the owning workspace's organization.
-	owningWorkspaceID := workspaceID
-	if owningWorkspaceID == "" && sv.Run != nil && sv.Run.Workspace != nil {
-		owningWorkspaceID = sv.Run.Workspace.ID
-	}
-	var svOrg *tfe.Organization
-	if owningWorkspaceID != "" {
-		workspace, err := tfeClient.Workspaces.ReadByID(ctx, owningWorkspaceID)
 		if err != nil {
-			return ToolErrorf(logger, "failed to resolve workspace for state version %q: %v", sv.ID, err)
+			return ToolError(logger, "Failed to get state version", err)
 		}
-		svOrg = workspace.Organization
-	}
-	if res, err := checkOrganizationAllowed(ctx, logger, "state version", sv.ID, svOrg); res != nil {
-		return res, err
+		var svOrg *tfe.Organization
+		if sv.Run != nil && sv.Run.Workspace != nil {
+			workspace, err := tfeClient.Workspaces.ReadByID(ctx, sv.Run.Workspace.ID)
+			if err != nil {
+				return ToolErrorf(logger, "failed to resolve workspace for state version %q: %v", sv.ID, err)
+			}
+			svOrg = workspace.Organization
+		}
+		if res, err := checkOrganizationAllowed(ctx, logger, "state version", sv.ID, svOrg); res != nil {
+			return res, err
+		}
 	}
 
 	buf := bytes.NewBuffer(nil)
