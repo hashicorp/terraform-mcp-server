@@ -8,6 +8,7 @@ import (
 	"os"
 	"testing"
 
+	"github.com/hashicorp/terraform-mcp-server/pkg/toolsets"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
@@ -117,4 +118,18 @@ func TestToolsAndToolsetsTogetherTriggersFatal(t *testing.T) {
 
 	assert.True(t, *fatalCalled,
 		"passing both --tools and --toolsets explicitly must still trigger the conflict Fatal")
+}
+
+func TestDefaultKeywordMatchesFlagDefault(t *testing.T) {
+	// Build a fresh command the same way init() does, and check the
+	// registered default value for --toolsets is literally toolsets.Default,
+	// not a hardcoded string that might drift from it (this was the "all"
+	// vs "default" mismatch bug).
+	flag := rootCmd.PersistentFlags().Lookup("toolsets")
+	if flag == nil {
+		t.Fatal("toolsets flag not registered")
+	}
+	if flag.DefValue != toolsets.Default {
+		t.Errorf("--toolsets flag default = %q, want %q (toolsets.Default)", flag.DefValue, toolsets.Default)
+	}
 }

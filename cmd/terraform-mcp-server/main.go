@@ -228,7 +228,7 @@ func parseIndividualTools(toolsFlag string, logger *log.Logger) []string {
 
 	if len(validTools) == 0 {
 		logger.Warn("No valid tools specified, falling back to default toolsets")
-		return parseToolsets("default", logger)
+		return parseToolsets(toolsets.Default, logger)
 	}
 
 	// Use the public API to enable individual tools mode
@@ -266,7 +266,7 @@ func getToolsetsFromCmd(cmd *cobra.Command, logger *log.Logger) []string {
 		toolsetsFlag, err = cmd.Root().PersistentFlags().GetString("toolsets")
 		if err != nil {
 			logger.Warnf("Failed to get toolsets flag, using default: %v", err)
-			toolsetsFlag = "default"
+			toolsetsFlag = toolsets.Default
 		}
 	}
 	return parseToolsets(toolsetsFlag, logger)
