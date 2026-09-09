@@ -16,18 +16,32 @@ import (
 // OrgNameArgument is the tool argument holding the organization name for a tool call
 const OrgNameArgument = "terraform_org_name"
 
+type organizationAllowlistContextKey struct{}
+
+func WithOrganizationAllowlist(ctx context.Context, allowedOrganizations map[string]struct{}) context.Context {
+	return context.WithValue(ctx, organizationAllowlistContextKey{}, allowedOrganizations)
+}
+
+func OrganizationAllowed(ctx context.Context, organizationName string) bool {
+	allowedOrganizations, ok := ctx.Value(organizationAllowlistContextKey{}).(map[string]struct{})
+	if !ok {
+		return true
+	}
+	_, allowed := allowedOrganizations[strings.ToLower(strings.TrimSpace(organizationName))]
+	return allowed
+}
+
 func OrganizationAllowlistToolMiddleware(allowlist []string, logger *log.Logger) server.ToolHandlerMiddleware {
 	allowedOrganizations := BuildAllowedOrganizationsMap(allowlist)
 
 	return func(nextToolHandler server.ToolHandlerFunc) server.ToolHandlerFunc {
 		return func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-			// Skip allowlist enforcement for tools without an organization argument.
-			organizationName := strings.ToLower(strings.TrimSpace(request.GetString(OrgNameArgument, "")))
-			if organizationName == "" {
-				return nextToolHandler(ctx, request)
-			}
+			ctx = WithOrganizationAllowlist(ctx, allowedOrganizations)
 
-			if _, allowed := allowedOrganizations[organizationName]; !allowed {
+			// Tools that pass the organization by argument are checked here; ID-based
+			// tools carry no name and are checked in their handlers.
+			organizationName := strings.ToLower(strings.TrimSpace(request.GetString(OrgNameArgument, "")))
+			if organizationName != "" && !OrganizationAllowed(ctx, organizationName) {
 				logger.Warnf("Rejecting tool call %q: organization %q is not in the configured allowlist",
 					request.Params.Name, organizationName)
 				return mcp.NewToolResultError(fmt.Sprintf(

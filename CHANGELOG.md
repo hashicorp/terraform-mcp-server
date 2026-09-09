@@ -1,3 +1,9 @@
+# 1.3.1
+
+FIXES
+
+* Enforce `MCP_ORGANIZATION_ALLOWLIST` for tools that target a resource by ID and send no `terraform_org_name` (`force_unlock_workspace`, `delete_workspace_safely`, `action_run`, `grant_team_access`, `add_team_member`, `get_state_version`, `delete_project`, `delete_team`, `create_no_code_workspace`, and the variable set / policy set attach tools). These tools previously bypassed the allowlist; they now resolve the target's owning organization from the TFE API and reject the call when it is not allowlisted. [519](https://github.com/hashicorp/terraform-mcp-server/pull/519)
+
 # 1.3.0
 
 FEATURES

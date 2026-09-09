@@ -51,6 +51,14 @@ func deleteTeamHandler(ctx context.Context, request mcp.CallToolRequest, logger 
 		return ToolError(logger, "Failed to get Terraform client - ensure TFE_TOKEN and TFE_ADDRESS are configured", nil)
 	}
 
+	org, err := teamOrganization(ctx, tfeClient, teamID)
+	if err != nil {
+		return ToolErrorf(logger, "team not found: %s", teamID)
+	}
+	if res, err := checkOrganizationAllowed(ctx, logger, "team", teamID, org); res != nil {
+		return res, err
+	}
+
 	err = tfeClient.Teams.Delete(ctx, teamID)
 	if err != nil {
 		return ToolErrorf(logger, "Failed to delete team %q: %v", teamID, err)

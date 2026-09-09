@@ -48,6 +48,14 @@ func deleteProjectHandler(ctx context.Context, request mcp.CallToolRequest, logg
 		return ToolError(logger, "failed to get Terraform client - ensure TFE_TOKEN and TFE_ADDRESS are configured", err)
 	}
 
+	project, err := tfeClient.Projects.Read(ctx, projectID)
+	if err != nil {
+		return ToolErrorf(logger, "project not found: %s", projectID)
+	}
+	if res, err := checkOrganizationAllowed(ctx, logger, "project", projectID, project.Organization); res != nil {
+		return res, err
+	}
+
 	err = tfeClient.Projects.Delete(ctx, projectID)
 	if err != nil {
 		return ToolErrorf(logger, "failed to delete project %q: %v", projectID, err)

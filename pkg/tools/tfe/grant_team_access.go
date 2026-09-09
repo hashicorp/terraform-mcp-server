@@ -92,6 +92,14 @@ func grantTeamAccessHandler(ctx context.Context, request mcp.CallToolRequest, lo
 			return ToolErrorf(logger, "Invalid Team access level %q - must be one of: %s", accessLevel, validTeamAccessLevelsStr)
 		}
 
+		workspace, err := tfeClient.Workspaces.ReadByID(ctx, workspaceID)
+		if err != nil {
+			return ToolErrorf(logger, "workspace not found: %s", workspaceID)
+		}
+		if res, err := checkOrganizationAllowed(ctx, logger, "workspace", workspaceID, workspace.Organization); res != nil {
+			return res, err
+		}
+
 		ta, err := tfeClient.TeamAccess.Add(ctx, tfe.TeamAccessAddOptions{
 			Access:    tfe.Access(tfe.AccessType(accessLevel)),
 			Workspace: &tfe.Workspace{ID: workspaceID},
@@ -115,6 +123,14 @@ func grantTeamAccessHandler(ctx context.Context, request mcp.CallToolRequest, lo
 
 	if !slices.Contains(validTeamProjectAccessLevels, accessLevel) {
 		return ToolErrorf(logger, "Invalid Team Project access level %q - must be one of: %s", accessLevel, validTeamProjectAccessLevelsStr)
+	}
+
+	project, err := tfeClient.Projects.Read(ctx, projectID)
+	if err != nil {
+		return ToolErrorf(logger, "project not found: %s", projectID)
+	}
+	if res, err := checkOrganizationAllowed(ctx, logger, "project", projectID, project.Organization); res != nil {
+		return res, err
 	}
 
 	tpa, err := tfeClient.TeamProjectAccess.Add(ctx, tfe.TeamProjectAccessAddOptions{
