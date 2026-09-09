@@ -120,16 +120,18 @@ func TestToolsAndToolsetsTogetherTriggersFatal(t *testing.T) {
 		"passing both --tools and --toolsets explicitly must still trigger the conflict Fatal")
 }
 
-func TestDefaultKeywordMatchesFlagDefault(t *testing.T) {
+func TestToolsetsFlagDefaultIsAll(t *testing.T) {
 	// Build a fresh command the same way init() does, and check the
-	// registered default value for --toolsets is literally toolsets.Default,
-	// not a hardcoded string that might drift from it (this was the "all"
-	// vs "default" mismatch bug).
+	// registered default value for --toolsets is literally toolsets.All,
+	// not a hardcoded string that might drift from it. This intentionally
+	// preserves existing behavior: no --toolsets flag == every toolset
+	// enabled (relied on e.g. by the hcpt test workflow, which starts the
+	// server with no --toolsets flag at all).
 	flag := rootCmd.PersistentFlags().Lookup("toolsets")
 	if flag == nil {
 		t.Fatal("toolsets flag not registered")
 	}
-	if flag.DefValue != toolsets.Default {
-		t.Errorf("--toolsets flag default = %q, want %q (toolsets.Default)", flag.DefValue, toolsets.Default)
+	if flag.DefValue != toolsets.All {
+		t.Errorf("--toolsets flag default = %q, want %q (toolsets.All)", flag.DefValue, toolsets.All)
 	}
 }

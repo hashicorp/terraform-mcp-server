@@ -141,7 +141,7 @@ func init() {
 	rootCmd.PersistentFlags().String("log-file", "", "Path to log file")
 	rootCmd.PersistentFlags().String("log-level", "info", "Log level (trace, debug, info, warn, error, fatal, panic)")
 	rootCmd.PersistentFlags().String("log-format", "text", "Log format (text or json)")
-	rootCmd.PersistentFlags().String("toolsets", toolsets.Default, toolsets.GenerateToolsetsHelp())
+	rootCmd.PersistentFlags().String("toolsets", toolsets.All, toolsets.GenerateToolsetsHelp())
 	rootCmd.PersistentFlags().String("tools", "", toolsets.GenerateToolsHelp())
 
 	// Add StreamableHTTP command flags (avoid 'h' shorthand conflict with help)

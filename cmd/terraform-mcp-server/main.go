@@ -228,7 +228,7 @@ func parseIndividualTools(toolsFlag string, logger *log.Logger) []string {
 
 	if len(validTools) == 0 {
 		logger.Warn("No valid tools specified, falling back to default toolsets")
-		return parseToolsets(toolsets.Default, logger)
+		return parseToolsets(toolsets.All, logger)
 	}
 
 	// Use the public API to enable individual tools mode
