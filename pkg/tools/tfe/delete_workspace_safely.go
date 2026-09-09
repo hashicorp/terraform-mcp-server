@@ -52,6 +52,10 @@ func deleteWorkspaceSafelyHandler(ctx context.Context, request mcp.CallToolReque
 		return ToolErrorf(logger, "workspace not found: %s", workspaceID)
 	}
 
+	if res, err := checkOrganizationAllowed(ctx, logger, "workspace", workspaceID, workspace.Organization); res != nil {
+		return res, err
+	}
+
 	err = tfeClient.Workspaces.SafeDeleteByID(ctx, workspaceID)
 	if err != nil {
 		return ToolErrorf(logger, "failed to delete workspace '%s' - it may still have managed resources: %v", workspaceID, err)

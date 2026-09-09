@@ -67,6 +67,14 @@ func addTeamMemberHandler(ctx context.Context, request mcp.CallToolRequest, logg
 		return ToolError(logger, "Failed to get Terraform client - ensure TFE_TOKEN and TFE_ADDRESS are configured", nil)
 	}
 
+	org, err := teamOrganization(ctx, tfeClient, teamID)
+	if err != nil {
+		return ToolErrorf(logger, "team not found: %s", teamID)
+	}
+	if res, err := checkOrganizationAllowed(ctx, logger, "team", teamID, org); res != nil {
+		return res, err
+	}
+
 	options := tfe.TeamMemberAddOptions{}
 	var memberID string
 	if username != "" {

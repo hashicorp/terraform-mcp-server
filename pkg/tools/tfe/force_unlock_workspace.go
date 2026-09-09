@@ -54,6 +54,10 @@ func forceUnlockWorkspace(ctx context.Context, request mcp.CallToolRequest, logg
 		return ToolErrorf(logger, "workspace not found: %s", workspaceID)
 	}
 
+	if res, err := checkOrganizationAllowed(ctx, logger, "workspace", workspaceID, workspace.Organization); res != nil {
+		return res, err
+	}
+
 	// Guard: Reject early if the
 	// workspace is not locked to avoid a misleading "resource not found" from
 	// the TFE API.

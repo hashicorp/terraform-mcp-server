@@ -59,6 +59,21 @@ func actionRunHandler(ctx context.Context, request mcp.CallToolRequest, logger *
 		return ToolError(logger, "failed to get Terraform client", err)
 	}
 
+	run, err := tfeClient.Runs.Read(ctx, runID)
+	if err != nil {
+		return ToolErrorf(logger, "run not found: %s", runID)
+	}
+	if run.Workspace == nil {
+		return ToolErrorf(logger, "could not determine the workspace for run %s", runID)
+	}
+	workspace, err := tfeClient.Workspaces.ReadByID(ctx, run.Workspace.ID)
+	if err != nil {
+		return ToolErrorf(logger, "workspace not found for run %s: %v", runID, err)
+	}
+	if res, err := checkOrganizationAllowed(ctx, logger, "run", runID, workspace.Organization); res != nil {
+		return res, err
+	}
+
 	var msg string
 	switch runAction {
 	case "apply":

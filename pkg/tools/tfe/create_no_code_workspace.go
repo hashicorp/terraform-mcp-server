@@ -87,6 +87,10 @@ func createNoCodeWorkspaceHandler(ctx context.Context, request mcp.CallToolReque
 		return ToolError(logger, err.Error(), nil)
 	}
 
+	if res, err := checkOrganizationAllowed(ctx, logger, "project", projectID, project.Organization); res != nil {
+		return res, err
+	}
+
 	// build the elicitation schema from the module's metadata and configured variable options
 	elicitationSchema := buildElicitationSchema(moduleMetadata, noCodeModule)
 

@@ -68,6 +68,14 @@ func AttachPolicySetToWorkspaces(logger *log.Logger) server.ServerTool {
 				return ToolError(logger, "failed to get Terraform client", err)
 			}
 
+			policySet, err := tfeClient.PolicySets.Read(ctx, policySetID)
+			if err != nil {
+				return ToolErrorf(logger, "policy set not found: %s", policySetID)
+			}
+			if res, err := checkOrganizationAllowed(ctx, logger, "policy set", policySetID, policySet.Organization); res != nil {
+				return res, err
+			}
+
 			err = tfeClient.PolicySets.AddWorkspaces(ctx, policySetID, tfe.PolicySetAddWorkspacesOptions{
 				Workspaces: workspaces,
 			})

@@ -73,3 +73,12 @@ func TestOrganizationAllowlistToolMiddleware(t *testing.T) {
 		})
 	}
 }
+
+func TestOrganizationAllowed(t *testing.T) {
+	ctxWithAllowlist := WithOrganizationAllowlist(context.Background(), BuildAllowedOrganizationsMap([]string{"allowed-org"}))
+
+	assert.True(t, OrganizationAllowed(context.Background(), "any-org"), "no allowlist configured allows everything")
+	assert.True(t, OrganizationAllowed(ctxWithAllowlist, "Allowed-Org"), "match is case-insensitive")
+	assert.False(t, OrganizationAllowed(ctxWithAllowlist, "blocked-org"), "org outside the allowlist is rejected")
+	assert.False(t, OrganizationAllowed(ctxWithAllowlist, ""), "unknown org fails closed when an allowlist is configured")
+}

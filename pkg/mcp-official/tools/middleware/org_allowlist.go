@@ -21,6 +21,10 @@ func OrganizationAllowlist(allowlist []string, logger *slog.Logger) mcp.Middlewa
 
 	return func(next mcp.MethodHandler) mcp.MethodHandler {
 		return func(ctx context.Context, method string, req mcp.Request) (mcp.Result, error) {
+			// Expose the allowlist to ID-based tool handlers, which resolve the
+			// owning organization from the TFE API instead of a request argument.
+			ctx = tfeclient.WithOrganizationAllowlist(ctx, allowedOrganizations)
+
 			// Only tool calls carry an organization argument to check
 			if method != "tools/call" {
 				return next(ctx, method, req)
@@ -41,11 +45,7 @@ func OrganizationAllowlist(allowlist []string, logger *slog.Logger) mcp.Middlewa
 			}
 
 			organizationName := strings.ToLower(strings.TrimSpace(args.TerraformOrgName))
-			if organizationName == "" {
-				return next(ctx, method, req)
-			}
-
-			if _, ok := allowedOrganizations[organizationName]; !ok {
+			if organizationName != "" && !tfeclient.OrganizationAllowed(ctx, organizationName) {
 				logger.WarnContext(ctx, "rejecting tool call: organization not in allowlist",
 					"tool", params.Name, "organization", organizationName)
 				return &mcp.CallToolResult{

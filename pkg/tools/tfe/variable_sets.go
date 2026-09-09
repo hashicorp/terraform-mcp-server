@@ -194,6 +194,14 @@ func CreateVariableInVariableSet(logger *log.Logger) server.ServerTool {
 				return ToolError(logger, "failed to get Terraform client", err)
 			}
 
+			varSet, err := tfeClient.VariableSets.Read(ctx, varSetID, nil)
+			if err != nil {
+				return ToolErrorf(logger, "variable set not found: %s", varSetID)
+			}
+			if res, err := checkOrganizationAllowed(ctx, logger, "variable set", varSetID, varSet.Organization); res != nil {
+				return res, err
+			}
+
 			variable, err := tfeClient.VariableSetVariables.Create(ctx, varSetID, &tfe.VariableSetVariableCreateOptions{
 				Key:         &key,
 				Value:       &value,
@@ -247,6 +255,14 @@ func DeleteVariableInVariableSet(logger *log.Logger) server.ServerTool {
 				return ToolError(logger, "failed to get Terraform client", err)
 			}
 
+			varSet, err := tfeClient.VariableSets.Read(ctx, varSetID, nil)
+			if err != nil {
+				return ToolErrorf(logger, "variable set not found: %s", varSetID)
+			}
+			if res, err := checkOrganizationAllowed(ctx, logger, "variable set", varSetID, varSet.Organization); res != nil {
+				return res, err
+			}
+
 			err = tfeClient.VariableSetVariables.Delete(ctx, varSetID, variableID)
 			if err != nil {
 				return ToolErrorf(logger, "failed to delete variable '%s' from variable set '%s': %v", variableID, varSetID, err)
@@ -296,6 +312,14 @@ func AttachVariableSetToWorkspaces(logger *log.Logger) server.ServerTool {
 			tfeClient, err := client.GetTfeClientFromContext(ctx, logger)
 			if err != nil {
 				return ToolError(logger, "failed to get Terraform client", err)
+			}
+
+			varSet, err := tfeClient.VariableSets.Read(ctx, varSetID, nil)
+			if err != nil {
+				return ToolErrorf(logger, "variable set not found: %s", varSetID)
+			}
+			if res, err := checkOrganizationAllowed(ctx, logger, "variable set", varSetID, varSet.Organization); res != nil {
+				return res, err
 			}
 
 			err = tfeClient.VariableSets.ApplyToWorkspaces(ctx, varSetID, &tfe.VariableSetApplyToWorkspacesOptions{
@@ -349,6 +373,14 @@ func DetachVariableSetFromWorkspaces(logger *log.Logger) server.ServerTool {
 			tfeClient, err := client.GetTfeClientFromContext(ctx, logger)
 			if err != nil {
 				return ToolError(logger, "failed to get Terraform client", err)
+			}
+
+			varSet, err := tfeClient.VariableSets.Read(ctx, varSetID, nil)
+			if err != nil {
+				return ToolErrorf(logger, "variable set not found: %s", varSetID)
+			}
+			if res, err := checkOrganizationAllowed(ctx, logger, "variable set", varSetID, varSet.Organization); res != nil {
+				return res, err
 			}
 
 			err = tfeClient.VariableSets.RemoveFromWorkspaces(ctx, varSetID, &tfe.VariableSetRemoveFromWorkspacesOptions{
