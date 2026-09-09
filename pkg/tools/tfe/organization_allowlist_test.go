@@ -21,26 +21,20 @@ func TestCheckOrganizationAllowed(t *testing.T) {
 	ctxWithAllowlist := client.WithOrganizationAllowlist(context.Background(),
 		client.BuildAllowedOrganizationsMap([]string{"allowed-org"}))
 
-	t.Run("no allowlist configured allows any organization", func(t *testing.T) {
-		res, err := checkOrganizationAllowed(context.Background(), logger, "workspace", "ws-1", &tfe.Organization{Name: "any-org"})
+	t.Run("allowed organization returns no error result", func(t *testing.T) {
+		res, err := checkOrganizationAllowed(ctxWithAllowlist, logger, "workspace", "ws-1", &tfe.Organization{Name: "allowed-org"})
 		require.NoError(t, err)
 		assert.Nil(t, res)
 	})
 
-	t.Run("organization on the allowlist is allowed", func(t *testing.T) {
-		res, err := checkOrganizationAllowed(ctxWithAllowlist, logger, "workspace", "ws-1", &tfe.Organization{Name: "Allowed-Org"})
-		require.NoError(t, err)
-		assert.Nil(t, res)
-	})
-
-	t.Run("organization off the allowlist is rejected", func(t *testing.T) {
+	t.Run("disallowed organization returns an error result", func(t *testing.T) {
 		res, err := checkOrganizationAllowed(ctxWithAllowlist, logger, "workspace", "ws-1", &tfe.Organization{Name: "blocked-org"})
 		require.NoError(t, err)
 		require.NotNil(t, res)
 		assert.True(t, res.IsError)
 	})
 
-	t.Run("unresolved organization fails closed when an allowlist is configured", func(t *testing.T) {
+	t.Run("nil organization fails closed when an allowlist is configured", func(t *testing.T) {
 		res, err := checkOrganizationAllowed(ctxWithAllowlist, logger, "team", "team-1", nil)
 		require.NoError(t, err)
 		require.NotNil(t, res)

@@ -194,11 +194,7 @@ func CreateVariableInVariableSet(logger *log.Logger) server.ServerTool {
 				return ToolError(logger, "failed to get Terraform client", err)
 			}
 
-			varSet, err := tfeClient.VariableSets.Read(ctx, varSetID, nil)
-			if err != nil {
-				return ToolErrorf(logger, "variable set not found: %s", varSetID)
-			}
-			if res, err := checkOrganizationAllowed(ctx, logger, "variable set", varSetID, varSet.Organization); res != nil {
+			if res, err := checkVariableSetOrganizationAllowed(ctx, tfeClient, logger, varSetID); res != nil {
 				return res, err
 			}
 
@@ -255,11 +251,7 @@ func DeleteVariableInVariableSet(logger *log.Logger) server.ServerTool {
 				return ToolError(logger, "failed to get Terraform client", err)
 			}
 
-			varSet, err := tfeClient.VariableSets.Read(ctx, varSetID, nil)
-			if err != nil {
-				return ToolErrorf(logger, "variable set not found: %s", varSetID)
-			}
-			if res, err := checkOrganizationAllowed(ctx, logger, "variable set", varSetID, varSet.Organization); res != nil {
+			if res, err := checkVariableSetOrganizationAllowed(ctx, tfeClient, logger, varSetID); res != nil {
 				return res, err
 			}
 
@@ -314,11 +306,7 @@ func AttachVariableSetToWorkspaces(logger *log.Logger) server.ServerTool {
 				return ToolError(logger, "failed to get Terraform client", err)
 			}
 
-			varSet, err := tfeClient.VariableSets.Read(ctx, varSetID, nil)
-			if err != nil {
-				return ToolErrorf(logger, "variable set not found: %s", varSetID)
-			}
-			if res, err := checkOrganizationAllowed(ctx, logger, "variable set", varSetID, varSet.Organization); res != nil {
+			if res, err := checkVariableSetOrganizationAllowed(ctx, tfeClient, logger, varSetID); res != nil {
 				return res, err
 			}
 
@@ -375,11 +363,7 @@ func DetachVariableSetFromWorkspaces(logger *log.Logger) server.ServerTool {
 				return ToolError(logger, "failed to get Terraform client", err)
 			}
 
-			varSet, err := tfeClient.VariableSets.Read(ctx, varSetID, nil)
-			if err != nil {
-				return ToolErrorf(logger, "variable set not found: %s", varSetID)
-			}
-			if res, err := checkOrganizationAllowed(ctx, logger, "variable set", varSetID, varSet.Organization); res != nil {
+			if res, err := checkVariableSetOrganizationAllowed(ctx, tfeClient, logger, varSetID); res != nil {
 				return res, err
 			}
 

@@ -5,6 +5,7 @@ package tools
 
 import (
 	"context"
+	"net/url"
 
 	"github.com/hashicorp/go-tfe"
 	"github.com/hashicorp/terraform-mcp-server/pkg/client"
@@ -23,9 +24,17 @@ func checkOrganizationAllowed(ctx context.Context, logger *log.Logger, resource,
 	return ToolErrorf(logger, "%s %q belongs to organization %q, which is not allowed by this server", resource, resourceID, orgName)
 }
 
+func checkVariableSetOrganizationAllowed(ctx context.Context, tfeClient *tfe.Client, logger *log.Logger, varSetID string) (*mcp.CallToolResult, error) {
+	varSet, err := tfeClient.VariableSets.Read(ctx, varSetID, nil)
+	if err != nil {
+		return ToolErrorf(logger, "variable set not found: %s", varSetID)
+	}
+	return checkOrganizationAllowed(ctx, logger, "variable set", varSetID, varSet.Organization)
+}
+
 // go-tfe's Team type does not expose the organization relationship, so read it from the raw API.
 func teamOrganization(ctx context.Context, tfeClient *tfe.Client, teamID string) (*tfe.Organization, error) {
-	req, err := tfeClient.NewRequest("GET", "teams/"+teamID, nil)
+	req, err := tfeClient.NewRequest("GET", "teams/"+url.PathEscape(teamID), nil)
 	if err != nil {
 		return nil, err
 	}
