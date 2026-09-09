@@ -230,7 +230,7 @@ func parseIndividualTools(toolsFlag string, logger *log.Logger) toolsets.ToolFil
 
 	if len(validTools) == 0 {
 		logger.Warn("No valid tools specified, falling back to default toolsets")
-		return parseToolsets(toolsets.Default, logger)
+		return parseToolsets(toolsets.All, logger)
 	}
 	logger.Infof("Enabled individual tools: %v", validTools)
 	return toolsets.NewIndividualToolFilter(validTools)
