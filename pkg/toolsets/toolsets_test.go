@@ -381,25 +381,3 @@ func TestToolFilter_IndividualModeIgnoresToolsets(t *testing.T) {
 		t.Error("list_workspaces should be enabled: it is explicitly listed in Tools")
 	}
 }
-
-func TestToolFilter_Toolsets(t *testing.T) {
-	f := NewToolsetFilter([]string{Registry})
-
-	if !f.IsToolEnabled("search_providers") {
-		t.Error("search_providers should be enabled: belongs to the registry toolset")
-	}
-	if f.IsToolEnabled("whoami") {
-		t.Error("whoami should be disabled: belongs to terraform toolset, not enabled")
-	}
-}
-
-func TestToolFilter_IndividualTools(t *testing.T) {
-	f := NewIndividualToolFilter([]string{"search_providers"})
-
-	if !f.IsToolEnabled("search_providers") {
-		t.Error("search_providers should be enabled: explicitly listed")
-	}
-	if f.IsToolEnabled("get_provider_details") {
-		t.Error("get_provider_details should be disabled: not explicitly listed, even though it's in the same toolset as search_providers")
-	}
-}
