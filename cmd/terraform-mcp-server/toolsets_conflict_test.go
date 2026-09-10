@@ -135,3 +135,15 @@ func TestToolsetsFlagDefaultIsAll(t *testing.T) {
 		t.Errorf("--toolsets flag default = %q, want %q (toolsets.All)", flag.DefValue, toolsets.All)
 	}
 }
+
+// TestInvalidToolsFlagFallsBackToDefaultToolsets locks down that passing
+// --tools with only invalid/unrecognized names falls back to
+// DefaultToolsets() (registry-only)
+func TestInvalidToolsFlagFallsBackToDefaultToolsets(t *testing.T) {
+	logger, _ := fatalRecordingLogger()
+
+	result := parseIndividualTools("not_a_real_tool,not_real", logger)
+
+	assert.Equal(t, toolsets.DefaultToolsets(), result,
+		"invalid --tools names must fall back to DefaultToolsets()")
+}
