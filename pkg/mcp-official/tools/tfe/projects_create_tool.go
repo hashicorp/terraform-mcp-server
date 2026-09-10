@@ -5,6 +5,7 @@ package tools
 
 import (
 	"context"
+	"fmt"
 	"slices"
 	"strings"
 
@@ -12,7 +13,6 @@ import (
 	"github.com/hashicorp/go-tfe"
 	"github.com/hashicorp/terraform-mcp-server/pkg/mcp-official/client"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
-	log "github.com/sirupsen/logrus"
 )
 
 const (
@@ -91,16 +91,16 @@ func CreateProjectTool() *mcp.Tool {
 	}
 }
 
-func CreateProjectFunc(logger *log.Logger) mcp.ToolHandlerFor[CreateProjectArguments, *CreateProjectResponse] {
+func CreateProjectFunc() mcp.ToolHandlerFor[CreateProjectArguments, *CreateProjectResponse] {
 	return func(ctx context.Context, request *mcp.CallToolRequest, input CreateProjectArguments) (*mcp.CallToolResult, *CreateProjectResponse, error) {
 		terraformOrgName := strings.TrimSpace(input.TerraformOrgName)
 		projectName := strings.TrimSpace(input.ProjectName)
 
 		if terraformOrgName == "" {
-			return nil, nil, toolError(logger, "terraform_org_name must not be blank", nil)
+			return nil, nil, fmt.Errorf("terraform_org_name must not be blank")
 		}
 		if projectName == "" {
-			return nil, nil, toolError(logger, "project_name must not be blank", nil)
+			return nil, nil, fmt.Errorf("project_name must not be blank")
 		}
 
 		options := tfe.ProjectCreateOptions{Name: projectName}
@@ -113,20 +113,20 @@ func CreateProjectFunc(logger *log.Logger) mcp.ToolHandlerFor[CreateProjectArgum
 		// runs, but keep the check so the tool stays correct if the schema changes.
 		if mode := strings.ToLower(strings.TrimSpace(input.DefaultExecutionMode)); mode != "" {
 			if !slices.Contains(validExecutionModes, mode) {
-				return nil, nil, toolError(logger, "invalid default_execution_mode "+input.DefaultExecutionMode+
-					": must be one of "+strings.Join(validExecutionModes, ", "), nil)
+				return nil, nil, fmt.Errorf("invalid default_execution_mode %q: must be one of %s",
+					input.DefaultExecutionMode, strings.Join(validExecutionModes, ", "))
 			}
 			options.DefaultExecutionMode = tfe.String(mode)
 		}
 
 		tfeClient, err := client.GetTfeClient(ctx, client.SessionIDFromRequest(request))
 		if err != nil {
-			return nil, nil, toolError(logger, "getting Terraform client", err)
+			return nil, nil, fmt.Errorf("getting Terraform client: %w", err)
 		}
 
 		project, err := tfeClient.Projects.Create(ctx, terraformOrgName, options)
 		if err != nil {
-			return nil, nil, toolError(logger, "creating project "+projectName+" in organization "+terraformOrgName, err)
+			return nil, nil, fmt.Errorf("creating project %q in organization %q: %w", projectName, terraformOrgName, err)
 		}
 
 		response := &CreateProjectResponse{
