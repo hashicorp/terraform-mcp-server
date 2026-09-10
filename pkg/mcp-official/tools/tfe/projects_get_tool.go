@@ -5,12 +5,12 @@ package tools
 
 import (
 	"context"
+	"fmt"
 	"strings"
 
 	"github.com/google/jsonschema-go/jsonschema"
 	"github.com/hashicorp/terraform-mcp-server/pkg/mcp-official/client"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
-	log "github.com/sirupsen/logrus"
 )
 
 // ProjectDetails is the response shape returned by the get_project tool.
@@ -57,21 +57,21 @@ func GetProjectTool() *mcp.Tool {
 	}
 }
 
-func GetProjectFunc(logger *log.Logger) mcp.ToolHandlerFor[GetProjectArguments, *ProjectDetails] {
+func GetProjectFunc() mcp.ToolHandlerFor[GetProjectArguments, *ProjectDetails] {
 	return func(ctx context.Context, request *mcp.CallToolRequest, input GetProjectArguments) (*mcp.CallToolResult, *ProjectDetails, error) {
 		projectID := strings.TrimSpace(input.ProjectID)
 		if projectID == "" {
-			return nil, nil, toolError(logger, "project_id must not be blank", nil)
+			return nil, nil, fmt.Errorf("project_id must not be blank")
 		}
 
 		tfeClient, err := client.GetTfeClient(ctx, client.SessionIDFromRequest(request))
 		if err != nil {
-			return nil, nil, toolError(logger, "getting Terraform client", err)
+			return nil, nil, fmt.Errorf("getting Terraform client: %w", err)
 		}
 
 		project, err := tfeClient.Projects.Read(ctx, projectID)
 		if err != nil {
-			return nil, nil, toolError(logger, "reading project "+projectID, err)
+			return nil, nil, fmt.Errorf("reading project %q: %w", projectID, err)
 		}
 
 		details := &ProjectDetails{
