@@ -42,7 +42,6 @@ func ListTerraformOrganizationsTool() *mcp.Tool {
 			PropertyOrder:        []string{"page", "pageSize"},
 			AdditionalProperties: &jsonschema.Schema{Not: &jsonschema.Schema{}},
 		},
-		OutputSchema: outputSchema[OrganizationSummaryList]("list_terraform_orgs"),
 		Annotations: &mcp.ToolAnnotations{
 			Title:           "List all Terraform organizations",
 			OpenWorldHint:   ptr(true),
@@ -52,35 +51,34 @@ func ListTerraformOrganizationsTool() *mcp.Tool {
 	}
 }
 
-func ListTerraformOrganizationsFunc() mcp.ToolHandlerFor[ListOrganizationsArguments, *OrganizationSummaryList] {
-	return func(ctx context.Context, request *mcp.CallToolRequest, input ListOrganizationsArguments) (*mcp.CallToolResult, *OrganizationSummaryList, error) {
-		tfeClient, err := client.GetTfeClient(ctx, client.SessionIDFromRequest(request))
-		if err != nil {
-			return nil, nil, fmt.Errorf("getting Terraform client: %w", err)
-		}
-
-		orgs, err := tfeClient.Organizations.List(ctx, &tfe.OrganizationListOptions{
-			ListOptions: input.ListOptions(),
-		})
-		if err != nil {
-			return nil, nil, fmt.Errorf("listing Terraform organizations: %w", err)
-		}
-		if len(orgs.Items) == 0 {
-			return nil, nil, fmt.Errorf("no organizations to list")
-		}
-
-		summaries := make([]*OrganizationSummary, len(orgs.Items))
-		for i, o := range orgs.Items {
-			summaries[i] = &OrganizationSummary{
-				Name:      o.Name,
-				Email:     o.Email,
-				CreatedAt: o.CreatedAt,
-			}
-		}
-
-		return nil, &OrganizationSummaryList{
-			Items:             nonNilSlice(summaries),
-			PaginationDetails: paginationDetails(orgs.Pagination),
-		}, nil
+func ListTerraformOrganizationsFunc(ctx context.Context, request *mcp.CallToolRequest, input ListOrganizationsArguments) (*mcp.CallToolResult, *OrganizationSummaryList, error) {
+	tfeClient, err := client.GetTfeClient(ctx, client.SessionIDFromRequest(request))
+	if err != nil {
+		return nil, nil, fmt.Errorf("getting Terraform client: %w", err)
 	}
+
+	orgs, err := tfeClient.Organizations.List(ctx, &tfe.OrganizationListOptions{
+		ListOptions: input.ListOptions(),
+	})
+	if err != nil {
+		return nil, nil, fmt.Errorf("listing Terraform organizations: %w", err)
+	}
+	if len(orgs.Items) == 0 {
+		return nil, nil, fmt.Errorf("no organizations to list")
+	}
+
+	summaries := make([]*OrganizationSummary, len(orgs.Items))
+	for i, o := range orgs.Items {
+		summaries[i] = &OrganizationSummary{
+			Name:      o.Name,
+			Email:     o.Email,
+			CreatedAt: o.CreatedAt,
+		}
+	}
+
+	return nil, &OrganizationSummaryList{
+		Items:             summaries,
+		PaginationDetails: paginationDetails(orgs.Pagination),
+	}, nil
+
 }
