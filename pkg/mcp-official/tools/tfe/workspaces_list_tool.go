@@ -93,7 +93,6 @@ func ListWorkspacesTool() *mcp.Tool {
 			Required:             []string{"terraform_org_name"},
 			AdditionalProperties: &jsonschema.Schema{Not: &jsonschema.Schema{}},
 		},
-		OutputSchema: outputSchema[WorkspaceSummaryList]("list_workspaces"),
 		Annotations: &mcp.ToolAnnotations{
 			Title:           "List Terraform workspaces with queries",
 			OpenWorldHint:   ptr(true),
@@ -103,62 +102,66 @@ func ListWorkspacesTool() *mcp.Tool {
 	}
 }
 
-func ListWorkspacesFunc() mcp.ToolHandlerFor[ListWorkspacesArguments, *WorkspaceSummaryList] {
-	return func(ctx context.Context, request *mcp.CallToolRequest, input ListWorkspacesArguments) (*mcp.CallToolResult, *WorkspaceSummaryList, error) {
-		terraformOrgName := strings.TrimSpace(input.TerraformOrgName)
-		if terraformOrgName == "" {
-			return nil, nil, fmt.Errorf("terraform_org_name must not be blank")
-		}
-
-		tfeClient, err := client.GetTfeClient(ctx, client.SessionIDFromRequest(request))
-		if err != nil {
-			return nil, nil, fmt.Errorf("getting Terraform client: %w", err)
-		}
-
-		workspaces, err := tfeClient.Workspaces.List(ctx, terraformOrgName, &tfe.WorkspaceListOptions{
-			ProjectID:    input.ProjectID,
-			Search:       input.SearchQuery,
-			Tags:         joinTrimmedCSV(input.Tags),
-			ExcludeTags:  joinTrimmedCSV(input.ExcludeTags),
-			WildcardName: input.WildcardName,
-			ListOptions:  input.ListOptions(),
-		})
-		if err != nil {
-			return nil, nil, fmt.Errorf("listing workspaces in organization %q: %w", terraformOrgName, err)
-		}
-		if len(workspaces.Items) == 0 {
-			return nil, nil, fmt.Errorf("no workspaces to list in organization %q", terraformOrgName)
-		}
-
-		summaries := make([]*WorkspaceSummary, len(workspaces.Items))
-		for i, w := range workspaces.Items {
-			summaries[i] = &WorkspaceSummary{
-				ID:            w.ID,
-				Name:          w.Name,
-				Description:   w.Description,
-				Environment:   w.Environment,
-				CreatedAt:     w.CreatedAt,
-				ExecutionMode: w.ExecutionMode,
-			}
-		}
-
-		return nil, &WorkspaceSummaryList{
-			Items:             nonNilSlice(summaries),
-			PaginationDetails: paginationDetails(workspaces.Pagination),
-		}, nil
+func ListWorkspacesFunc(ctx context.Context, request *mcp.CallToolRequest, input ListWorkspacesArguments) (*mcp.CallToolResult, *WorkspaceSummaryList, error) {
+	terraformOrgName := strings.TrimSpace(input.TerraformOrgName)
+	if terraformOrgName == "" {
+		return nil, nil, fmt.Errorf("terraform_org_name must not be blank")
 	}
+
+	tfeClient, err := client.GetTfeClient(ctx, client.SessionIDFromRequest(request))
+	if err != nil {
+		return nil, nil, fmt.Errorf("getting Terraform client: %w", err)
+	}
+
+	workspaces, err := tfeClient.Workspaces.List(ctx, terraformOrgName, &tfe.WorkspaceListOptions{
+		ProjectID:    input.ProjectID,
+		Search:       input.SearchQuery,
+		Tags:         normaliseCommaSeparated(input.Tags),
+		ExcludeTags:  normaliseCommaSeparated(input.ExcludeTags),
+		WildcardName: input.WildcardName,
+		ListOptions:  input.ListOptions(),
+	})
+	if err != nil {
+		return nil, nil, fmt.Errorf("listing workspaces in organization %q: %w", terraformOrgName, err)
+	}
+	if len(workspaces.Items) == 0 {
+		return nil, nil, fmt.Errorf("no workspaces to list in organization %q", terraformOrgName)
+	}
+
+	summaries := make([]*WorkspaceSummary, len(workspaces.Items))
+	for i, w := range workspaces.Items {
+		summaries[i] = &WorkspaceSummary{
+			ID:            w.ID,
+			Name:          w.Name,
+			Description:   w.Description,
+			Environment:   w.Environment,
+			CreatedAt:     w.CreatedAt,
+			ExecutionMode: w.ExecutionMode,
+		}
+	}
+
+	return nil, &WorkspaceSummaryList{
+		Items:             summaries,
+		PaginationDetails: paginationDetails(workspaces.Pagination),
+	}, nil
+
 }
 
-// joinTrimmedCSV normalizes a comma-separated list by trimming whitespace around
+// normaliseCommaSeparated normalizes a comma-separated list by trimming whitespace around
 // each element, so "a, b , c" is sent to the API as "a,b,c".
-func joinTrimmedCSV(csv string) string {
-	if strings.TrimSpace(csv) == "" {
+func normaliseCommaSeparated(value string) string {
+	if strings.TrimSpace(value) == "" {
 		return ""
 	}
 
-	parts := strings.Split(csv, ",")
-	for i, part := range parts {
-		parts[i] = strings.TrimSpace(part)
+	parts := strings.Split(value, ",")
+
+	result := make([]string, 0, len(parts))
+	for _, part := range parts {
+		if part = strings.TrimSpace(part); part != "" {
+			result = append(result, part)
+		}
 	}
-	return strings.Join(parts, ",")
+
+	return strings.Join(result, ",")
 }

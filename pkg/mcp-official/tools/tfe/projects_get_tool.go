@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/google/jsonschema-go/jsonschema"
 	"github.com/hashicorp/terraform-mcp-server/pkg/mcp-official/client"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
@@ -29,25 +28,13 @@ type ProjectDetails struct {
 // GetProjectArguments holds the input parameters for fetching a single project.
 type GetProjectArguments struct {
 	// Required field
-	ProjectID string `json:"project_id"`
+	ProjectID string `json:"project_id" jsonschema:"The ID of the project to fetch (e.g., 'prj-abc123def456')"`
 }
 
 func GetProjectTool() *mcp.Tool {
 	return &mcp.Tool{
 		Name:        "get_project",
 		Description: `Fetches detailed information about a Terraform project by its ID. If the project ID isn't already known, call "list_terraform_projects" first.`,
-		InputSchema: &jsonschema.Schema{
-			Type: "object",
-			Properties: map[string]*jsonschema.Schema{
-				"project_id": {
-					Type:        "string",
-					Description: "The ID of the project to fetch (e.g., 'prj-abc123def456')",
-				},
-			},
-			PropertyOrder:        []string{"project_id"},
-			Required:             []string{"project_id"},
-			AdditionalProperties: &jsonschema.Schema{Not: &jsonschema.Schema{}},
-		},
 		Annotations: &mcp.ToolAnnotations{
 			Title:           "Get a Terraform project by ID",
 			OpenWorldHint:   ptr(true),
@@ -57,44 +44,43 @@ func GetProjectTool() *mcp.Tool {
 	}
 }
 
-func GetProjectFunc() mcp.ToolHandlerFor[GetProjectArguments, *ProjectDetails] {
-	return func(ctx context.Context, request *mcp.CallToolRequest, input GetProjectArguments) (*mcp.CallToolResult, *ProjectDetails, error) {
-		projectID := strings.TrimSpace(input.ProjectID)
-		if projectID == "" {
-			return nil, nil, fmt.Errorf("project_id must not be blank")
-		}
-
-		tfeClient, err := client.GetTfeClient(ctx, client.SessionIDFromRequest(request))
-		if err != nil {
-			return nil, nil, fmt.Errorf("getting Terraform client: %w", err)
-		}
-
-		project, err := tfeClient.Projects.Read(ctx, projectID)
-		if err != nil {
-			return nil, nil, fmt.Errorf("reading project %q: %w", projectID, err)
-		}
-
-		details := &ProjectDetails{
-			ID:                   project.ID,
-			Name:                 project.Name,
-			Description:          project.Description,
-			DefaultExecutionMode: project.DefaultExecutionMode,
-			IsUnified:            project.IsUnified,
-		}
-
-		if project.Organization != nil {
-			details.OrganizationName = project.Organization.Name
-		}
-		if project.DefaultAgentPool != nil {
-			details.DefaultAgentPoolID = project.DefaultAgentPool.ID
-			details.DefaultAgentPoolName = project.DefaultAgentPool.Name
-		}
-		if project.AutoDestroyActivityDuration.IsSpecified() && !project.AutoDestroyActivityDuration.IsNull() {
-			if v, err := project.AutoDestroyActivityDuration.Get(); err == nil {
-				details.AutoDestroyActivityDuration = v
-			}
-		}
-
-		return nil, details, nil
+func GetProjectFunc(ctx context.Context, request *mcp.CallToolRequest, input GetProjectArguments) (*mcp.CallToolResult, *ProjectDetails, error) {
+	projectID := strings.TrimSpace(input.ProjectID)
+	if projectID == "" {
+		return nil, nil, fmt.Errorf("project_id must not be blank")
 	}
+
+	tfeClient, err := client.GetTfeClient(ctx, client.SessionIDFromRequest(request))
+	if err != nil {
+		return nil, nil, fmt.Errorf("getting Terraform client: %w", err)
+	}
+
+	project, err := tfeClient.Projects.Read(ctx, projectID)
+	if err != nil {
+		return nil, nil, fmt.Errorf("reading project %q: %w", projectID, err)
+	}
+
+	details := &ProjectDetails{
+		ID:                   project.ID,
+		Name:                 project.Name,
+		Description:          project.Description,
+		DefaultExecutionMode: project.DefaultExecutionMode,
+		IsUnified:            project.IsUnified,
+	}
+
+	if project.Organization != nil {
+		details.OrganizationName = project.Organization.Name
+	}
+	if project.DefaultAgentPool != nil {
+		details.DefaultAgentPoolID = project.DefaultAgentPool.ID
+		details.DefaultAgentPoolName = project.DefaultAgentPool.Name
+	}
+	if project.AutoDestroyActivityDuration.IsSpecified() && !project.AutoDestroyActivityDuration.IsNull() {
+		if v, err := project.AutoDestroyActivityDuration.Get(); err == nil {
+			details.AutoDestroyActivityDuration = v
+		}
+	}
+
+	return nil, details, nil
+
 }
