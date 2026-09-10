@@ -52,7 +52,6 @@ func ListProjectsTool() *mcp.Tool {
 			Required:             []string{"terraform_org_name"},
 			AdditionalProperties: &jsonschema.Schema{Not: &jsonschema.Schema{}},
 		},
-		OutputSchema: outputSchema[ProjectSummaryList]("list_terraform_projects"),
 		Annotations: &mcp.ToolAnnotations{
 			Title:           "List all Terraform projects",
 			OpenWorldHint:   ptr(true),
@@ -62,39 +61,38 @@ func ListProjectsTool() *mcp.Tool {
 	}
 }
 
-func ListProjectsFunc() mcp.ToolHandlerFor[ListProjectsArguments, *ProjectSummaryList] {
-	return func(ctx context.Context, request *mcp.CallToolRequest, input ListProjectsArguments) (*mcp.CallToolResult, *ProjectSummaryList, error) {
-		terraformOrgName := strings.TrimSpace(input.TerraformOrgName)
-		if terraformOrgName == "" {
-			return nil, nil, fmt.Errorf("terraform_org_name must not be blank")
-		}
-
-		tfeClient, err := client.GetTfeClient(ctx, client.SessionIDFromRequest(request))
-		if err != nil {
-			return nil, nil, fmt.Errorf("getting Terraform client: %w", err)
-		}
-
-		projects, err := tfeClient.Projects.List(ctx, terraformOrgName, &tfe.ProjectListOptions{
-			ListOptions: input.ListOptions(),
-		})
-		if err != nil {
-			return nil, nil, fmt.Errorf("listing projects in organization %q: %w", terraformOrgName, err)
-		}
-		if len(projects.Items) == 0 {
-			return nil, nil, fmt.Errorf("no projects to list in organization %q", terraformOrgName)
-		}
-
-		summaries := make([]*ProjectSummary, len(projects.Items))
-		for i, p := range projects.Items {
-			summaries[i] = &ProjectSummary{
-				ID:   p.ID,
-				Name: p.Name,
-			}
-		}
-
-		return nil, &ProjectSummaryList{
-			Items:             nonNilSlice(summaries),
-			PaginationDetails: paginationDetails(projects.Pagination),
-		}, nil
+func ListProjectsFunc(ctx context.Context, request *mcp.CallToolRequest, input ListProjectsArguments) (*mcp.CallToolResult, *ProjectSummaryList, error) {
+	terraformOrgName := strings.TrimSpace(input.TerraformOrgName)
+	if terraformOrgName == "" {
+		return nil, nil, fmt.Errorf("terraform_org_name must not be blank")
 	}
+
+	tfeClient, err := client.GetTfeClient(ctx, client.SessionIDFromRequest(request))
+	if err != nil {
+		return nil, nil, fmt.Errorf("getting Terraform client: %w", err)
+	}
+
+	projects, err := tfeClient.Projects.List(ctx, terraformOrgName, &tfe.ProjectListOptions{
+		ListOptions: input.ListOptions(),
+	})
+	if err != nil {
+		return nil, nil, fmt.Errorf("listing projects in organization %q: %w", terraformOrgName, err)
+	}
+	if len(projects.Items) == 0 {
+		return nil, nil, fmt.Errorf("no projects to list in organization %q", terraformOrgName)
+	}
+
+	summaries := make([]*ProjectSummary, len(projects.Items))
+	for i, p := range projects.Items {
+		summaries[i] = &ProjectSummary{
+			ID:   p.ID,
+			Name: p.Name,
+		}
+	}
+
+	return nil, &ProjectSummaryList{
+		Items:             summaries,
+		PaginationDetails: paginationDetails(projects.Pagination),
+	}, nil
+
 }
