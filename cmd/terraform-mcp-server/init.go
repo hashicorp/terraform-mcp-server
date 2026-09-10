@@ -40,8 +40,6 @@ type healthResponse struct {
 	Version   string `json:"version"`
 }
 
-const officialSlogOutputFileName = "terraform-mcp-official.log"
-
 var (
 	rootCmd = &cobra.Command{
 		Use:     "terraform-mcp-server",
@@ -278,9 +276,16 @@ func initLogger(outPath string, level log.Level, format string) (*log.Logger, er
 }
 
 func initSlog(outPath string, level slog.Level, format string) (*slog.Logger, *os.File, error) {
-	file, err := os.OpenFile(outPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o666)
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to open log file: %w", err)
+	out := io.Writer(os.Stderr)
+	var file *os.File
+
+	if outPath != "" {
+		var err error
+		file, err = os.OpenFile(outPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o666)
+		if err != nil {
+			return nil, nil, fmt.Errorf("failed to open log file: %w", err)
+		}
+		out = file
 	}
 
 	opts := &slog.HandlerOptions{
@@ -289,9 +294,9 @@ func initSlog(outPath string, level slog.Level, format string) (*slog.Logger, *o
 	var handler slog.Handler
 	// Set formatter based on format parameter
 	if strings.ToLower(format) == "json" {
-		handler = slog.NewJSONHandler(file, opts)
+		handler = slog.NewJSONHandler(out, opts)
 	} else {
-		handler = slog.NewTextHandler(file, opts)
+		handler = slog.NewTextHandler(out, opts)
 	}
 	return slog.New(handler), file, nil
 }
@@ -417,17 +422,23 @@ func streamableHTTPServerInit(ctx context.Context, hcServer *server.MCPServer, l
 	// Create the official go-sdk streamable server
 	if enableOfficialSDK := os.Getenv("TF_X_OFFICIAL_SDK_ENABLED"); enableOfficialSDK == "true" {
 		logger.Info("TF_X_OFFICIAL_SDK_ENABLED set to true in env, enabling the official mcp go-sdk server")
+		logFile, err := rootCmd.PersistentFlags().GetString("log-file")
+		if err != nil {
+			return fmt.Errorf("failed to get log file: %w", err)
+		}
 		slogLevel := getSlogLevel(rootCmd)
 		slogFormat := getLogFormat(rootCmd)
-		officialLogger, officialLogFile, err := initSlog(officialSlogOutputFileName, slogLevel, slogFormat)
+		officialLogger, officialLogFile, err := initSlog(logFile, slogLevel, slogFormat)
 		if err != nil {
-			return fmt.Errorf("failed to initialize official MCP slog logger at %s: %w", officialSlogOutputFileName, err)
+			return fmt.Errorf("failed to initialize official MCP slog logger: %w", err)
 		}
-		defer func() {
-			if err := officialLogFile.Close(); err != nil {
-				logger.Errorf("Failed to close official MCP log file at %s: %v", officialSlogOutputFileName, err)
-			}
-		}()
+		if officialLogFile != nil {
+			defer func() {
+				if err := officialLogFile.Close(); err != nil {
+					logger.Errorf("Failed to close official MCP log file at %s: %v", logFile, err)
+				}
+			}()
+		}
 
 		officialLogger = officialLogger.With("component", "mcp-official")
 		officialStreamableServer := getOfficialStreamableServer(ctx, heartbeatInterval, isStateless, corsConfig, logger, officialLogger, organizationAllowlist, filter, rateLimiter, metricsConfig)

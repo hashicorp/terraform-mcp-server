@@ -19,15 +19,12 @@ func ToolLogging(logger *slog.Logger) mcp.Middleware {
 				return next(ctx, method, req)
 			}
 
-			toolName := "unknown"
-			arguments := ""
-			if params, ok := req.GetParams().(*mcp.CallToolParamsRaw); ok {
-				toolName = params.Name
-				arguments = string(params.Arguments)
-			}
+			params := req.GetParams().(*mcp.CallToolParamsRaw)
+			toolName := params.Name
+			arguments := params.Arguments
 
 			result, err := next(ctx, method, req)
-			// Protocol method error
+			// Protocol-level error
 			if err != nil {
 				logger.ErrorContext(ctx, "tool call failed",
 					"tool", toolName,
@@ -36,18 +33,12 @@ func ToolLogging(logger *slog.Logger) mcp.Middleware {
 				return result, err
 			}
 
-			// Tool execution error
+			// Tool-level error
 			if toolResult, ok := result.(*mcp.CallToolResult); ok && toolResult.IsError {
-				if toolErr := toolResult.GetError(); toolErr != nil {
-					logger.ErrorContext(ctx, "tool call failed",
-						"tool", toolName,
-						"arguments", arguments,
-						"error", toolErr)
-				} else {
-					logger.WarnContext(ctx, "tool call returned an error result",
-						"tool", toolName,
-						"arguments", arguments)
-				}
+				logger.ErrorContext(ctx, "tool call failed",
+					"tool", toolName,
+					"arguments", arguments,
+					"error", toolResult.GetError())
 				return result, nil
 			}
 
