@@ -1,3 +1,11 @@
+# 1.3.1
+
+IMPROVEMENTS
+
+* `get_private_module_details` now reports every submodule published with a private module, each with its own inputs, outputs, dependencies, provider dependencies, resources, and README, matching the detail already provided for the root module. The root module section is now labelled and its README is reported alongside its own inputs and outputs.
+* `get_private_module_details` now reports the module version its details were read from, and the generated usage snippet pins that version instead of the first entry in the module's version statuses, which may be a version whose ingress is still pending or has failed.
+* `get_private_module_details` now requests the registry's latest-version route directly when `private_module_version` is omitted, instead of sending a request with an empty version segment.
+
 # 1.3.0
 
 FEATURES
