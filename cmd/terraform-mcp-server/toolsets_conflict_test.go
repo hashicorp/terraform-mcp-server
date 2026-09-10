@@ -8,6 +8,7 @@ import (
 	"os"
 	"testing"
 
+	"github.com/hashicorp/terraform-mcp-server/pkg/toolsets"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
@@ -117,4 +118,32 @@ func TestToolsAndToolsetsTogetherTriggersFatal(t *testing.T) {
 
 	assert.True(t, *fatalCalled,
 		"passing both --tools and --toolsets explicitly must still trigger the conflict Fatal")
+}
+
+func TestToolsetsFlagDefaultIsAll(t *testing.T) {
+	// Build a fresh command the same way init() does, and check the
+	// registered default value for --toolsets is literally toolsets.All,
+	// not a hardcoded string that might drift from it. This intentionally
+	// preserves existing behavior: no --toolsets flag == every toolset
+	// enabled (relied on e.g. by the hcpt test workflow, which starts the
+	// server with no --toolsets flag at all).
+	flag := rootCmd.PersistentFlags().Lookup("toolsets")
+	if flag == nil {
+		t.Fatal("toolsets flag not registered")
+	}
+	if flag.DefValue != toolsets.All {
+		t.Errorf("--toolsets flag default = %q, want %q (toolsets.All)", flag.DefValue, toolsets.All)
+	}
+}
+
+// TestInvalidToolsFlagFallsBackToDefaultToolsets locks down that passing
+// --tools with only invalid/unrecognized names falls back to
+// DefaultToolsets() (registry-only)
+func TestInvalidToolsFlagFallsBackToDefaultToolsets(t *testing.T) {
+	logger, _ := fatalRecordingLogger()
+
+	result := parseIndividualTools("not_a_real_tool,not_real", logger)
+
+	assert.Equal(t, toolsets.DefaultToolsets(), result,
+		"invalid --tools names must fall back to DefaultToolsets()")
 }

@@ -100,8 +100,9 @@ func GetToolsetForTool(toolName string) (string, bool) {
 	return toolset, exists
 }
 
-// GetAllValidToolNames returns a set of all valid tool names
-func GetAllValidToolNames() map[string]bool {
+// KnownToolNames returns every tool name registered in ToolToToolset
+func KnownToolNames() map[string]bool {
+
 	validTools := make(map[string]bool)
 	for toolName := range ToolToToolset {
 		validTools[toolName] = true
@@ -112,7 +113,7 @@ func GetAllValidToolNames() map[string]bool {
 // ParseIndividualTools parses and validates individual tool names
 // Returns the validated tool names and any invalid ones
 func ParseIndividualTools(toolNames []string) ([]string, []string) {
-	validToolNames := GetAllValidToolNames()
+	validToolNames := KnownToolNames()
 	seen := make(map[string]bool)
 	valid := make([]string, 0, len(toolNames))
 	invalid := make([]string, 0)
@@ -144,24 +145,22 @@ func EnableIndividualTools(toolNames []string) []string {
 	return result
 }
 
-// IsToolEnabled checks if a tool is enabled based on the enabled toolsets
+// IsToolEnabled checks if a tool is enabled based on the enabled toolsets.
+//
+// NOTE: this is the pre-migration []string + sentinel-marker encoding.
+// ToolFilter (filter.go) is the new, typed replacement — new code should
+// prefer NewToolsetFilter/NewIndividualToolFilter. This function stays as-is
+// until call sites (main.go, dynamic_tool.go) are migrated in a later PR.
 func IsToolEnabled(toolName string, enabledToolsets []string) bool {
 	if ContainsToolset(enabledToolsets, All) {
 		return true
 	}
-
-	// Check if we're in individual tool mode
 	if ContainsToolset(enabledToolsets, individualToolsMarker) {
-		// In individual tool mode, check if this specific tool is in the list
 		return ContainsToolset(enabledToolsets, toolName)
 	}
-
-	// Look up which toolset this tool belongs to
 	toolset, exists := GetToolsetForTool(toolName)
 	if !exists {
 		return false
 	}
-
-	// Check if the tool's toolset is enabled
 	return ContainsToolset(enabledToolsets, toolset)
 }

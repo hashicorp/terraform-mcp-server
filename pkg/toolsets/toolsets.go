@@ -48,6 +48,7 @@ var (
 	}
 )
 
+// AvailableToolsets returns metadata for every toolset group. Excludes "all" and "default"
 func AvailableToolsets() []Toolset {
 	return []Toolset{
 		RegistryToolset,
@@ -61,7 +62,10 @@ func DefaultToolsets() []string {
 	return []string{Registry}
 }
 
-func GetValidToolsetNames() map[string]bool {
+// ValidToolsetNames returns every valid value for the --toolsets flag:
+// each real toolset group name, plus the "all" and "default" keywords.
+func ValidToolsetNames() map[string]bool {
+
 	validNames := make(map[string]bool)
 	for _, ts := range AvailableToolsets() {
 		validNames[ts.Name] = true
@@ -71,29 +75,38 @@ func GetValidToolsetNames() map[string]bool {
 	return validNames
 }
 
-func CleanToolsets(enabledToolsets []string) ([]string, []string) {
+// CleanToolsets trims whitespace and drops empty/duplicate entries from
+// enabledToolsets. It returns the cleaned, valid toolset names (invalid
+// names removed) and, separately, the invalid names that were dropped so
+// the caller can warn about them.
+func CleanToolsets(enabledToolsets []string) (valid []string, invalid []string) {
 	seen := make(map[string]bool)
-	result := make([]string, 0, len(enabledToolsets))
-	invalid := make([]string, 0)
-	validNames := GetValidToolsetNames()
+	valid = make([]string, 0, len(enabledToolsets))
+	invalid = make([]string, 0)
+	validNames := ValidToolsetNames()
 
 	for _, toolset := range enabledToolsets {
 		trimmed := strings.TrimSpace(toolset)
 		if trimmed == "" {
 			continue
 		}
-		if !seen[trimmed] {
-			seen[trimmed] = true
-			result = append(result, trimmed)
-			if !validNames[trimmed] {
-				invalid = append(invalid, trimmed)
-			}
+		if seen[trimmed] {
+			continue
+		}
+		seen[trimmed] = true
+		if validNames[trimmed] {
+			valid = append(valid, trimmed)
+		} else {
+			invalid = append(invalid, trimmed)
 		}
 	}
 
-	return result, invalid
+	return valid, invalid
 }
 
+// ExpandDefaultToolset replaces the "default" keyword in toolsets with the
+// names from DefaultToolsets(), leaving any other explicitly-requested
+// toolsets untouched. Returns toolsets unchanged if "default" isn't present.
 func ExpandDefaultToolset(toolsets []string) []string {
 	hasDefault := false
 	seen := make(map[string]bool)

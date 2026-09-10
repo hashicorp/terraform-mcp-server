@@ -24,13 +24,13 @@ func TestCleanToolsets(t *testing.T) {
 		{
 			name:            "invalid toolsets",
 			input:           []string{"invalid", "fake"},
-			expectedValid:   []string{"invalid", "fake"},
+			expectedValid:   []string{},
 			expectedInvalid: []string{"invalid", "fake"},
 		},
 		{
 			name:            "mixed valid and invalid",
 			input:           []string{"registry", "invalid", "terraform"},
-			expectedValid:   []string{"registry", "invalid", "terraform"},
+			expectedValid:   []string{"registry", "terraform"},
 			expectedInvalid: []string{"invalid"},
 		},
 		{
@@ -156,19 +156,19 @@ func TestContainsToolset(t *testing.T) {
 	}
 }
 
-func TestGetValidToolsetNames(t *testing.T) {
-	validNames := GetValidToolsetNames()
+func TestValidToolsetNames(t *testing.T) {
+	validNames := ValidToolsetNames()
 
 	// Check that all expected toolsets are present
 	expected := []string{"registry", "registry-private", "terraform", "all", "default"}
 	for _, name := range expected {
 		if !validNames[name] {
-			t.Errorf("GetValidToolsetNames() missing expected toolset: %s", name)
+			t.Errorf("ValidToolsetNames() missing expected toolset: %s", name)
 		}
 	}
 
 	if len(validNames) != len(expected) {
-		t.Errorf("GetValidToolsetNames() returned %d toolsets, want %d", len(validNames), len(expected))
+		t.Errorf("ValidToolsetNames() returned %d toolsets, want %d", len(validNames), len(expected))
 	}
 }
 
@@ -338,8 +338,8 @@ func TestIsToolEnabledIndividualMode(t *testing.T) {
 	}
 }
 
-func TestGetAllValidToolNames(t *testing.T) {
-	validTools := GetAllValidToolNames()
+func TestKnownToolNames(t *testing.T) {
+	validTools := KnownToolNames()
 
 	// Verify we have a reasonable number of tools (at least the ones we know about)
 	expectedTools := []string{
@@ -357,12 +357,27 @@ func TestGetAllValidToolNames(t *testing.T) {
 
 	for _, tool := range expectedTools {
 		if !validTools[tool] {
-			t.Errorf("GetAllValidToolNames() missing expected tool: %s", tool)
+			t.Errorf("KnownToolNames() missing expected tool: %s", tool)
 		}
 	}
 
 	// Verify count matches ToolToToolset map
 	if len(validTools) != len(ToolToToolset) {
-		t.Errorf("GetAllValidToolNames() returned %d tools, want %d", len(validTools), len(ToolToToolset))
+		t.Errorf("KnownToolNames() returned %d tools, want %d", len(validTools), len(ToolToToolset))
+	}
+}
+
+func TestToolFilter_IndividualModeIgnoresToolsets(t *testing.T) {
+	f := ToolFilter{
+		Mode:     ModeIndividualTools,
+		Toolsets: []string{Terraform}, // should be irrelevant
+		Tools:    []string{"list_workspaces"},
+	}
+
+	if f.IsToolEnabled("whoami") {
+		t.Error("whoami should be disabled: not in Tools list, and Toolsets should be ignored in individual mode")
+	}
+	if !f.IsToolEnabled("list_workspaces") {
+		t.Error("list_workspaces should be enabled: it is explicitly listed in Tools")
 	}
 }
