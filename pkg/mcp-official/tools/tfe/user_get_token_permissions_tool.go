@@ -26,8 +26,7 @@ type TokenPermissionsResult struct {
 
 func GetTokenPermissionsTool() *mcp.Tool {
 	return &mcp.Tool{
-		Name: "get_token_permissions",
-		// TODO: Add output schema helper
+		Name:        "get_token_permissions",
 		Description: "Fetches the permissions the current token has for the specified terraform organization.",
 		Annotations: &mcp.ToolAnnotations{
 			Title:           "Get permissions for current token",
@@ -53,7 +52,6 @@ func GetTokenPermissionsFunc(ctx context.Context, request *mcp.CallToolRequest, 
 		return nil, nil, fmt.Errorf("failed to read organization %q: %w", terraformOrgName, err)
 	}
 
-	// TODO: Add nonNilSlice helper
 	return nil, &TokenPermissionsResult{
 		Permissions: tfeclient.HumanReadableTokenPermissions(org.Permissions),
 	}, nil
