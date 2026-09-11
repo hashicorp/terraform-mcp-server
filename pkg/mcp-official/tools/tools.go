@@ -18,10 +18,22 @@ var officialFactories = map[string]func(svr *mcp.Server){
 	// Tools not yet migrated simply have no entry and are silently skipped
 	// below — no other code needs to change.
 	"list_workspaces": func(svr *mcp.Server) {
-		mcp.AddTool(svr, tfeTools.ListWorkpsacesTool(), tfeTools.ListWorkspacesFunc)
+		mcp.AddTool(svr, tfeTools.ListWorkspacesTool(), tfeTools.ListWorkspacesFunc)
 	},
 	"list_terraform_orgs": func(svr *mcp.Server) {
 		mcp.AddTool(svr, tfeTools.ListTerraformOrganizationsTool(), tfeTools.ListTerraformOrganizationsFunc)
+	},
+	"list_terraform_projects": func(svr *mcp.Server) {
+		mcp.AddTool(svr, tfeTools.ListProjectsTool(), tfeTools.ListProjectsFunc)
+	},
+	"create_project": func(svr *mcp.Server) {
+		mcp.AddTool(svr, tfeTools.CreateProjectTool(), tfeTools.CreateProjectFunc)
+	},
+	"get_project": func(svr *mcp.Server) {
+		mcp.AddTool(svr, tfeTools.GetProjectTool(), tfeTools.GetProjectFunc)
+	},
+	"delete_project": func(svr *mcp.Server) {
+		mcp.AddTool(svr, tfeTools.DeleteProjectTool(), tfeTools.DeleteProjectFunc)
 	},
 }
 
@@ -32,24 +44,6 @@ func RegisterTools(svr *mcp.Server, logger *log.Logger, filter toolsets.ToolFilt
 		}
 		if register, ok := officialFactories[td.Name]; ok {
 			register(svr)
-		}
-	}
-
-	if toolsets.IsToolEnabled("list_terraform_projects", enabledToolsets) {
-		mcp.AddTool(svr, tfeTools.ListProjectsTool(), tfeTools.ListProjectsFunc)
-	}
-
-	if toolsets.IsToolEnabled("create_project", enabledToolsets) {
-		mcp.AddTool(svr, tfeTools.CreateProjectTool(), tfeTools.CreateProjectFunc)
-	}
-
-	if toolsets.IsToolEnabled("get_project", enabledToolsets) {
-		mcp.AddTool(svr, tfeTools.GetProjectTool(), tfeTools.GetProjectFunc)
-	}
-
-	if destructiveOperationsEnabled() {
-		if toolsets.IsToolEnabled("delete_project", enabledToolsets) {
-			mcp.AddTool(svr, tfeTools.DeleteProjectTool(), tfeTools.DeleteProjectFunc)
 		}
 	}
 }
