@@ -5,6 +5,7 @@ package tools
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -19,24 +20,20 @@ type GetTokenPermissionsArguments struct {
 	TerraformOrgName string `json:"terraform_org_name" jsonschema:"The name of the Terraform Cloud/Enterprise organization"`
 }
 
-// TokenPermissionsResult is the response shape returned by the get_token_permissions tool.
-type TokenPermissionsResult struct {
-	Permissions []string `json:"permissions"`
-}
-
 func GetTokenPermissionsTool() *mcp.Tool {
 	return &mcp.Tool{
 		Name:        "get_token_permissions",
 		Description: "Fetches the permissions the current token has for the specified terraform organization.",
 		Annotations: &mcp.ToolAnnotations{
 			Title:           "Get permissions for current token",
+			OpenWorldHint:   ptr(true),
 			ReadOnlyHint:    true,
 			DestructiveHint: ptr(false),
 		},
 	}
 }
 
-func GetTokenPermissionsFunc(ctx context.Context, request *mcp.CallToolRequest, input GetTokenPermissionsArguments) (*mcp.CallToolResult, *TokenPermissionsResult, error) {
+func GetTokenPermissionsFunc(ctx context.Context, request *mcp.CallToolRequest, input GetTokenPermissionsArguments) (*mcp.CallToolResult, any, error) {
 	terraformOrgName := strings.TrimSpace(input.TerraformOrgName)
 	if terraformOrgName == "" {
 		return nil, nil, fmt.Errorf("terraform_org_name must not be blank")
@@ -52,7 +49,10 @@ func GetTokenPermissionsFunc(ctx context.Context, request *mcp.CallToolRequest, 
 		return nil, nil, fmt.Errorf("failed to read organization %q: %w", terraformOrgName, err)
 	}
 
-	return nil, &TokenPermissionsResult{
-		Permissions: tfeclient.HumanReadableTokenPermissions(org.Permissions),
-	}, nil
+	// The bare array matches the mark3labs tool and test/terraform/user_test.go.
+	buf, err := json.Marshal(tfeclient.HumanReadableTokenPermissions(org.Permissions))
+	if err != nil {
+		return nil, nil, fmt.Errorf("marshaling token permissions: %w", err)
+	}
+	return textResult(string(buf)), nil, nil
 }
