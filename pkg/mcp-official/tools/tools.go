@@ -22,6 +22,14 @@ var officialFactories = map[string]func(svr *mcp.Server){
 	"list_terraform_orgs": func(svr *mcp.Server) {
 		mcp.AddTool(svr, tfeTools.ListTerraformOrganizationsTool(), tfeTools.ListTerraformOrganizationsFunc)
 	},
+
+	"whoami": func(svr *mcp.Server) {
+		mcp.AddTool(svr, tfeTools.WhoAmITool(), tfeTools.WhoAmIFunc)
+	},
+
+	"get_token_permissions": func(svr *mcp.Server) {
+		mcp.AddTool(svr, tfeTools.GetTokenPermissionsTool(), tfeTools.GetTokenPermissionsFunc)
+	},
 }
 
 func RegisterTools(svr *mcp.Server, logger *slog.Logger, filter toolsets.ToolFilter) {
@@ -29,13 +37,5 @@ func RegisterTools(svr *mcp.Server, logger *slog.Logger, filter toolsets.ToolFil
 		if register, ok := officialFactories[td.Name]; ok {
 			register(svr)
 		}
-	}
-
-	if toolsets.IsToolEnabled("whoami", enabledToolsets) {
-		mcp.AddTool(svr, tfeTools.WhoAmITool(), tfeTools.WhoAmIFunc)
-	}
-
-	if toolsets.IsToolEnabled("get_token_permissions", enabledToolsets) {
-		mcp.AddTool(svr, tfeTools.GetTokenPermissionsTool(), tfeTools.GetTokenPermissionsFunc)
 	}
 }
