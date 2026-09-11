@@ -172,7 +172,7 @@ func TestValidToolsetNames(t *testing.T) {
 	}
 }
 
-func TestIsToolEnabled(t *testing.T) {
+func TestToolFilter_ToolsetsMode(t *testing.T) {
 	tests := []struct {
 		name            string
 		toolName        string
@@ -219,10 +219,10 @@ func TestIsToolEnabled(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := IsToolEnabled(tt.toolName, tt.enabledToolsets)
+			result := NewToolsetFilter(tt.enabledToolsets).IsToolEnabled(tt.toolName)
 
 			if result != tt.expected {
-				t.Errorf("IsToolEnabled(%s, %v) = %v, want %v", tt.toolName, tt.enabledToolsets, result, tt.expected)
+				t.Errorf("NewToolsetFilter(%v).IsToolEnabled(%s) = %v, want %v", tt.enabledToolsets, tt.toolName, result, tt.expected)
 			}
 		})
 	}
@@ -288,51 +288,45 @@ func TestParseIndividualTools(t *testing.T) {
 	}
 }
 
-func TestIsToolEnabledIndividualMode(t *testing.T) {
+func TestToolFilter_IndividualMode(t *testing.T) {
 	tests := []struct {
-		name            string
-		toolName        string
-		enabledToolsets []string
-		expected        bool
+		name      string
+		toolName  string
+		toolNames []string
+		expected  bool
 	}{
 		{
-			name:            "tool enabled in individual mode",
-			toolName:        "search_providers",
-			enabledToolsets: EnableIndividualTools([]string{"search_providers", "list_workspaces"}),
-			expected:        true,
+			name:      "tool enabled in individual mode",
+			toolName:  "search_providers",
+			toolNames: []string{"search_providers", "list_workspaces"},
+			expected:  true,
 		},
 		{
-			name:            "tool disabled in individual mode",
-			toolName:        "get_provider_details",
-			enabledToolsets: EnableIndividualTools([]string{"search_providers", "list_workspaces"}),
-			expected:        false,
+			name:      "tool disabled in individual mode",
+			toolName:  "get_provider_details",
+			toolNames: []string{"search_providers", "list_workspaces"},
+			expected:  false,
 		},
 		{
-			name:            "all toolset overrides individual mode",
-			toolName:        "get_provider_details",
-			enabledToolsets: append([]string{"all"}, EnableIndividualTools([]string{"search_providers"})...),
-			expected:        true,
+			name:      "terraform tool in individual mode",
+			toolName:  "list_workspaces",
+			toolNames: []string{"list_workspaces"},
+			expected:  true,
 		},
 		{
-			name:            "terraform tool in individual mode",
-			toolName:        "list_workspaces",
-			enabledToolsets: EnableIndividualTools([]string{"list_workspaces"}),
-			expected:        true,
-		},
-		{
-			name:            "private registry tool in individual mode",
-			toolName:        "search_private_modules",
-			enabledToolsets: EnableIndividualTools([]string{"search_private_modules"}),
-			expected:        true,
+			name:      "private registry tool in individual mode",
+			toolName:  "search_private_modules",
+			toolNames: []string{"search_private_modules"},
+			expected:  true,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := IsToolEnabled(tt.toolName, tt.enabledToolsets)
+			result := NewIndividualToolFilter(tt.toolNames).IsToolEnabled(tt.toolName)
 
 			if result != tt.expected {
-				t.Errorf("IsToolEnabled(%s, %v) = %v, want %v", tt.toolName, tt.enabledToolsets, result, tt.expected)
+				t.Errorf("NewIndividualToolFilter(%v).IsToolEnabled(%s) = %v, want %v", tt.toolNames, tt.toolName, result, tt.expected)
 			}
 		})
 	}
@@ -361,9 +355,9 @@ func TestKnownToolNames(t *testing.T) {
 		}
 	}
 
-	// Verify count matches ToolToToolset map
-	if len(validTools) != len(ToolToToolset) {
-		t.Errorf("KnownToolNames() returned %d tools, want %d", len(validTools), len(ToolToToolset))
+	// Verify count matches AllTools (the single source of truth in registry.go)
+	if len(validTools) != len(AllTools) {
+		t.Errorf("KnownToolNames() returned %d tools, want %d", len(validTools), len(AllTools))
 	}
 }
 

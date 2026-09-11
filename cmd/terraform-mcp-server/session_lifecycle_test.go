@@ -13,6 +13,7 @@ import (
 	"unsafe"
 
 	"github.com/hashicorp/terraform-mcp-server/pkg/client"
+	"github.com/hashicorp/terraform-mcp-server/pkg/toolsets"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -64,7 +65,7 @@ func TestGetOfficialStreamableServer_SessionLifecycle(t *testing.T) {
 		client.CORSConfig{Mode: "disabled"},
 		logger,
 		nil, // organizationAllowlist
-		[]string{"list_workspaces"},
+		toolsets.NewToolsetFilter([]string{"list_workspaces"}),
 		rateLimiter,
 		client.MetricsConfig{Enabled: false},
 	)

@@ -250,8 +250,8 @@ func initLogger(outPath string, level log.Level, format string) (*log.Logger, er
 }
 
 // registerToolsAndResources registers tools and resources with the MCP server
-func registerToolsAndResources(hcServer *server.MCPServer, logger *log.Logger, enabledToolsets []string) {
-	tools.RegisterTools(hcServer, logger, enabledToolsets)
+func registerToolsAndResources(hcServer *server.MCPServer, logger *log.Logger, filter toolsets.ToolFilter) {
+	tools.RegisterTools(hcServer, logger, filter)
 	resources.RegisterResources(hcServer, logger)
 	resources.RegisterResourceTemplates(hcServer, logger)
 }
@@ -301,7 +301,7 @@ func setupInstana(logger *log.Logger) instana.TracerLogger {
 	})
 }
 
-func streamableHTTPServerInit(ctx context.Context, hcServer *server.MCPServer, logger *log.Logger, host string, port string, endpointPath string, heartbeatInterval time.Duration, organizationAllowlist []string, enabledToolsets []string, rateLimiter *client.RateLimitMiddleware, metricsConfig client.MetricsConfig) error {
+func streamableHTTPServerInit(ctx context.Context, hcServer *server.MCPServer, logger *log.Logger, host string, port string, endpointPath string, heartbeatInterval time.Duration, organizationAllowlist []string, filter toolsets.ToolFilter, rateLimiter *client.RateLimitMiddleware, metricsConfig client.MetricsConfig) error {
 	// Ensure endpoint path starts with /
 	endpointPath = path.Join("/", endpointPath)
 	var handler http.Handler
@@ -370,7 +370,7 @@ func streamableHTTPServerInit(ctx context.Context, hcServer *server.MCPServer, l
 	// Create the official go-sdk streamable server
 	if enableOfficialSDK := os.Getenv("TF_X_OFFICIAL_SDK_ENABLED"); enableOfficialSDK == "true" {
 		logger.Info("TF_X_OFFICIAL_SDK_ENABLED set to true in env, enabling the official mcp go-sdk server")
-		officialStreamableServer := getOfficialStreamableServer(ctx, heartbeatInterval, isStateless, corsConfig, logger, organizationAllowlist, enabledToolsets, rateLimiter, metricsConfig)
+		officialStreamableServer := getOfficialStreamableServer(ctx, heartbeatInterval, isStateless, corsConfig, logger, organizationAllowlist, filter, rateLimiter, metricsConfig)
 		// Handle the /mcp endpoint with the official go-sdk streamable server (with security wrapper)
 		mux.Handle(endpointPath+"/official", officialStreamableServer)
 		mux.Handle(endpointPath+"/official/", officialStreamableServer)
@@ -459,7 +459,7 @@ func streamableHTTPServerInit(ctx context.Context, hcServer *server.MCPServer, l
 	return nil
 }
 
-func getOfficialStreamableServer(ctx context.Context, heartbeatInterval time.Duration, isStateless bool, corsConfig client.CORSConfig, logger *log.Logger, organizationAllowlist []string, enabledToolsets []string, rateLimiter *client.RateLimitMiddleware, metricsConfig client.MetricsConfig) http.Handler {
+func getOfficialStreamableServer(ctx context.Context, heartbeatInterval time.Duration, isStateless bool, corsConfig client.CORSConfig, logger *log.Logger, organizationAllowlist []string, filter toolsets.ToolFilter, rateLimiter *client.RateLimitMiddleware, metricsConfig client.MetricsConfig) http.Handler {
 	logger.Info("Creating a go-sdk StreamableHTTP server...")
 	slogLogger := newSlogLogger(logger)
 
@@ -495,7 +495,7 @@ func getOfficialStreamableServer(ctx context.Context, heartbeatInterval time.Dur
 			}()
 		}),
 	}
-	hcServer := mcpofficial.NewServer(version.Version, instructions, heartbeatInterval, logger, enabledToolsets, serverOpts...)
+	hcServer := mcpofficial.NewServer(version.Version, instructions, heartbeatInterval, logger, filter, serverOpts...)
 
 	opts := &mcp.StreamableHTTPOptions{
 		Stateless:             isStateless,

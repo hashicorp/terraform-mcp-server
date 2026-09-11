@@ -14,9 +14,6 @@ const (
 	// Special toolsets
 	All     = "all"
 	Default = "default"
-
-	// Internal marker for individual tool filtering
-	individualToolsMarker = "__individual_tools__"
 )
 
 // Toolset represents metadata about a toolset

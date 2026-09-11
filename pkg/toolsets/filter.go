@@ -3,6 +3,8 @@
 
 package toolsets
 
+import "strings"
+
 // FilterMode selects how ToolFilter.IsToolEnabled decides availability.
 type FilterMode int
 
@@ -43,4 +45,13 @@ func (f ToolFilter) IsToolEnabled(toolName string) bool {
 		return false
 	}
 	return ContainsToolset(f.Toolsets, toolset)
+}
+
+// String implements fmt.Stringer so logger.Infof("...: %v", filter) prints
+// something readable instead of the raw struct fields
+func (f ToolFilter) String() string {
+	if f.Mode == ModeIndividualTools {
+		return "tools=" + strings.Join(f.Tools, ",")
+	}
+	return "toolsets=" + strings.Join(f.Toolsets, ",")
 }
