@@ -22,6 +22,12 @@ var officialFactories = map[string]func(svr *mcp.Server){
 	"list_terraform_orgs": func(svr *mcp.Server) {
 		mcp.AddTool(svr, tfeTools.ListTerraformOrganizationsTool(), tfeTools.ListTerraformOrganizationsFunc)
 	},
+	"list_state_versions": func(svr *mcp.Server) {
+		mcp.AddTool(svr, tfeTools.ListStateVersionsTool(), tfeTools.ListStateVersionsFunc)
+	},
+	"get_state_version": func(svr *mcp.Server) {
+		mcp.AddTool(svr, tfeTools.GetStateVersionTool(), tfeTools.GetStateVersionFunc)
+	},
 }
 
 func RegisterTools(svr *mcp.Server, logger *slog.Logger, filter toolsets.ToolFilter) {
@@ -29,12 +35,5 @@ func RegisterTools(svr *mcp.Server, logger *slog.Logger, filter toolsets.ToolFil
 		if register, ok := officialFactories[td.Name]; ok {
 			register(svr)
 		}
-	}
-
-	if toolsets.IsToolEnabled("list_state_versions", enabledToolsets) {
-		mcp.AddTool(svr, tfeTools.ListStateVersionsTool(), tfeTools.ListStateVersionsFunc)
-	}
-	if toolsets.IsToolEnabled("get_state_version", enabledToolsets) {
-		mcp.AddTool(svr, tfeTools.GetStateVersionTool(), tfeTools.GetStateVersionFunc)
 	}
 }
