@@ -52,12 +52,4 @@ func RegisterTools(svr *mcp.Server, logger *slog.Logger, filter toolsets.ToolFil
 			register(svr)
 		}
 	}
-
-	if toolsets.IsToolEnabled("whoami", enabledToolsets) {
-		mcp.AddTool(svr, tfeTools.WhoAmITool(), tfeTools.WhoAmIFunc)
-	}
-
-	if toolsets.IsToolEnabled("get_token_permissions", enabledToolsets) {
-		mcp.AddTool(svr, tfeTools.GetTokenPermissionsTool(), tfeTools.GetTokenPermissionsFunc)
-	}
 }
