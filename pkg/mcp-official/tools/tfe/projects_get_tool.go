@@ -82,5 +82,4 @@ func GetProjectFunc(ctx context.Context, request *mcp.CallToolRequest, input Get
 	}
 
 	return nil, details, nil
-
 }
