@@ -42,7 +42,7 @@ type ListWorkspacesArguments struct {
 	WildcardName string `json:"wildcard_name,omitempty" jsonschema:"Wildcard pattern"`
 }
 
-func ListWorkpsacesTool() *mcp.Tool {
+func ListWorkspacesTool() *mcp.Tool {
 	return &mcp.Tool{
 		Name:        "list_workspaces",
 		Description: "Search and list Terraform workspaces within a specified organization. Returns all workspaces when no filters are applied, or filters results based on name patterns, tags, or search queries. Supports pagination for large result sets. Returns a truncated summary of the workspace, use get_workspace_details to get the full details for a specific workspace.",
@@ -79,12 +79,12 @@ func ListWorkspacesFunc(ctx context.Context, request *mcp.CallToolRequest, input
 		}
 	}
 
-	client, err := client.GetTfeClient(ctx, client.SessionIDFromRequest(request))
+	tfeClient, err := client.GetTfeClient(ctx, client.SessionIDFromRequest(request))
 	if err != nil {
 		return nil, nil, err
 	}
 
-	workspaces, err := client.Workspaces.List(ctx, terraformOrgName, &tfe.WorkspaceListOptions{
+	workspaces, err := tfeClient.Workspaces.List(ctx, terraformOrgName, &tfe.WorkspaceListOptions{
 		ProjectID:    projectID,
 		Search:       searchQuery,
 		Tags:         strings.Join(tags, ","),

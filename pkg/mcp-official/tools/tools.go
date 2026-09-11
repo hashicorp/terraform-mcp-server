@@ -1,10 +1,11 @@
 package tools
 
 import (
+	"log/slog"
+
 	tfeTools "github.com/hashicorp/terraform-mcp-server/pkg/mcp-official/tools/tfe"
 	"github.com/hashicorp/terraform-mcp-server/pkg/toolsets"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
-	log "github.com/sirupsen/logrus"
 )
 
 // officialFactories has one entry per tool actually ported to the official
@@ -18,14 +19,14 @@ var officialFactories = map[string]func(svr *mcp.Server){
 	// Tools not yet migrated simply have no entry and are silently skipped
 	// below — no other code needs to change.
 	"list_workspaces": func(svr *mcp.Server) {
-		mcp.AddTool(svr, tfeTools.ListWorkpsacesTool(), tfeTools.ListWorkspacesFunc)
+		mcp.AddTool(svr, tfeTools.ListWorkspacesTool(), tfeTools.ListWorkspacesFunc)
 	},
 	"list_terraform_orgs": func(svr *mcp.Server) {
 		mcp.AddTool(svr, tfeTools.ListTerraformOrganizationsTool(), tfeTools.ListTerraformOrganizationsFunc)
 	},
 }
 
-func RegisterTools(svr *mcp.Server, logger *log.Logger, filter toolsets.ToolFilter) {
+func RegisterTools(svr *mcp.Server, logger *slog.Logger, filter toolsets.ToolFilter) {
 	for _, td := range toolsets.AllTools {
 		if !filter.IsToolEnabled(td.Name) {
 			continue
