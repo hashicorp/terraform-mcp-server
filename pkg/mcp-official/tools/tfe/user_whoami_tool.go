@@ -24,6 +24,7 @@ func WhoAmITool() *mcp.Tool {
 		Description: "Returns the identity of the currently authenticated Terraform token. Use this to determine which user or service account the active token belongs to.",
 		Annotations: &mcp.ToolAnnotations{
 			Title:           "Get current Terraform identity",
+			OpenWorldHint:   ptr(true),
 			ReadOnlyHint:    true,
 			DestructiveHint: ptr(false),
 		},
