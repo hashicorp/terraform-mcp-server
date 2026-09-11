@@ -92,6 +92,12 @@ var ToolToToolset = map[string]string{
 	// Terraform tools - State Versions
 	"list_state_versions": Terraform,
 	"get_state_version":   Terraform,
+
+	// Terraform tools - State Inspection
+	"list_state_resources":    Terraform,
+	"get_state_resource":      Terraform,
+	"search_state_attributes": Terraform,
+	"get_state_summary":       Terraform,
 }
 
 // GetToolsetForTool returns the toolset name for a given tool name
