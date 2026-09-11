@@ -75,7 +75,7 @@ func TestToolsFlagAloneDoesNotConflictWithDefaultToolsets(t *testing.T) {
 	}
 
 	logger, fatalCalled := fatalRecordingLogger()
-	var captured []string
+	var captured toolsets.ToolFilter
 	rootCmd.Run = func(cmd *cobra.Command, _ []string) {
 		captured = getToolsetsFromCmd(cmd, logger)
 	}
@@ -85,8 +85,9 @@ func TestToolsFlagAloneDoesNotConflictWithDefaultToolsets(t *testing.T) {
 	assert.False(t, *fatalCalled,
 		"passing only --tools (with --toolsets at its declared 'all' default) must not "+
 			"trigger the --tools/--toolsets conflict Fatal")
-	assert.Contains(t, captured, "search_providers")
-	assert.Contains(t, captured, "get_provider_details")
+	assert.True(t, captured.IsToolEnabled("search_providers"))
+	assert.True(t, captured.IsToolEnabled("get_provider_details"))
+
 }
 
 // TestToolsAndToolsetsTogetherTriggersFatal locks the negative behavior down:
@@ -144,6 +145,5 @@ func TestInvalidToolsFlagFallsBackToDefaultToolsets(t *testing.T) {
 
 	result := parseIndividualTools("not_a_real_tool,not_real", logger)
 
-	assert.Equal(t, toolsets.DefaultToolsets(), result,
-		"invalid --tools names must fall back to DefaultToolsets()")
+	assert.Equal(t, toolsets.NewToolsetFilter(toolsets.DefaultToolsets()), result, "invalid --tools names must fall back to DefaultToolsets()")
 }

@@ -36,7 +36,7 @@ import (
 var instructions string
 var sessionClientInfo sync.Map // map[string]client.ClientInfo
 
-func runHTTPServer(logger *log.Logger, host string, port string, endpointPath string, heartbeatInterval time.Duration, enabledToolsets []string, metricsConfig client.MetricsConfig, organizationAllowlist []string) error {
+func runHTTPServer(logger *log.Logger, host string, port string, endpointPath string, heartbeatInterval time.Duration, filter toolsets.ToolFilter, metricsConfig client.MetricsConfig, organizationAllowlist []string) error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
@@ -59,11 +59,11 @@ func runHTTPServer(logger *log.Logger, host string, port string, endpointPath st
 	hcServer, rateLimiter := NewServer(
 		version.Version,
 		logger,
-		enabledToolsets,
+		filter,
 		serverOpts...,
 	)
 
-	registerToolsAndResources(hcServer, logger, enabledToolsets)
+	registerToolsAndResources(hcServer, logger, filter)
 
 	hooks.AddOnUnregisterSession(func(ctx context.Context, session server.ClientSession) {
 		// Clean up client info populated in the metrics hooks, for the session
@@ -89,7 +89,7 @@ func runHTTPServer(logger *log.Logger, host string, port string, endpointPath st
 	})
 	attachMetricsHooks(hooks, metricsConfig, logger)
 
-	return streamableHTTPServerInit(ctx, hcServer, logger, host, port, endpointPath, heartbeatInterval, organizationAllowlist, enabledToolsets, rateLimiter, metricsConfig)
+	return streamableHTTPServerInit(ctx, hcServer, logger, host, port, endpointPath, heartbeatInterval, organizationAllowlist, filter, rateLimiter, metricsConfig)
 }
 
 func attachMetricsHooks(hooks *server.Hooks, metricsConfig client.MetricsConfig, logger *log.Logger) {
@@ -158,7 +158,7 @@ func attachMetricsHooks(hooks *server.Hooks, metricsConfig client.MetricsConfig,
 	})
 }
 
-func runStdioServer(logger *log.Logger, enabledToolsets []string) error {
+func runStdioServer(logger *log.Logger, filter toolsets.ToolFilter) error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
@@ -167,8 +167,8 @@ func runStdioServer(logger *log.Logger, enabledToolsets []string) error {
 	hooks.AddOnRegisterSession(func(ctx context.Context, session server.ClientSession) {
 		client.NewSessionHandler(ctx, session.SessionID(), logger)
 	})
-	hcServer, rateLimiter := NewServer(version.Version, logger, enabledToolsets, server.WithHooks(hooks))
-	registerToolsAndResources(hcServer, logger, enabledToolsets)
+	hcServer, rateLimiter := NewServer(version.Version, logger, filter, server.WithHooks(hooks))
+	registerToolsAndResources(hcServer, logger, filter)
 
 	hooks.AddOnUnregisterSession(func(ctx context.Context, session server.ClientSession) {
 		client.EndSessionHandler(ctx, session.SessionID(), rateLimiter, logger)
@@ -177,7 +177,9 @@ func runStdioServer(logger *log.Logger, enabledToolsets []string) error {
 	return serverInit(ctx, hcServer, logger)
 }
 
-func NewServer(version string, logger *log.Logger, enabledToolsets []string, opts ...server.ServerOption) (*server.MCPServer, *client.RateLimitMiddleware) {
+func NewServer(version string, logger *log.Logger, filter toolsets.ToolFilter, opts ...server.ServerOption) (*server.MCPServer, *client.RateLimitMiddleware) {
+	// filter is accepted for signature symmetry with runHTTPServer/runStdioServer, actual tool gating happens in registerToolsAndResources -> tools.RegisterTools.
+
 	// Create rate limiting middleware with environment-based configuration
 	rateLimitConfig := client.LoadRateLimitConfigFromEnv()
 	rateLimitMiddleware := client.NewRateLimitMiddleware(rateLimitConfig, logger)
@@ -203,7 +205,7 @@ func NewServer(version string, logger *log.Logger, enabledToolsets []string, opt
 }
 
 // parseToolsets parses and validates the toolsets flag value
-func parseToolsets(toolsetsFlag string, logger *log.Logger) []string {
+func parseToolsets(toolsetsFlag string, logger *log.Logger) toolsets.ToolFilter {
 	rawToolsets := strings.Split(toolsetsFlag, ",")
 
 	cleaned, invalid := toolsets.CleanToolsets(rawToolsets)
@@ -214,11 +216,11 @@ func parseToolsets(toolsetsFlag string, logger *log.Logger) []string {
 	expanded := toolsets.ExpandDefaultToolset(cleaned)
 
 	logger.Infof("Enabled toolsets: %v", expanded)
-	return expanded
+	return toolsets.NewToolsetFilter(expanded)
 }
 
 // parseIndividualTools parses and validates the tools flag value
-func parseIndividualTools(toolsFlag string, logger *log.Logger) []string {
+func parseIndividualTools(toolsFlag string, logger *log.Logger) toolsets.ToolFilter {
 	rawTools := strings.Split(toolsFlag, ",")
 
 	validTools, invalidTools := toolsets.ParseIndividualTools(rawTools)
@@ -230,14 +232,11 @@ func parseIndividualTools(toolsFlag string, logger *log.Logger) []string {
 		logger.Warn("No valid tools specified, falling back to default toolsets")
 		return parseToolsets(toolsets.Default, logger)
 	}
-
-	// Use the public API to enable individual tools mode
-	result := toolsets.EnableIndividualTools(validTools)
 	logger.Infof("Enabled individual tools: %v", validTools)
-	return result
+	return toolsets.NewIndividualToolFilter(validTools)
 }
 
-func getToolsetsFromCmd(cmd *cobra.Command, logger *log.Logger) []string {
+func getToolsetsFromCmd(cmd *cobra.Command, logger *log.Logger) toolsets.ToolFilter {
 	// Check if --tools flag is set (individual tool mode)
 	toolsFlag, err := cmd.Flags().GetString("tools")
 	if err != nil {
@@ -287,9 +286,9 @@ func runDefaultCommand(cmd *cobra.Command, _ []string) {
 	}
 
 	// Get toolsets from the command that was passed in
-	enabledToolsets := getToolsetsFromCmd(cmd, logger)
+	filter := getToolsetsFromCmd(cmd, logger)
 
-	if err := runStdioServer(logger, enabledToolsets); err != nil {
+	if err := runStdioServer(logger, filter); err != nil {
 		stdlog.Fatal("failed to run stdio server:", err)
 	}
 }
@@ -311,13 +310,13 @@ func main() {
 		port := getHTTPPort()
 		host := getHTTPHost()
 		endpointPath := getEndpointPath(nil)
-		enabledToolsets := getToolsetsFromCmd(rootCmd, logger)
+		filter := getToolsetsFromCmd(rootCmd, logger)
 		heartbeatInterval := getHeartbeatInterval()
 		organizationAllowlist, err := getOrganizationAllowlist(rootCmd)
 		if err != nil {
 			stdlog.Fatal(err)
 		}
-		if err := runHTTPServer(logger, host, port, endpointPath, heartbeatInterval, enabledToolsets, metricsConfig, organizationAllowlist); err != nil {
+		if err := runHTTPServer(logger, host, port, endpointPath, heartbeatInterval, filter, metricsConfig, organizationAllowlist); err != nil {
 			stdlog.Fatal("failed to run StreamableHTTP server:", err)
 		}
 		return

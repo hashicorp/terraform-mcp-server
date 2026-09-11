@@ -24,19 +24,19 @@ type DynamicToolRegistry struct {
 	tfeToolsRegistered bool
 	mcpServer          *server.MCPServer
 	logger             *log.Logger
-	enabledToolsets    []string
+	filter             toolsets.ToolFilter
 }
 
 var globalToolRegistry *DynamicToolRegistry
 
 // registerDynamicTools registers the global tool registry
-func registerDynamicTools(mcpServer *server.MCPServer, logger *log.Logger, enabledToolsets []string) {
+func registerDynamicTools(mcpServer *server.MCPServer, logger *log.Logger, filter toolsets.ToolFilter) {
 	globalToolRegistry = &DynamicToolRegistry{
 		sessionsWithTFE:    make(map[string]bool),
 		tfeToolsRegistered: false,
 		mcpServer:          mcpServer,
 		logger:             logger,
-		enabledToolsets:    enabledToolsets,
+		filter:             filter,
 	}
 
 	// Set the callback in the client package to avoid circular imports
@@ -102,290 +102,45 @@ func (r *DynamicToolRegistry) registerTFETools() {
 	if r.tfeToolsRegistered {
 		return
 	}
-
 	r.logger.Info("Registering TFE tools - first session with valid TFE client detected")
 
-	// Terraform toolset - Organization
-	if toolsets.IsToolEnabled("whoami", r.enabledToolsets) {
-		tool := r.createDynamicTFETool("whoami", tfeTools.WhoAmI)
-		r.mcpServer.AddTool(tool.Tool, tool.Handler)
-	}
+	tfOpsEnabled := isTerraformOperationsEnabled()
 
-	if toolsets.IsToolEnabled("list_terraform_orgs", r.enabledToolsets) {
-		tool := r.createDynamicTFETool("list_terraform_orgs", tfeTools.ListTerraformOrgs)
-		r.mcpServer.AddTool(tool.Tool, tool.Handler)
-	}
-
-	// Terraform toolset - Team tools
-	if toolsets.IsToolEnabled("create_team", r.enabledToolsets) {
-		tool := r.createDynamicTFETool("create_team", tfeTools.CreateTeam)
-		r.mcpServer.AddTool(tool.Tool, tool.Handler)
-	}
-
-	if toolsets.IsToolEnabled("list_teams", r.enabledToolsets) {
-		tool := r.createDynamicTFETool("list_teams", tfeTools.ListTeams)
-		r.mcpServer.AddTool(tool.Tool, tool.Handler)
-	}
-
-	if toolsets.IsToolEnabled("get_team", r.enabledToolsets) {
-		tool := r.createDynamicTFETool("get_team", tfeTools.GetTeam)
-		r.mcpServer.AddTool(tool.Tool, tool.Handler)
-	}
-
-	if toolsets.IsToolEnabled("add_team_member", r.enabledToolsets) {
-		tool := r.createDynamicTFETool("add_team_member", tfeTools.AddTeamMember)
-		r.mcpServer.AddTool(tool.Tool, tool.Handler)
-	}
-
-	if toolsets.IsToolEnabled("grant_team_access", r.enabledToolsets) {
-		tool := r.createDynamicTFETool("grant_team_access", tfeTools.GrantTeamAccess)
-		r.mcpServer.AddTool(tool.Tool, tool.Handler)
-	}
-
-	// Only register delete_team if TF operations are enable AND toolset is enable
-	if isTerraformOperationsEnabled() && toolsets.IsToolEnabled("delete_team", r.enabledToolsets) {
-		tool := r.createDynamicTFETool("delete_team", tfeTools.DeleteTeam)
-		r.mcpServer.AddTool(tool.Tool, tool.Handler)
-	}
-
-	// Terraform toolset - Workspace management tools
-	if toolsets.IsToolEnabled("list_workspaces", r.enabledToolsets) {
-		tool := r.createDynamicTFETool("list_workspaces", tfeTools.ListWorkspaces)
-		r.mcpServer.AddTool(tool.Tool, tool.Handler)
-	}
-
-	if toolsets.IsToolEnabled("get_workspace_details", r.enabledToolsets) {
-		tool := r.createDynamicTFETool("get_workspace_details", tfeTools.GetWorkspaceDetails)
-		r.mcpServer.AddTool(tool.Tool, tool.Handler)
-	}
-
-	if toolsets.IsToolEnabled("create_workspace", r.enabledToolsets) {
-		tool := r.createDynamicTFETool("create_workspace", tfeTools.CreateWorkspace)
-		r.mcpServer.AddTool(tool.Tool, tool.Handler)
-	}
-
-	if toolsets.IsToolEnabled("update_workspace", r.enabledToolsets) {
-		tool := r.createDynamicTFETool("update_workspace", tfeTools.UpdateWorkspace)
-		r.mcpServer.AddTool(tool.Tool, tool.Handler)
-	}
-
-	// Terraform toolset - Project management tools
-	if toolsets.IsToolEnabled("create_project", r.enabledToolsets) {
-		tool := r.createDynamicTFETool("create_project", tfeTools.CreateProject)
-		r.mcpServer.AddTool(tool.Tool, tool.Handler)
-	}
-
-	if toolsets.IsToolEnabled("list_terraform_projects", r.enabledToolsets) {
-		tool := r.createDynamicTFETool("list_terraform_projects", tfeTools.ListTerraformProjects)
-		r.mcpServer.AddTool(tool.Tool, tool.Handler)
-	}
-
-	if toolsets.IsToolEnabled("get_project", r.enabledToolsets) {
-		tool := r.createDynamicTFETool("get_project", tfeTools.GetProject)
-		r.mcpServer.AddTool(tool.Tool, tool.Handler)
-	}
-
-	// Only register delete_project if TF operations are enabled AND toolset is enabled
-	if isTerraformOperationsEnabled() && toolsets.IsToolEnabled("delete_project", r.enabledToolsets) {
-		tool := r.createDynamicTFETool("delete_project", tfeTools.DeleteProject)
-		r.mcpServer.AddTool(tool.Tool, tool.Handler)
-	}
-
-	// Only register delete_workspace_safely if TF operations are enabled AND toolset is enabled
-	if isTerraformOperationsEnabled() && toolsets.IsToolEnabled("delete_workspace_safely", r.enabledToolsets) {
-		tool := r.createDynamicTFETool("delete_workspace_safely", tfeTools.DeleteWorkspaceSafely)
-		r.mcpServer.AddTool(tool.Tool, tool.Handler)
-	}
-
-	if isTerraformOperationsEnabled() && toolsets.IsToolEnabled("force_unlock_workspace", r.enabledToolsets) {
-		tool := r.createDynamicTFETool("force_unlock_workspace", tfeTools.ForceUnlockWorkspace)
-		r.mcpServer.AddTool(tool.Tool, tool.Handler)
-	}
-
-	// Registry-private toolset - Private provider tools
-	if toolsets.IsToolEnabled("search_private_providers", r.enabledToolsets) {
-		tool := r.createDynamicTFETool("search_private_providers", tfeTools.SearchPrivateProviders)
-		r.mcpServer.AddTool(tool.Tool, tool.Handler)
-	}
-
-	if toolsets.IsToolEnabled("get_private_provider_details", r.enabledToolsets) {
-		tool := r.createDynamicTFETool("get_private_provider_details", tfeTools.GetPrivateProviderDetails)
-		r.mcpServer.AddTool(tool.Tool, tool.Handler)
-	}
-
-	// Registry-private toolset - Private module tools
-	if toolsets.IsToolEnabled("search_private_modules", r.enabledToolsets) {
-		tool := r.createDynamicTFETool("search_private_modules", tfeTools.SearchPrivateModules)
-		r.mcpServer.AddTool(tool.Tool, tool.Handler)
-	}
-
-	if toolsets.IsToolEnabled("get_private_module_details", r.enabledToolsets) {
-		tool := r.createDynamicTFETool("get_private_module_details", tfeTools.GetPrivateModuleDetails)
-		r.mcpServer.AddTool(tool.Tool, tool.Handler)
-	}
-
-	// Terraform toolset - Workspace tags tools
-	if toolsets.IsToolEnabled("create_workspace_tags", r.enabledToolsets) {
-		tool := r.createDynamicTFETool("create_workspace_tags", tfeTools.CreateWorkspaceTags)
-		r.mcpServer.AddTool(tool.Tool, tool.Handler)
-	}
-
-	if toolsets.IsToolEnabled("read_workspace_tags", r.enabledToolsets) {
-		tool := r.createDynamicTFETool("read_workspace_tags", tfeTools.ReadWorkspaceTags)
-		r.mcpServer.AddTool(tool.Tool, tool.Handler)
-	}
-
-	// Terraform toolset - Run tools
-	if toolsets.IsToolEnabled("list_runs", r.enabledToolsets) {
-		tool := r.createDynamicTFETool("list_runs", tfeTools.ListRuns)
-		r.mcpServer.AddTool(tool.Tool, tool.Handler)
-	}
-
-	// Create run tool with conditional options based on TF operations setting
-	if toolsets.IsToolEnabled("create_run", r.enabledToolsets) {
-		var tool server.ServerTool
-		if isTerraformOperationsEnabled() {
-			tool = r.createDynamicTFETool("create_run", tfeTools.CreateRun)
-		} else {
-			tool = r.createDynamicTFETool("create_run", tfeTools.CreateRunSafe)
+	for _, td := range toolsets.AllTools {
+		if !td.RequiresTFE || !r.filter.IsToolEnabled(td.Name) {
+			continue
 		}
+		if td.RequiresTFOps && !tfOpsEnabled {
+			continue
+		}
+
+		switch td.Name {
+		case "create_no_code_workspace":
+			// Needs *server.MCPServer too, for elicitation
+			tool := r.createDynamicTFEToolWithElicitation(td.Name, tfeTools.CreateNoCodeWorkspace)
+			r.mcpServer.AddTool(tool.Tool, tool.Handler)
+			continue
+		case "create_run":
+			// create_run is always registered when its toolset is enabled. Unlike the
+			// other RequiresTFOps tools, ENABLE_TF_OPERATIONS doesn't hide it — it just
+			// swaps which factory (safe vs. full) backs it
+			factory := tfeTools.CreateRunSafe
+			if tfOpsEnabled {
+				factory = tfeTools.CreateRun
+			}
+			tool := r.createDynamicTFETool(td.Name, factory)
+			r.mcpServer.AddTool(tool.Tool, tool.Handler)
+			continue
+		}
+		factory, ok := toolFactories[td.Name]
+		if !ok {
+			r.logger.Warnf("no tool factory registered for %q; skipping", td.Name)
+			continue
+		}
+		tool := r.createDynamicTFETool(td.Name, factory)
 		r.mcpServer.AddTool(tool.Tool, tool.Handler)
 	}
 
-	// Only register action_run if TF operations are enabled AND toolset is enabled
-	if isTerraformOperationsEnabled() && toolsets.IsToolEnabled("action_run", r.enabledToolsets) {
-		tool := r.createDynamicTFETool("action_run", tfeTools.ActionRun)
-		r.mcpServer.AddTool(tool.Tool, tool.Handler)
-	}
-
-	if toolsets.IsToolEnabled("create_no_code_workspace", r.enabledToolsets) {
-		tool := r.createDynamicTFEToolWithElicitation("create_no_code_workspace", tfeTools.CreateNoCodeWorkspace)
-		r.mcpServer.AddTool(tool.Tool, tool.Handler)
-	}
-
-	if toolsets.IsToolEnabled("get_run_details", r.enabledToolsets) {
-		tool := r.createDynamicTFETool("get_run_details", tfeTools.GetRunDetails)
-		r.mcpServer.AddTool(tool.Tool, tool.Handler)
-	}
-
-	if toolsets.IsToolEnabled("get_plan_details", r.enabledToolsets) {
-		tool := r.createDynamicTFETool("get_plan_details", tfeTools.GetPlanDetails)
-		r.mcpServer.AddTool(tool.Tool, tool.Handler)
-	}
-
-	if toolsets.IsToolEnabled("get_plan_logs", r.enabledToolsets) {
-		tool := r.createDynamicTFETool("get_plan_logs", tfeTools.GetPlanLogs)
-		r.mcpServer.AddTool(tool.Tool, tool.Handler)
-	}
-
-	if toolsets.IsToolEnabled("get_plan_json_output", r.enabledToolsets) {
-		tool := r.createDynamicTFETool("get_plan_json_output", tfeTools.GetPlanJSONOutput)
-		r.mcpServer.AddTool(tool.Tool, tool.Handler)
-	}
-
-	if toolsets.IsToolEnabled("get_apply_details", r.enabledToolsets) {
-		tool := r.createDynamicTFETool("get_apply_details", tfeTools.GetApplyDetails)
-		r.mcpServer.AddTool(tool.Tool, tool.Handler)
-	}
-
-	if toolsets.IsToolEnabled("get_apply_logs", r.enabledToolsets) {
-		tool := r.createDynamicTFETool("get_apply_logs", tfeTools.GetApplyLogs)
-		r.mcpServer.AddTool(tool.Tool, tool.Handler)
-	}
-	if toolsets.IsToolEnabled("get_sentinel_mock", r.enabledToolsets) {
-		tool := r.createDynamicTFETool("get_sentinel_mock", tfeTools.GetSentinelMock)
-		r.mcpServer.AddTool(tool.Tool, tool.Handler)
-	}
-
-	// Terraform toolset - Variable set tools
-	if toolsets.IsToolEnabled("list_variable_sets", r.enabledToolsets) {
-		tool := r.createDynamicTFETool("list_variable_sets", tfeTools.ListVariableSets)
-		r.mcpServer.AddTool(tool.Tool, tool.Handler)
-	}
-
-	if toolsets.IsToolEnabled("create_variable_set", r.enabledToolsets) {
-		tool := r.createDynamicTFETool("create_variable_set", tfeTools.CreateVariableSet)
-		r.mcpServer.AddTool(tool.Tool, tool.Handler)
-	}
-
-	if toolsets.IsToolEnabled("create_variable_in_variable_set", r.enabledToolsets) {
-		tool := r.createDynamicTFETool("create_variable_in_variable_set", tfeTools.CreateVariableInVariableSet)
-		r.mcpServer.AddTool(tool.Tool, tool.Handler)
-	}
-
-	if toolsets.IsToolEnabled("delete_variable_in_variable_set", r.enabledToolsets) {
-		tool := r.createDynamicTFETool("delete_variable_in_variable_set", tfeTools.DeleteVariableInVariableSet)
-		r.mcpServer.AddTool(tool.Tool, tool.Handler)
-	}
-
-	// Attach/detach variable sets to/from workspaces
-	if toolsets.IsToolEnabled("attach_variable_set_to_workspaces", r.enabledToolsets) {
-		tool := r.createDynamicTFETool("attach_variable_set_to_workspaces", tfeTools.AttachVariableSetToWorkspaces)
-		r.mcpServer.AddTool(tool.Tool, tool.Handler)
-	}
-
-	if toolsets.IsToolEnabled("detach_variable_set_from_workspaces", r.enabledToolsets) {
-		tool := r.createDynamicTFETool("detach_variable_set_from_workspaces", tfeTools.DetachVariableSetFromWorkspaces)
-		r.mcpServer.AddTool(tool.Tool, tool.Handler)
-	}
-
-	if toolsets.IsToolEnabled("attach_policy_set_to_workspaces", r.enabledToolsets) {
-		tool := r.createDynamicTFETool("attach_policy_set_to_workspaces", tfeTools.AttachPolicySetToWorkspaces)
-		r.mcpServer.AddTool(tool.Tool, tool.Handler)
-	}
-
-	if toolsets.IsToolEnabled("list_workspace_policy_sets", r.enabledToolsets) {
-		tool := r.createDynamicTFETool("list_workspace_policy_sets", tfeTools.ListWorkspacePolicySets)
-		r.mcpServer.AddTool(tool.Tool, tool.Handler)
-	}
-
-	// Terraform toolset - Variable tools
-	if toolsets.IsToolEnabled("list_workspace_variables", r.enabledToolsets) {
-		tool := r.createDynamicTFETool("list_workspace_variables", tfeTools.ListWorkspaceVariables)
-		r.mcpServer.AddTool(tool.Tool, tool.Handler)
-	}
-
-	if toolsets.IsToolEnabled("create_workspace_variable", r.enabledToolsets) {
-		tool := r.createDynamicTFETool("create_workspace_variable", tfeTools.CreateWorkspaceVariable)
-		r.mcpServer.AddTool(tool.Tool, tool.Handler)
-	}
-
-	if toolsets.IsToolEnabled("update_workspace_variable", r.enabledToolsets) {
-		tool := r.createDynamicTFETool("update_workspace_variable", tfeTools.UpdateWorkspaceVariable)
-		r.mcpServer.AddTool(tool.Tool, tool.Handler)
-	}
-
-	if toolsets.IsToolEnabled("get_token_permissions", r.enabledToolsets) {
-		tool := r.createDynamicTFETool("get_token_permissions", tfeTools.GetTokenPermissions)
-		r.mcpServer.AddTool(tool.Tool, tool.Handler)
-	}
-
-	// Terraform toolset - Stacks
-	if toolsets.IsToolEnabled("list_stacks", r.enabledToolsets) {
-		tool := r.createDynamicTFETool("list_stacks", tfeTools.ListStacks)
-		r.mcpServer.AddTool(tool.Tool, tool.Handler)
-	}
-	if toolsets.IsToolEnabled("get_stack_details", r.enabledToolsets) {
-		tool := r.createDynamicTFETool("get_stack_details", tfeTools.GetStackDetails)
-		r.mcpServer.AddTool(tool.Tool, tool.Handler)
-	}
-
-	// Terraform State-Version Toolsets
-	if toolsets.IsToolEnabled("list_state_versions", r.enabledToolsets) {
-		tool := r.createDynamicTFETool("list_state_versions", tfeTools.ListStateVersions)
-		r.mcpServer.AddTool(tool.Tool, tool.Handler)
-	}
-
-	if toolsets.IsToolEnabled("get_state_version", r.enabledToolsets) {
-		tool := r.createDynamicTFETool("get_state_version", tfeTools.GetStateVersion)
-		r.mcpServer.AddTool(tool.Tool, tool.Handler)
-	}
-
-	// Terraform Toolset - Comments
-	if toolsets.IsToolEnabled("get_run_comments", r.enabledToolsets) {
-		tool := r.createDynamicTFETool("get_run_comments", tfeTools.GetRunComments)
-		r.mcpServer.AddTool(tool.Tool, tool.Handler)
-	}
 	r.tfeToolsRegistered = true
 }
 

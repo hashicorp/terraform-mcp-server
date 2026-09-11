@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/hashicorp/terraform-mcp-server/pkg/mcp-official/tools"
+	"github.com/hashicorp/terraform-mcp-server/pkg/toolsets"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	log "github.com/sirupsen/logrus"
@@ -43,7 +44,7 @@ func WithMiddlewares(mw ...mcp.Middleware) Option {
 	}
 }
 
-func NewServer(version, instructions string, heartbeatInterval time.Duration, logger *log.Logger, enabledToolsets []string, opts ...Option) *mcp.Server {
+func NewServer(version, instructions string, heartbeatInterval time.Duration, logger *log.Logger, filter toolsets.ToolFilter, opts ...Option) *mcp.Server {
 	cfg := &serverConfig{mcpOpts: mcp.ServerOptions{Instructions: instructions}}
 	if heartbeatInterval > 0 {
 		logger.Infof("HTTP heartbeat enabled with interval: %v", heartbeatInterval)
@@ -69,6 +70,6 @@ func NewServer(version, instructions string, heartbeatInterval time.Duration, lo
 		svr.AddReceivingMiddleware(cfg.middlewares...)
 	}
 
-	tools.RegisterTools(svr, logger, enabledToolsets)
+	tools.RegisterTools(svr, logger, filter)
 	return svr
 }

@@ -12,6 +12,7 @@ import (
 	"unsafe"
 
 	"github.com/hashicorp/terraform-mcp-server/pkg/client"
+	"github.com/hashicorp/terraform-mcp-server/pkg/toolsets"
 	"github.com/mark3labs/mcp-go/mcp"
 	mcpserver "github.com/mark3labs/mcp-go/server"
 	log "github.com/sirupsen/logrus"
@@ -269,7 +270,7 @@ func TestNewServerWithHooksOptionPassesThrough(t *testing.T) {
 	customHooks := &mcpserver.Hooks{}
 	customHooks.AddBeforeCallTool(func(ctx context.Context, id any, message *mcp.CallToolRequest) {})
 
-	srv, _ := NewServer("test-version", metricsTestLogger(), nil, mcpserver.WithHooks(customHooks))
+	srv, _ := NewServer("test-version", metricsTestLogger(), toolsets.ToolFilter{}, mcpserver.WithHooks(customHooks))
 	hooks := getServerHooksForTest(t, srv)
 
 	require.GreaterOrEqual(t, len(hooks.OnBeforeCallTool), 1)

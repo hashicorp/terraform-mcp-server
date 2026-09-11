@@ -3,108 +3,32 @@
 
 package toolsets
 
-import "strings"
+import (
+	"strings"
+	"sync"
+)
 
-var ToolToToolset = map[string]string{
-	// Public Registry tools (providers, modules, policies)
-	"search_providers":            Registry,
-	"get_provider_details":        Registry,
-	"get_latest_provider_version": Registry,
-	"get_provider_capabilities":   Registry,
-	"search_modules":              Registry,
-	"get_module_details":          Registry,
-	"get_latest_module_version":   Registry,
-	"search_policies":             Registry,
-	"get_policy_details":          Registry,
-
-	// Private Registry tools (TFE/TFC private registry)
-	"search_private_modules":       RegistryPrivate,
-	"get_private_module_details":   RegistryPrivate,
-	"search_private_providers":     RegistryPrivate,
-	"get_private_provider_details": RegistryPrivate,
-
-	// Terraform tools - User
-	"whoami":                Terraform,
-	"get_token_permissions": Terraform,
-
-	// Terraform tools - Organization
-	"list_terraform_orgs": Terraform,
-
-	// Terraform tools - Projects
-	"list_terraform_projects": Terraform,
-	"create_project":          Terraform,
-	"get_project":             Terraform,
-	"delete_project":          Terraform,
-
-	// Terraform tools - Teams
-	"list_teams":        Terraform,
-	"get_team":          Terraform,
-	"create_team":       Terraform,
-	"add_team_member":   Terraform,
-	"grant_team_access": Terraform,
-	"delete_team":       Terraform,
-
-	// Terraform tools - Workspaces
-	"list_workspaces":          Terraform,
-	"get_workspace_details":    Terraform,
-	"create_workspace":         Terraform,
-	"create_no_code_workspace": Terraform,
-	"update_workspace":         Terraform,
-	"delete_workspace_safely":  Terraform,
-	"force_unlock_workspace":   Terraform,
-
-	// Terraform tools - Runs and Plans
-	"list_runs":            Terraform,
-	"get_run_details":      Terraform,
-	"get_run_comments":     Terraform,
-	"create_run":           Terraform,
-	"action_run":           Terraform,
-	"get_plan_details":     Terraform,
-	"get_plan_logs":        Terraform,
-	"get_plan_json_output": Terraform,
-	"get_apply_details":    Terraform,
-	"get_apply_logs":       Terraform,
-	"get_sentinel_mock":    Terraform,
-
-	// Terraform tools - Workspace Variables
-	"list_workspace_variables":  Terraform,
-	"create_workspace_variable": Terraform,
-	"update_workspace_variable": Terraform,
-
-	// Terraform tools - Variable Sets
-	"list_variable_sets":                  Terraform,
-	"create_variable_set":                 Terraform,
-	"create_variable_in_variable_set":     Terraform,
-	"delete_variable_in_variable_set":     Terraform,
-	"attach_variable_set_to_workspaces":   Terraform,
-	"detach_variable_set_from_workspaces": Terraform,
-
-	// Terraform tools - Tags and Policies
-	"create_workspace_tags":           Terraform,
-	"read_workspace_tags":             Terraform,
-	"attach_policy_set_to_workspaces": Terraform,
-	"list_workspace_policy_sets":      Terraform,
-
-	// Terraform tools - Stacks
-	"list_stacks":       Terraform,
-	"get_stack_details": Terraform,
-
-	// Terraform tools - State Versions
-	"list_state_versions": Terraform,
-	"get_state_version":   Terraform,
-}
+// toolsetIndex is a memoized "tool name -> toolset name" lookup, built once
+// from AllTools (registry.go) instead of hand-maintaining a second map
+var toolsetIndex = sync.OnceValue(func() map[string]string {
+	index := make(map[string]string, len(AllTools))
+	for _, td := range AllTools {
+		index[td.Name] = td.Toolset
+	}
+	return index
+})
 
 // GetToolsetForTool returns the toolset name for a given tool name
 func GetToolsetForTool(toolName string) (string, bool) {
-	toolset, exists := ToolToToolset[toolName]
+	toolset, exists := toolsetIndex()[toolName]
 	return toolset, exists
 }
 
-// KnownToolNames returns every tool name registered in ToolToToolset
+// KnownToolNames returns every tool name registered in toolsetIndex
 func KnownToolNames() map[string]bool {
-
-	validTools := make(map[string]bool)
-	for toolName := range ToolToToolset {
+	index := toolsetIndex()
+	validTools := make(map[string]bool, len(index))
+	for toolName := range index {
 		validTools[toolName] = true
 	}
 	return validTools
@@ -134,33 +58,4 @@ func ParseIndividualTools(toolNames []string) ([]string, []string) {
 	}
 
 	return valid, invalid
-}
-
-// EnableIndividualTools creates a toolset list for individual tool filtering mode
-// The returned list includes an internal marker plus the specified tool names
-func EnableIndividualTools(toolNames []string) []string {
-	result := make([]string, 0, len(toolNames)+1)
-	result = append(result, individualToolsMarker)
-	result = append(result, toolNames...)
-	return result
-}
-
-// IsToolEnabled checks if a tool is enabled based on the enabled toolsets.
-//
-// NOTE: this is the pre-migration []string + sentinel-marker encoding.
-// ToolFilter (filter.go) is the new, typed replacement — new code should
-// prefer NewToolsetFilter/NewIndividualToolFilter. This function stays as-is
-// until call sites (main.go, dynamic_tool.go) are migrated in a later PR.
-func IsToolEnabled(toolName string, enabledToolsets []string) bool {
-	if ContainsToolset(enabledToolsets, All) {
-		return true
-	}
-	if ContainsToolset(enabledToolsets, individualToolsMarker) {
-		return ContainsToolset(enabledToolsets, toolName)
-	}
-	toolset, exists := GetToolsetForTool(toolName)
-	if !exists {
-		return false
-	}
-	return ContainsToolset(enabledToolsets, toolset)
 }
