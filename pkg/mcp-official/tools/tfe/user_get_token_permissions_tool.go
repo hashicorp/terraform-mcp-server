@@ -49,7 +49,6 @@ func GetTokenPermissionsFunc(ctx context.Context, request *mcp.CallToolRequest, 
 		return nil, nil, fmt.Errorf("failed to read organization %q: %w", terraformOrgName, err)
 	}
 
-	// The bare array matches the mark3labs tool and test/terraform/user_test.go.
 	buf, err := json.Marshal(tfeclient.HumanReadableTokenPermissions(org.Permissions))
 	if err != nil {
 		return nil, nil, fmt.Errorf("marshaling token permissions: %w", err)
