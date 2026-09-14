@@ -34,4 +34,20 @@ func RegisterTools(svr *mcp.Server, logger *log.Logger, filter toolsets.ToolFilt
 			register(svr)
 		}
 	}
+
+	if toolsets.IsToolEnabled("list_teams", enabledToolsets) {
+		mcp.AddTool(svr, tfeTools.ListTeamsTool(), tfeTools.ListTeamsFunc)
+	}
+	if toolsets.IsToolEnabled("get_team", enabledToolsets) {
+		mcp.AddTool(svr, tfeTools.GetTeamTool(), tfeTools.GetTeamFunc)
+	}
+	if toolsets.IsToolEnabled("create_team", enabledToolsets) {
+		mcp.AddTool(svr, tfeTools.CreateTeamTool(), tfeTools.CreateTeamFunc)
+	}
+	if toolsets.IsToolEnabled("add_team_member", enabledToolsets) {
+		mcp.AddTool(svr, tfeTools.AddTeamMemberTool(), tfeTools.AddTeamMemberFunc)
+	}
+	if toolsets.IsToolEnabled("grant_team_access", enabledToolsets) {
+		mcp.AddTool(svr, tfeTools.GrantTeamAccessTool(), tfeTools.GrantTeamAccessFunc)
+	}
 }
