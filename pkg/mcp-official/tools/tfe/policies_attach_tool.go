@@ -67,9 +67,5 @@ func AttachPolicySetToWorkspacesFunc(ctx context.Context, request *mcp.CallToolR
 		return nil, nil, fmt.Errorf("failed to attach policy set %q to workspaces: %w", policySetID, err)
 	}
 
-	return &mcp.CallToolResult{
-		Content: []mcp.Content{&mcp.TextContent{
-			Text: fmt.Sprintf("Successfully attached policy set %q to %d workspace(s)", policySetID, len(workspaces)),
-		}},
-	}, nil, nil
+	return textResult(fmt.Sprintf("Successfully attached policy set %q to %d workspace(s)", policySetID, len(workspaces))), nil, nil
 }
