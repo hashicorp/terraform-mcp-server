@@ -1,7 +1,7 @@
 package tools
 
 import (
-	"log"
+	"log/slog"
 	"strings"
 
 	tfeTools "github.com/hashicorp/terraform-mcp-server/pkg/mcp-official/tools/tfe"
@@ -46,7 +46,7 @@ func isTerraformOperationsEnabled() bool {
 	return strings.ToLower(envVar) == "true"
 }
 
-func RegisterTools(svr *mcp.Server, logger *log.Logger, filter toolsets.ToolFilter) {
+func RegisterTools(svr *mcp.Server, logger *slog.Logger, filter toolsets.ToolFilter) {
 
 	tfOpsEnabled := isTerraformOperationsEnabled()
 
