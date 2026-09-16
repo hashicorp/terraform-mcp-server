@@ -14,7 +14,7 @@ import (
 )
 
 // ListWorkspacePolicySetsSummary holds a trimmed view of a single policy set that
-// applies to a workspace, along with the reason it applies.
+// applies to a workspace
 type ListWorkspacePolicySetsSummary struct {
 	ID          string `json:"id"`
 	Name        string `json:"name"`
@@ -32,7 +32,6 @@ type ListWorkspacePolicySetsSummaryList struct {
 
 // ListWorkspacePolicySetsArguments holds the required inputs for listing policy sets attached to a workspace.
 type ListWorkspacePolicySetsArguments struct {
-	// Required field
 	TerraformOrgName string `json:"terraform_org_name" jsonschema:"The name of the Terraform Cloud/Enterprise organization"`
 	WorkspaceID      string `json:"workspace_id" jsonschema:"The workspace ID to get policy sets for (e.g., ws-2HRvNs49EWPjDqT1)"`
 }
@@ -43,13 +42,16 @@ func ListWorkspacePolicySetsTool() *mcp.Tool {
 		Description: "Read all policy sets attached to a workspace. Returns both directly attached policy sets and global policy sets that apply to all workspaces.",
 		Annotations: &mcp.ToolAnnotations{
 			Title:           "List Terraform workspaces policy sets",
-			OpenWorldHint:   ptr(true),
 			ReadOnlyHint:    true,
 			DestructiveHint: ptr(false),
 		},
 	}
 }
 
+// ListWorkspacePolicySetsFunc returns every policy set that applies to the workspace,
+// directly attached or global. The result is always the same shape, an object holding an
+// items array, so a workspace with no policy sets reports an empty list rather than a
+// differently shaped payload the model has to interpret.
 func ListWorkspacePolicySetsFunc(ctx context.Context, request *mcp.CallToolRequest, input ListWorkspacePolicySetsArguments) (*mcp.CallToolResult, *ListWorkspacePolicySetsSummaryList, error) {
 	terraformOrgName := strings.TrimSpace(input.TerraformOrgName)
 	workspaceID := strings.TrimSpace(input.WorkspaceID)
@@ -71,12 +73,16 @@ func ListWorkspacePolicySetsFunc(ctx context.Context, request *mcp.CallToolReque
 		return nil, nil, fmt.Errorf("workspace not found %q: %w", workspaceID, err)
 	}
 
+	// A workspace belongs to exactly one org and policy sets are org-scoped, so a
+	// mismatch would report this org's global policy sets against a foreign workspace.
 	if workspace.Organization != nil && !strings.EqualFold(workspace.Organization.Name, terraformOrgName) {
 		return nil, nil, fmt.Errorf("workspace %q belongs to organization %q, not %q",
 			workspaceID, workspace.Organization.Name, terraformOrgName)
 	}
 
-	var matchingSets []*ListWorkspacePolicySetsSummary
+	// Paginate through all policy sets with the workspaces included. The slice starts
+	// empty rather than nil so an unmatched workspace marshals as [] instead of null.
+	matchingSets := []*ListWorkspacePolicySetsSummary{}
 	pageNumber := 1
 
 	for {
@@ -119,16 +125,6 @@ func ListWorkspacePolicySetsFunc(ctx context.Context, request *mcp.CallToolReque
 			break
 		}
 		pageNumber++
-	}
-
-	// Explicit Content suppresses the SDK's marshalled-JSON fallback text, and the empty
-	// (non-nil) slice serializes as [] rather than null.
-	if len(matchingSets) == 0 {
-		return &mcp.CallToolResult{
-			Content: []mcp.Content{&mcp.TextContent{
-				Text: fmt.Sprintf("No policy sets are attached to workspace %q", workspaceID),
-			}},
-		}, &ListWorkspacePolicySetsSummaryList{Items: []*ListWorkspacePolicySetsSummary{}}, nil
 	}
 
 	return nil, &ListWorkspacePolicySetsSummaryList{Items: matchingSets}, nil
