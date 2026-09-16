@@ -9,7 +9,6 @@ import (
 	"sync"
 
 	"github.com/hashicorp/terraform-mcp-server/pkg/client"
-	tfeTools "github.com/hashicorp/terraform-mcp-server/pkg/tools/tfe"
 	"github.com/hashicorp/terraform-mcp-server/pkg/toolsets"
 	"github.com/hashicorp/terraform-mcp-server/pkg/utils"
 	"github.com/mark3labs/mcp-go/mcp"
@@ -106,60 +105,25 @@ func (r *DynamicToolRegistry) registerTFETools() {
 
 	tfOpsEnabled := isTerraformOperationsEnabled()
 
-	for _, td := range toolsets.AllTools {
-		if !td.RequiresTFE || !r.filter.IsToolEnabled(td.Name) {
-			continue
-		}
+	for _, td := range r.filter.EnabledTools(func(td toolsets.ToolDef) bool { return td.RequiresTFE }) {
 		if td.RequiresTFOps && !tfOpsEnabled {
 			continue
 		}
 
-		switch td.Name {
-		case "create_no_code_workspace":
-			// Needs *server.MCPServer too, for elicitation
-			tool := r.createDynamicTFEToolWithElicitation(td.Name, tfeTools.CreateNoCodeWorkspace)
-			r.mcpServer.AddTool(tool.Tool, tool.Handler)
-			continue
-		case "create_run":
-			// create_run is always registered when its toolset is enabled. Unlike the
-			// other RequiresTFOps tools, ENABLE_TF_OPERATIONS doesn't hide it — it just
-			// swaps which factory (safe vs. full) backs it
-			factory := tfeTools.CreateRunSafe
-			if tfOpsEnabled {
-				factory = tfeTools.CreateRun
-			}
-			tool := r.createDynamicTFETool(td.Name, factory)
-			r.mcpServer.AddTool(tool.Tool, tool.Handler)
-			continue
-		}
-		factory, ok := toolFactories[td.Name]
-		if !ok {
+		var built server.ServerTool
+		if special, ok := specialFactories[td.Name]; ok {
+			built = special(r.logger, r.mcpServer, tfOpsEnabled)
+		} else if factory, ok := toolFactories[td.Name]; ok {
+			built = factory(r.logger)
+		} else {
 			r.logger.Warnf("no tool factory registered for %q; skipping", td.Name)
 			continue
 		}
-		tool := r.createDynamicTFETool(td.Name, factory)
-		r.mcpServer.AddTool(tool.Tool, tool.Handler)
+
+		r.mcpServer.AddTool(built.Tool, r.wrapWithAvailabilityCheck(td.Name, built.Handler))
 	}
 
 	r.tfeToolsRegistered = true
-}
-
-// createDynamicTFETool creates a TFE tool with dynamic availability checking
-func (r *DynamicToolRegistry) createDynamicTFETool(toolName string, toolFactory func(*log.Logger) server.ServerTool) server.ServerTool {
-	originalTool := toolFactory(r.logger)
-	return server.ServerTool{
-		Tool:    originalTool.Tool,
-		Handler: r.wrapWithAvailabilityCheck(toolName, originalTool.Handler),
-	}
-}
-
-// createDynamicTFEToolWithElicitation creates a TFE tool with dynamic availability checking that also needs MCPServer for elicitation
-func (r *DynamicToolRegistry) createDynamicTFEToolWithElicitation(toolName string, toolFactory func(*log.Logger, *server.MCPServer) server.ServerTool) server.ServerTool {
-	originalTool := toolFactory(r.logger, r.mcpServer)
-	return server.ServerTool{
-		Tool:    originalTool.Tool,
-		Handler: r.wrapWithAvailabilityCheck(toolName, originalTool.Handler),
-	}
 }
 
 // wrapWithAvailabilityCheck wraps a tool handler with dynamic TFE availability checking
