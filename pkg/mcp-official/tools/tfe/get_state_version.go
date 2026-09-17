@@ -40,10 +40,6 @@ func GetStateVersionTool() *mcp.Tool {
 					Description: "Optional Workspace id to fetch latest version",
 				},
 			},
-			AnyOf: []*jsonschema.Schema{
-				{Required: []string{"state_version_id"}},
-				{Required: []string{"workspace_id"}},
-			},
 		},
 		Annotations: &mcp.ToolAnnotations{
 			Title:           "Get Terraform state version",
