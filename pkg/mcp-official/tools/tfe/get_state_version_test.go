@@ -25,12 +25,9 @@ func TestGetStateVersionTool(t *testing.T) {
 	require.True(t, ok)
 	assert.NotContains(t, schema.Required, "state_version_id")
 	assert.NotContains(t, schema.Required, "workspace_id")
-	require.Len(t, schema.AnyOf, 2)
-	assert.Contains(t, schema.AnyOf[0].Required, "state_version_id")
-	assert.Contains(t, schema.AnyOf[1].Required, "workspace_id")
 }
 
-func TestGetStateVersionParameterValidation(t *testing.T) {
+func TestGetStateVersionSchemaValidation(t *testing.T) {
 	tool := GetStateVersionTool()
 	schema, ok := tool.InputSchema.(*jsonschema.Schema)
 	require.True(t, ok)
@@ -43,7 +40,11 @@ func TestGetStateVersionParameterValidation(t *testing.T) {
 		expectError bool
 	}{
 		{name: "state version present", params: map[string]any{"state_version_id": "sv-abc123"}},
-		{name: "both IDs missing", params: map[string]any{}, expectError: true},
+		{name: "workspace present", params: map[string]any{"workspace_id": "ws-abc123"}},
+		{name: "invalid state version type", params: map[string]any{"state_version_id": 123}, expectError: true},
+		{name: "invalid workspace type", params: map[string]any{"workspace_id": 123}, expectError: true},
+		// Missing IDs must reach the handler so it can return the existing error message.
+		{name: "both IDs missing", params: map[string]any{}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -53,6 +54,24 @@ func TestGetStateVersionParameterValidation(t *testing.T) {
 			} else {
 				assert.NoError(t, err)
 			}
+		})
+	}
+}
+
+func TestGetStateVersionFunc_ReturnsErrorWhenIDsAreMissingOrBlank(t *testing.T) {
+	tests := []struct {
+		name  string
+		input GetStateVersionArguments
+	}{
+		{name: "missing IDs"},
+		{name: "blank IDs", input: GetStateVersionArguments{StateVersionID: "  ", WorkspaceID: "\t"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, output, err := GetStateVersionFunc(t.Context(), nil, tt.input)
+			require.EqualError(t, err, "One of state_version_id or workspace_id must be provided")
+			assert.Nil(t, result)
+			assert.Nil(t, output)
 		})
 	}
 }
