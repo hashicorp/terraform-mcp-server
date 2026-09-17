@@ -18,10 +18,12 @@ type ReadWorkspaceTagsArguments struct {
 	WorkspaceName    string `json:"workspace_name" jsonschema:"The name of the Terraform Cloud/Enterprise Workspace"`
 }
 
-// ReadWorkspaceTagsResult holds the tags and tag bindings for a workspace.
+// ReadWorkspaceTagsResult holds the tags and tag bindings for a workspace. The workspace
+// name is echoed back so a caller can confirm which workspace the tags belong to.
 type ReadWorkspaceTagsResult struct {
-	Tags        []string `json:"tags"`
-	TagBindings []string `json:"tag_bindings"`
+	WorkspaceName string   `json:"workspace_name"`
+	Tags          []string `json:"tags"`
+	TagBindings   []string `json:"tag_bindings"`
 }
 
 func ReadWorkspaceTagsTool() *mcp.Tool {
@@ -61,7 +63,9 @@ func ReadWorkspaceTagsFunc(ctx context.Context, request *mcp.CallToolRequest, in
 		return nil, nil, fmt.Errorf("failed to list tags for workspace %q: %w", workspaceName, err)
 	}
 
-	var tagNames []string
+	// Both lists start empty rather than nil so an untagged workspace reports [] instead
+	// of null.
+	tagNames := []string{}
 	for _, tag := range tags.Items {
 		tagNames = append(tagNames, tag.Name)
 	}
@@ -71,17 +75,14 @@ func ReadWorkspaceTagsFunc(ctx context.Context, request *mcp.CallToolRequest, in
 		return nil, nil, fmt.Errorf("failed to list tag bindings for workspace %q: %w", workspaceName, err)
 	}
 
-	var tagBindings []string
+	tagBindings := []string{}
 	for _, binding := range bindings {
-		if binding.Value != "" {
-			tagBindings = append(tagBindings, fmt.Sprintf("%s:%s", binding.Key, binding.Value))
-		} else {
-			tagBindings = append(tagBindings, binding.Key)
-		}
+		tagBindings = append(tagBindings, formatTagBinding(binding))
 	}
 
 	return nil, &ReadWorkspaceTagsResult{
-		Tags:        tagNames,
-		TagBindings: tagBindings,
+		WorkspaceName: workspaceName,
+		Tags:          tagNames,
+		TagBindings:   tagBindings,
 	}, nil
 }

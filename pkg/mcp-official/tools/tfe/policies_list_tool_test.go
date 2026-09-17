@@ -7,7 +7,6 @@ import (
 	"testing"
 
 	"github.com/google/jsonschema-go/jsonschema"
-	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -45,37 +44,12 @@ func TestListWorkspacePolicySetsInputSchema(t *testing.T) {
 // validate. A non-object root in either schema is dropped silently at discovery, so the
 // tool would simply not exist for those clients while every other test still passed.
 func TestListWorkspacePolicySetsSchemasAreObjectRooted(t *testing.T) {
-	server := mcp.NewServer(&mcp.Implementation{Name: "test", Version: "v0.0.0"}, nil)
-	mcp.AddTool(server, ListWorkspacePolicySetsTool(), ListWorkspacePolicySetsFunc)
+	listed := listedTool(t, ListWorkspacePolicySetsTool(), ListWorkspacePolicySetsFunc)
 
-	serverTransport, clientTransport := mcp.NewInMemoryTransports()
-	serverSession, err := server.Connect(t.Context(), serverTransport, nil)
-	require.NoError(t, err)
-	defer serverSession.Close()
+	objectSchema(t, listed.InputSchema, "input schema")
 
-	clientSession, err := mcp.NewClient(&mcp.Implementation{Name: "test", Version: "v0.0.0"}, nil).
-		Connect(t.Context(), clientTransport, nil)
-	require.NoError(t, err)
-	defer clientSession.Close()
-
-	tools, err := clientSession.ListTools(t.Context(), nil)
-	require.NoError(t, err)
-	require.Len(t, tools.Tools, 1)
-
-	listed := tools.Tools[0]
-
-	// The listed schemas arrive as decoded JSON, so assert on the wire shape.
-	inputSchema, ok := listed.InputSchema.(map[string]any)
-	require.True(t, ok, "input schema should decode to a JSON object")
-	assert.Equal(t, "object", inputSchema["type"])
-
-	outputSchema, ok := listed.OutputSchema.(map[string]any)
-	require.True(t, ok, "output schema should decode to a JSON object")
-	assert.Equal(t, "object", outputSchema["type"], "a bare array root would be dropped by strict clients")
-
-	properties, ok := outputSchema["properties"].(map[string]any)
-	require.True(t, ok, "output schema should declare properties")
-	assert.Contains(t, properties, "items", "policy sets belong under items, not at the root")
+	outputProperties := objectSchema(t, listed.OutputSchema, "output schema")
+	assert.Contains(t, outputProperties, "items", "policy sets belong under items, not at the root")
 }
 
 func TestListWorkspacePolicySetsRejectsBlankArguments(t *testing.T) {
