@@ -25,6 +25,9 @@ var officialFactories = map[string]func(svr *mcp.Server){
 	"read_workspace_tags": func(svr *mcp.Server) {
 		mcp.AddTool(svr, tfeTools.ReadWorkspaceTagsTool(), tfeTools.ReadWorkspaceTagsFunc)
 	},
+	"create_workspace_tags": func(svr *mcp.Server) {
+		mcp.AddTool(svr, tfeTools.CreateWorkspaceTagsTool(), tfeTools.CreateWorkspaceTagsFunc)
+	},
 	"list_workspace_policy_sets": func(svr *mcp.Server) {
 		mcp.AddTool(svr, tfeTools.ListWorkspacePolicySetsTool(), tfeTools.ListWorkspacePolicySetsFunc)
 	},
