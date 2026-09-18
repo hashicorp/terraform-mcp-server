@@ -521,7 +521,7 @@ func writeExamplePayload(b *strings.Builder, schemas map[string]listResourceEntr
 // attributes and block types. Required items always appear; optional ones are
 // skipped to keep the example concise.
 func buildExampleAttributes(attrs map[string]listResourceAttribute, blockTypes map[string]listResourceBlockType) []map[string]any {
-	var result []map[string]any
+	result := make([]map[string]any, 0)
 
 	// Required scalar attributes first.
 	for _, name := range sortedKeys(attrs) {
