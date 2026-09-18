@@ -124,9 +124,6 @@ func ListWorkspacesFunc(ctx context.Context, request *mcp.CallToolRequest, input
 	if err != nil {
 		return nil, nil, fmt.Errorf("listing workspaces in organization %q: %w", terraformOrgName, err)
 	}
-	if len(workspaces.Items) == 0 {
-		return nil, nil, fmt.Errorf("no workspaces to list in organization %q", terraformOrgName)
-	}
 
 	summaries := make([]*WorkspaceSummary, len(workspaces.Items))
 	for i, w := range workspaces.Items {
@@ -144,7 +141,6 @@ func ListWorkspacesFunc(ctx context.Context, request *mcp.CallToolRequest, input
 		Items:             summaries,
 		PaginationDetails: paginationDetails(workspaces.Pagination),
 	}, nil
-
 }
 
 // normaliseCommaSeparated normalizes a comma-separated list by trimming whitespace around
@@ -155,7 +151,6 @@ func normaliseCommaSeparated(value string) string {
 	}
 
 	parts := strings.Split(value, ",")
-
 	result := make([]string, 0, len(parts))
 	for _, part := range parts {
 		if part = strings.TrimSpace(part); part != "" {

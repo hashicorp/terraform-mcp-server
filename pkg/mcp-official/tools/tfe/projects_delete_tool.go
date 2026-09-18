@@ -14,7 +14,6 @@ import (
 
 // DeleteProjectArguments holds the input parameters for deleting a project.
 type DeleteProjectArguments struct {
-	// Required field
 	ProjectID string `json:"project_id" jsonschema:"The ID of the Project to delete (e.g., 'prj-abc123def456')"`
 }
 

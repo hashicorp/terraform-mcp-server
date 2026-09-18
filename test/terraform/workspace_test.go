@@ -317,10 +317,11 @@ func TestWorkspaceErrorPaths(t *testing.T) {
 	})
 
 	t.Run("list_workspaces non-existent org", func(t *testing.T) {
-		result, _ := callTool(t, s, "list_workspaces", map[string]any{
+		result, resultText := callTool(t, s, "list_workspaces", map[string]any{
 			"terraform_org_name": nonExistentOrg,
 		})
 		assert.True(t, result.IsError, "list_workspaces with a non-existent org should return an error")
+		assert.Contains(t, resultText, nonExistentOrg, "error should reference the org that was not found")
 	})
 
 	t.Run("get_workspace_details non-existent workspace", func(t *testing.T) {
