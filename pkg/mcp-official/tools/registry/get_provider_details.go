@@ -9,8 +9,8 @@ import (
 	"fmt"
 	"path"
 	"strconv"
-	"strings"
 
+	"github.com/google/jsonschema-go/jsonschema"
 	registryapi "github.com/hashicorp/terraform-mcp-server/pkg/client"
 	"github.com/hashicorp/terraform-mcp-server/pkg/mcp-official/client"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -18,7 +18,7 @@ import (
 )
 
 type GetProviderDetailsArguments struct {
-	ProviderDocID string `json:"provider_doc_id" jsonschema:"Exact tfprovider-compatible provider_doc_id, (e.g., '8894603', '8906901') retrieved from 'search_providers'"`
+	ProviderDocID string `json:"provider_doc_id"`
 }
 
 func GetProviderDetailsTool() *mcp.Tool {
@@ -31,11 +31,23 @@ func GetProviderDetailsTool() *mcp.Tool {
 			ReadOnlyHint:    true,
 			DestructiveHint: ptr(false),
 		},
+		InputSchema: &jsonschema.Schema{
+			Type: "object",
+			Properties: map[string]*jsonschema.Schema{
+				"provider_doc_id": {
+					Type:        "string",
+					Description: "Exact tfprovider-compatible provider_doc_id, (e.g., '8894603', '8906901') retrieved from 'search_providers'",
+				},
+			},
+			Required: []string{"provider_doc_id"},
+		},
 	}
 }
 
 func GetProviderDetailsFunc(ctx context.Context, request *mcp.CallToolRequest, input GetProviderDetailsArguments) (*mcp.CallToolResult, any, error) {
-	providerDocID := strings.TrimSpace(input.ProviderDocID)
+	// TODO: Replace with structured slog logging
+	logger := log.StandardLogger()
+	providerDocID := GetString(input.ProviderDocID, "")
 	if providerDocID == "" {
 		return nil, nil, fmt.Errorf("provider_doc_id cannot be empty")
 	}
@@ -48,7 +60,7 @@ func GetProviderDetailsFunc(ctx context.Context, request *mcp.CallToolRequest, i
 		return nil, nil, fmt.Errorf("failed to get http client for public Terraform registry: %w", err)
 	}
 
-	detailResp, err := registryapi.SendRegistryCall(ctx, httpClient, "GET", path.Join("provider-docs", providerDocID), log.StandardLogger(), "v2")
+	detailResp, err := registryapi.SendRegistryCall(ctx, httpClient, "GET", path.Join("provider-docs", providerDocID), logger, "v2")
 	if err != nil {
 		return nil, nil, fmt.Errorf("provider doc not found: %s - use search_providers first to find valid provider_doc_id values", providerDocID)
 	}
@@ -61,8 +73,4 @@ func GetProviderDetailsFunc(ctx context.Context, request *mcp.CallToolRequest, i
 	return &mcp.CallToolResult{
 		Content: []mcp.Content{&mcp.TextContent{Text: details.Data.Attributes.Content}},
 	}, nil, nil
-}
-
-func ptr[T any](v T) *T {
-	return &v
 }
