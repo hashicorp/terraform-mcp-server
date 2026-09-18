@@ -6,7 +6,6 @@ package tools
 import (
 	"context"
 	"fmt"
-	"slices"
 	"strings"
 
 	"github.com/google/jsonschema-go/jsonschema"
@@ -17,11 +16,10 @@ import (
 
 const (
 	executionModeLocal  = "local"
-	executionModeAgent  = "agent"
 	executionModeRemote = "remote"
 )
 
-var validExecutionModes = []string{executionModeLocal, executionModeAgent, executionModeRemote}
+var validExecutionModes = []string{executionModeLocal, executionModeRemote}
 
 // CreateProjectResponse is the response shape returned by the create_project tool.
 type CreateProjectResponse struct {
@@ -69,8 +67,8 @@ func CreateProjectTool() *mcp.Tool {
 				},
 				"default_execution_mode": {
 					Type:        "string",
-					Description: "Optional default execution mode for workspaces in the project: local, agent, remote. If not set, workspaces inherit the organization's default execution mode.",
-					Enum:        []any{executionModeLocal, executionModeAgent, executionModeRemote},
+					Description: "Optional default execution mode for workspaces in the project: local, remote. If not set, workspaces inherit the organization's default execution mode.",
+					Enum:        enumOf(validExecutionModes...),
 				},
 			},
 			PropertyOrder: []string{
@@ -108,11 +106,7 @@ func CreateProjectFunc(ctx context.Context, request *mcp.CallToolRequest, input 
 		options.Description = &description
 	}
 
-	if mode := strings.ToLower(strings.TrimSpace(input.DefaultExecutionMode)); mode != "" {
-		if !slices.Contains(validExecutionModes, mode) {
-			return nil, nil, fmt.Errorf("invalid default_execution_mode %q: must be one of %s",
-				input.DefaultExecutionMode, strings.Join(validExecutionModes, ", "))
-		}
+	if mode := strings.TrimSpace(input.DefaultExecutionMode); mode != "" {
 		options.DefaultExecutionMode = tfe.String(mode)
 	}
 
@@ -139,4 +133,15 @@ func CreateProjectFunc(ctx context.Context, request *mcp.CallToolRequest, input 
 
 	return nil, response, nil
 
+}
+
+// enumOf converts string values into the []any form jsonschema.Schema.Enum expects.
+// Lets a tool reuse its package-level list of valid values as the schema constraint,
+// so the two can't drift apart.
+func enumOf(values ...string) []any {
+	out := make([]any, len(values))
+	for i, v := range values {
+		out[i] = v
+	}
+	return out
 }

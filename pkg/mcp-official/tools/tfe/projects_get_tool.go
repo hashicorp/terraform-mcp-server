@@ -27,7 +27,6 @@ type ProjectDetails struct {
 
 // GetProjectArguments holds the input parameters for fetching a single project.
 type GetProjectArguments struct {
-	// Required field
 	ProjectID string `json:"project_id" jsonschema:"The ID of the project to fetch (e.g., 'prj-abc123def456')"`
 }
 
