@@ -9,7 +9,7 @@ import (
 )
 
 // toolsetIndex is a memoized "tool name -> toolset name" lookup, built once
-// from AllTools (registry.go) instead of hand-maintaining a second map
+// from AllTools (all_tools.go) instead of hand-maintaining a second map
 var toolsetIndex = sync.OnceValue(func() map[string]string {
 	index := make(map[string]string, len(AllTools))
 	for _, td := range AllTools {
