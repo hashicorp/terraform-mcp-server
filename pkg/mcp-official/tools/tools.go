@@ -24,6 +24,13 @@ var officialFactories = map[string]func(svr *mcp.Server){
 	"list_terraform_orgs": func(svr *mcp.Server) {
 		mcp.AddTool(svr, tfeTools.ListTerraformOrganizationsTool(), tfeTools.ListTerraformOrganizationsFunc)
 	},
+
+	"list_stacks": func(svr *mcp.Server) {
+		mcp.AddTool(svr, tfeTools.ListStacksTool(), tfeTools.ListStacksFunc)
+	},
+	"get_stack_details": func(svr *mcp.Server) {
+		mcp.AddTool(svr, tfeTools.GetStackDetailsTool(), tfeTools.GetStackDetailsFunc)
+	},
 }
 
 func RegisterTools(svr *mcp.Server, logger *slog.Logger, filter toolsets.ToolFilter) {
