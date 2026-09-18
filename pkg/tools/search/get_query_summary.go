@@ -20,7 +20,16 @@ import (
 
 type querySummary struct {
 	ResourcesDiscovered int                   `json:"resources_discovered"`
+	Resources           []queryResource       `json:"resources"`
 	ListCompletions     []queryListCompletion `json:"list_completions"`
+	Diagnostics         []queryDiagnostic     `json:"diagnostics"`
+}
+
+type queryResource struct {
+	Address      string         `json:"address"`
+	DisplayName  string         `json:"display_name"`
+	Identity     map[string]any `json:"identity"`
+	ResourceType string         `json:"resource_type"`
 }
 
 type queryListCompletion struct {
@@ -29,9 +38,17 @@ type queryListCompletion struct {
 	Total        int    `json:"total"`
 }
 
+type queryDiagnostic struct {
+	Severity string `json:"severity"`
+	Summary  string `json:"summary"`
+	Detail   string `json:"detail,omitempty"`
+}
+
 type queryLogRecord struct {
-	Type         string               `json:"type"`
-	ListComplete *queryListCompletion `json:"list_complete"`
+	Type              string               `json:"type"`
+	ListResourceFound *queryResource       `json:"list_resource_found"`
+	ListComplete      *queryListCompletion `json:"list_complete"`
+	Diagnostic        *queryDiagnostic     `json:"diagnostic"`
 }
 
 // GetQuerySummary retrieves a completed query run's log and summarizes its results.
@@ -92,16 +109,27 @@ func readQuerySummary(ctx context.Context, tfeClient *tfe.Client, queryRunID str
 }
 
 func parseQuerySummary(reader io.Reader) (*querySummary, error) {
-	summary := &querySummary{ListCompletions: []queryListCompletion{}}
+	summary := &querySummary{
+		Resources:       []queryResource{},
+		ListCompletions: []queryListCompletion{},
+		Diagnostics:     []queryDiagnostic{},
+	}
 	lines := bufio.NewReader(reader)
 
 	for {
 		line, err := lines.ReadBytes('\n')
 		if len(line) > 0 {
 			var record queryLogRecord
-			if json.Unmarshal(line, &record) == nil && record.Type == "list_complete" && record.ListComplete != nil {
-				summary.ResourcesDiscovered += record.ListComplete.Total
-				summary.ListCompletions = append(summary.ListCompletions, *record.ListComplete)
+			if json.Unmarshal(line, &record) == nil {
+				switch {
+				case record.Type == "list_resource_found" && record.ListResourceFound != nil:
+					summary.Resources = append(summary.Resources, *record.ListResourceFound)
+				case record.Type == "list_complete" && record.ListComplete != nil:
+					summary.ResourcesDiscovered += record.ListComplete.Total
+					summary.ListCompletions = append(summary.ListCompletions, *record.ListComplete)
+				case record.Type == "diagnostic" && record.Diagnostic != nil:
+					summary.Diagnostics = append(summary.Diagnostics, *record.Diagnostic)
+				}
 			}
 		}
 
@@ -128,4 +156,6 @@ const getQuerySummaryDescription = `Retrieves and parses the NDJSON log for an H
 
 Call get_query_status first and wait for it to return a terminal status, then pass the
 same query_run_id to this tool. The result contains resources_discovered and one
-list_completions entry per list block, with its address, resource_type, and total.`
+resources entry per discovered resource with its display name and identity. It also
+contains one list_completions entry per list block with its address, resource_type,
+and total, plus any Terraform diagnostics that explain an errored query.`
