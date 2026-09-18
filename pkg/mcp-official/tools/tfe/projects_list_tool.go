@@ -78,9 +78,6 @@ func ListProjectsFunc(ctx context.Context, request *mcp.CallToolRequest, input L
 	if err != nil {
 		return nil, nil, fmt.Errorf("listing projects in organization %q: %w", terraformOrgName, err)
 	}
-	if len(projects.Items) == 0 {
-		return nil, nil, fmt.Errorf("no projects to list in organization %q", terraformOrgName)
-	}
 
 	summaries := make([]*ProjectSummary, len(projects.Items))
 	for i, p := range projects.Items {
@@ -94,5 +91,4 @@ func ListProjectsFunc(ctx context.Context, request *mcp.CallToolRequest, input L
 		Items:             summaries,
 		PaginationDetails: paginationDetails(projects.Pagination),
 	}, nil
-
 }

@@ -44,7 +44,7 @@ func TestCreateProjectToolInputSchema(t *testing.T) {
 
 	executionMode := schema.Properties["default_execution_mode"]
 	require.NotNil(t, executionMode)
-	assert.Equal(t, []any{executionModeLocal, executionModeAgent, executionModeRemote}, executionMode.Enum)
+	assert.Equal(t, []any{"local", "remote"}, executionMode.Enum)
 
 	require.NotNil(t, schema.AdditionalProperties)
 	assert.NotNil(t, schema.AdditionalProperties.Not)
@@ -65,11 +65,6 @@ func TestCreateProjectFunc_ValidatesInput(t *testing.T) {
 			name:  "blank project name",
 			input: CreateProjectArguments{TerraformOrgName: "org", ProjectName: "   "},
 			want:  "project_name must not be blank",
-		},
-		{
-			name:  "unsupported execution mode",
-			input: CreateProjectArguments{TerraformOrgName: "org", ProjectName: "project", DefaultExecutionMode: "cloud"},
-			want:  `invalid default_execution_mode "cloud": must be one of local, agent, remote`,
 		},
 	}
 

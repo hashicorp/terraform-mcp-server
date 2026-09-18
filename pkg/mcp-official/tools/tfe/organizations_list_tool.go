@@ -63,9 +63,6 @@ func ListTerraformOrganizationsFunc(ctx context.Context, request *mcp.CallToolRe
 	if err != nil {
 		return nil, nil, fmt.Errorf("listing Terraform organizations: %w", err)
 	}
-	if len(orgs.Items) == 0 {
-		return nil, nil, fmt.Errorf("no organizations to list")
-	}
 
 	summaries := make([]*OrganizationSummary, len(orgs.Items))
 	for i, o := range orgs.Items {
@@ -80,5 +77,4 @@ func ListTerraformOrganizationsFunc(ctx context.Context, request *mcp.CallToolRe
 		Items:             summaries,
 		PaginationDetails: paginationDetails(orgs.Pagination),
 	}, nil
-
 }

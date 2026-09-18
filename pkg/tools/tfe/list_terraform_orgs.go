@@ -55,9 +55,6 @@ func listTerraformOrgsHandler(ctx context.Context, request mcp.CallToolRequest, 
 	if err != nil {
 		return ToolError(logger, "failed to list Terraform organizations", err)
 	}
-	if len(orgs.Items) == 0 {
-		return ToolError(logger, "no organizations to list", err)
-	}
 
 	orgSummaries := make([]*OrganizationSummary, len(orgs.Items))
 	for i, o := range orgs.Items {
