@@ -33,6 +33,9 @@ func TestParseQuerySummary(t *testing.T) {
 	queryLog := strings.Join([]string{
 		`{"type":"list_start","list_start":{"address":"list.aws_instance.example"}}`,
 		`not JSON`,
+		`{"type":"list_resource_found","list_resource_found":{"address":"list.aws_instance.example","display_name":"i-1234567890abcdef0","identity":{"id":"i-1234567890abcdef0"},"identity_version":1,"resource_type":"aws_instance"}}`,
+		`{"type":"list_resource_found","list_resource_found":{"address":"list.aws_s3_bucket.example","display_name":"example-bucket","identity":{"bucket":"example-bucket","region":"us-east-2"},"identity_version":1,"resource_type":"aws_s3_bucket"}}`,
+		`{"type":"diagnostic","diagnostic":{"severity":"warning","summary":"Partial result","detail":"One resource could not be read."}}`,
 		`{"type":"list_complete","list_complete":{"address":"list.aws_instance.example","resource_type":"aws_instance","total":2}}`,
 		`{"type":"list_complete","list_complete":{"address":"list.aws_s3_bucket.example","resource_type":"aws_s3_bucket","total":3}}`,
 	}, "\r\n")
@@ -41,10 +44,27 @@ func TestParseQuerySummary(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Equal(t, 5, summary.ResourcesDiscovered)
+	assert.Equal(t, []queryResource{
+		{
+			Address:      "list.aws_instance.example",
+			DisplayName:  "i-1234567890abcdef0",
+			Identity:     map[string]any{"id": "i-1234567890abcdef0"},
+			ResourceType: "aws_instance",
+		},
+		{
+			Address:      "list.aws_s3_bucket.example",
+			DisplayName:  "example-bucket",
+			Identity:     map[string]any{"bucket": "example-bucket", "region": "us-east-2"},
+			ResourceType: "aws_s3_bucket",
+		},
+	}, summary.Resources)
 	assert.Equal(t, []queryListCompletion{
 		{Address: "list.aws_instance.example", ResourceType: "aws_instance", Total: 2},
 		{Address: "list.aws_s3_bucket.example", ResourceType: "aws_s3_bucket", Total: 3},
 	}, summary.ListCompletions)
+	assert.Equal(t, []queryDiagnostic{
+		{Severity: "warning", Summary: "Partial result", Detail: "One resource could not be read."},
+	}, summary.Diagnostics)
 }
 
 func TestParseQuerySummaryWithoutListCompletions(t *testing.T) {
@@ -52,7 +72,9 @@ func TestParseQuerySummaryWithoutListCompletions(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Zero(t, summary.ResourcesDiscovered)
+	assert.Empty(t, summary.Resources)
 	assert.Empty(t, summary.ListCompletions)
+	assert.Empty(t, summary.Diagnostics)
 }
 
 func TestReadQuerySummary(t *testing.T) {
@@ -65,7 +87,7 @@ func TestReadQuerySummary(t *testing.T) {
 			w.Header().Set("Content-Type", "application/vnd.api+json")
 			_, _ = fmt.Fprintf(w, `{"data":{"type":"queries","id":"qry-test","attributes":{"status":"finished","terraform-version":"1.14.0","generate-config-out":false,"log-read-url":%q}}}`, server.URL+"/logs")
 		case "/logs":
-			logBytes := []byte("\x02{\"type\":\"list_complete\",\"list_complete\":{\"address\":\"list.aws_instance.example\",\"resource_type\":\"aws_instance\",\"total\":2}}\n\x03")
+			logBytes := []byte("\x02{\"type\":\"list_resource_found\",\"list_resource_found\":{\"address\":\"list.aws_instance.example\",\"display_name\":\"i-1234567890abcdef0\",\"identity\":{\"id\":\"i-1234567890abcdef0\"},\"resource_type\":\"aws_instance\"}}\n{\"type\":\"diagnostic\",\"diagnostic\":{\"severity\":\"error\",\"summary\":\"Query failed\",\"detail\":\"Provider returned an error.\"}}\n{\"type\":\"list_complete\",\"list_complete\":{\"address\":\"list.aws_instance.example\",\"resource_type\":\"aws_instance\",\"total\":2}}\n\x03")
 			offset, _ := strconv.Atoi(r.URL.Query().Get("offset"))
 			limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
 			if offset < len(logBytes) {
@@ -84,5 +106,5 @@ func TestReadQuerySummary(t *testing.T) {
 	response, err := readQuerySummary(context.Background(), tfeClient, "qry-test")
 
 	require.NoError(t, err)
-	assert.JSONEq(t, `{"resources_discovered":2,"list_completions":[{"address":"list.aws_instance.example","resource_type":"aws_instance","total":2}]}`, response)
+	assert.JSONEq(t, `{"resources_discovered":2,"resources":[{"address":"list.aws_instance.example","display_name":"i-1234567890abcdef0","identity":{"id":"i-1234567890abcdef0"},"resource_type":"aws_instance"}],"list_completions":[{"address":"list.aws_instance.example","resource_type":"aws_instance","total":2}],"diagnostics":[{"severity":"error","summary":"Query failed","detail":"Provider returned an error."}]}`, response)
 }
