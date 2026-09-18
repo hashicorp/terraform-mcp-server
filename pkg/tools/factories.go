@@ -5,6 +5,7 @@ package tools
 
 import (
 	registryTools "github.com/hashicorp/terraform-mcp-server/pkg/tools/registry"
+	searchTools "github.com/hashicorp/terraform-mcp-server/pkg/tools/search"
 	tfeTools "github.com/hashicorp/terraform-mcp-server/pkg/tools/tfe"
 	"github.com/mark3labs/mcp-go/server"
 	log "github.com/sirupsen/logrus"
@@ -26,6 +27,13 @@ type toolFactory func(logger *log.Logger) server.ServerTool
 //   - create_run: swaps between CreateRun/CreateRunSafe based on
 //     ENABLE_TF_OPERATIONS.
 var toolFactories = map[string]toolFactory{
+	// HCP Terraform no-code search tools
+	"generate_query_configuration": searchTools.GenerateQueryConfiguration,
+	"provider_list_schema_list":    searchTools.ProviderListSchemaList,
+	"execute_query":                searchTools.ExecuteQuery,
+	"get_query_status":             searchTools.GetQueryStatus,
+	"get_query_summary":            searchTools.GetQuerySummary,
+
 	// Public Registry tools
 	"search_providers":            registryTools.ResolveProviderDocID,
 	"get_provider_details":        registryTools.GetProviderDocs,

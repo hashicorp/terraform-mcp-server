@@ -9,7 +9,6 @@ import (
 	"sync"
 
 	"github.com/hashicorp/terraform-mcp-server/pkg/client"
-	searchTools "github.com/hashicorp/terraform-mcp-server/pkg/tools/search"
 	tfeTools "github.com/hashicorp/terraform-mcp-server/pkg/tools/tfe"
 	"github.com/hashicorp/terraform-mcp-server/pkg/toolsets"
 	"github.com/hashicorp/terraform-mcp-server/pkg/utils"
@@ -139,24 +138,6 @@ func (r *DynamicToolRegistry) registerTFETools() {
 			continue
 		}
 		tool := r.createDynamicTFETool(td.Name, factory)
-		r.mcpServer.AddTool(tool.Tool, tool.Handler)
-	}
-
-	// Search toolset - provider_list_schema_list (requires TFE auth)
-	if toolsets.IsToolEnabled("provider_list_schema_list", r.enabledToolsets) {
-		tool := r.createDynamicTFETool("provider_list_schema_list", searchTools.ProviderListSchemaList)
-		r.mcpServer.AddTool(tool.Tool, tool.Handler)
-	}
-	if toolsets.IsToolEnabled("execute_query", r.enabledToolsets) {
-		tool := r.createDynamicTFETool("execute_query", searchTools.ExecuteQuery)
-		r.mcpServer.AddTool(tool.Tool, tool.Handler)
-	}
-	if toolsets.IsToolEnabled("get_query_status", r.enabledToolsets) {
-		tool := r.createDynamicTFETool("get_query_status", searchTools.GetQueryStatus)
-		r.mcpServer.AddTool(tool.Tool, tool.Handler)
-	}
-	if toolsets.IsToolEnabled("get_query_summary", r.enabledToolsets) {
-		tool := r.createDynamicTFETool("get_query_summary", searchTools.GetQuerySummary)
 		r.mcpServer.AddTool(tool.Tool, tool.Handler)
 	}
 

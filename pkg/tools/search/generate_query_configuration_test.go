@@ -369,6 +369,22 @@ func TestWriteExamplePayload_ContainsGenerateConfigOut(t *testing.T) {
 	}
 }
 
+func TestWriteExamplePayload_UsesEmptyAttributesArray(t *testing.T) {
+	schemas := map[string]listResourceEntry{
+		"aws_s3_bucket": {Block: listResourceBlock{}},
+	}
+	var b strings.Builder
+	writeExamplePayload(&b, schemas, []string{"aws_s3_bucket"}, "aws", "hashicorp", "6.62.0")
+	out := b.String()
+
+	if !strings.Contains(out, `"attributes": []`) {
+		t.Fatalf("example payload must use an empty attributes array, got:\n%s", out)
+	}
+	if strings.Contains(out, `"attributes": null`) {
+		t.Fatal("example payload must not use null for attributes")
+	}
+}
+
 // ── variable notes ────────────────────────────────────────────────────────────
 
 func TestWriteVariableNotes_ContainsMistakeRows(t *testing.T) {
