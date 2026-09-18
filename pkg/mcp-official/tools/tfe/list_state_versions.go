@@ -99,8 +99,12 @@ func ListStateVersionsFunc(ctx context.Context, request *mcp.CallToolRequest, in
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to list workspace state versions: %w", err)
 	}
+
+	var result *mcp.CallToolResult
 	if len(stateVersions.Items) == 0 {
-		return nil, nil, fmt.Errorf("workspace has no state versions to list")
+		result = &mcp.CallToolResult{
+			Content: []mcp.Content{&mcp.TextContent{Text: "workspace has no state versions to list"}},
+		}
 	}
 
 	summaries := make([]*StateVersionSummary, len(stateVersions.Items))
@@ -116,7 +120,7 @@ func ListStateVersionsFunc(ctx context.Context, request *mcp.CallToolRequest, in
 		}
 	}
 
-	return nil, &StateVersionSummaryList{
+	return result, &StateVersionSummaryList{
 		Items:      summaries,
 		Pagination: stateVersions.Pagination,
 	}, nil
