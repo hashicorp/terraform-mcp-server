@@ -29,9 +29,9 @@ func GetModuleDetailsTool() *mcp.Tool {
 		Description: "Fetches up-to-date documentation on how to use a Terraform module. You must call 'search_modules' first to obtain the exact valid and compatible module_id required to use this tool.",
 		Annotations: &mcp.ToolAnnotations{
 			Title:           "Retrieve documentation for a specific Terraform module",
-			OpenWorldHint:   ptr(true),
+			OpenWorldHint:   jsonschema.Ptr(true),
 			ReadOnlyHint:    true,
-			DestructiveHint: ptr(false),
+			DestructiveHint: jsonschema.Ptr(false),
 		},
 		InputSchema: &jsonschema.Schema{
 			Type: "object",

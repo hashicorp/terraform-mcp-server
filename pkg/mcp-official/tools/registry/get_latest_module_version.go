@@ -29,9 +29,9 @@ func GetLatestModuleVersionTool() *mcp.Tool {
 		Description: "Fetches the latest version of a Terraform module from the public registry",
 		Annotations: &mcp.ToolAnnotations{
 			Title:           "Get Latest Module Version",
-			OpenWorldHint:   ptr(true),
+			OpenWorldHint:   jsonschema.Ptr(true),
 			ReadOnlyHint:    true,
-			DestructiveHint: ptr(false),
+			DestructiveHint: jsonschema.Ptr(false),
 		},
 		InputSchema: &jsonschema.Schema{
 			Type: "object",
