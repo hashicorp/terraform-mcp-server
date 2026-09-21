@@ -71,19 +71,19 @@ func GetProviderCapabilitiesFunc(ctx context.Context, request *mcp.CallToolReque
 	// TODO: Replace with structured slog logging
 	logger := log.StandardLogger()
 
-	namespace := GetString(input.Namespace, "")
+	namespace := input.Namespace
 	if namespace == "" {
 		return nil, nil, fmt.Errorf("missing required input: namespace")
 	}
 	namespace = strings.ToLower(namespace)
 
-	name := GetString(input.Name, "")
+	name := input.Name
 	if name == "" {
 		return nil, nil, fmt.Errorf("missing required input: name")
 	}
 	name = strings.ToLower(name)
 
-	version := GetString(input.Version, "latest")
+	version := strings.ToLower(input.Version)
 	if version == "latest" || !utils.IsValidProviderVersionFormat(version) {
 		httpClient, err := client.GetHttpClient(ctx, client.SessionIDFromRequest(request))
 		if err != nil {

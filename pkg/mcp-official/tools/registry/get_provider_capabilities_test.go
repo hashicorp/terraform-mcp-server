@@ -28,6 +28,10 @@ func TestGetProviderCapabilitiesTool(t *testing.T) {
 	require.True(t, ok)
 	assert.Contains(t, schema.Required, "namespace")
 	assert.Contains(t, schema.Required, "name")
+
+	versionSchema := schema.Properties["version"]
+	require.NotNil(t, versionSchema)
+	assert.JSONEq(t, `"latest"`, string(versionSchema.Default))
 }
 
 func TestGetProviderCapabilitiesParameterValidation(t *testing.T) {
