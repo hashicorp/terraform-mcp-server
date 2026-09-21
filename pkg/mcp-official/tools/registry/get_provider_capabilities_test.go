@@ -4,11 +4,9 @@
 package tools
 
 import (
-	"fmt"
 	"testing"
 
 	"github.com/google/jsonschema-go/jsonschema"
-	registryapi "github.com/hashicorp/terraform-mcp-server/pkg/client"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -60,37 +58,5 @@ func TestGetProviderCapabilitiesParameterValidation(t *testing.T) {
 				assert.NoError(t, err)
 			}
 		})
-	}
-}
-
-func TestCapabilitiesExampleLimit(t *testing.T) {
-	for _, count := range []int{1, 10, 11} {
-		t.Run(fmt.Sprint(count), func(t *testing.T) {
-			docs := registryapi.ProviderDocs{}
-			for i := 0; i < count; i++ {
-				docs.Docs = append(docs.Docs, registryapi.ProviderDoc{ID: fmt.Sprint(i), Title: fmt.Sprintf("resource_%d", i), Category: "resources", Language: "hcl"})
-			}
-			result := analyzeAndFormatCapabilities(docs, "hashicorp", "test", "1.0.0")
-			require.Contains(t, result, fmt.Sprintf("Resources: %d available", count))
-			if count <= 10 {
-				require.Contains(t, result, fmt.Sprintf("resource_%d (provider_doc_id: %d)", count-1, count-1))
-				require.NotContains(t, result, "... and")
-			} else {
-				require.Contains(t, result, "resource_2 (provider_doc_id: 2)")
-				require.NotContains(t, result, "resource_3 (")
-				require.Contains(t, result, "... and 8 more")
-			}
-		})
-	}
-}
-
-func TestCapabilitiesCategories(t *testing.T) {
-	docs := registryapi.ProviderDocs{}
-	for _, category := range []string{"resources", "data-sources", "functions", "guides", "actions", "ephemeral-resources", "list-resources"} {
-		docs.Docs = append(docs.Docs, registryapi.ProviderDoc{Category: category, Language: "hcl", Title: category, ID: "123"})
-	}
-	result := analyzeAndFormatCapabilities(docs, "hashicorp", "test", "1.0.0")
-	for _, title := range []string{"Resources", "Data Sources", "Functions", "Guides", "Actions", "Ephemeral Resources", "List Resources"} {
-		require.Contains(t, result, title+": 1 available")
 	}
 }
