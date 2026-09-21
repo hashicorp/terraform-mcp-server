@@ -132,7 +132,6 @@ func CreateProjectFunc(ctx context.Context, request *mcp.CallToolRequest, input 
 	}
 
 	return nil, response, nil
-
 }
 
 // enumOf converts string values into the []any form jsonschema.Schema.Enum expects.

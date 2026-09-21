@@ -125,6 +125,29 @@ func TestWorkspaceHappyPath(t *testing.T) {
 	// directly — independent of the tools under test.
 	defer client.Workspaces.SafeDeleteByID(t.Context(), wsID)
 
+	t.Run("list workspaces in org", func(t *testing.T) {
+		result, resultText := callTool(t, s, "list_workspaces", map[string]any{
+			"terraform_org_name": tfeOrgName,
+		})
+		require.False(t, result.IsError, "list_workspaces should not return an error")
+		require.NotEmpty(t, resultText, "list_workspaces should return a non-empty response")
+
+		assert.Greater(t, int(gjson.Get(resultText, "items.#").Int()), 0, "list_workspaces should return at least one workspace")
+		assert.NotEmpty(t, gjson.Get(resultText, "items.0.id").String(), "workspace items should contain an id")
+		assert.NotEmpty(t, gjson.Get(resultText, "items.0.workspace_name").String(), "workspace items should contain a workspace_name")
+
+		// Confirm the workspace created for this test appears in the list.
+		found := false
+		gjson.Get(resultText, "items").ForEach(func(_, item gjson.Result) bool {
+			if item.Get("id").String() == wsID {
+				found = true
+				return false
+			}
+			return true
+		})
+		assert.True(t, found, "list_workspaces should include the workspace created for this test (id: %s)", wsID)
+	})
+
 	t.Run("Get workspace details", func(t *testing.T) {
 		getResult, getResultText := callTool(t, s, "get_workspace_details", map[string]any{
 			"terraform_org_name": tfeOrgName,
@@ -279,9 +302,6 @@ func runWorkspaceTagsTest(t *testing.T, s *mcp.ClientSession, wsName string) {
 		assert.Contains(t, readTagsResultText, "env:staging", "read_workspace_tags response should include the key:value tag binding")
 	})
 }
-
-// TestWorkspaceErrorPaths exercises error branches that fires when a caller
-// provides a non-existent org/workspace name or a stale workspace ID.
 
 func TestWorkspaceErrorPaths(t *testing.T) {
 	requireTfOperations(t)
