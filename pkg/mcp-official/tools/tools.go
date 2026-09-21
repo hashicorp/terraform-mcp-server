@@ -3,6 +3,7 @@ package tools
 import (
 	"log/slog"
 
+	registryTools "github.com/hashicorp/terraform-mcp-server/pkg/mcp-official/tools/registry"
 	tfeTools "github.com/hashicorp/terraform-mcp-server/pkg/mcp-official/tools/tfe"
 	"github.com/hashicorp/terraform-mcp-server/pkg/toolsets"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -23,6 +24,12 @@ var officialFactories = map[string]func(svr *mcp.Server){
 	},
 	"list_terraform_orgs": func(svr *mcp.Server) {
 		mcp.AddTool(svr, tfeTools.ListTerraformOrganizationsTool(), tfeTools.ListTerraformOrganizationsFunc)
+	},
+	"search_policies": func(svr *mcp.Server) {
+		mcp.AddTool(svr, registryTools.SearchPoliciesTool(), registryTools.SearchPoliciesFunc)
+	},
+	"get_policy_details": func(svr *mcp.Server) {
+		mcp.AddTool(svr, registryTools.GetPolicyDetailsTool(), registryTools.GetPolicyDetailsFunc)
 	},
 }
 

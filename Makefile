@@ -11,7 +11,7 @@ TARGET_DIR ?= $(CURDIR)/dist
 # Build flags
 LDFLAGS=-ldflags="-s -w"
 
-.PHONY: all build crt-build test test-e2e test-security clean deps docker-build run-http run-http-secure docker-run-http test-http test-hcpt cleanup-test-containers update-server-json-version help
+.PHONY: all build crt-build test test-e2e test-e2e-official-public-registry test-security clean deps docker-build run-http run-http-secure docker-run-http test-http test-hcpt cleanup-test-containers update-server-json-version help
 
 # Default target
 all: build
@@ -37,6 +37,10 @@ test:
 # Run e2e tests
 test-e2e:
 	@trap '$(MAKE) cleanup-test-containers' EXIT; $(GO) test -v --tags e2e ./e2e
+
+# Run public registry tool e2e tests against the official SDK HTTP endpoint.
+test-e2e-official-public-registry:
+	@trap '$(MAKE) cleanup-test-containers' EXIT; TF_X_OFFICIAL_SDK_ENABLED=true $(GO) test -v --tags e2e ./e2e -run '.*/HTTP$$'
 
 # Run hcpt tests
 # Usage: make test-hcpt RUN=TestWorkspace
@@ -110,6 +114,7 @@ help:
 	@echo "  crt-build               - Build using crt-build script"
 	@echo "  test                    - Run all tests"
 	@echo "  test-e2e                - Run end-to-end tests"
+	@echo "  test-e2e-official-public-registry - Run public registry e2e tests against the official SDK HTTP endpoint"
 	@echo "  test-hcpt               - Run hcpt tests (optional: RUN=<pattern> to filter tests)"
 	@echo "  test-security           - Run security-related tests"
 	@echo "  test-http               - Test StreamableHTTP health endpoint"
