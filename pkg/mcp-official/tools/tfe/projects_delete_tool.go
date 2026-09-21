@@ -53,5 +53,4 @@ func DeleteProjectFunc(ctx context.Context, request *mcp.CallToolRequest, input 
 	}
 
 	return nil, &DeleteProjectResponse{ID: projectID, Deleted: true}, nil
-
 }
