@@ -30,6 +30,10 @@ func TestSearchProvidersTool(t *testing.T) {
 	assert.NotContains(t, schema.Required, "provider_document_type")
 	assert.NotContains(t, schema.Required, "provider_version")
 
+	providerNamespaceSchema := schema.Properties["provider_namespace"]
+	require.NotNil(t, providerNamespaceSchema)
+	assert.JSONEq(t, `"hashicorp"`, string(providerNamespaceSchema.Default))
+
 	providerDocumentTypeSchema := schema.Properties["provider_document_type"]
 	require.NotNil(t, providerDocumentTypeSchema)
 	assert.Equal(t, []any{"resources", "data-sources", "functions", "guides", "overview", "actions", "list-resources"}, providerDocumentTypeSchema.Enum)

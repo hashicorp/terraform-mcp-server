@@ -47,7 +47,8 @@ func GetProviderDetailsTool() *mcp.Tool {
 func GetProviderDetailsFunc(ctx context.Context, request *mcp.CallToolRequest, input GetProviderDetailsArguments) (*mcp.CallToolResult, any, error) {
 	// TODO: Replace with structured slog logging
 	logger := log.StandardLogger()
-	providerDocID := GetString(input.ProviderDocID, "")
+
+	providerDocID := input.ProviderDocID
 	if providerDocID == "" {
 		return nil, nil, fmt.Errorf("provider_doc_id cannot be empty")
 	}

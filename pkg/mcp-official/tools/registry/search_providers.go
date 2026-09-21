@@ -53,7 +53,8 @@ If there are multiple good matches, mention this but proceed with the most relev
 				},
 				"provider_namespace": {
 					Type:        "string",
-					Description: "The publisher of the Terraform provider, typically the name of the company, or their GitHub organization name that created the provider",
+					Description: "The publisher of the Terraform provider, typically the name of the company, or their GitHub organization name that created the provider (defaults to hashicorp)",
+					Default:     json.RawMessage(`"hashicorp"`),
 				},
 				"service_slug": {
 					Type:        "string",
@@ -79,6 +80,7 @@ If there are multiple good matches, mention this but proceed with the most relev
 func SearchProvidersFunc(ctx context.Context, request *mcp.CallToolRequest, input SearchProvidersArguments) (*mcp.CallToolResult, any, error) {
 	// TODO: Replace with structured slog logging
 	logger := log.StandardLogger()
+
 	defaultErrorGuide := "please check the provider name, provider namespace or the provider version you're looking for, perhaps the provider is published under a different namespace or company name"
 
 	httpClient, err := officialclient.GetHttpClient(ctx, officialclient.SessionIDFromRequest(request))
@@ -91,14 +93,11 @@ func SearchProvidersFunc(ctx context.Context, request *mcp.CallToolRequest, inpu
 		return nil, nil, fmt.Errorf("failed to resolve provider: %v - %s", err, defaultErrorGuide)
 	}
 
-	serviceSlug := GetString(input.ServiceSlug, "")
+	serviceSlug := input.ServiceSlug
 	if serviceSlug == "" {
 		return nil, nil, fmt.Errorf("service_slug cannot be empty")
 	}
 	serviceSlug = strings.ToLower(serviceSlug)
-
-	providerDocumentType := GetString(input.ProviderDocumentType, "resources")
-	providerDetail.ProviderDocumentType = providerDocumentType
 
 	// Check if we need to use v2 API for guides, functions, or overview
 	if utils.IsV2ProviderDocumentType(providerDetail.ProviderDocumentType) {
@@ -157,24 +156,17 @@ func SearchProvidersFunc(ctx context.Context, request *mcp.CallToolRequest, inpu
 
 func resolveProviderDetails(ctx context.Context, input SearchProvidersArguments, httpClient *http.Client, logger *log.Logger) (client.ProviderDetail, error) {
 	providerDetail := client.ProviderDetail{}
-	providerName := GetString(input.ProviderName, "")
+	providerName := input.ProviderName
 	if providerName == "" {
 		return providerDetail, fmt.Errorf("provider_name is required")
 	}
 	providerName = strings.ToLower(providerName)
 
-	providerNamespace := GetString(input.ProviderNamespace, "")
-	if providerNamespace == "" {
-		logger.Debugf(`provider_namespace not provided, trying the hashicorp namespace`)
-		providerNamespace = "hashicorp"
-	}
-	providerNamespace = strings.ToLower(providerNamespace)
+	providerNamespace := strings.ToLower(input.ProviderNamespace)
 
-	providerVersion := GetString(input.ProviderVersion, "latest")
-	providerVersion = strings.ToLower(providerVersion)
+	providerVersion := strings.ToLower(input.ProviderVersion)
 
-	providerDocumentType := GetString(input.ProviderDocumentType, "resources")
-	providerDocumentType = strings.ToLower(providerDocumentType)
+	providerDocumentType := strings.ToLower(input.ProviderDocumentType)
 
 	var err error
 	providerVersionValue := ""

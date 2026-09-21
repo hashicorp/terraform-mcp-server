@@ -51,13 +51,13 @@ func GetLatestProviderVersionFunc(ctx context.Context, request *mcp.CallToolRequ
 	// TODO: Replace with structured slog logging
 	logger := log.StandardLogger()
 
-	namespace := GetString(input.Namespace, "")
+	namespace := input.Namespace
 	if namespace == "" {
 		return nil, nil, fmt.Errorf("missing required input: namespace")
 	}
 	namespace = strings.ToLower(namespace)
 
-	name := GetString(input.Name, "")
+	name := input.Name
 	if name == "" {
 		return nil, nil, fmt.Errorf("missing required input: name")
 	}
