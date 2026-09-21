@@ -38,9 +38,9 @@ Return the selected module_id and explain your choice. If there are multiple goo
 If no modules were found, reattempt the search with a new moduleName query.`,
 		Annotations: &mcp.ToolAnnotations{
 			Title:           "Search and match Terraform modules based on name and relevance",
-			OpenWorldHint:   ptr(true),
+			OpenWorldHint:   jsonschema.Ptr(true),
 			ReadOnlyHint:    true,
-			DestructiveHint: ptr(false),
+			DestructiveHint: jsonschema.Ptr(false),
 		},
 		InputSchema: &jsonschema.Schema{
 			Type: "object",
@@ -52,7 +52,7 @@ If no modules were found, reattempt the search with a new moduleName query.`,
 				"current_offset": {
 					Type:        "integer",
 					Description: "Current offset for pagination",
-					Minimum:     ptr(0.0),
+					Minimum:     jsonschema.Ptr(0.0),
 					Default:     json.RawMessage(`0`),
 				},
 			},
