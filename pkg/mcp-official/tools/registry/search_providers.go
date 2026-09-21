@@ -40,9 +40,9 @@ Return the selected 'provider_doc_id' and explain your choice.
 If there are multiple good matches, mention this but proceed with the most relevant one.`,
 		Annotations: &mcp.ToolAnnotations{
 			Title:           "Identify the most relevant provider document ID for a Terraform service",
-			OpenWorldHint:   ptr(true),
+			OpenWorldHint:   jsonschema.Ptr(true),
 			ReadOnlyHint:    true,
-			DestructiveHint: ptr(false),
+			DestructiveHint: jsonschema.Ptr(false),
 		},
 		InputSchema: &jsonschema.Schema{
 			Type: "object",
@@ -83,6 +83,20 @@ func SearchProvidersFunc(ctx context.Context, request *mcp.CallToolRequest, inpu
 
 	defaultErrorGuide := "please check the provider name, provider namespace or the provider version you're looking for, perhaps the provider is published under a different namespace or company name"
 
+	input.ProviderName = strings.ToLower(strings.TrimSpace(input.ProviderName))
+	if input.ProviderName == "" {
+		return nil, nil, fmt.Errorf("provider_name is required")
+	}
+
+	input.ServiceSlug = strings.ToLower(strings.TrimSpace(input.ServiceSlug))
+	if input.ServiceSlug == "" {
+		return nil, nil, fmt.Errorf("service_slug cannot be empty")
+	}
+
+	input.ProviderNamespace = strings.ToLower(strings.TrimSpace(input.ProviderNamespace))
+	input.ProviderVersion = strings.ToLower(strings.TrimSpace(input.ProviderVersion))
+	input.ProviderDocumentType = strings.ToLower(strings.TrimSpace(input.ProviderDocumentType))
+
 	httpClient, err := officialclient.GetHttpClient(ctx, officialclient.SessionIDFromRequest(request))
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to get http client for public Terraform registry: %w", err)
@@ -94,10 +108,6 @@ func SearchProvidersFunc(ctx context.Context, request *mcp.CallToolRequest, inpu
 	}
 
 	serviceSlug := input.ServiceSlug
-	if serviceSlug == "" {
-		return nil, nil, fmt.Errorf("service_slug cannot be empty")
-	}
-	serviceSlug = strings.ToLower(serviceSlug)
 
 	// Check if we need to use v2 API for guides, functions, or overview
 	if utils.IsV2ProviderDocumentType(providerDetail.ProviderDocumentType) {
@@ -157,16 +167,9 @@ func SearchProvidersFunc(ctx context.Context, request *mcp.CallToolRequest, inpu
 func resolveProviderDetails(ctx context.Context, input SearchProvidersArguments, httpClient *http.Client, logger *log.Logger) (client.ProviderDetail, error) {
 	providerDetail := client.ProviderDetail{}
 	providerName := input.ProviderName
-	if providerName == "" {
-		return providerDetail, fmt.Errorf("provider_name is required")
-	}
-	providerName = strings.ToLower(providerName)
-
-	providerNamespace := strings.ToLower(input.ProviderNamespace)
-
-	providerVersion := strings.ToLower(input.ProviderVersion)
-
-	providerDocumentType := strings.ToLower(input.ProviderDocumentType)
+	providerNamespace := input.ProviderNamespace
+	providerVersion := input.ProviderVersion
+	providerDocumentType := input.ProviderDocumentType
 
 	var err error
 	providerVersionValue := ""

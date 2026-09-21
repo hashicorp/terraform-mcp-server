@@ -26,9 +26,9 @@ func GetLatestProviderVersionTool() *mcp.Tool {
 		Description: "Fetches the latest version of a Terraform provider from the public registry",
 		Annotations: &mcp.ToolAnnotations{
 			Title:           "Get Latest Provider Version",
-			OpenWorldHint:   ptr(true),
+			OpenWorldHint:   jsonschema.Ptr(true),
 			ReadOnlyHint:    true,
-			DestructiveHint: ptr(false),
+			DestructiveHint: jsonschema.Ptr(false),
 		},
 		InputSchema: &jsonschema.Schema{
 			Type: "object",
@@ -51,13 +51,13 @@ func GetLatestProviderVersionFunc(ctx context.Context, request *mcp.CallToolRequ
 	// TODO: Replace with structured slog logging
 	logger := log.StandardLogger()
 
-	namespace := input.Namespace
+	namespace := strings.TrimSpace(input.Namespace)
 	if namespace == "" {
 		return nil, nil, fmt.Errorf("missing required input: namespace")
 	}
 	namespace = strings.ToLower(namespace)
 
-	name := input.Name
+	name := strings.TrimSpace(input.Name)
 	if name == "" {
 		return nil, nil, fmt.Errorf("missing required input: name")
 	}

@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"path"
 	"strconv"
+	"strings"
 
 	"github.com/google/jsonschema-go/jsonschema"
 	registryapi "github.com/hashicorp/terraform-mcp-server/pkg/client"
@@ -27,9 +28,9 @@ func GetProviderDetailsTool() *mcp.Tool {
 		Description: `Fetches up-to-date documentation for a specific service from a Terraform provider. You must call 'search_providers' tool first to obtain the exact tfprovider-compatible provider_doc_id required to use this tool.`,
 		Annotations: &mcp.ToolAnnotations{
 			Title:           "Fetch detailed Terraform provider documentation using a document ID",
-			OpenWorldHint:   ptr(true),
+			OpenWorldHint:   jsonschema.Ptr(true),
 			ReadOnlyHint:    true,
-			DestructiveHint: ptr(false),
+			DestructiveHint: jsonschema.Ptr(false),
 		},
 		InputSchema: &jsonschema.Schema{
 			Type: "object",
@@ -48,7 +49,7 @@ func GetProviderDetailsFunc(ctx context.Context, request *mcp.CallToolRequest, i
 	// TODO: Replace with structured slog logging
 	logger := log.StandardLogger()
 
-	providerDocID := input.ProviderDocID
+	providerDocID := strings.TrimSpace(input.ProviderDocID)
 	if providerDocID == "" {
 		return nil, nil, fmt.Errorf("provider_doc_id cannot be empty")
 	}
