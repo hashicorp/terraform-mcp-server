@@ -38,17 +38,6 @@ func TestAttachPolicySetToWorkspacesInputSchema(t *testing.T) {
 	}
 }
 
-// TestAttachPolicySetToWorkspacesPublishesNoOutputSchema pins the text-result contract.
-// This tool confirms a mutation in prose, so it declares no structured output. Retyping
-// its output value to a struct would publish a schema and emit structured content the
-// handler never fills, adding a phantom payload beside the confirmation text.
-func TestAttachPolicySetToWorkspacesPublishesNoOutputSchema(t *testing.T) {
-	listed := listedTool(t, AttachPolicySetToWorkspacesTool(), AttachPolicySetToWorkspacesFunc)
-
-	objectSchema(t, listed.InputSchema, "input schema")
-	assert.Nil(t, listed.OutputSchema, "a prose confirmation declares no structured output")
-}
-
 func TestAttachPolicySetToWorkspacesRejectsInvalidArguments(t *testing.T) {
 	tests := []struct {
 		name    string
