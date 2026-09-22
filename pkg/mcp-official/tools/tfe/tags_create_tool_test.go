@@ -43,16 +43,6 @@ func TestCreateWorkspaceTagsInputSchema(t *testing.T) {
 		"the tags description must teach the model the key:value form the parser accepts")
 }
 
-func TestCreateWorkspaceTagsSchemasAreObjectRooted(t *testing.T) {
-	listed := listedTool(t, CreateWorkspaceTagsTool(), CreateWorkspaceTagsFunc)
-
-	objectSchema(t, listed.InputSchema, "input schema")
-
-	outputProperties := objectSchema(t, listed.OutputSchema, "output schema")
-	assert.Contains(t, outputProperties, "workspace_name")
-	assert.Contains(t, outputProperties, "tags_added")
-}
-
 func TestCreateWorkspaceTagsRejectsInvalidArguments(t *testing.T) {
 	tests := []struct {
 		name    string

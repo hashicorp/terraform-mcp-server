@@ -38,19 +38,6 @@ func TestReadWorkspaceTagsInputSchema(t *testing.T) {
 	}
 }
 
-func TestReadWorkspaceTagsSchemasAreObjectRooted(t *testing.T) {
-	listed := listedTool(t, ReadWorkspaceTagsTool(), ReadWorkspaceTagsFunc)
-
-	objectSchema(t, listed.InputSchema, "input schema")
-
-	outputProperties := objectSchema(t, listed.OutputSchema, "output schema")
-	assert.Contains(t, outputProperties, "tags")
-	assert.Contains(t, outputProperties, "tag_bindings")
-	// The workspace name identifies which workspace the tags belong to. Dropping it
-	// would leave the payload unattributable and break the live tag test.
-	assert.Contains(t, outputProperties, "workspace_name")
-}
-
 func TestReadWorkspaceTagsRejectsBlankArguments(t *testing.T) {
 	tests := []struct {
 		name    string

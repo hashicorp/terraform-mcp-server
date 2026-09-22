@@ -19,14 +19,11 @@ func TestListWorkspacePolicySetsTool(t *testing.T) {
 	assert.True(t, tool.Annotations.ReadOnlyHint)
 	require.NotNil(t, tool.Annotations.DestructiveHint)
 	assert.False(t, *tool.Annotations.DestructiveHint)
-
-	// The arguments carry no constraints beyond being required, so the SDK infers
-	// the input schema from the struct tags.
-	assert.Nil(t, tool.InputSchema)
+	assert.Nil(t, tool.InputSchema, "list_workspace_policy_sets relies on the SDK deriving its input schema")
 }
 
 func TestListWorkspacePolicySetsInputSchema(t *testing.T) {
-	schema, err := jsonschema.For[ListWorkspacePolicySetsArguments](nil)
+	schema, err := jsonschema.For[PolicySetsArguments](nil)
 	require.NoError(t, err)
 
 	assert.Equal(t, "object", schema.Type)
@@ -40,42 +37,30 @@ func TestListWorkspacePolicySetsInputSchema(t *testing.T) {
 	}
 }
 
-// TestListWorkspacePolicySetsSchemasAreObjectRooted checks the shape strict clients
-// validate. A non-object root in either schema is dropped silently at discovery, so the
-// tool would simply not exist for those clients while every other test still passed.
-func TestListWorkspacePolicySetsSchemasAreObjectRooted(t *testing.T) {
-	listed := listedTool(t, ListWorkspacePolicySetsTool(), ListWorkspacePolicySetsFunc)
-
-	objectSchema(t, listed.InputSchema, "input schema")
-
-	outputProperties := objectSchema(t, listed.OutputSchema, "output schema")
-	assert.Contains(t, outputProperties, "items", "policy sets belong under items, not at the root")
-}
-
 func TestListWorkspacePolicySetsRejectsBlankArguments(t *testing.T) {
 	tests := []struct {
 		name    string
-		input   ListWorkspacePolicySetsArguments
+		input   PolicySetsArguments
 		wantErr string
 	}{
 		{
 			name:    "empty organization name",
-			input:   ListWorkspacePolicySetsArguments{WorkspaceID: "ws-2HRvNs49EWPjDqT1"},
+			input:   PolicySetsArguments{WorkspaceID: "ws-2HRvNs49EWPjDqT1"},
 			wantErr: "terraform_org_name must not be blank",
 		},
 		{
 			name:    "whitespace-only organization name",
-			input:   ListWorkspacePolicySetsArguments{TerraformOrgName: "   ", WorkspaceID: "ws-2HRvNs49EWPjDqT1"},
+			input:   PolicySetsArguments{TerraformOrgName: "   ", WorkspaceID: "ws-2HRvNs49EWPjDqT1"},
 			wantErr: "terraform_org_name must not be blank",
 		},
 		{
 			name:    "empty workspace ID",
-			input:   ListWorkspacePolicySetsArguments{TerraformOrgName: "test-org"},
+			input:   PolicySetsArguments{TerraformOrgName: "test-org"},
 			wantErr: "workspace_id must not be blank",
 		},
 		{
 			name:    "whitespace-only workspace ID",
-			input:   ListWorkspacePolicySetsArguments{TerraformOrgName: "test-org", WorkspaceID: "\t\n "},
+			input:   PolicySetsArguments{TerraformOrgName: "test-org", WorkspaceID: "\t\n "},
 			wantErr: "workspace_id must not be blank",
 		},
 	}

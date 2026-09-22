@@ -13,9 +13,9 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-// ListWorkspacePolicySetsSummary holds a trimmed view of a single policy set that
+// PolicySetsSummary holds a trimmed view of a single policy set that
 // applies to a workspace
-type ListWorkspacePolicySetsSummary struct {
+type PolicySetsSummary struct {
 	ID          string `json:"id"`
 	Name        string `json:"name"`
 	Description string `json:"description"`
@@ -24,14 +24,14 @@ type ListWorkspacePolicySetsSummary struct {
 	Reason      string `json:"reason"`
 }
 
-// ListWorkspacePolicySetsSummaryList contains the policy sets that apply to a workspace.
+// PolicySetsSummaryList contains the policy sets that apply to a workspace.
 // The handler aggregates every page into one list, so no pagination details are reported.
-type ListWorkspacePolicySetsSummaryList struct {
-	Items []*ListWorkspacePolicySetsSummary `json:"items"`
+type PolicySetsSummaryList struct {
+	Items []*PolicySetsSummary `json:"items"`
 }
 
-// ListWorkspacePolicySetsArguments holds the required inputs for listing policy sets attached to a workspace.
-type ListWorkspacePolicySetsArguments struct {
+// PolicySetsArguments holds the required inputs for listing policy sets attached to a workspace.
+type PolicySetsArguments struct {
 	TerraformOrgName string `json:"terraform_org_name" jsonschema:"The name of the Terraform Cloud/Enterprise organization"`
 	WorkspaceID      string `json:"workspace_id" jsonschema:"The workspace ID to get policy sets for (e.g., ws-2HRvNs49EWPjDqT1)"`
 }
@@ -49,10 +49,8 @@ func ListWorkspacePolicySetsTool() *mcp.Tool {
 }
 
 // ListWorkspacePolicySetsFunc returns every policy set that applies to the workspace,
-// directly attached or global. The result is always the same shape, an object holding an
-// items array, so a workspace with no policy sets reports an empty list rather than a
-// differently shaped payload the model has to interpret.
-func ListWorkspacePolicySetsFunc(ctx context.Context, request *mcp.CallToolRequest, input ListWorkspacePolicySetsArguments) (*mcp.CallToolResult, *ListWorkspacePolicySetsSummaryList, error) {
+// directly attached or global.
+func ListWorkspacePolicySetsFunc(ctx context.Context, request *mcp.CallToolRequest, input PolicySetsArguments) (*mcp.CallToolResult, *PolicySetsSummaryList, error) {
 	terraformOrgName := strings.TrimSpace(input.TerraformOrgName)
 	workspaceID := strings.TrimSpace(input.WorkspaceID)
 
@@ -82,7 +80,7 @@ func ListWorkspacePolicySetsFunc(ctx context.Context, request *mcp.CallToolReque
 
 	// Paginate through all policy sets with the workspaces included. The slice starts
 	// empty rather than nil so an unmatched workspace marshals as [] instead of null.
-	matchingSets := []*ListWorkspacePolicySetsSummary{}
+	matchingSets := []*PolicySetsSummary{}
 	pageNumber := 1
 
 	for {
@@ -110,7 +108,7 @@ func ListWorkspacePolicySetsFunc(ctx context.Context, request *mcp.CallToolReque
 				}
 			}
 			if applies {
-				matchingSets = append(matchingSets, &ListWorkspacePolicySetsSummary{
+				matchingSets = append(matchingSets, &PolicySetsSummary{
 					ID:          ps.ID,
 					Name:        ps.Name,
 					Description: ps.Description,
@@ -127,5 +125,5 @@ func ListWorkspacePolicySetsFunc(ctx context.Context, request *mcp.CallToolReque
 		pageNumber++
 	}
 
-	return nil, &ListWorkspacePolicySetsSummaryList{Items: matchingSets}, nil
+	return nil, &PolicySetsSummaryList{Items: matchingSets}, nil
 }
