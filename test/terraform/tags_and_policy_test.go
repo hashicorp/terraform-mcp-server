@@ -46,7 +46,10 @@ func TestListWorkspacePolicySets(t *testing.T) {
 		require.False(t, result.IsError, "list_workspace_policy_sets should not return an error")
 		require.NotEmpty(t, resultText, "list_workspace_policy_sets should return a non-empty response")
 
-		psResult := gjson.Get(resultText, fmt.Sprintf("items.#(id==%q)", ps.ID))
+		// Note: Switch back to the items.# query after the SDK migration is complete.
+		// psResult := gjson.Get(resultText, fmt.Sprintf("items.#(id==%q)", ps.ID))
+		// Legacy tool returns a bare JSON array instead of {"items": [...]}.
+		psResult := gjson.Get(resultText, fmt.Sprintf("#(id==%q)", ps.ID))
 		require.True(t, psResult.Exists(), "response should contain the directly attached policy set")
 		assert.Equal(t, psName, psResult.Get("name").String(), "response should contain the policy set name")
 		assert.Equal(t, "directly attached", psResult.Get("reason").String(), "policy set should be reported as directly attached")
@@ -75,7 +78,10 @@ func TestListWorkspacePolicySets(t *testing.T) {
 		require.NotEmpty(t, resultText, "list_workspace_policy_sets should return a non-empty response")
 
 		// Find the global policy set in the result by ID using gjson query syntax.
-		globalPsResult := gjson.Get(resultText, fmt.Sprintf("items.#(id==%q)", globalPs.ID))
+		// Note: Switch back to the items.# query after the SDK migration is complete.
+		// globalPsResult := gjson.Get(resultText, fmt.Sprintf("items.#(id==%q)", globalPs.ID))
+		// Legacy tool returns a bare JSON array instead of {"items": [...]}.
+		globalPsResult := gjson.Get(resultText, fmt.Sprintf("#(id==%q)", globalPs.ID))
 		require.True(t, globalPsResult.Exists(), "response should contain the global policy set")
 		assert.Equal(t, globalPsName, globalPsResult.Get("name").String(), "global policy set name should match")
 		assert.Equal(t, "global", globalPsResult.Get("reason").String(), "global policy set should have reason 'global'")
