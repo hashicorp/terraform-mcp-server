@@ -28,6 +28,23 @@ func NewToolsetFilter(toolsets []string) ToolFilter {
 	return ToolFilter{Mode: ModeToolsets, Toolsets: toolsets}
 }
 
+// EnabledTools returns the tools this filter allows, optionally narrowed
+// further by include  — a yes/no check per tool (e.g. "only tools that need a
+// TFE session"). Pass nil to skip the extra check.
+func (f ToolFilter) EnabledTools(include func(ToolDef) bool) []ToolDef {
+	enabled := make([]ToolDef, 0, len(AllTools))
+	for _, td := range AllTools {
+		if !f.IsToolEnabled(td.Name) {
+			continue
+		}
+		if include != nil && !include(td) {
+			continue
+		}
+		enabled = append(enabled, td)
+	}
+	return enabled
+}
+
 func NewIndividualToolFilter(tools []string) ToolFilter {
 	return ToolFilter{Mode: ModeIndividualTools, Tools: tools}
 }
