@@ -68,19 +68,14 @@ func paginationSchemaProperties() map[string]*jsonschema.Schema {
 		"page": {
 			Type:        "integer",
 			Description: "Page number for pagination (min 1)",
-			Minimum:     ptr(float64(defaultPage)),
+			Minimum:     jsonschema.Ptr(float64(defaultPage)),
 		},
 		"pageSize": {
 			Type:        "integer",
 			Description: "Results per page for pagination (min 1, max 100)",
-			Minimum:     ptr(float64(minPageSize)),
-			Maximum:     ptr(float64(maxPageSize)),
+			Minimum:     jsonschema.Ptr(float64(minPageSize)),
+			Maximum:     jsonschema.Ptr(float64(maxPageSize)),
 		},
 	}
 }
 
-// ptr is a convenience helper for taking the address of a literal value,
-// needed wherever the SDK or schema types expect a *bool, *float64, etc.
-func ptr[T any](v T) *T {
-	return &v
-}

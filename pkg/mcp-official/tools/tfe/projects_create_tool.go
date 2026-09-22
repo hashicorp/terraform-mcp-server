@@ -56,14 +56,14 @@ func CreateProjectTool() *mcp.Tool {
 				"project_name": {
 					Type:        "string",
 					Description: "The project name. Must be 3-40 characters and may contain letters, numbers, spaces, hyphens, and underscores. It cannot start or end with a space.",
-					MinLength:   ptr(3),
-					MaxLength:   ptr(40),
+					MinLength:   jsonschema.Ptr(3),
+					MaxLength:   jsonschema.Ptr(40),
 					Pattern:     `^[A-Za-z0-9_-][A-Za-z0-9 _-]*[A-Za-z0-9_-]$`,
 				},
 				"description": {
 					Type:        "string",
 					Description: "Optional project description. Must be no more than 256 characters",
-					MaxLength:   ptr(256),
+					MaxLength:   jsonschema.Ptr(256),
 				},
 				"default_execution_mode": {
 					Type:        "string",
@@ -82,9 +82,9 @@ func CreateProjectTool() *mcp.Tool {
 		},
 		Annotations: &mcp.ToolAnnotations{
 			Title:           "Create a new Terraform project",
-			OpenWorldHint:   ptr(true),
+			OpenWorldHint:   jsonschema.Ptr(true),
 			ReadOnlyHint:    false,
-			DestructiveHint: ptr(false),
+			DestructiveHint: jsonschema.Ptr(false),
 		},
 	}
 }

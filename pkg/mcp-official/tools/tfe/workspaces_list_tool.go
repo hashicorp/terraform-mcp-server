@@ -95,9 +95,9 @@ func ListWorkspacesTool() *mcp.Tool {
 		},
 		Annotations: &mcp.ToolAnnotations{
 			Title:           "List Terraform workspaces with queries",
-			OpenWorldHint:   ptr(true),
+			OpenWorldHint:   jsonschema.Ptr(true),
 			ReadOnlyHint:    true,
-			DestructiveHint: ptr(false),
+			DestructiveHint: jsonschema.Ptr(false),
 		},
 	}
 }

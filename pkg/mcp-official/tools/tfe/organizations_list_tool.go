@@ -44,9 +44,9 @@ func ListTerraformOrganizationsTool() *mcp.Tool {
 		},
 		Annotations: &mcp.ToolAnnotations{
 			Title:           "List all Terraform organizations",
-			OpenWorldHint:   ptr(true),
+			OpenWorldHint:   jsonschema.Ptr(true),
 			ReadOnlyHint:    true,
-			DestructiveHint: ptr(false),
+			DestructiveHint: jsonschema.Ptr(false),
 		},
 	}
 }
