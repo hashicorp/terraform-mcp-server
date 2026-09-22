@@ -5,6 +5,8 @@ package tools
 
 import (
 	"log/slog"
+	"os"
+	"strings"
 
 	tfeTools "github.com/hashicorp/terraform-mcp-server/pkg/mcp-official/tools/tfe"
 	"github.com/hashicorp/terraform-mcp-server/pkg/toolsets"
@@ -40,7 +42,12 @@ var officialFactories = map[string]func(svr *mcp.Server){
 }
 
 func RegisterTools(svr *mcp.Server, logger *slog.Logger, filter toolsets.ToolFilter) {
+	tfOpsEnabled := strings.EqualFold(os.Getenv("ENABLE_TF_OPERATIONS"), "true")
+
 	for _, td := range filter.EnabledTools(nil) {
+		if td.RequiresTFOps && !tfOpsEnabled {
+			continue
+		}
 		if register, ok := officialFactories[td.Name]; ok {
 			register(svr)
 		}
