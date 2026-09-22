@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/google/jsonschema-go/jsonschema"
 	"github.com/hashicorp/terraform-mcp-server/pkg/mcp-official/client"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
@@ -36,9 +37,9 @@ func GetProjectTool() *mcp.Tool {
 		Description: `Fetches detailed information about a Terraform project by its ID. If the project ID isn't already known, call "list_terraform_projects" first.`,
 		Annotations: &mcp.ToolAnnotations{
 			Title:           "Get a Terraform project by ID",
-			OpenWorldHint:   ptr(true),
+			OpenWorldHint:   jsonschema.Ptr(true),
 			ReadOnlyHint:    true,
-			DestructiveHint: ptr(false),
+			DestructiveHint: jsonschema.Ptr(false),
 		},
 	}
 }

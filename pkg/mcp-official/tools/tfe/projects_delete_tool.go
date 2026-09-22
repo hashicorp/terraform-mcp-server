@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/google/jsonschema-go/jsonschema"
 	"github.com/hashicorp/terraform-mcp-server/pkg/mcp-official/client"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
@@ -30,9 +31,9 @@ func DeleteProjectTool() *mcp.Tool {
 		Description: `Deletes a Terraform project by ID. This is a destructive operation. The request will fail if the project still contains workspaces or stacks. If the project ID isn't already known, call list_terraform_projects first to look it up rather than asking the user to find it themselves.`,
 		Annotations: &mcp.ToolAnnotations{
 			Title:           "Delete a Terraform project by ID",
-			OpenWorldHint:   ptr(true),
+			OpenWorldHint:   jsonschema.Ptr(true),
 			ReadOnlyHint:    false,
-			DestructiveHint: ptr(true),
+			DestructiveHint: jsonschema.Ptr(true),
 		},
 	}
 }
