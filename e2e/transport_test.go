@@ -136,9 +136,8 @@ func createHTTPClient(t *testing.T) (*mcp.ClientSession, func()) {
 	t.Log("Starting HTTP MCP server...")
 
 	port := getTestPort()
-	// Registry tools are registered on the legacy endpoint today. The official
-	// endpoint currently exposes only list_workspaces.
-	config := legacyServerConfig()
+	// Select the official endpoint when the SDK feature flag is enabled.
+	config := currentServerConfig()
 	baseURL := fmt.Sprintf("http://localhost:%s", port)
 	mcpURL := baseURL + config.mcpPath
 
