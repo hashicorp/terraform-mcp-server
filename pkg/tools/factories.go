@@ -33,6 +33,10 @@ var toolFactories = map[string]toolFactory{
 	"execute_query":                searchTools.ExecuteQuery,
 	"get_query_status":             searchTools.GetQueryStatus,
 	"get_query_summary":            searchTools.GetQuerySummary,
+	// Registered dynamically with the MCP server because it uses elicitation.
+	"import_query_results": func(logger *log.Logger) server.ServerTool {
+		return searchTools.ImportQueryResults(logger, nil)
+	},
 
 	// Public Registry tools
 	"search_providers":            registryTools.ResolveProviderDocID,
