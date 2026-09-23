@@ -16,7 +16,6 @@ import (
 
 // GetTokenPermissionsArguments holds the input parameters for fetching token permissions.
 type GetTokenPermissionsArguments struct {
-	// Required field
 	TerraformOrgName string `json:"terraform_org_name" jsonschema:"The name of the Terraform Cloud/Enterprise organization"`
 }
 

@@ -27,9 +27,6 @@ func TestGetTokenPermissionsTool(t *testing.T) {
 	assert.True(t, *tool.Annotations.OpenWorldHint)
 }
 
-// The tool relies on an inferred schema, so the struct tags are the public
-// contract: dropping the jsonschema tag or adding omitempty would silently
-// change what clients are told to send.
 func TestGetTokenPermissionsArgumentsSchema(t *testing.T) {
 	schema, err := jsonschema.For[GetTokenPermissionsArguments](nil)
 	require.NoError(t, err)
