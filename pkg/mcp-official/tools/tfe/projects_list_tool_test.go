@@ -4,8 +4,10 @@
 package tools
 
 import (
+	"encoding/json"
 	"testing"
 
+	"github.com/google/jsonschema-go/jsonschema"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -21,6 +23,36 @@ func TestListProjectsTool(t *testing.T) {
 	assert.True(t, tool.Annotations.ReadOnlyHint)
 	require.NotNil(t, tool.Annotations.DestructiveHint)
 	assert.False(t, *tool.Annotations.DestructiveHint)
+}
+
+func TestListProjectsToolOutputSchema(t *testing.T) {
+	schema, ok := ListProjectsTool().OutputSchema.(*jsonschema.Schema)
+	require.True(t, ok)
+	assert.Equal(t, "object", schema.Type)
+
+	items := schema.Properties["items"]
+	require.NotNil(t, items)
+	assert.Equal(t, "array", items.Type)
+	assert.Empty(t, items.Types)
+	require.NotNil(t, items.Items)
+	assert.Equal(t, "object", items.Items.Type)
+	require.NotNil(t, schema.AdditionalProperties)
+	assert.NotNil(t, schema.AdditionalProperties.Not)
+
+	resolved, err := schema.Resolve(nil)
+	require.NoError(t, err)
+
+	results := []ProjectSummaryList{
+		{Items: make([]ProjectSummary, 0)},
+		{Items: []ProjectSummary{{ID: "prj-123", Name: "project"}}},
+	}
+	for _, result := range results {
+		data, err := json.Marshal(result)
+		require.NoError(t, err)
+		var value any
+		require.NoError(t, json.Unmarshal(data, &value))
+		assert.NoError(t, resolved.Validate(&value))
+	}
 }
 
 func TestListProjectsToolInputSchema(t *testing.T) {

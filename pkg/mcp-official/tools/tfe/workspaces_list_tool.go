@@ -27,7 +27,7 @@ type WorkspaceSummary struct {
 
 // WorkspaceSummaryList contains the list of workspace summaries and pagination details
 type WorkspaceSummaryList struct {
-	Items []*WorkspaceSummary `json:"items"`
+	Items []WorkspaceSummary `json:"items"`
 	PaginationDetails
 }
 
@@ -93,6 +93,36 @@ func ListWorkspacesTool() *mcp.Tool {
 			Required:             []string{"terraform_org_name"},
 			AdditionalProperties: &jsonschema.Schema{Not: &jsonschema.Schema{}},
 		},
+		OutputSchema: &jsonschema.Schema{
+			Type: "object",
+			Properties: map[string]*jsonschema.Schema{
+				"items": {
+					Type: "array",
+					Items: &jsonschema.Schema{
+						Type: "object",
+						Properties: map[string]*jsonschema.Schema{
+							"id":             {Type: "string"},
+							"workspace_name": {Type: "string"},
+							"description":    {Type: "string"},
+							"environment":    {Type: "string"},
+							"created_at":     {Type: "string"},
+							"execution_mode": {Type: "string"},
+						},
+						PropertyOrder:        []string{"id", "workspace_name", "description", "environment", "created_at", "execution_mode"},
+						Required:             []string{"id", "workspace_name", "description", "environment", "created_at", "execution_mode"},
+						AdditionalProperties: &jsonschema.Schema{Not: &jsonschema.Schema{}},
+					},
+				},
+				"current-page": {Type: "integer"},
+				"prev-page":    {Type: "integer"},
+				"next-page":    {Type: "integer"},
+				"total-count":  {Type: "integer"},
+				"total-pages":  {Type: "integer"},
+			},
+			PropertyOrder:        []string{"items", "current-page", "prev-page", "next-page", "total-count", "total-pages"},
+			Required:             []string{"items"},
+			AdditionalProperties: &jsonschema.Schema{Not: &jsonschema.Schema{}},
+		},
 		Annotations: &mcp.ToolAnnotations{
 			Title:           "List Terraform workspaces with queries",
 			OpenWorldHint:   jsonschema.Ptr(true),
@@ -125,9 +155,10 @@ func ListWorkspacesFunc(ctx context.Context, request *mcp.CallToolRequest, input
 		return nil, nil, fmt.Errorf("listing workspaces in organization %q: %w", terraformOrgName, err)
 	}
 
-	summaries := make([]*WorkspaceSummary, len(workspaces.Items))
+	// Keep the allocated slice non-nil so an empty page marshals as [] rather than null.
+	summaries := make([]WorkspaceSummary, len(workspaces.Items))
 	for i, w := range workspaces.Items {
-		summaries[i] = &WorkspaceSummary{
+		summaries[i] = WorkspaceSummary{
 			ID:            w.ID,
 			Name:          w.Name,
 			Description:   w.Description,
