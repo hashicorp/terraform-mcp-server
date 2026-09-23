@@ -38,10 +38,13 @@ type noCodeQueryResource struct {
 
 type executeQueryOptions struct {
 	Type              string                `jsonapi:"primary,no-code-queries"`
+	Source            string                `jsonapi:"attr,source"`
 	GenerateConfigOut *bool                 `jsonapi:"attr,generate-config-out,omitempty"`
 	Providers         []noCodeQueryProvider `jsonapi:"attr,no-code-query-providers"`
 	Workspace         *tfe.Workspace        `jsonapi:"relation,workspace"`
 }
+
+const executeQuerySource = "terraform-mcp"
 
 // ExecuteQuery creates and immediately executes an HCP Terraform no-code query.
 func ExecuteQuery(logger *log.Logger) server.ServerTool {
@@ -190,6 +193,7 @@ func isPositiveInteger(value any) bool {
 
 func submitExecuteQuery(ctx context.Context, tfeClient *tfe.Client, workspaceID string, configuration *executeQueryConfiguration) (string, error) {
 	options := &executeQueryOptions{
+		Source:            executeQuerySource,
 		GenerateConfigOut: configuration.GenerateConfigOut,
 		Providers:         configuration.Providers,
 		Workspace: &tfe.Workspace{
