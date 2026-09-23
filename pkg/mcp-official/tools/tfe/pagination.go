@@ -78,4 +78,3 @@ func paginationSchemaProperties() map[string]*jsonschema.Schema {
 		},
 	}
 }
-
