@@ -121,6 +121,7 @@ func TestSubmitExecuteQuery(t *testing.T) {
 	assert.JSONEq(t, `{"data":{"type":"no-code-queries","id":"ncqry-test","relationships":{"latest-query-run":{"data":{"type":"queries","id":"qry-test"}}}}}`, response)
 	assert.Equal(t, "no-code-queries", received["data"].(map[string]any)["type"])
 	attributes := received["data"].(map[string]any)["attributes"].(map[string]any)
+	assert.Equal(t, "terraform-mcp", attributes["source"])
 	assert.Equal(t, false, attributes["generate-config-out"])
 	providers := attributes["no-code-query-providers"].([]any)
 	assert.Equal(t, "aws", providers[0].(map[string]any)["name"])
