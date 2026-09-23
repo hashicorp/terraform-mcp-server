@@ -25,8 +25,9 @@ func TestGetQueryStatusDefinition(t *testing.T) {
 	assert.Contains(t, tool.Tool.Description, "go-tfe")
 	assert.Contains(t, tool.Tool.Description, "pending")
 	assert.Contains(t, tool.Tool.Description, "finished, errored, or canceled")
-	assert.Contains(t, tool.Tool.Description, "do not repeatedly call")
+	assert.Contains(t, tool.Tool.Description, "same query_run_id")
 	assert.Contains(t, tool.Tool.Description, "get_query_summary")
+	assert.NotNil(t, tool.Tool.OutputSchema)
 	require.NotNil(t, tool.Tool.Annotations.ReadOnlyHint)
 	assert.True(t, *tool.Tool.Annotations.ReadOnlyHint)
 	require.NotNil(t, tool.Tool.Annotations.DestructiveHint)
@@ -55,20 +56,23 @@ func TestWaitForQueryStatusPollsUntilFinished(t *testing.T) {
 	tfeClient, err := tfe.NewClient(&tfe.Config{Address: server.URL, Token: "test-token", HTTPClient: server.Client()})
 	require.NoError(t, err)
 
-	response, status, err := waitForQueryStatus(context.Background(), tfeClient, "qry-test", time.Millisecond)
+	response, err := waitForQueryStatus(context.Background(), tfeClient, "qry-test", time.Millisecond, queryStatusMaxReads)
 
 	require.NoError(t, err)
-	assert.Equal(t, tfe.QueryRunFinished, status)
-	assert.Contains(t, response, `"status":"finished"`)
+	assert.Equal(t, tfe.QueryRunFinished, response.Status)
+	assert.True(t, response.Terminal)
+	assert.Contains(t, response.Message, "get_query_summary")
 	assert.Equal(t, int32(2), reads.Load())
 }
 
-func TestWaitForQueryStatusTimesOut(t *testing.T) {
+func TestWaitForQueryStatusReturnsNonterminalStatus(t *testing.T) {
+	var reads atomic.Int32
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/api/v2/ping" {
 			w.WriteHeader(http.StatusOK)
 			return
 		}
+		reads.Add(1)
 		w.Header().Set("Content-Type", "application/vnd.api+json")
 		_, _ = w.Write([]byte(`{"data":{"type":"queries","id":"qry-test","attributes":{"status":"running","terraform-version":"1.14.0","generate-config-out":false}}}`))
 	}))
@@ -76,13 +80,14 @@ func TestWaitForQueryStatusTimesOut(t *testing.T) {
 
 	tfeClient, err := tfe.NewClient(&tfe.Config{Address: server.URL, Token: "test-token", HTTPClient: server.Client()})
 	require.NoError(t, err)
-	ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond)
-	defer cancel()
+	response, err := waitForQueryStatus(context.Background(), tfeClient, "qry-test", 2*time.Second, 2)
 
-	_, _, err = waitForQueryStatus(ctx, tfeClient, "qry-test", time.Second)
-
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "timed out waiting for a terminal status")
+	require.NoError(t, err)
+	assert.False(t, response.Terminal)
+	assert.Equal(t, tfe.QueryRunStatus("running"), response.Status)
+	assert.Equal(t, 2, response.RetryAfterSeconds)
+	assert.Contains(t, response.Message, "same query_run_id")
+	assert.Equal(t, int32(2), reads.Load())
 }
 
 func TestReadQueryStatus(t *testing.T) {
@@ -110,7 +115,7 @@ func TestReadQueryStatus(t *testing.T) {
 	response, err := readQueryStatus(context.Background(), tfeClient, "qry-test")
 
 	require.NoError(t, err)
-	assert.Contains(t, response, `"id":"qry-test"`)
+	assert.Contains(t, response, `"query_run_id":"qry-test"`)
 	assert.Contains(t, response, `"status":"running"`)
 }
 
