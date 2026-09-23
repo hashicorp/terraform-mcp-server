@@ -22,7 +22,7 @@ type ProjectSummary struct {
 
 // ProjectSummaryList is a list of project summaries and pagination details
 type ProjectSummaryList struct {
-	Items []*ProjectSummary `json:"items"`
+	Items []ProjectSummary `json:"items"`
 	PaginationDetails
 }
 
@@ -52,6 +52,32 @@ func ListProjectsTool() *mcp.Tool {
 			Required:             []string{"terraform_org_name"},
 			AdditionalProperties: &jsonschema.Schema{Not: &jsonschema.Schema{}},
 		},
+		OutputSchema: &jsonschema.Schema{
+			Type: "object",
+			Properties: map[string]*jsonschema.Schema{
+				"items": {
+					Type: "array",
+					Items: &jsonschema.Schema{
+						Type: "object",
+						Properties: map[string]*jsonschema.Schema{
+							"project_id":   {Type: "string"},
+							"project_name": {Type: "string"},
+						},
+						PropertyOrder:        []string{"project_id", "project_name"},
+						Required:             []string{"project_id", "project_name"},
+						AdditionalProperties: &jsonschema.Schema{Not: &jsonschema.Schema{}},
+					},
+				},
+				"current-page": {Type: "integer"},
+				"prev-page":    {Type: "integer"},
+				"next-page":    {Type: "integer"},
+				"total-count":  {Type: "integer"},
+				"total-pages":  {Type: "integer"},
+			},
+			PropertyOrder:        []string{"items", "current-page", "prev-page", "next-page", "total-count", "total-pages"},
+			Required:             []string{"items"},
+			AdditionalProperties: &jsonschema.Schema{Not: &jsonschema.Schema{}},
+		},
 		Annotations: &mcp.ToolAnnotations{
 			Title:           "List all Terraform projects",
 			OpenWorldHint:   jsonschema.Ptr(true),
@@ -79,9 +105,10 @@ func ListProjectsFunc(ctx context.Context, request *mcp.CallToolRequest, input L
 		return nil, nil, fmt.Errorf("listing projects in organization %q: %w", terraformOrgName, err)
 	}
 
-	summaries := make([]*ProjectSummary, len(projects.Items))
+	// Keep the allocated slice non-nil so an empty page marshals as [] rather than null.
+	summaries := make([]ProjectSummary, len(projects.Items))
 	for i, p := range projects.Items {
-		summaries[i] = &ProjectSummary{
+		summaries[i] = ProjectSummary{
 			ID:   p.ID,
 			Name: p.Name,
 		}

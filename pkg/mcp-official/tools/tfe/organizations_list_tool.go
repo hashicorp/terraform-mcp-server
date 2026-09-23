@@ -23,7 +23,7 @@ type OrganizationSummary struct {
 
 // OrganizationSummaryList contains the list of organization summaries and pagination details
 type OrganizationSummaryList struct {
-	Items []*OrganizationSummary `json:"items"`
+	Items []OrganizationSummary `json:"items"`
 	PaginationDetails
 }
 
@@ -40,6 +40,33 @@ func ListTerraformOrganizationsTool() *mcp.Tool {
 			Type:                 "object",
 			Properties:           paginationSchemaProperties(),
 			PropertyOrder:        []string{"page", "pageSize"},
+			AdditionalProperties: &jsonschema.Schema{Not: &jsonschema.Schema{}},
+		},
+		OutputSchema: &jsonschema.Schema{
+			Type: "object",
+			Properties: map[string]*jsonschema.Schema{
+				"items": {
+					Type: "array",
+					Items: &jsonschema.Schema{
+						Type: "object",
+						Properties: map[string]*jsonschema.Schema{
+							"organization_name":  {Type: "string"},
+							"organization_email": {Type: "string"},
+							"created_at":         {Type: "string"},
+						},
+						PropertyOrder:        []string{"organization_name", "organization_email", "created_at"},
+						Required:             []string{"organization_name", "organization_email", "created_at"},
+						AdditionalProperties: &jsonschema.Schema{Not: &jsonschema.Schema{}},
+					},
+				},
+				"current-page": {Type: "integer"},
+				"prev-page":    {Type: "integer"},
+				"next-page":    {Type: "integer"},
+				"total-count":  {Type: "integer"},
+				"total-pages":  {Type: "integer"},
+			},
+			PropertyOrder:        []string{"items", "current-page", "prev-page", "next-page", "total-count", "total-pages"},
+			Required:             []string{"items"},
 			AdditionalProperties: &jsonschema.Schema{Not: &jsonschema.Schema{}},
 		},
 		Annotations: &mcp.ToolAnnotations{
@@ -64,9 +91,10 @@ func ListTerraformOrganizationsFunc(ctx context.Context, request *mcp.CallToolRe
 		return nil, nil, fmt.Errorf("listing Terraform organizations: %w", err)
 	}
 
-	summaries := make([]*OrganizationSummary, len(orgs.Items))
+	// Keep the allocated slice non-nil so an empty page marshals as [] rather than null.
+	summaries := make([]OrganizationSummary, len(orgs.Items))
 	for i, o := range orgs.Items {
-		summaries[i] = &OrganizationSummary{
+		summaries[i] = OrganizationSummary{
 			Name:      o.Name,
 			Email:     o.Email,
 			CreatedAt: o.CreatedAt,

@@ -4,8 +4,11 @@
 package tools
 
 import (
+	"encoding/json"
 	"testing"
+	"time"
 
+	"github.com/google/jsonschema-go/jsonschema"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -21,6 +24,36 @@ func TestListWorkspacesTool(t *testing.T) {
 	assert.True(t, tool.Annotations.ReadOnlyHint)
 	require.NotNil(t, tool.Annotations.DestructiveHint)
 	assert.False(t, *tool.Annotations.DestructiveHint)
+}
+
+func TestListWorkspacesToolOutputSchema(t *testing.T) {
+	schema, ok := ListWorkspacesTool().OutputSchema.(*jsonschema.Schema)
+	require.True(t, ok)
+	assert.Equal(t, "object", schema.Type)
+
+	items := schema.Properties["items"]
+	require.NotNil(t, items)
+	assert.Equal(t, "array", items.Type)
+	assert.Empty(t, items.Types)
+	require.NotNil(t, items.Items)
+	assert.Equal(t, "object", items.Items.Type)
+	require.NotNil(t, schema.AdditionalProperties)
+	assert.NotNil(t, schema.AdditionalProperties.Not)
+
+	resolved, err := schema.Resolve(nil)
+	require.NoError(t, err)
+
+	results := []WorkspaceSummaryList{
+		{Items: make([]WorkspaceSummary, 0)},
+		{Items: []WorkspaceSummary{{ID: "ws-123", Name: "workspace", CreatedAt: time.Now()}}},
+	}
+	for _, result := range results {
+		data, err := json.Marshal(result)
+		require.NoError(t, err)
+		var value any
+		require.NoError(t, json.Unmarshal(data, &value))
+		assert.NoError(t, resolved.Validate(&value))
+	}
 }
 
 func TestListWorkspacesToolInputSchema(t *testing.T) {
