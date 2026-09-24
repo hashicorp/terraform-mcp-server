@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/google/jsonschema-go/jsonschema"
 	"github.com/hashicorp/go-tfe"
 	"github.com/hashicorp/terraform-mcp-server/pkg/mcp-official/client"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -31,10 +32,23 @@ func CreateWorkspaceTagsTool() *mcp.Tool {
 	return &mcp.Tool{
 		Name:        "create_workspace_tags",
 		Description: "Add tags to a Terraform workspace.",
+		OutputSchema: &jsonschema.Schema{
+			Type: "object",
+			Properties: map[string]*jsonschema.Schema{
+				"workspace_name": {Type: "string"},
+				"tags_added": {
+					Type:  "array",
+					Items: &jsonschema.Schema{Type: "string"},
+				},
+			},
+			PropertyOrder:        []string{"workspace_name", "tags_added"},
+			Required:             []string{"workspace_name", "tags_added"},
+			AdditionalProperties: &jsonschema.Schema{Not: &jsonschema.Schema{}},
+		},
 		Annotations: &mcp.ToolAnnotations{
 			Title:           "Create Terraform workspace tags",
 			ReadOnlyHint:    false,
-			DestructiveHint: ptr(false),
+			DestructiveHint: jsonschema.Ptr(false),
 		},
 	}
 }

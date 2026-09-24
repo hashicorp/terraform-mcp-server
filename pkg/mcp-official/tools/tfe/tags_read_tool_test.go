@@ -4,6 +4,7 @@
 package tools
 
 import (
+	"encoding/json"
 	"testing"
 
 	"github.com/google/jsonschema-go/jsonschema"
@@ -35,6 +36,40 @@ func TestReadWorkspaceTagsInputSchema(t *testing.T) {
 		require.True(t, ok, "schema should declare property %q", name)
 		assert.Equal(t, "string", property.Type)
 		assert.NotEmpty(t, property.Description, "property %q should describe itself to the model", name)
+	}
+}
+
+func TestReadWorkspaceTagsOutputSchema(t *testing.T) {
+	schema, ok := ReadWorkspaceTagsTool().OutputSchema.(*jsonschema.Schema)
+	require.True(t, ok)
+	assert.Equal(t, "object", schema.Type)
+	assert.Equal(t, []string{"workspace_name", "tags", "tag_bindings"}, schema.PropertyOrder)
+	assert.Equal(t, []string{"workspace_name", "tags", "tag_bindings"}, schema.Required)
+	require.NotNil(t, schema.AdditionalProperties)
+	assert.NotNil(t, schema.AdditionalProperties.Not)
+
+	for _, name := range []string{"tags", "tag_bindings"} {
+		items := schema.Properties[name]
+		require.NotNil(t, items)
+		assert.Equal(t, "array", items.Type)
+		assert.Empty(t, items.Types)
+		require.NotNil(t, items.Items)
+		assert.Equal(t, "string", items.Items.Type)
+	}
+
+	resolved, err := schema.Resolve(nil)
+	require.NoError(t, err)
+
+	results := []ReadWorkspaceTagsResult{
+		{WorkspaceName: "workspace", Tags: make([]string, 0), TagBindings: make([]string, 0)},
+		{WorkspaceName: "workspace", Tags: []string{"production"}, TagBindings: []string{"env:staging"}},
+	}
+	for _, result := range results {
+		data, err := json.Marshal(result)
+		require.NoError(t, err)
+		var value any
+		require.NoError(t, json.Unmarshal(data, &value))
+		assert.NoError(t, resolved.Validate(&value))
 	}
 }
 

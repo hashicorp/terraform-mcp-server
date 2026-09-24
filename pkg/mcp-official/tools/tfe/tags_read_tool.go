@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/google/jsonschema-go/jsonschema"
 	"github.com/hashicorp/terraform-mcp-server/pkg/mcp-official/client"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
@@ -30,10 +31,27 @@ func ReadWorkspaceTagsTool() *mcp.Tool {
 	return &mcp.Tool{
 		Name:        "read_workspace_tags",
 		Description: "Read all tags from a Terraform workspace.",
+		OutputSchema: &jsonschema.Schema{
+			Type: "object",
+			Properties: map[string]*jsonschema.Schema{
+				"workspace_name": {Type: "string"},
+				"tags": {
+					Type:  "array",
+					Items: &jsonschema.Schema{Type: "string"},
+				},
+				"tag_bindings": {
+					Type:  "array",
+					Items: &jsonschema.Schema{Type: "string"},
+				},
+			},
+			PropertyOrder:        []string{"workspace_name", "tags", "tag_bindings"},
+			Required:             []string{"workspace_name", "tags", "tag_bindings"},
+			AdditionalProperties: &jsonschema.Schema{Not: &jsonschema.Schema{}},
+		},
 		Annotations: &mcp.ToolAnnotations{
 			Title:           "Read Terraform workspace tags",
 			ReadOnlyHint:    true,
-			DestructiveHint: ptr(false),
+			DestructiveHint: jsonschema.Ptr(false),
 		},
 	}
 }
