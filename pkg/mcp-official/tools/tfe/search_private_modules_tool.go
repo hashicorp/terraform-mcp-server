@@ -36,7 +36,7 @@ type PrivateModuleSummary struct {
 
 // PrivateModuleSummaryList contains matching modules and pagination details.
 type PrivateModuleSummaryList struct {
-	Items []*PrivateModuleSummary `json:"items"`
+	Items []PrivateModuleSummary `json:"items"`
 	PaginationDetails
 }
 
@@ -60,6 +60,50 @@ func SearchPrivateModulesTool() *mcp.Tool {
 			Properties:           properties,
 			Required:             []string{"terraform_org_name"},
 			PropertyOrder:        []string{"terraform_org_name", "search_query", "page", "pageSize"},
+			AdditionalProperties: &jsonschema.Schema{Not: &jsonschema.Schema{}},
+		},
+		OutputSchema: &jsonschema.Schema{
+			Type: "object",
+			Properties: map[string]*jsonschema.Schema{
+				"items": {
+					Type: "array",
+					Items: &jsonschema.Schema{
+						Type: "object",
+						Properties: map[string]*jsonschema.Schema{
+							"private_module_id": {Type: "string"},
+							"name":              {Type: "string"},
+							"namespace":         {Type: "string"},
+							"provider":          {Type: "string"},
+							"registry_name":     {Type: "string"},
+							"created_at":        {Type: "string"},
+							"updated_at":        {Type: "string"},
+							"no_code":           {Type: "boolean"},
+							"no_code_module_ids": {
+								Type:  "array",
+								Items: &jsonschema.Schema{Type: "string"},
+							},
+						},
+						PropertyOrder: []string{
+							"private_module_id", "name", "namespace", "provider", "registry_name",
+							"created_at", "updated_at", "no_code", "no_code_module_ids",
+						},
+						Required: []string{
+							"private_module_id", "name", "namespace", "provider", "registry_name",
+							"created_at", "updated_at", "no_code", "no_code_module_ids",
+						},
+						AdditionalProperties: &jsonschema.Schema{Not: &jsonschema.Schema{}},
+					},
+				},
+				"current-page": {Type: "integer"},
+				"prev-page":    {Type: "integer"},
+				"next-page":    {Type: "integer"},
+				"total-count":  {Type: "integer"},
+				"total-pages":  {Type: "integer"},
+			},
+			PropertyOrder: []string{
+				"items", "current-page", "prev-page", "next-page", "total-count", "total-pages",
+			},
+			Required:             []string{"items"},
 			AdditionalProperties: &jsonschema.Schema{Not: &jsonschema.Schema{}},
 		},
 		Annotations: &mcp.ToolAnnotations{
@@ -102,7 +146,7 @@ func SearchPrivateModulesFunc(
 }
 
 func privateModuleSummaryList(modules *tfe.RegistryModuleList) *PrivateModuleSummaryList {
-	items := make([]*PrivateModuleSummary, len(modules.Items))
+	items := make([]PrivateModuleSummary, len(modules.Items))
 	for i, module := range modules.Items {
 		noCodeModuleIDs := make([]string, 0, len(module.RegistryNoCodeModule))
 		if module.NoCode {
@@ -113,7 +157,7 @@ func privateModuleSummaryList(modules *tfe.RegistryModuleList) *PrivateModuleSum
 			}
 		}
 
-		items[i] = &PrivateModuleSummary{
+		items[i] = PrivateModuleSummary{
 			PrivateModuleID: module.Namespace + "/" + module.Name + "/" + module.Provider,
 			Name:            module.Name,
 			Namespace:       module.Namespace,

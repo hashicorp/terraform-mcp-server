@@ -45,7 +45,7 @@ type PrivateProviderSummary struct {
 
 // PrivateProviderSummaryList contains matching providers and pagination details.
 type PrivateProviderSummaryList struct {
-	Items []*PrivateProviderSummary `json:"items"`
+	Items []PrivateProviderSummary `json:"items"`
 	PaginationDetails
 }
 
@@ -75,6 +75,49 @@ func SearchPrivateProvidersTool() *mcp.Tool {
 			Properties:           properties,
 			Required:             []string{"terraform_org_name"},
 			PropertyOrder:        []string{"terraform_org_name", "search_query", "registry_name", "page", "pageSize"},
+			AdditionalProperties: &jsonschema.Schema{Not: &jsonschema.Schema{}},
+		},
+		OutputSchema: &jsonschema.Schema{
+			Type: "object",
+			Properties: map[string]*jsonschema.Schema{
+				"items": {
+					Type: "array",
+					Items: &jsonschema.Schema{
+						Type: "object",
+						Properties: map[string]*jsonschema.Schema{
+							"id":               {Type: "string"},
+							"provider_address": {Type: "string"},
+							"name":             {Type: "string"},
+							"namespace":        {Type: "string"},
+							"registry_name":    {Type: "string"},
+							"created_at":       {Type: "string"},
+							"updated_at":       {Type: "string"},
+							"versions": {
+								Type:  "array",
+								Items: &jsonschema.Schema{Type: "string"},
+							},
+						},
+						PropertyOrder: []string{
+							"id", "provider_address", "name", "namespace", "registry_name",
+							"created_at", "updated_at", "versions",
+						},
+						Required: []string{
+							"id", "provider_address", "name", "namespace", "registry_name",
+							"created_at", "updated_at", "versions",
+						},
+						AdditionalProperties: &jsonschema.Schema{Not: &jsonschema.Schema{}},
+					},
+				},
+				"current-page": {Type: "integer"},
+				"prev-page":    {Type: "integer"},
+				"next-page":    {Type: "integer"},
+				"total-count":  {Type: "integer"},
+				"total-pages":  {Type: "integer"},
+			},
+			PropertyOrder: []string{
+				"items", "current-page", "prev-page", "next-page", "total-count", "total-pages",
+			},
+			Required:             []string{"items"},
 			AdditionalProperties: &jsonschema.Schema{Not: &jsonschema.Schema{}},
 		},
 		Annotations: &mcp.ToolAnnotations{
@@ -127,7 +170,7 @@ func SearchPrivateProvidersFunc(
 }
 
 func privateProviderSummaryList(providers *tfe.RegistryProviderList) *PrivateProviderSummaryList {
-	items := make([]*PrivateProviderSummary, len(providers.Items))
+	items := make([]PrivateProviderSummary, len(providers.Items))
 	for i, provider := range providers.Items {
 		versions := make([]string, 0, len(provider.RegistryProviderVersions))
 		for _, version := range provider.RegistryProviderVersions {
@@ -136,7 +179,7 @@ func privateProviderSummaryList(providers *tfe.RegistryProviderList) *PrivatePro
 			}
 		}
 
-		items[i] = &PrivateProviderSummary{
+		items[i] = PrivateProviderSummary{
 			ID:              provider.ID,
 			ProviderAddress: provider.Namespace + "/" + provider.Name,
 			Name:            provider.Name,
