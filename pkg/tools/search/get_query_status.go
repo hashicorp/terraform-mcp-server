@@ -45,16 +45,14 @@ type queryStatusTimestampsResponse struct {
 }
 
 type queryStatusPollConfig struct {
-	pollInterval      time.Duration
-	waitBudget        time.Duration
-	retryAfterSeconds int
+	pollInterval time.Duration
+	waitBudget   time.Duration
 }
 
 func defaultQueryStatusPollConfig() queryStatusPollConfig {
 	return queryStatusPollConfig{
-		pollInterval:      queryStatusPollInterval,
-		waitBudget:        queryStatusWaitBudget,
-		retryAfterSeconds: queryStatusRetryAfterSeconds,
+		pollInterval: queryStatusPollInterval,
+		waitBudget:   queryStatusWaitBudget,
 	}
 }
 
@@ -95,9 +93,6 @@ func getQueryStatusHandlerWithConfig(ctx context.Context, request mcp.CallToolRe
 	if config.waitBudget <= 0 {
 		return getQueryStatusToolErrorf(logger, "wait budget must be greater than zero")
 	}
-	if config.retryAfterSeconds <= 0 {
-		return getQueryStatusToolErrorf(logger, "retry after seconds must be greater than zero")
-	}
 
 	pollCtx, cancel := context.WithTimeoutCause(ctx, config.waitBudget, errQueryStatusWaitBudgetExceeded)
 	defer cancel()
@@ -110,7 +105,7 @@ func getQueryStatusHandlerWithConfig(ctx context.Context, request mcp.CallToolRe
 		return getQueryStatusToolErrorf(logger, "failed to get query run %q: %v", queryRunID, err)
 	}
 
-	response, err := waitForQueryStatus(ctx, pollCtx, tfeClient, queryRunID, config.pollInterval, config.retryAfterSeconds, logger)
+	response, err := waitForQueryStatus(ctx, pollCtx, tfeClient, queryRunID, config.pollInterval, logger)
 	if err != nil {
 		return getQueryStatusToolErrorf(logger, "failed to get query run %q: %v", queryRunID, err)
 	}
@@ -130,12 +125,9 @@ func readQueryStatus(ctx context.Context, tfeClient *tfe.Client, queryRunID stri
 	return marshalQueryStatus(queryRun)
 }
 
-func waitForQueryStatus(parentCtx, pollCtx context.Context, tfeClient *tfe.Client, queryRunID string, pollInterval time.Duration, retryAfterSeconds int, logger *log.Logger) (*queryStatusResponse, error) {
+func waitForQueryStatus(parentCtx, pollCtx context.Context, tfeClient *tfe.Client, queryRunID string, pollInterval time.Duration, logger *log.Logger) (*queryStatusResponse, error) {
 	if pollInterval <= 0 {
 		return nil, fmt.Errorf("poll interval must be greater than zero")
-	}
-	if retryAfterSeconds <= 0 {
-		return nil, fmt.Errorf("retry after seconds must be greater than zero")
 	}
 
 	startedAt := time.Now()
@@ -148,11 +140,11 @@ func waitForQueryStatus(parentCtx, pollCtx context.Context, tfeClient *tfe.Clien
 		}
 		reads++
 		queryRun, err := tfeClient.QueryRuns.Read(pollCtx, queryRunID)
+		if callerErr := callerCancellation(parentCtx); callerErr != nil {
+			logQueryStatusPoll(logger, queryRunID, reads, startedAt, lastResponse, "caller_canceled", callerErr)
+			return nil, callerErr
+		}
 		if err != nil {
-			if callerErr := callerCancellation(parentCtx); callerErr != nil {
-				logQueryStatusPoll(logger, queryRunID, reads, startedAt, lastResponse, "caller_canceled", callerErr)
-				return nil, callerErr
-			}
 			if errors.Is(context.Cause(pollCtx), errQueryStatusWaitBudgetExceeded) &&
 				lastResponse != nil && errors.Is(err, pollCtx.Err()) {
 				logQueryStatusPoll(logger, queryRunID, reads, startedAt, lastResponse, "internal_budget", nil)
@@ -161,24 +153,16 @@ func waitForQueryStatus(parentCtx, pollCtx context.Context, tfeClient *tfe.Clien
 			logQueryStatusPoll(logger, queryRunID, reads, startedAt, lastResponse, "read_error", err)
 			return nil, err
 		}
-		if err := callerCancellation(parentCtx); err != nil {
-			logQueryStatusPoll(logger, queryRunID, reads, startedAt, lastResponse, "caller_canceled", err)
-			return nil, err
-		}
 		response := queryStatusResponseFromRun(queryRun)
-		logQueryStatusPoll(logger, queryRunID, reads, startedAt, &response, "status_read", nil)
-		if err := callerCancellation(parentCtx); err != nil {
-			logQueryStatusPoll(logger, queryRunID, reads, startedAt, &response, "caller_canceled", err)
-			return nil, err
-		}
 		if isTerminalQueryStatus(queryRun.Status) {
 			response.Message = fmt.Sprintf("Query run reached terminal status %q. Call get_query_summary with the same query_run_id to retrieve the result summary.", queryRun.Status)
 			logQueryStatusPoll(logger, queryRunID, reads, startedAt, &response, "terminal", nil)
 			return &response, nil
 		}
-		response.RetryAfterSeconds = retryAfterSeconds
+		response.RetryAfterSeconds = queryStatusRetryAfterSeconds
 		response.Message = fmt.Sprintf("Query run is still %q. Call get_query_status again with the same query_run_id after %d seconds.", queryRun.Status, response.RetryAfterSeconds)
 		lastResponse = &response
+		logQueryStatusPoll(logger, queryRunID, reads, startedAt, lastResponse, "status_read", nil)
 
 		timer := time.NewTimer(pollInterval)
 		select {
