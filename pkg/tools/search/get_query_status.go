@@ -6,6 +6,7 @@ package search
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -18,14 +19,20 @@ import (
 )
 
 const (
-	queryStatusPollInterval = 3 * time.Second
-	queryStatusTimeout      = 2 * time.Minute
+	queryStatusPollInterval      = 3 * time.Second
+	queryStatusWaitBudget        = 40 * time.Second
+	queryStatusRetryAfterSeconds = 5
 )
 
+var errQueryStatusWaitBudgetExceeded = errors.New("query status wait budget exceeded")
+
 type queryStatusResponse struct {
-	ID               string                         `json:"id"`
-	Status           tfe.QueryRunStatus             `json:"status"`
-	StatusTimestamps *queryStatusTimestampsResponse `json:"status_timestamps,omitempty"`
+	ID                string                         `json:"query_run_id"`
+	Status            tfe.QueryRunStatus             `json:"status"`
+	Terminal          bool                           `json:"terminal"`
+	RetryAfterSeconds int                            `json:"retry_after_seconds,omitempty"`
+	Message           string                         `json:"message"`
+	StatusTimestamps  *queryStatusTimestampsResponse `json:"status_timestamps,omitempty"`
 }
 
 type queryStatusTimestampsResponse struct {
@@ -35,6 +42,18 @@ type queryStatusTimestampsResponse struct {
 	QueuingAt       *time.Time `json:"queuing_at,omitempty"`
 	FinishedAt      *time.Time `json:"finished_at,omitempty"`
 	RunningAt       *time.Time `json:"running_at,omitempty"`
+}
+
+type queryStatusPollConfig struct {
+	pollInterval time.Duration
+	waitBudget   time.Duration
+}
+
+func defaultQueryStatusPollConfig() queryStatusPollConfig {
+	return queryStatusPollConfig{
+		pollInterval: queryStatusPollInterval,
+		waitBudget:   queryStatusWaitBudget,
+	}
 }
 
 // GetQueryStatus gets the current status and details of an HCP Terraform query run.
@@ -50,6 +69,7 @@ func GetQueryStatus(logger *log.Logger) server.ServerTool {
 				mcp.Required(),
 				mcp.Description("Query run ID returned in the execute_query response as data.relationships.latest-query-run.data.id."),
 			),
+			mcp.WithOutputSchema[queryStatusResponse](),
 		),
 		Handler: func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			return getQueryStatusHandler(ctx, request, logger)
@@ -58,29 +78,43 @@ func GetQueryStatus(logger *log.Logger) server.ServerTool {
 }
 
 func getQueryStatusHandler(ctx context.Context, request mcp.CallToolRequest, logger *log.Logger) (*mcp.CallToolResult, error) {
+	return getQueryStatusHandlerWithConfig(ctx, request, logger, defaultQueryStatusPollConfig())
+}
+
+func getQueryStatusHandlerWithConfig(ctx context.Context, request mcp.CallToolRequest, logger *log.Logger, config queryStatusPollConfig) (*mcp.CallToolResult, error) {
 	queryRunID, err := request.RequireString("query_run_id")
-	if err != nil || strings.TrimSpace(queryRunID) == "" {
+	queryRunID = strings.TrimSpace(queryRunID)
+	if err != nil || queryRunID == "" {
 		return getQueryStatusToolErrorf(logger, "missing required input: query_run_id")
 	}
+	if config.pollInterval <= 0 {
+		return getQueryStatusToolErrorf(logger, "poll interval must be greater than zero")
+	}
+	if config.waitBudget <= 0 {
+		return getQueryStatusToolErrorf(logger, "wait budget must be greater than zero")
+	}
 
-	tfeClient, err := client.GetTfeClientFromContext(ctx, logger)
+	pollCtx, cancel := context.WithTimeoutCause(ctx, config.waitBudget, errQueryStatusWaitBudgetExceeded)
+	defer cancel()
+
+	tfeClient, err := client.GetTfeClientFromContext(pollCtx, logger)
 	if err != nil {
 		return getQueryStatusToolErrorf(logger, "failed to get Terraform client: %v", err)
 	}
+	if err := callerCancellation(ctx); err != nil {
+		return getQueryStatusToolErrorf(logger, "failed to get query run %q: %v", queryRunID, err)
+	}
 
-	pollCtx, cancel := context.WithTimeout(ctx, queryStatusTimeout)
-	defer cancel()
-
-	response, status, err := waitForQueryStatus(pollCtx, tfeClient, strings.TrimSpace(queryRunID), queryStatusPollInterval)
+	response, err := waitForQueryStatus(ctx, pollCtx, tfeClient, queryRunID, config.pollInterval, logger)
 	if err != nil {
 		return getQueryStatusToolErrorf(logger, "failed to get query run %q: %v", queryRunID, err)
 	}
 
-	return mcp.NewToolResultText(fmt.Sprintf(
-		"Query run reached terminal status %q. Do not call get_query_status again for this query run. Call get_query_summary with the same query_run_id to retrieve the result summary.\n\n%s",
-		status,
-		response,
-	)), nil
+	text, err := json.Marshal(response)
+	if err != nil {
+		return getQueryStatusToolErrorf(logger, "failed to marshal query run %q: %v", queryRunID, err)
+	}
+	return mcp.NewToolResultStructured(response, fmt.Sprintf("%s\n\n%s", response.Message, text)), nil
 }
 
 func readQueryStatus(ctx context.Context, tfeClient *tfe.Client, queryRunID string) (string, error) {
@@ -91,25 +125,88 @@ func readQueryStatus(ctx context.Context, tfeClient *tfe.Client, queryRunID stri
 	return marshalQueryStatus(queryRun)
 }
 
-func waitForQueryStatus(ctx context.Context, tfeClient *tfe.Client, queryRunID string, pollInterval time.Duration) (string, tfe.QueryRunStatus, error) {
+func waitForQueryStatus(parentCtx, pollCtx context.Context, tfeClient *tfe.Client, queryRunID string, pollInterval time.Duration, logger *log.Logger) (*queryStatusResponse, error) {
+	if pollInterval <= 0 {
+		return nil, fmt.Errorf("poll interval must be greater than zero")
+	}
+
+	startedAt := time.Now()
+	reads := 0
+	var lastResponse *queryStatusResponse
 	for {
-		queryRun, err := tfeClient.QueryRuns.Read(ctx, queryRunID)
+		if err := callerCancellation(parentCtx); err != nil {
+			logQueryStatusPoll(logger, queryRunID, reads, startedAt, lastResponse, "caller_canceled", err)
+			return nil, err
+		}
+		reads++
+		queryRun, err := tfeClient.QueryRuns.Read(pollCtx, queryRunID)
+		if callerErr := callerCancellation(parentCtx); callerErr != nil {
+			logQueryStatusPoll(logger, queryRunID, reads, startedAt, lastResponse, "caller_canceled", callerErr)
+			return nil, callerErr
+		}
 		if err != nil {
-			return "", "", err
+			if errors.Is(context.Cause(pollCtx), errQueryStatusWaitBudgetExceeded) &&
+				lastResponse != nil && errors.Is(err, pollCtx.Err()) {
+				logQueryStatusPoll(logger, queryRunID, reads, startedAt, lastResponse, "internal_budget", nil)
+				return lastResponse, nil
+			}
+			logQueryStatusPoll(logger, queryRunID, reads, startedAt, lastResponse, "read_error", err)
+			return nil, err
 		}
+		response := queryStatusResponseFromRun(queryRun)
 		if isTerminalQueryStatus(queryRun.Status) {
-			response, err := marshalQueryStatus(queryRun)
-			return response, queryRun.Status, err
+			response.Message = fmt.Sprintf("Query run reached terminal status %q. Call get_query_summary with the same query_run_id to retrieve the result summary.", queryRun.Status)
+			logQueryStatusPoll(logger, queryRunID, reads, startedAt, &response, "terminal", nil)
+			return &response, nil
 		}
+		response.RetryAfterSeconds = queryStatusRetryAfterSeconds
+		response.Message = fmt.Sprintf("Query run is still %q. Call get_query_status again with the same query_run_id after %d seconds.", queryRun.Status, response.RetryAfterSeconds)
+		lastResponse = &response
+		logQueryStatusPoll(logger, queryRunID, reads, startedAt, lastResponse, "status_read", nil)
 
 		timer := time.NewTimer(pollInterval)
 		select {
-		case <-ctx.Done():
+		case <-pollCtx.Done():
 			timer.Stop()
-			return "", "", fmt.Errorf("timed out waiting for a terminal status: %w", ctx.Err())
+			if err := callerCancellation(parentCtx); err != nil {
+				logQueryStatusPoll(logger, queryRunID, reads, startedAt, lastResponse, "caller_canceled", err)
+				return nil, err
+			}
+			if errors.Is(context.Cause(pollCtx), errQueryStatusWaitBudgetExceeded) {
+				logQueryStatusPoll(logger, queryRunID, reads, startedAt, lastResponse, "internal_budget", nil)
+				return lastResponse, nil
+			}
+			logQueryStatusPoll(logger, queryRunID, reads, startedAt, lastResponse, "caller_canceled", context.Cause(pollCtx))
+			return nil, context.Cause(pollCtx)
 		case <-timer.C:
 		}
 	}
+}
+
+func callerCancellation(ctx context.Context) error {
+	if ctx.Err() == nil {
+		return nil
+	}
+	return context.Cause(ctx)
+}
+
+func logQueryStatusPoll(logger *log.Logger, queryRunID string, pollCount int, startedAt time.Time, response *queryStatusResponse, reason string, err error) {
+	if logger == nil {
+		return
+	}
+	fields := log.Fields{
+		"query_run_id": queryRunID,
+		"poll_count":   pollCount,
+		"elapsed":      time.Since(startedAt),
+		"reason":       reason,
+	}
+	if response != nil {
+		fields["last_status"] = response.Status
+	}
+	if err != nil {
+		fields["error"] = err
+	}
+	logger.WithFields(fields).Debug("Polled HCP Terraform query run status")
 }
 
 func isTerminalQueryStatus(status tfe.QueryRunStatus) bool {
@@ -122,15 +219,20 @@ func isTerminalQueryStatus(status tfe.QueryRunStatus) bool {
 }
 
 func marshalQueryStatus(queryRun *tfe.QueryRun) (string, error) {
-	response, err := json.Marshal(queryStatusResponse{
-		ID:               queryRun.ID,
-		Status:           queryRun.Status,
-		StatusTimestamps: queryStatusTimestamps(queryRun.StatusTimestamps),
-	})
+	response, err := json.Marshal(queryStatusResponseFromRun(queryRun))
 	if err != nil {
 		return "", fmt.Errorf("marshaling query run: %w", err)
 	}
 	return string(response), nil
+}
+
+func queryStatusResponseFromRun(queryRun *tfe.QueryRun) queryStatusResponse {
+	return queryStatusResponse{
+		ID:               queryRun.ID,
+		Status:           queryRun.Status,
+		Terminal:         isTerminalQueryStatus(queryRun.Status),
+		StatusTimestamps: queryStatusTimestamps(queryRun.StatusTimestamps),
+	}
 }
 
 func queryStatusTimestamps(timestamps *tfe.QueryRunStatusTimestamps) *queryStatusTimestampsResponse {
@@ -171,7 +273,9 @@ const getQueryStatusDescription = `Fetches an HCP Terraform query run using go-t
 
 Pass the query run ID from data.relationships.latest-query-run.data.id in the
 execute_query response. This tool checks every three seconds while status is pending,
-queued, or running and returns once status is finished, errored, or canceled. Make one
-call only; do not repeatedly call this tool with the same query run ID. After a terminal
-status is returned, call get_query_summary with the same ID. The wait times out after two
-minutes. Do not use curl or call the HCP Terraform query API directly.`
+queued, or running and returns once status is finished, errored, or canceled. One call
+waits for at most 40 seconds. If the run is still active, the tool returns its current
+status and instructs you to call this tool again with the same query_run_id after
+retry_after_seconds. retry_after_seconds is omitted for a terminal status. After a
+terminal status is returned, call get_query_summary with the same ID. Do not use curl or
+call the HCP Terraform query API directly.`
