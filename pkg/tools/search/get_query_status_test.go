@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -36,15 +37,15 @@ func (s queryRunsStub) Read(ctx context.Context, queryRunID string) (*tfe.QueryR
 	return s.read(ctx, queryRunID)
 }
 
-type queryStatusLogHook struct {
-	callback func(*log.Entry)
+type queryStatusWaitContext struct {
+	context.Context
+	waiting chan struct{}
+	once    sync.Once
 }
 
-func (h queryStatusLogHook) Levels() []log.Level { return log.AllLevels }
-
-func (h queryStatusLogHook) Fire(entry *log.Entry) error {
-	h.callback(entry)
-	return nil
+func (c *queryStatusWaitContext) Done() <-chan struct{} {
+	c.once.Do(func() { close(c.waiting) })
+	return c.Context.Done()
 }
 
 func (queryStatusTestSession) Initialize() {}
@@ -105,7 +106,7 @@ func TestWaitForQueryStatusPollsUntilFinished(t *testing.T) {
 	require.NoError(t, err)
 
 	ctx := context.Background()
-	response, err := waitForQueryStatus(ctx, ctx, tfeClient, "qry-test", time.Millisecond, queryStatusRetryAfterSeconds, nil)
+	response, err := waitForQueryStatus(ctx, ctx, tfeClient, "qry-test", time.Millisecond, nil)
 
 	require.NoError(t, err)
 	assert.Equal(t, tfe.QueryRunFinished, response.Status)
@@ -131,7 +132,7 @@ func TestWaitForQueryStatusReturnsNonterminalStatus(t *testing.T) {
 	require.NoError(t, err)
 	ctx, cancel := context.WithTimeoutCause(context.Background(), 10*time.Millisecond, errQueryStatusWaitBudgetExceeded)
 	defer cancel()
-	response, err := waitForQueryStatus(context.Background(), ctx, tfeClient, "qry-test", time.Second, queryStatusRetryAfterSeconds, nil)
+	response, err := waitForQueryStatus(context.Background(), ctx, tfeClient, "qry-test", time.Second, nil)
 
 	require.NoError(t, err)
 	assert.False(t, response.Terminal)
@@ -152,7 +153,7 @@ func TestWaitForQueryStatusReturnsEachTerminalStatus(t *testing.T) {
 			tfeClient := queryStatusTFEClient(t, server)
 
 			ctx := context.Background()
-			response, err := waitForQueryStatus(ctx, ctx, tfeClient, "qry-test", time.Millisecond, queryStatusRetryAfterSeconds, nil)
+			response, err := waitForQueryStatus(ctx, ctx, tfeClient, "qry-test", time.Millisecond, nil)
 
 			require.NoError(t, err)
 			assert.Equal(t, status, response.Status)
@@ -167,18 +168,11 @@ func TestWaitForQueryStatusReturnsEachTerminalStatus(t *testing.T) {
 func TestWaitForQueryStatusReturnsLastStatusWhenInternalBudgetExpires(t *testing.T) {
 	ctx, cancel := context.WithCancelCause(context.Background())
 	tfeClient := queryStatusStubClient(func(context.Context, string) (*tfe.QueryRun, error) {
+		cancel(errQueryStatusWaitBudgetExceeded)
 		return &tfe.QueryRun{ID: "qry-test", Status: tfe.QueryRunRunning}, nil
 	})
-	logger := log.New()
-	logger.SetOutput(&bytes.Buffer{})
-	logger.SetLevel(log.DebugLevel)
-	logger.AddHook(queryStatusLogHook{callback: func(entry *log.Entry) {
-		if entry.Data["reason"] == "status_read" {
-			cancel(errQueryStatusWaitBudgetExceeded)
-		}
-	}})
 
-	response, err := waitForQueryStatus(context.Background(), ctx, tfeClient, "qry-test", time.Second, queryStatusRetryAfterSeconds, logger)
+	response, err := waitForQueryStatus(context.Background(), ctx, tfeClient, "qry-test", time.Second, nil)
 
 	require.NoError(t, err)
 	assert.Equal(t, tfe.QueryRunRunning, response.Status)
@@ -186,24 +180,31 @@ func TestWaitForQueryStatusReturnsLastStatusWhenInternalBudgetExpires(t *testing
 	assert.Equal(t, queryStatusRetryAfterSeconds, response.RetryAfterSeconds)
 }
 
-func TestWaitForQueryStatusPreservesCallerCancellation(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
+func TestWaitForQueryStatusPreservesCallerCancellationWhileWaiting(t *testing.T) {
+	callerCtx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	waiting := make(chan struct{})
+	stop := make(chan struct{})
+	defer close(stop)
+	pollCtx := &queryStatusWaitContext{Context: callerCtx, waiting: waiting}
+	reads := 0
 	tfeClient := queryStatusStubClient(func(context.Context, string) (*tfe.QueryRun, error) {
+		reads++
 		return &tfe.QueryRun{ID: "qry-test", Status: tfe.QueryRunRunning}, nil
 	})
-	logger := log.New()
-	logger.SetOutput(&bytes.Buffer{})
-	logger.SetLevel(log.DebugLevel)
-	logger.AddHook(queryStatusLogHook{callback: func(entry *log.Entry) {
-		if entry.Data["reason"] == "status_read" {
+	go func() {
+		select {
+		case <-waiting:
 			cancel()
+		case <-stop:
 		}
-	}})
+	}()
 
-	response, err := waitForQueryStatus(ctx, ctx, tfeClient, "qry-test", time.Second, queryStatusRetryAfterSeconds, logger)
+	response, err := waitForQueryStatus(callerCtx, pollCtx, tfeClient, "qry-test", time.Second, nil)
 
 	assert.Nil(t, response)
 	assert.ErrorIs(t, err, context.Canceled)
+	assert.Equal(t, 1, reads)
 }
 
 func TestWaitForQueryStatusReturnsLastStatusWhenBudgetExpiresDuringRead(t *testing.T) {
@@ -219,7 +220,7 @@ func TestWaitForQueryStatusReturnsLastStatusWhenBudgetExpiresDuringRead(t *testi
 	ctx, cancel := context.WithTimeoutCause(context.Background(), 100*time.Millisecond, errQueryStatusWaitBudgetExceeded)
 	defer cancel()
 
-	response, err := waitForQueryStatus(context.Background(), ctx, tfeClient, "qry-test", time.Millisecond, queryStatusRetryAfterSeconds, nil)
+	response, err := waitForQueryStatus(context.Background(), ctx, tfeClient, "qry-test", time.Millisecond, nil)
 
 	require.NoError(t, err)
 	require.NotNil(t, response)
@@ -237,7 +238,7 @@ func TestWaitForQueryStatusPreservesInitialReadFailureWhenBudgetExpires(t *testi
 	ctx, cancel := context.WithTimeoutCause(context.Background(), 100*time.Millisecond, errQueryStatusWaitBudgetExceeded)
 	defer cancel()
 
-	response, err := waitForQueryStatus(context.Background(), ctx, tfeClient, "qry-test", time.Second, queryStatusRetryAfterSeconds, nil)
+	response, err := waitForQueryStatus(context.Background(), ctx, tfeClient, "qry-test", time.Second, nil)
 
 	assert.Nil(t, response)
 	assert.Error(t, err)
@@ -256,7 +257,7 @@ func TestWaitForQueryStatusPreservesCallerCancellationDuringRead(t *testing.T) {
 	})
 	tfeClient := queryStatusTFEClient(t, server)
 
-	response, err := waitForQueryStatus(ctx, ctx, tfeClient, "qry-test", time.Millisecond, queryStatusRetryAfterSeconds, nil)
+	response, err := waitForQueryStatus(ctx, ctx, tfeClient, "qry-test", time.Millisecond, nil)
 
 	assert.Nil(t, response)
 	assert.ErrorIs(t, err, context.Canceled)
@@ -271,7 +272,7 @@ func TestWaitForQueryStatusPreservesCallerCancellationAfterSuccessfulRead(t *tes
 		return &tfe.QueryRun{ID: "qry-test", Status: tfe.QueryRunFinished}, nil
 	})
 
-	response, err := waitForQueryStatus(ctx, ctx, tfeClient, "qry-test", time.Second, queryStatusRetryAfterSeconds, nil)
+	response, err := waitForQueryStatus(ctx, ctx, tfeClient, "qry-test", time.Second, nil)
 
 	assert.Nil(t, response)
 	assert.ErrorIs(t, err, callerErr)
@@ -290,7 +291,7 @@ func TestWaitForQueryStatusPreservesAPIErrorRacingInternalBudget(t *testing.T) {
 		return nil, apiErr
 	})
 
-	response, err := waitForQueryStatus(context.Background(), ctx, tfeClient, "qry-test", time.Millisecond, queryStatusRetryAfterSeconds, nil)
+	response, err := waitForQueryStatus(context.Background(), ctx, tfeClient, "qry-test", time.Millisecond, nil)
 
 	assert.Nil(t, response)
 	assert.ErrorIs(t, err, apiErr)
@@ -300,13 +301,9 @@ func TestWaitForQueryStatusRejectsInvalidPollingConfiguration(t *testing.T) {
 	tfeClient := &tfe.Client{}
 
 	ctx := context.Background()
-	response, err := waitForQueryStatus(ctx, ctx, tfeClient, "qry-test", 0, queryStatusRetryAfterSeconds, nil)
+	response, err := waitForQueryStatus(ctx, ctx, tfeClient, "qry-test", 0, nil)
 	assert.Nil(t, response)
 	assert.EqualError(t, err, "poll interval must be greater than zero")
-
-	response, err = waitForQueryStatus(ctx, ctx, tfeClient, "qry-test", time.Second, 0, nil)
-	assert.Nil(t, response)
-	assert.EqualError(t, err, "retry after seconds must be greater than zero")
 }
 
 func TestGetQueryStatusHandlerReturnsStructuredAndTextResults(t *testing.T) {
@@ -435,22 +432,23 @@ func TestWaitForQueryStatusLogsPollingAndCancellation(t *testing.T) {
 	logger.SetOutput(&buf)
 	logger.SetLevel(log.DebugLevel)
 	ctx, cancel := context.WithCancel(context.Background())
+	reads := 0
 	tfeClient := queryStatusStubClient(func(context.Context, string) (*tfe.QueryRun, error) {
-		return &tfe.QueryRun{ID: "qry-test", Status: tfe.QueryRunRunning}, nil
-	})
-	logger.AddHook(queryStatusLogHook{callback: func(entry *log.Entry) {
-		if entry.Data["reason"] == "status_read" {
-			cancel()
+		reads++
+		if reads == 1 {
+			return &tfe.QueryRun{ID: "qry-test", Status: tfe.QueryRunRunning}, nil
 		}
-	}})
+		cancel()
+		return nil, context.Canceled
+	})
 
-	response, err := waitForQueryStatus(ctx, ctx, tfeClient, "qry-test", time.Second, queryStatusRetryAfterSeconds, logger)
+	response, err := waitForQueryStatus(ctx, ctx, tfeClient, "qry-test", time.Millisecond, logger)
 
 	assert.Nil(t, response)
 	assert.ErrorIs(t, err, context.Canceled)
 	output := buf.String()
 	assert.Contains(t, output, "query_run_id=qry-test")
-	assert.Contains(t, output, "poll_count=1")
+	assert.Contains(t, output, "poll_count=2")
 	assert.Contains(t, output, "last_status=running")
 	assert.Contains(t, output, "reason=caller_canceled")
 	assert.Contains(t, output, "elapsed=")
@@ -549,9 +547,8 @@ func queryStatusHandlerContext(t *testing.T, testServer *httptest.Server) contex
 
 func testQueryStatusPollConfig() queryStatusPollConfig {
 	return queryStatusPollConfig{
-		pollInterval:      time.Millisecond,
-		waitBudget:        10 * time.Millisecond,
-		retryAfterSeconds: queryStatusRetryAfterSeconds,
+		pollInterval: time.Millisecond,
+		waitBudget:   10 * time.Millisecond,
 	}
 }
 
