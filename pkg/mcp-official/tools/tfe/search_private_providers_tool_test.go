@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"testing"
 
+	"github.com/google/jsonschema-go/jsonschema"
 	"github.com/hashicorp/go-tfe"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -40,6 +41,62 @@ func TestSearchPrivateProvidersTool(t *testing.T) {
 	assert.JSONEq(t, `"private"`, string(registryName.Default))
 	assert.Contains(t, schema.Properties, "page")
 	assert.Contains(t, schema.Properties, "pageSize")
+}
+
+func TestSearchPrivateProvidersOutputSchema(t *testing.T) {
+	schema, ok := SearchPrivateProvidersTool().OutputSchema.(*jsonschema.Schema)
+	require.True(t, ok)
+	assert.Equal(t, "object", schema.Type)
+	assert.Equal(t,
+		[]string{"items", "current-page", "prev-page", "next-page", "total-count", "total-pages"},
+		schema.PropertyOrder,
+	)
+	assert.Equal(t, []string{"items"}, schema.Required)
+	require.NotNil(t, schema.AdditionalProperties)
+	assert.NotNil(t, schema.AdditionalProperties.Not)
+
+	items := schema.Properties["items"]
+	require.NotNil(t, items)
+	assert.Equal(t, "array", items.Type)
+	assert.Empty(t, items.Types)
+	require.NotNil(t, items.Items)
+	assert.Equal(t, "object", items.Items.Type)
+	require.NotNil(t, items.Items.AdditionalProperties)
+	assert.NotNil(t, items.Items.AdditionalProperties.Not)
+
+	versions := items.Items.Properties["versions"]
+	require.NotNil(t, versions)
+	assert.Equal(t, "array", versions.Type)
+	assert.Empty(t, versions.Types)
+	require.NotNil(t, versions.Items)
+	assert.Equal(t, "string", versions.Items.Type)
+
+	resolved, err := schema.Resolve(nil)
+	require.NoError(t, err)
+
+	results := []PrivateProviderSummaryList{
+		{Items: make([]PrivateProviderSummary, 0)},
+		{
+			Items: []PrivateProviderSummary{{
+				ID:              "prov-123",
+				ProviderAddress: "acme/example",
+				Name:            "example",
+				Namespace:       "acme",
+				RegistryName:    "private",
+				CreatedAt:       "2026-01-02T03:04:05Z",
+				UpdatedAt:       "2026-02-03T04:05:06Z",
+				Versions:        []string{"2.0.0"},
+			}},
+			PaginationDetails: PaginationDetails{CurrentPage: 1, TotalCount: 1, TotalPages: 1},
+		},
+	}
+	for _, result := range results {
+		data, err := json.Marshal(result)
+		require.NoError(t, err)
+		var value any
+		require.NoError(t, json.Unmarshal(data, &value))
+		assert.NoError(t, resolved.Validate(&value))
+	}
 }
 
 func TestSearchPrivateProvidersFuncValidation(t *testing.T) {
@@ -108,7 +165,7 @@ func TestPrivateProviderSummaryList(t *testing.T) {
 		})
 
 		require.Len(t, got.Items, 1)
-		assert.Equal(t, &PrivateProviderSummary{
+		assert.Equal(t, PrivateProviderSummary{
 			ID:              "prov-123",
 			ProviderAddress: "acme/example",
 			Name:            "example",

@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"testing"
 
+	"github.com/google/jsonschema-go/jsonschema"
 	"github.com/hashicorp/go-tfe"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -35,6 +36,63 @@ func TestSearchPrivateModulesTool(t *testing.T) {
 	assert.NotNil(t, schema.AdditionalProperties.Not)
 	assert.Contains(t, schema.Properties, "page")
 	assert.Contains(t, schema.Properties, "pageSize")
+}
+
+func TestSearchPrivateModulesOutputSchema(t *testing.T) {
+	schema, ok := SearchPrivateModulesTool().OutputSchema.(*jsonschema.Schema)
+	require.True(t, ok)
+	assert.Equal(t, "object", schema.Type)
+	assert.Equal(t,
+		[]string{"items", "current-page", "prev-page", "next-page", "total-count", "total-pages"},
+		schema.PropertyOrder,
+	)
+	assert.Equal(t, []string{"items"}, schema.Required)
+	require.NotNil(t, schema.AdditionalProperties)
+	assert.NotNil(t, schema.AdditionalProperties.Not)
+
+	items := schema.Properties["items"]
+	require.NotNil(t, items)
+	assert.Equal(t, "array", items.Type)
+	assert.Empty(t, items.Types)
+	require.NotNil(t, items.Items)
+	assert.Equal(t, "object", items.Items.Type)
+	require.NotNil(t, items.Items.AdditionalProperties)
+	assert.NotNil(t, items.Items.AdditionalProperties.Not)
+
+	noCodeModuleIDs := items.Items.Properties["no_code_module_ids"]
+	require.NotNil(t, noCodeModuleIDs)
+	assert.Equal(t, "array", noCodeModuleIDs.Type)
+	assert.Empty(t, noCodeModuleIDs.Types)
+	require.NotNil(t, noCodeModuleIDs.Items)
+	assert.Equal(t, "string", noCodeModuleIDs.Items.Type)
+
+	resolved, err := schema.Resolve(nil)
+	require.NoError(t, err)
+
+	results := []PrivateModuleSummaryList{
+		{Items: make([]PrivateModuleSummary, 0)},
+		{
+			Items: []PrivateModuleSummary{{
+				PrivateModuleID: "acme/vpc/aws",
+				Name:            "vpc",
+				Namespace:       "acme",
+				Provider:        "aws",
+				RegistryName:    "private",
+				CreatedAt:       "2026-01-02T03:04:05Z",
+				UpdatedAt:       "2026-02-03T04:05:06Z",
+				NoCode:          true,
+				NoCodeModuleIDs: []string{"nocode-123"},
+			}},
+			PaginationDetails: PaginationDetails{CurrentPage: 1, TotalCount: 1, TotalPages: 1},
+		},
+	}
+	for _, result := range results {
+		data, err := json.Marshal(result)
+		require.NoError(t, err)
+		var value any
+		require.NoError(t, json.Unmarshal(data, &value))
+		assert.NoError(t, resolved.Validate(&value))
+	}
 }
 
 func TestSearchPrivateModulesFuncValidation(t *testing.T) {
@@ -83,7 +141,7 @@ func TestPrivateModuleSummaryList(t *testing.T) {
 		})
 
 		require.Len(t, got.Items, 1)
-		assert.Equal(t, &PrivateModuleSummary{
+		assert.Equal(t, PrivateModuleSummary{
 			PrivateModuleID: "acme/vpc/aws",
 			Name:            "vpc",
 			Namespace:       "acme",
