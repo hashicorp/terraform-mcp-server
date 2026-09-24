@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/google/jsonschema-go/jsonschema"
 	"github.com/hashicorp/go-tfe"
 	"github.com/hashicorp/terraform-mcp-server/pkg/mcp-official/client"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -27,7 +28,7 @@ type PolicySetsSummary struct {
 // PolicySetsSummaryList contains the policy sets that apply to a workspace.
 // The handler aggregates every page into one list, so no pagination details are reported.
 type PolicySetsSummaryList struct {
-	Items []*PolicySetsSummary `json:"items"`
+	Items []PolicySetsSummary `json:"items"`
 }
 
 // PolicySetsArguments holds the required inputs for listing policy sets attached to a workspace.
@@ -40,10 +41,35 @@ func ListWorkspacePolicySetsTool() *mcp.Tool {
 	return &mcp.Tool{
 		Name:        "list_workspace_policy_sets",
 		Description: "Read all policy sets attached to a workspace. Returns both directly attached policy sets and global policy sets that apply to all workspaces.",
+		OutputSchema: &jsonschema.Schema{
+			Type: "object",
+			Properties: map[string]*jsonschema.Schema{
+				"items": {
+					Type: "array",
+					Items: &jsonschema.Schema{
+						Type: "object",
+						Properties: map[string]*jsonschema.Schema{
+							"id":          {Type: "string"},
+							"name":        {Type: "string"},
+							"description": {Type: "string"},
+							"kind":        {Type: "string"},
+							"global":      {Type: "boolean"},
+							"reason":      {Type: "string"},
+						},
+						PropertyOrder:        []string{"id", "name", "description", "kind", "global", "reason"},
+						Required:             []string{"id", "name", "description", "kind", "global", "reason"},
+						AdditionalProperties: &jsonschema.Schema{Not: &jsonschema.Schema{}},
+					},
+				},
+			},
+			PropertyOrder:        []string{"items"},
+			Required:             []string{"items"},
+			AdditionalProperties: &jsonschema.Schema{Not: &jsonschema.Schema{}},
+		},
 		Annotations: &mcp.ToolAnnotations{
 			Title:           "List Terraform workspaces policy sets",
 			ReadOnlyHint:    true,
-			DestructiveHint: ptr(false),
+			DestructiveHint: jsonschema.Ptr(false),
 		},
 	}
 }
@@ -80,7 +106,7 @@ func ListWorkspacePolicySetsFunc(ctx context.Context, request *mcp.CallToolReque
 
 	// Paginate through all policy sets with the workspaces included. The slice starts
 	// empty rather than nil so an unmatched workspace marshals as [] instead of null.
-	matchingSets := []*PolicySetsSummary{}
+	matchingSets := []PolicySetsSummary{}
 	pageNumber := 1
 
 	for {
@@ -108,7 +134,7 @@ func ListWorkspacePolicySetsFunc(ctx context.Context, request *mcp.CallToolReque
 				}
 			}
 			if applies {
-				matchingSets = append(matchingSets, &PolicySetsSummary{
+				matchingSets = append(matchingSets, PolicySetsSummary{
 					ID:          ps.ID,
 					Name:        ps.Name,
 					Description: ps.Description,
