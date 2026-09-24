@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/google/jsonschema-go/jsonschema"
 	"github.com/hashicorp/terraform-mcp-server/pkg/mcp-official/client"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
@@ -24,9 +25,9 @@ func WhoAmITool() *mcp.Tool {
 		Description: "Returns the identity of the currently authenticated Terraform token. Use this to determine which user or service account the active token belongs to.",
 		Annotations: &mcp.ToolAnnotations{
 			Title:           "Get current Terraform identity",
-			OpenWorldHint:   ptr(true),
+			OpenWorldHint:   jsonschema.Ptr(true),
 			ReadOnlyHint:    true,
-			DestructiveHint: ptr(false),
+			DestructiveHint: jsonschema.Ptr(false),
 		},
 	}
 }

@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/google/jsonschema-go/jsonschema"
 	tfeclient "github.com/hashicorp/terraform-mcp-server/pkg/client"
 	"github.com/hashicorp/terraform-mcp-server/pkg/mcp-official/client"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -25,9 +26,9 @@ func GetTokenPermissionsTool() *mcp.Tool {
 		Description: "Fetches the permissions the current token has for the specified terraform organization.",
 		Annotations: &mcp.ToolAnnotations{
 			Title:           "Get permissions for current token",
-			OpenWorldHint:   ptr(true),
+			OpenWorldHint:   jsonschema.Ptr(true),
 			ReadOnlyHint:    true,
-			DestructiveHint: ptr(false),
+			DestructiveHint: jsonschema.Ptr(false),
 		},
 	}
 }
