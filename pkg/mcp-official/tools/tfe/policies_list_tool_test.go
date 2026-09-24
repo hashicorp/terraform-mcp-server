@@ -4,6 +4,7 @@
 package tools
 
 import (
+	"encoding/json"
 	"testing"
 
 	"github.com/google/jsonschema-go/jsonschema"
@@ -34,6 +35,49 @@ func TestListWorkspacePolicySetsInputSchema(t *testing.T) {
 		require.True(t, ok, "schema should declare property %q", name)
 		assert.Equal(t, "string", property.Type)
 		assert.NotEmpty(t, property.Description, "property %q should describe itself to the model", name)
+	}
+}
+
+func TestListWorkspacePolicySetsOutputSchema(t *testing.T) {
+	schema, ok := ListWorkspacePolicySetsTool().OutputSchema.(*jsonschema.Schema)
+	require.True(t, ok)
+	assert.Equal(t, "object", schema.Type)
+	assert.Equal(t, []string{"items"}, schema.PropertyOrder)
+	assert.Equal(t, []string{"items"}, schema.Required)
+	require.NotNil(t, schema.AdditionalProperties)
+	assert.NotNil(t, schema.AdditionalProperties.Not)
+
+	items := schema.Properties["items"]
+	require.NotNil(t, items)
+	assert.Equal(t, "array", items.Type)
+	assert.Empty(t, items.Types)
+	require.NotNil(t, items.Items)
+	assert.Equal(t, "object", items.Items.Type)
+	assert.Equal(t, []string{"id", "name", "description", "kind", "global", "reason"}, items.Items.PropertyOrder)
+	assert.Equal(t, []string{"id", "name", "description", "kind", "global", "reason"}, items.Items.Required)
+	require.NotNil(t, items.Items.AdditionalProperties)
+	assert.NotNil(t, items.Items.AdditionalProperties.Not)
+
+	resolved, err := schema.Resolve(nil)
+	require.NoError(t, err)
+
+	results := []PolicySetsSummaryList{
+		{Items: make([]PolicySetsSummary, 0)},
+		{Items: []PolicySetsSummary{{
+			ID:          "polset-123",
+			Name:        "security",
+			Description: "Security policies",
+			Kind:        "sentinel",
+			Global:      true,
+			Reason:      "global",
+		}}},
+	}
+	for _, result := range results {
+		data, err := json.Marshal(result)
+		require.NoError(t, err)
+		var value any
+		require.NoError(t, json.Unmarshal(data, &value))
+		assert.NoError(t, resolved.Validate(&value))
 	}
 }
 

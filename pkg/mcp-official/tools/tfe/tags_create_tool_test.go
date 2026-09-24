@@ -4,6 +4,7 @@
 package tools
 
 import (
+	"encoding/json"
 	"testing"
 
 	"github.com/google/jsonschema-go/jsonschema"
@@ -41,6 +42,38 @@ func TestCreateWorkspaceTagsInputSchema(t *testing.T) {
 
 	assert.Contains(t, schema.Properties["tags"].Description, "key:value",
 		"the tags description must teach the model the key:value form the parser accepts")
+}
+
+func TestCreateWorkspaceTagsOutputSchema(t *testing.T) {
+	schema, ok := CreateWorkspaceTagsTool().OutputSchema.(*jsonschema.Schema)
+	require.True(t, ok)
+	assert.Equal(t, "object", schema.Type)
+	assert.Equal(t, []string{"workspace_name", "tags_added"}, schema.PropertyOrder)
+	assert.Equal(t, []string{"workspace_name", "tags_added"}, schema.Required)
+	require.NotNil(t, schema.AdditionalProperties)
+	assert.NotNil(t, schema.AdditionalProperties.Not)
+
+	items := schema.Properties["tags_added"]
+	require.NotNil(t, items)
+	assert.Equal(t, "array", items.Type)
+	assert.Empty(t, items.Types)
+	require.NotNil(t, items.Items)
+	assert.Equal(t, "string", items.Items.Type)
+
+	resolved, err := schema.Resolve(nil)
+	require.NoError(t, err)
+
+	results := []CreateWorkspaceTagsResult{
+		{WorkspaceName: "workspace", TagsAdded: make([]string, 0)},
+		{WorkspaceName: "workspace", TagsAdded: []string{"production", "env:staging"}},
+	}
+	for _, result := range results {
+		data, err := json.Marshal(result)
+		require.NoError(t, err)
+		var value any
+		require.NoError(t, json.Unmarshal(data, &value))
+		assert.NoError(t, resolved.Validate(&value))
+	}
 }
 
 func TestCreateWorkspaceTagsRejectsInvalidArguments(t *testing.T) {
