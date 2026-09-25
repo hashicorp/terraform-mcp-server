@@ -18,6 +18,7 @@ import (
 
 	"github.com/hashicorp/terraform-mcp-server/pkg/client"
 	"github.com/hashicorp/terraform-mcp-server/pkg/instructions"
+	"github.com/hashicorp/terraform-mcp-server/pkg/logging"
 	mcpofficial "github.com/hashicorp/terraform-mcp-server/pkg/mcp-official"
 	"github.com/hashicorp/terraform-mcp-server/pkg/mcp-official/tools/middleware"
 	"github.com/hashicorp/terraform-mcp-server/pkg/resources"
@@ -59,9 +60,9 @@ var (
 			if err != nil {
 				stdlog.Fatal("Failed to get log file:", err)
 			}
-			logLevel := getLogLevel(cmd.Root())
-			logFormat := getLogFormat(cmd)
-			logger, err := initLogger(logFile, logLevel, logFormat)
+			logLevel := logging.LevelFromCommand(cmd.Root())
+			logFormat := logging.FormatFromCommand(cmd)
+			logger, err := logging.NewLogger(logFile, logLevel, logFormat)
 			if err != nil {
 				stdlog.Fatal("Failed to initialize logger:", err)
 			}
@@ -83,9 +84,9 @@ var (
 			if err != nil {
 				stdlog.Fatal("Failed to get log file:", err)
 			}
-			logLevel := getLogLevel(cmd.Root())
-			logFormat := getLogFormat(cmd)
-			logger, err := initLogger(logFile, logLevel, logFormat)
+			logLevel := logging.LevelFromCommand(cmd.Root())
+			logFormat := logging.FormatFromCommand(cmd)
+			logger, err := logging.NewLogger(logFile, logLevel, logFormat)
 			if err != nil {
 				stdlog.Fatal("Failed to initialize logger:", err)
 			}
@@ -169,139 +170,6 @@ func initConfig() {
 	viper.AutomaticEnv()
 }
 
-// getLogLevel determines the log level from environment variable or CLI flag
-func getLogLevel(cmd *cobra.Command) log.Level {
-	// Check environment variable first
-	if envLevel := os.Getenv("LOG_LEVEL"); envLevel != "" {
-		level, err := log.ParseLevel(envLevel)
-		if err != nil {
-			stdlog.Printf("Warning: %v, using default 'info' level\n", err)
-			return log.InfoLevel
-		}
-		return level
-	}
-
-	// Check CLI flag
-	if cmd != nil {
-		flagLevel, err := cmd.Flags().GetString("log-level")
-		if err == nil && flagLevel != "" {
-			level, err := log.ParseLevel(flagLevel)
-			if err != nil {
-				stdlog.Printf("Warning: %v, using default 'info' level\n", err)
-				return log.InfoLevel
-			}
-			return level
-		}
-	}
-
-	// Default to info level
-	return log.InfoLevel
-}
-
-// getSlogLevel determines the slog level from the environment or CLI flag.
-func getSlogLevel(cmd *cobra.Command) slog.Level {
-	configuredLevel := os.Getenv("LOG_LEVEL")
-	if configuredLevel == "" && cmd != nil {
-		flagLevel, err := cmd.Flags().GetString("log-level")
-		if err == nil {
-			configuredLevel = flagLevel
-		}
-	}
-
-	switch strings.ToLower(strings.TrimSpace(configuredLevel)) {
-	case "trace", "debug":
-		return slog.LevelDebug
-	case "", "info":
-		return slog.LevelInfo
-	case "warn":
-		return slog.LevelWarn
-	case "error", "fatal", "panic":
-		return slog.LevelError
-	default:
-		stdlog.Printf("Warning: invalid slog level %q, using default 'info' level\n", configuredLevel)
-		return slog.LevelInfo
-	}
-}
-
-// getLogFormat determines the log format from environment variable or CLI flag
-func getLogFormat(cmd *cobra.Command) string {
-	// Check environment variable first
-	if envFormat := os.Getenv("LOG_FORMAT"); envFormat != "" {
-		format := strings.ToLower(strings.TrimSpace(envFormat))
-		if format == "json" || format == "text" {
-			return format
-		}
-		stdlog.Printf("Warning: invalid LOG_FORMAT '%s', using default 'text' format\n", envFormat)
-		return "text"
-	}
-
-	// Check CLI flag
-	if cmd != nil {
-		if flagFormat, err := cmd.Flags().GetString("log-format"); err == nil && flagFormat != "" {
-			format := strings.ToLower(strings.TrimSpace(flagFormat))
-			if format == "json" || format == "text" {
-				return format
-			}
-			stdlog.Printf("Warning: invalid --log-format '%s', using default 'text' format\n", flagFormat)
-		}
-	}
-
-	return "text"
-}
-
-func initLogger(outPath string, level log.Level, format string) (*log.Logger, error) {
-	logger := log.New()
-	logger.SetLevel(level)
-
-	// Set formatter based on format parameter
-	if strings.ToLower(format) == "json" {
-		logger.SetFormatter(&log.JSONFormatter{})
-	} else {
-		logger.SetFormatter(&log.TextFormatter{
-			FullTimestamp: true,
-		})
-	}
-
-	if outPath == "" {
-		return logger, nil
-	}
-
-	file, err := os.OpenFile(outPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o666)
-	if err != nil {
-		return nil, fmt.Errorf("failed to open log file: %w", err)
-	}
-
-	logger.SetOutput(file)
-
-	return logger, nil
-}
-
-func initSlog(outPath string, level slog.Level, format string) (*slog.Logger, *os.File, error) {
-	out := io.Writer(os.Stderr)
-	var file *os.File
-
-	if outPath != "" {
-		var err error
-		file, err = os.OpenFile(outPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o666)
-		if err != nil {
-			return nil, nil, fmt.Errorf("failed to open log file: %w", err)
-		}
-		out = file
-	}
-
-	opts := &slog.HandlerOptions{
-		Level: level,
-	}
-	var handler slog.Handler
-	// Set formatter based on format parameter
-	if strings.ToLower(format) == "json" {
-		handler = slog.NewJSONHandler(out, opts)
-	} else {
-		handler = slog.NewTextHandler(out, opts)
-	}
-	return slog.New(handler), file, nil
-}
-
 // registerToolsAndResources registers tools and resources with the MCP server
 func registerToolsAndResources(hcServer *server.MCPServer, logger *log.Logger, filter toolsets.ToolFilter) {
 	tools.RegisterTools(hcServer, logger, filter)
@@ -366,7 +234,7 @@ func streamableHTTPServerInit(ctx context.Context, hcServer *server.MCPServer, l
 	// This is the modern MCP transport that supports both direct HTTP responses and SSE streams
 	opts := []server.StreamableHTTPOption{
 		server.WithEndpointPath(endpointPath), // Default MCP endpoint path
-		server.WithStreamableHTTPLogger(newSlogLogger(logger)),
+		server.WithStreamableHTTPLogger(logging.WrapLogrus(logger)),
 	}
 
 	// Load TLS configuration
@@ -427,9 +295,9 @@ func streamableHTTPServerInit(ctx context.Context, hcServer *server.MCPServer, l
 		if err != nil {
 			return fmt.Errorf("failed to get log file: %w", err)
 		}
-		slogLevel := getSlogLevel(rootCmd)
-		slogFormat := getLogFormat(rootCmd)
-		officialLogger, officialLogFile, err := initSlog(logFile, slogLevel, slogFormat)
+		slogLevel := logging.SlogLevelFromCommand(rootCmd)
+		slogFormat := logging.FormatFromCommand(rootCmd)
+		officialLogger, officialLogFile, err := logging.NewSlogLogger(logFile, slogLevel, slogFormat)
 		if err != nil {
 			return fmt.Errorf("failed to initialize official MCP slog logger: %w", err)
 		}
