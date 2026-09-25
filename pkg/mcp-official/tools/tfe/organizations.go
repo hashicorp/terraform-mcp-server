@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/google/jsonschema-go/jsonschema"
 	"github.com/hashicorp/go-tfe"
 	"github.com/hashicorp/terraform-mcp-server/pkg/mcp-official/client"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -19,7 +20,7 @@ type OrganizationSummary struct {
 
 // OrganizationSummaryList contains the list of organization summaries and pagination details
 type OrganizationSummaryList struct {
-	Items []*OrganizationSummary `json:"items"`
+	Items []OrganizationSummary `json:"items"`
 	*tfe.Pagination
 }
 
@@ -31,9 +32,26 @@ type ListOrganizationsArguments struct {
 }
 
 func ListTerraformOrganizationsTool() *mcp.Tool {
+	input, err := jsonschema.For[ListOrganizationsArguments](nil)
+	if err != nil {
+		panic(err)
+	}
+	input.Properties["page"].Minimum = jsonschema.Ptr(1.0)
+	input.Properties["pageSize"].Minimum = jsonschema.Ptr(1.0)
+	input.Properties["pageSize"].Maximum = jsonschema.Ptr(100.0)
+
+	output, err := jsonschema.For[OrganizationSummaryList](nil)
+	if err != nil {
+		panic(err)
+	}
+	items := output.Properties["items"]
+	items.Types, items.Type = nil, "array"
+
 	return &mcp.Tool{
-		Name:        "list_terraform_orgs",
-		Description: "Fetches a list of all Terraform organizations. Supports Pagination for large result sets.",
+		Name:         "list_terraform_orgs",
+		Description:  "Fetches a list of all Terraform organizations. Supports Pagination for large result sets.",
+		InputSchema:  input,
+		OutputSchema: output,
 		Annotations: &mcp.ToolAnnotations{
 			Title:           "List all Terraform organizations",
 			ReadOnlyHint:    true,
@@ -57,20 +75,24 @@ func ListTerraformOrganizationsFunc(ctx context.Context, request *mcp.CallToolRe
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to list Terraform organizations: %w", err)
 	}
+
+	var result *mcp.CallToolResult
 	if len(orgs.Items) == 0 {
-		return nil, nil, fmt.Errorf("no organizations to list")
+		result = &mcp.CallToolResult{
+			Content: []mcp.Content{&mcp.TextContent{Text: "no organizations to list"}},
+		}
 	}
 
-	summaries := make([]*OrganizationSummary, len(orgs.Items))
+	summaries := make([]OrganizationSummary, len(orgs.Items))
 	for i, o := range orgs.Items {
-		summaries[i] = &OrganizationSummary{
+		summaries[i] = OrganizationSummary{
 			Name:      o.Name,
 			Email:     o.Email,
 			CreatedAt: o.CreatedAt,
 		}
 	}
 
-	return nil, &OrganizationSummaryList{
+	return result, &OrganizationSummaryList{
 		Items:      summaries,
 		Pagination: orgs.Pagination,
 	}, nil

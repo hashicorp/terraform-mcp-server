@@ -26,46 +26,38 @@ type StateVersionSummary struct {
 }
 
 type StateVersionSummaryList struct {
-	Items []*StateVersionSummary `json:"items"`
+	Items []StateVersionSummary `json:"items"`
 	*tfe.Pagination
 }
 
 type ListStateVersionsArguments struct {
-	TerraformOrgName string `json:"terraform_org_name"`
-	WorkspaceName    string `json:"workspace_name"`
-	Page             int    `json:"page,omitempty"`
-	PageSize         int    `json:"pageSize,omitempty"`
+	TerraformOrgName string `json:"terraform_org_name" jsonschema:"The Terraform organization name"`
+	WorkspaceName    string `json:"workspace_name" jsonschema:"The workspace name to list state versions for"`
+	Page             int    `json:"page,omitempty" jsonschema:"Page number for pagination (min 1)"`
+	PageSize         int    `json:"pageSize,omitempty" jsonschema:"Results per page for pagination (min 1, max 100)"`
 }
 
 func ListStateVersionsTool() *mcp.Tool {
+	input, err := jsonschema.For[ListStateVersionsArguments](nil)
+	if err != nil {
+		panic(err)
+	}
+	input.Properties["page"].Minimum = jsonschema.Ptr(1.0)
+	input.Properties["pageSize"].Minimum = jsonschema.Ptr(1.0)
+	input.Properties["pageSize"].Maximum = jsonschema.Ptr(100.0)
+
+	output, err := jsonschema.For[StateVersionSummaryList](nil)
+	if err != nil {
+		panic(err)
+	}
+	items := output.Properties["items"]
+	items.Types, items.Type = nil, "array"
+
 	return &mcp.Tool{
-		Name:        "list_state_versions",
-		Description: "List all the state versions for a given Terraform workspace and organization.",
-		InputSchema: &jsonschema.Schema{
-			Type: "object",
-			Properties: map[string]*jsonschema.Schema{
-				"terraform_org_name": {
-					Type:        "string",
-					Description: "The Terraform organization name",
-				},
-				"workspace_name": {
-					Type:        "string",
-					Description: "The workspace name to list state versions for",
-				},
-				"page": {
-					Type:        "integer",
-					Description: "Page number for pagination (min 1)",
-					Minimum:     jsonschema.Ptr(1.0),
-				},
-				"pageSize": {
-					Type:        "integer",
-					Description: "Results per page for pagination (min 1, max 100)",
-					Minimum:     jsonschema.Ptr(1.0),
-					Maximum:     jsonschema.Ptr(100.0),
-				},
-			},
-			Required: []string{"terraform_org_name", "workspace_name"},
-		},
+		Name:         "list_state_versions",
+		Description:  "List all the state versions for a given Terraform workspace and organization.",
+		InputSchema:  input,
+		OutputSchema: output,
 		Annotations: &mcp.ToolAnnotations{
 			Title:           "List Terraform state versions",
 			ReadOnlyHint:    true,
@@ -107,9 +99,9 @@ func ListStateVersionsFunc(ctx context.Context, request *mcp.CallToolRequest, in
 		}
 	}
 
-	summaries := make([]*StateVersionSummary, len(stateVersions.Items))
+	summaries := make([]StateVersionSummary, len(stateVersions.Items))
 	for i, stateVersion := range stateVersions.Items {
-		summaries[i] = &StateVersionSummary{
+		summaries[i] = StateVersionSummary{
 			ID:               stateVersion.ID,
 			CreatedAt:        stateVersion.CreatedAt,
 			Serial:           stateVersion.Serial,

@@ -6,6 +6,7 @@ package tools
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"strings"
 	"time"
 
@@ -108,7 +109,13 @@ func searchTerraformWorkspacesHandler(ctx context.Context, request mcp.CallToolR
 		return ToolErrorf(logger, "failed to list workspaces in org '%s'", terraformOrgName)
 	}
 	if len(workspaces.Items) == 0 {
-		return ToolErrorf(logger, "no workspaces to list in organization %q", terraformOrgName)
+		return mcp.NewToolResultStructured(
+			&WorkspaceSummaryList{
+				Items:      []*WorkspaceSummary{},
+				Pagination: workspaces.Pagination,
+			},
+			fmt.Sprintf("no workspaces to list in organization %q", terraformOrgName),
+		), nil
 	}
 
 	summaries := make([]*WorkspaceSummary, len(workspaces.Items))
