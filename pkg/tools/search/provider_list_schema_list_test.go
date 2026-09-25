@@ -406,6 +406,8 @@ func TestProviderListSchemaList_ToolDefinition(t *testing.T) {
 	assert.True(t, *tool.Tool.Annotations.ReadOnlyHint)
 	require.NotNil(t, tool.Tool.Annotations.DestructiveHint)
 	assert.False(t, *tool.Tool.Annotations.DestructiveHint)
+	require.NotNil(t, tool.Tool.Annotations.OpenWorldHint)
+	assert.True(t, *tool.Tool.Annotations.OpenWorldHint)
 
 	// Parameters
 	props := tool.Tool.InputSchema.Properties

@@ -38,7 +38,7 @@ func ProviderListSchemaList(logger *log.Logger) server.ServerTool {
 		Tool: mcp.NewTool("provider_list_schema_list",
 			mcp.WithDescription(providerListSchemaListDescription),
 			mcp.WithTitleAnnotation("Fetch list_resource_schemas for a search-compatible provider"),
-			mcp.WithOpenWorldHintAnnotation(false),
+			mcp.WithOpenWorldHintAnnotation(true),
 			mcp.WithReadOnlyHintAnnotation(true),
 			mcp.WithDestructiveHintAnnotation(false),
 			mcp.WithString("provider_namespace",
