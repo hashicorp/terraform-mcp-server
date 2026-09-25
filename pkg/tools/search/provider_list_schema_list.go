@@ -95,6 +95,9 @@ func providerListSchemaListHandler(ctx context.Context, request mcp.CallToolRequ
 	if err != nil {
 		return searchToolErrorf(logger, "failed to get Terraform client — ensure TFE_TOKEN and TFE_ADDRESS are configured: %v", err)
 	}
+	if _, err := tfeClient.Workspaces.Read(ctx, orgName, workspaceName); err != nil {
+		return searchToolErrorf(logger, "workspace %q not found in organization %q: %v", workspaceName, orgName, err)
+	}
 
 	// go-tfe sets BaseURL to <address>/api/v2; strip the suffix to build our own paths.
 	// BaseURL() returns url.URL by value so we take its address to call String().
