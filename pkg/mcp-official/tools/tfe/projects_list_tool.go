@@ -1,0 +1,121 @@
+// Copyright IBM Corp. 2025
+// SPDX-License-Identifier: MPL-2.0
+
+package tools
+
+import (
+	"context"
+	"fmt"
+	"strings"
+
+	"github.com/google/jsonschema-go/jsonschema"
+	"github.com/hashicorp/go-tfe"
+	"github.com/hashicorp/terraform-mcp-server/pkg/mcp-official/client"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
+)
+
+// ProjectSummary is a truncated set of information about a project for listing
+type ProjectSummary struct {
+	ID   string `json:"project_id"`
+	Name string `json:"project_name"`
+}
+
+// ProjectSummaryList is a list of project summaries and pagination details
+type ProjectSummaryList struct {
+	Items []ProjectSummary `json:"items"`
+	PaginationDetails
+}
+
+// ListProjectsArguments holds the input parameters for listing projects within an organization.
+type ListProjectsArguments struct {
+	// Required field
+	TerraformOrgName string `json:"terraform_org_name"`
+
+	// Optional pagination fields (will be zero values if not provided)
+	Pagination
+}
+
+func ListProjectsTool() *mcp.Tool {
+	properties := paginationSchemaProperties()
+	properties["terraform_org_name"] = &jsonschema.Schema{
+		Type:        "string",
+		Description: "The name of the Terraform Cloud/Enterprise organization",
+	}
+
+	return &mcp.Tool{
+		Name:        "list_terraform_projects",
+		Description: `Search and list Terraform projects within a specified organization. Supports pagination for large result sets. Returns a truncated summary of the project, use "get_project" to get the full details for a specific project.`,
+		InputSchema: &jsonschema.Schema{
+			Type:                 "object",
+			Properties:           properties,
+			PropertyOrder:        []string{"terraform_org_name", "page", "pageSize"},
+			Required:             []string{"terraform_org_name"},
+			AdditionalProperties: &jsonschema.Schema{Not: &jsonschema.Schema{}},
+		},
+		OutputSchema: &jsonschema.Schema{
+			Type: "object",
+			Properties: map[string]*jsonschema.Schema{
+				"items": {
+					Type: "array",
+					Items: &jsonschema.Schema{
+						Type: "object",
+						Properties: map[string]*jsonschema.Schema{
+							"project_id":   {Type: "string"},
+							"project_name": {Type: "string"},
+						},
+						PropertyOrder:        []string{"project_id", "project_name"},
+						Required:             []string{"project_id", "project_name"},
+						AdditionalProperties: &jsonschema.Schema{Not: &jsonschema.Schema{}},
+					},
+				},
+				"current-page": {Type: "integer"},
+				"prev-page":    {Type: "integer"},
+				"next-page":    {Type: "integer"},
+				"total-count":  {Type: "integer"},
+				"total-pages":  {Type: "integer"},
+			},
+			PropertyOrder:        []string{"items", "current-page", "prev-page", "next-page", "total-count", "total-pages"},
+			Required:             []string{"items"},
+			AdditionalProperties: &jsonschema.Schema{Not: &jsonschema.Schema{}},
+		},
+		Annotations: &mcp.ToolAnnotations{
+			Title:           "List all Terraform projects",
+			OpenWorldHint:   jsonschema.Ptr(true),
+			ReadOnlyHint:    true,
+			DestructiveHint: jsonschema.Ptr(false),
+		},
+	}
+}
+
+func ListProjectsFunc(ctx context.Context, request *mcp.CallToolRequest, input ListProjectsArguments) (*mcp.CallToolResult, *ProjectSummaryList, error) {
+	terraformOrgName := strings.TrimSpace(input.TerraformOrgName)
+	if terraformOrgName == "" {
+		return nil, nil, fmt.Errorf("terraform_org_name must not be blank")
+	}
+
+	tfeClient, err := client.GetTfeClient(ctx, client.SessionIDFromRequest(request))
+	if err != nil {
+		return nil, nil, fmt.Errorf("getting Terraform client: %w", err)
+	}
+
+	projects, err := tfeClient.Projects.List(ctx, terraformOrgName, &tfe.ProjectListOptions{
+		ListOptions: input.ListOptions(),
+	})
+	if err != nil {
+		return nil, nil, fmt.Errorf("listing projects in organization %q: %w", terraformOrgName, err)
+	}
+
+	// Keep the allocated slice non-nil so an empty page marshals as [] rather than null.
+	summaries := make([]ProjectSummary, len(projects.Items))
+	for i, p := range projects.Items {
+		summaries[i] = ProjectSummary{
+			ID:   p.ID,
+			Name: p.Name,
+		}
+	}
+
+	return nil, &ProjectSummaryList{
+		Items:             summaries,
+		PaginationDetails: paginationDetails(projects.Pagination),
+	}, nil
+}
