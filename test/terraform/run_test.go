@@ -109,7 +109,9 @@ func TestRunLifecycle(t *testing.T) {
 		listedWorkspaceName := gjson.Get(resultText, "items.0.workspace_name").String()
 
 		// Verify against the TFE API directly
-		runs, err := client.Runs.List(t.Context(), workspace.ID, nil)
+		runs, err := client.Runs.List(t.Context(), workspace.ID, &tfe.RunListOptions{
+			Include: []tfe.RunIncludeOpt{tfe.RunWorkspace},
+		})
 		require.NoError(t, err)
 		require.Len(t, runs.Items, 1, "the dedicated workspace should contain one run")
 		assert.Equal(t, runs.Items[0].ID, listedRunID)
