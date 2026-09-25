@@ -18,10 +18,7 @@ func RegisterTools(hcServer *server.MCPServer, logger *log.Logger, filter toolse
 	// Registry toolset). TFE-gated tools are handled by
 	// registerDynamicTools/registerTFETools instead, since they can only be
 	// registered once a session actually has a valid TFE client.
-	for _, td := range toolsets.AllTools {
-		if td.RequiresTFE || !filter.IsToolEnabled(td.Name) {
-			continue
-		}
+	for _, td := range filter.EnabledTools(func(td toolsets.ToolDef) bool { return !td.RequiresTFE }) {
 		factory, ok := toolFactories[td.Name]
 		if !ok {
 			logger.Warnf("no tool factory registered for %q; skipping", td.Name)

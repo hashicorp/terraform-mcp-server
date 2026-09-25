@@ -6,6 +6,11 @@ IMPROVEMENTS
 * `get_private_module_details` now reports the module version its details were read from, and the generated usage snippet pins that version instead of the first entry in the module's version statuses, which may be a version whose ingress is still pending or has failed.
 * `get_private_module_details` now requests the registry's latest-version route directly when `private_module_version` is omitted, instead of sending a request with an empty version segment.
 
+FIXES
+
+* `list_runs` now applies the `status` filter. The tool accepts `status` as an array but read it as a string, so the filter was always dropped and runs of every status were returned.
+* `list_runs` now reports the `workspace_name` of each run. The runs were listed without including their workspace, so the name was always empty.
+
 # 1.3.0
 
 FEATURES

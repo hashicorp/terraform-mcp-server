@@ -5,13 +5,13 @@ package mcpofficial
 
 import (
 	"context"
+	"log/slog"
 	"time"
 
 	"github.com/hashicorp/terraform-mcp-server/pkg/mcp-official/tools"
 	"github.com/hashicorp/terraform-mcp-server/pkg/toolsets"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
-	log "github.com/sirupsen/logrus"
 )
 
 // serverConfig holds server settings, set via Options like WithMiddlewares
@@ -44,10 +44,10 @@ func WithMiddlewares(mw ...mcp.Middleware) Option {
 	}
 }
 
-func NewServer(version, instructions string, heartbeatInterval time.Duration, logger *log.Logger, filter toolsets.ToolFilter, opts ...Option) *mcp.Server {
-	cfg := &serverConfig{mcpOpts: mcp.ServerOptions{Instructions: instructions}}
+func NewServer(version, instructions string, heartbeatInterval time.Duration, logger *slog.Logger, filter toolsets.ToolFilter, opts ...Option) *mcp.Server {
+	cfg := &serverConfig{mcpOpts: mcp.ServerOptions{Instructions: instructions, Logger: logger}}
 	if heartbeatInterval > 0 {
-		logger.Infof("HTTP heartbeat enabled with interval: %v", heartbeatInterval)
+		logger.Info("HTTP heartbeat enabled", "interval", heartbeatInterval)
 		cfg.mcpOpts.KeepAlive = heartbeatInterval
 	}
 	for _, opt := range opts {

@@ -109,7 +109,9 @@ func TestRunLifecycle(t *testing.T) {
 		listedWorkspaceName := gjson.Get(resultText, "items.0.workspace_name").String()
 
 		// Verify against the TFE API directly
-		runs, err := client.Runs.List(t.Context(), workspace.ID, nil)
+		runs, err := client.Runs.List(t.Context(), workspace.ID, &tfe.RunListOptions{
+			Include: []tfe.RunIncludeOpt{tfe.RunWorkspace},
+		})
 		require.NoError(t, err)
 		require.Len(t, runs.Items, 1, "the dedicated workspace should contain one run")
 		assert.Equal(t, runs.Items[0].ID, listedRunID)
@@ -305,4 +307,73 @@ func waitForRun(t *testing.T, client *tfe.Client, runID, condition string, condi
 		}
 		return nil, nil
 	})
+}
+
+// Regression test for Issue#531. status was read with GetString on an array and
+// silently dropped, so every run came back regardless of the filter. And
+// workspace_name was always empty because the workspace relation was never
+// included in the list options.
+func TestListRunsStatusFilterAndWorkspaceName(t *testing.T) {
+	requireTfOperations(t)
+	s := newTestingSession(t)
+	defer s.Close()
+
+	client := tfeClient(t)
+	workspaceName := randomName("list-runs-filter-")
+	executionMode := "remote"
+	workspace, err := client.Workspaces.Create(t.Context(), tfeOrgName, tfe.WorkspaceCreateOptions{
+		Name:          &workspaceName,
+		ExecutionMode: &executionMode,
+		AutoApply:     tfe.Bool(false),
+	})
+	require.NoError(t, err, "failed to create test workspace")
+	defer client.Workspaces.DeleteByID(t.Context(), workspace.ID)
+
+	uploadRunTestConfiguration(t, client, workspace.ID)
+
+	// Create a plan_only run and wait for it to finish so we can be able to have a run in a
+	// known status to be able to filter on.
+	result, resultText := callTool(t, s, "create_run", map[string]any{
+		"terraform_org_name": tfeOrgName,
+		"workspace_name":     workspaceName,
+		"run_type":           "plan_only",
+		"message":            "list_runs status filter test",
+	})
+	require.False(t, result.IsError, "create_run should not return an error")
+	runID := gjson.Get(resultText, "data.id").String()
+	require.NotEmpty(t, runID, "create_run response should include a run ID")
+
+	waitForRun(t, client, runID, "planned_and_finished", func(r *tfe.Run) bool {
+		return r.Status == tfe.RunPlannedAndFinished
+	})
+
+	// Every run that comes back should have that status and a populated workspace_name
+	listResult, listText := callTool(t, s, "list_runs", map[string]any{
+		"terraform_org_name": tfeOrgName,
+		"workspace_name":     workspaceName,
+		"status":             []string{"planned_and_finished"},
+	})
+	require.False(t, listResult.IsError, "list_runs should not return an error")
+
+	items := gjson.Get(listText, "items").Array()
+	require.NotEmpty(t, items, "expected at least one planned_and_finished run")
+
+	for _, item := range items {
+		assert.Equal(t, "planned_and_finished", item.Get("status").String(),
+			"run %s came back with the wrong status", item.Get("id").String())
+		assert.Equal(t, workspaceName, item.Get("workspace_name").String(),
+			"run %s has empty or wrong workspace_name", item.Get("id").String())
+	}
+	assert.True(t, gjson.Get(listText, `items.#(id=="`+runID+`").id`).Exists(),
+		"run %s should appear when filtering on planned_and_finished", runID)
+
+	// Now we are filtering on a status the run doesn't have should exclude it. Prior to the
+	// fix the filter was dropped and it would have come back anyway.
+	_, erroredText := callTool(t, s, "list_runs", map[string]any{
+		"terraform_org_name": tfeOrgName,
+		"workspace_name":     workspaceName,
+		"status":             []string{"errored"},
+	})
+	assert.False(t, gjson.Get(erroredText, `items.#(id=="`+runID+`").id`).Exists(),
+		"run %s is planned_and_finished and should not appear when filtering on errored", runID)
 }
