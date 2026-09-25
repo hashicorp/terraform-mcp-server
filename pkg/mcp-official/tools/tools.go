@@ -30,4 +30,20 @@ func RegisterTools(svr *mcp.Server, logger *slog.Logger, filter toolsets.ToolFil
 			register(svr)
 		}
 	}
+
+	if toolsets.IsToolEnabled("search_private_modules", enabledToolsets) {
+		mcp.AddTool(svr, tfeTools.SearchPrivateModulesTool(), tfeTools.SearchPrivateModulesFunc)
+	}
+
+	if toolsets.IsToolEnabled("search_private_providers", enabledToolsets) {
+		mcp.AddTool(svr, tfeTools.SearchPrivateProvidersTool(), tfeTools.SearchPrivateProvidersFunc)
+	}
+
+	if toolsets.IsToolEnabled("get_private_provider_details", enabledToolsets) {
+		mcp.AddTool(svr, tfeTools.GetPrivateProviderDetailsTool(), tfeTools.GetPrivateProviderDetailsFunc)
+	}
+
+	if toolsets.IsToolEnabled("get_private_module_details", enabledToolsets) {
+		mcp.AddTool(svr, tfeTools.GetPrivateModuleDetailsTool(), tfeTools.GetPrivateModuleDetailsFunc)
+	}
 }
