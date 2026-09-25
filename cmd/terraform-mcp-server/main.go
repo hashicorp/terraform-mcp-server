@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/hashicorp/terraform-mcp-server/pkg/client"
+	"github.com/hashicorp/terraform-mcp-server/pkg/instructions"
 	"github.com/hashicorp/terraform-mcp-server/pkg/toolsets"
 	"github.com/hashicorp/terraform-mcp-server/version"
 	"go.opentelemetry.io/otel"
@@ -32,8 +33,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-//go:embed instructions.md
-var instructions string
 var sessionClientInfo sync.Map // map[string]client.ClientInfo
 
 func runHTTPServer(logger *log.Logger, host string, port string, endpointPath string, heartbeatInterval time.Duration, filter toolsets.ToolFilter, metricsConfig client.MetricsConfig, organizationAllowlist []string) error {
@@ -188,7 +187,7 @@ func NewServer(version string, logger *log.Logger, filter toolsets.ToolFilter, o
 	defaultOpts := []server.ServerOption{
 		server.WithToolCapabilities(true),
 		server.WithResourceCapabilities(true, true),
-		server.WithInstructions(instructions),
+		server.WithInstructions(instructions.Text),
 		server.WithToolHandlerMiddleware(rateLimitMiddleware.Middleware()),
 		server.WithToolHandlerMiddleware(client.ToolLoggingMiddleware(logger)),
 		server.WithElicitation(),

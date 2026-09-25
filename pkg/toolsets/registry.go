@@ -13,8 +13,9 @@ type ToolDef struct {
 }
 
 // AllTools is the full list of tools known to the server. Both the
-// mark3labs and official-SDK registration code should loop over this
-// instead of hardcoding their own per-tool if-chain.
+// mark3labs and official-SDK registration code should walk this via
+// ToolFilter.EnabledTools instead of hardcoding their own per-tool
+// if-chain (see filter.go).
 var AllTools = []ToolDef{
 	// Public Registry tools (providers, modules, policies) — no TFE session needed
 	{Name: "search_providers", Toolset: Registry},

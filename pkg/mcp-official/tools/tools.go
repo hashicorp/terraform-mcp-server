@@ -16,8 +16,6 @@ import (
 
 var officialFactories = map[string]func(svr *mcp.Server){
 	// Add entries here as each tool gets ported to the official go-sdk
-	// Tools not yet migrated simply have no entry and are silently skipped
-	// below — no other code needs to change.
 	"list_workspaces": func(svr *mcp.Server) {
 		mcp.AddTool(svr, tfeTools.ListWorkspacesTool(), tfeTools.ListWorkspacesFunc)
 	},
@@ -27,10 +25,7 @@ var officialFactories = map[string]func(svr *mcp.Server){
 }
 
 func RegisterTools(svr *mcp.Server, logger *slog.Logger, filter toolsets.ToolFilter) {
-	for _, td := range toolsets.AllTools {
-		if !filter.IsToolEnabled(td.Name) {
-			continue
-		}
+	for _, td := range filter.EnabledTools(nil) {
 		if register, ok := officialFactories[td.Name]; ok {
 			register(svr)
 		}

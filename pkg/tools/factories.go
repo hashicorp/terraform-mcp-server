@@ -15,16 +15,8 @@ type toolFactory func(logger *log.Logger) server.ServerTool
 
 // toolFactories is the single lookup both RegisterTools (tools.go, registry
 // tools) and registerTFETools (dynamic_tool.go, TFE tools) dispatch through,
-// keyed by toolsets.ToolDef.Name. This replaces the copy-pasted
-// `if toolsets.IsToolEnabled(...) { tool := xTools.Y(logger); AddTool(...) }`
-// block that used to appear once per tool in each registration site.
-//
-// Two tools are intentionally NOT here — they don't fit the plain
-// func(*log.Logger) server.ServerTool shape and are handled explicitly where
-// they're registered, in dynamic_tool.go:
-//   - create_no_code_workspace: also needs *server.MCPServer (elicitation).
-//   - create_run: swaps between CreateRun/CreateRunSafe based on
-//     ENABLE_TF_OPERATIONS.
+// keyed by toolsets.ToolDef.Name. Two tools that don't fit this plain shape
+// (create_no_code_workspace, create_run) live in specialFactories below
 var toolFactories = map[string]toolFactory{
 	// Public Registry tools
 	"search_providers":            registryTools.ResolveProviderDocID,
@@ -110,4 +102,22 @@ var toolFactories = map[string]toolFactory{
 	// Terraform - State Versions
 	"list_state_versions": tfeTools.ListStateVersions,
 	"get_state_version":   tfeTools.GetStateVersion,
+}
+
+// specialFactories covers the 2 tools that don't fit toolFactory's shape:
+//   - create_no_code_workspace: also needs *server.MCPServer for elicitation
+//   - create_run: picks CreateRun or CreateRunSafe based on ENABLE_TF_OPERATIONS
+//
+// Keeping these in a map (not a switch statement) keeps every tool's setup
+// data-driven, not just most of them
+var specialFactories = map[string]func(logger *log.Logger, mcpServer *server.MCPServer, tfOpsEnabled bool) server.ServerTool{
+	"create_no_code_workspace": func(logger *log.Logger, mcpServer *server.MCPServer, _ bool) server.ServerTool {
+		return tfeTools.CreateNoCodeWorkspace(logger, mcpServer)
+	},
+	"create_run": func(logger *log.Logger, _ *server.MCPServer, tfOpsEnabled bool) server.ServerTool {
+		if tfOpsEnabled {
+			return tfeTools.CreateRun(logger)
+		}
+		return tfeTools.CreateRunSafe(logger)
+	},
 }

@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/hashicorp/terraform-mcp-server/pkg/client"
+	"github.com/hashicorp/terraform-mcp-server/pkg/instructions"
 	mcpofficial "github.com/hashicorp/terraform-mcp-server/pkg/mcp-official"
 	"github.com/hashicorp/terraform-mcp-server/pkg/mcp-official/tools/middleware"
 	"github.com/hashicorp/terraform-mcp-server/pkg/resources"
@@ -565,7 +566,7 @@ func getOfficialStreamableServer(ctx context.Context, heartbeatInterval time.Dur
 			}()
 		}),
 	}
-	hcServer := mcpofficial.NewServer(version.Version, instructions, heartbeatInterval, officialLogger, filter, serverOpts...)
+	hcServer := mcpofficial.NewServer(version.Version, instructions.Text, heartbeatInterval, officialLogger, filter, serverOpts...)
 
 	opts := &mcp.StreamableHTTPOptions{
 		Stateless:             isStateless,
