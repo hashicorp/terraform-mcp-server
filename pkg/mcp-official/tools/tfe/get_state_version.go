@@ -44,7 +44,7 @@ func GetStateVersionTool() *mcp.Tool {
 		Annotations: &mcp.ToolAnnotations{
 			Title:           "Get Terraform state version",
 			ReadOnlyHint:    true,
-			DestructiveHint: ptr(false),
+			DestructiveHint: jsonschema.Ptr(false),
 		},
 	}
 }
