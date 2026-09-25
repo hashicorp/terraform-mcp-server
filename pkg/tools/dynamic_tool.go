@@ -9,6 +9,7 @@ import (
 	"sync"
 
 	"github.com/hashicorp/terraform-mcp-server/pkg/client"
+	searchTools "github.com/hashicorp/terraform-mcp-server/pkg/tools/search"
 	tfeTools "github.com/hashicorp/terraform-mcp-server/pkg/tools/tfe"
 	"github.com/hashicorp/terraform-mcp-server/pkg/toolsets"
 	"github.com/hashicorp/terraform-mcp-server/pkg/utils"
@@ -118,6 +119,10 @@ func (r *DynamicToolRegistry) registerTFETools() {
 		case "create_no_code_workspace":
 			// Needs *server.MCPServer too, for elicitation
 			tool := r.createDynamicTFEToolWithElicitation(td.Name, tfeTools.CreateNoCodeWorkspace)
+			r.mcpServer.AddTool(tool.Tool, tool.Handler)
+			continue
+		case "import_query_results":
+			tool := r.createDynamicTFEToolWithElicitation(td.Name, searchTools.ImportQueryResults)
 			r.mcpServer.AddTool(tool.Tool, tool.Handler)
 			continue
 		case "create_run":
