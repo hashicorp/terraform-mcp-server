@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/jsonschema-go/jsonschema"
 	"github.com/hashicorp/go-tfe"
 	"github.com/hashicorp/terraform-mcp-server/pkg/mcp-official/client"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -26,7 +27,8 @@ type WorkspaceSummary struct {
 
 // WorkspaceSummaryList contains the list of workspace summaries and pagination details
 type WorkspaceSummaryList struct {
-	Items []*WorkspaceSummary `json:"items"`
+	Items []WorkspaceSummary `json:"items"`
+	*tfe.Pagination
 }
 
 // ListWorkspacesArguments holds the input parameters for listing workspaces within an organization.
@@ -40,12 +42,31 @@ type ListWorkspacesArguments struct {
 	Tags         string `json:"tags,omitempty" jsonschema:"Comma-separated tags"`
 	ExcludeTags  string `json:"exclude_tags,omitempty" jsonschema:"Tags to exclude"`
 	WildcardName string `json:"wildcard_name,omitempty" jsonschema:"Wildcard pattern"`
+	Page         int    `json:"page,omitempty" jsonschema:"Page number for pagination (min 1)"`
+	PageSize     int    `json:"pageSize,omitempty" jsonschema:"Results per page for pagination (min 1, max 100)"`
 }
 
 func ListWorkspacesTool() *mcp.Tool {
+	input, err := jsonschema.For[ListWorkspacesArguments](nil)
+	if err != nil {
+		panic(err)
+	}
+	input.Properties["page"].Minimum = jsonschema.Ptr(1.0)
+	input.Properties["pageSize"].Minimum = jsonschema.Ptr(1.0)
+	input.Properties["pageSize"].Maximum = jsonschema.Ptr(100.0)
+
+	output, err := jsonschema.For[WorkspaceSummaryList](nil)
+	if err != nil {
+		panic(err)
+	}
+	items := output.Properties["items"]
+	items.Types, items.Type = nil, "array"
+
 	return &mcp.Tool{
-		Name:        "list_workspaces",
-		Description: "Search and list Terraform workspaces within a specified organization. Returns all workspaces when no filters are applied, or filters results based on name patterns, tags, or search queries. Supports pagination for large result sets. Returns a truncated summary of the workspace, use get_workspace_details to get the full details for a specific workspace.",
+		Name:         "list_workspaces",
+		Description:  "Search and list Terraform workspaces within a specified organization. Returns all workspaces when no filters are applied, or filters results based on name patterns, tags, or search queries. Supports pagination for large result sets. Returns a truncated summary of the workspace, use get_workspace_details to get the full details for a specific workspace.",
+		InputSchema:  input,
+		OutputSchema: output,
 		Annotations: &mcp.ToolAnnotations{
 			Title:           "List Terraform workspaces with queries",
 			OpenWorldHint:   ptr(true),
@@ -90,17 +111,25 @@ func ListWorkspacesFunc(ctx context.Context, request *mcp.CallToolRequest, input
 		Tags:         strings.Join(tags, ","),
 		ExcludeTags:  strings.Join(excludeTags, ","),
 		WildcardName: wildcardName,
+		ListOptions: tfe.ListOptions{
+			PageNumber: input.Page,
+			PageSize:   input.PageSize,
+		},
 	})
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to list workspaces in org '%s': %w", terraformOrgName, err)
 	}
+
+	var result *mcp.CallToolResult
 	if len(workspaces.Items) == 0 {
-		return nil, nil, fmt.Errorf("no workspaces to list in organization %q", terraformOrgName)
+		result = &mcp.CallToolResult{
+			Content: []mcp.Content{&mcp.TextContent{Text: fmt.Sprintf("no workspaces to list in organization %q", terraformOrgName)}},
+		}
 	}
 
-	summaries := make([]*WorkspaceSummary, len(workspaces.Items))
+	summaries := make([]WorkspaceSummary, len(workspaces.Items))
 	for i, w := range workspaces.Items {
-		summaries[i] = &WorkspaceSummary{
+		summaries[i] = WorkspaceSummary{
 			ID:            w.ID,
 			Name:          w.Name,
 			Description:   w.Description,
@@ -109,7 +138,8 @@ func ListWorkspacesFunc(ctx context.Context, request *mcp.CallToolRequest, input
 			ExecutionMode: w.ExecutionMode,
 		}
 	}
-	return nil, &WorkspaceSummaryList{
-		Items: summaries,
+	return result, &WorkspaceSummaryList{
+		Items:      summaries,
+		Pagination: workspaces.Pagination,
 	}, nil
 }
