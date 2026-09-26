@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 
 	"github.com/hashicorp/terraform-mcp-server/pkg/client"
@@ -38,7 +39,7 @@ func ProviderListSchemaList(logger *log.Logger) server.ServerTool {
 		Tool: mcp.NewTool("provider_list_schema_list",
 			mcp.WithDescription(providerListSchemaListDescription),
 			mcp.WithTitleAnnotation("Fetch list_resource_schemas for a search-compatible provider"),
-			mcp.WithOpenWorldHintAnnotation(false),
+			mcp.WithOpenWorldHintAnnotation(true),
 			mcp.WithReadOnlyHintAnnotation(true),
 			mcp.WithDestructiveHintAnnotation(false),
 			mcp.WithString("provider_namespace",
@@ -94,6 +95,9 @@ func providerListSchemaListHandler(ctx context.Context, request mcp.CallToolRequ
 	tfeClient, err := client.GetTfeClientFromContext(ctx, logger)
 	if err != nil {
 		return searchToolErrorf(logger, "failed to get Terraform client — ensure TFE_TOKEN and TFE_ADDRESS are configured: %v", err)
+	}
+	if _, err := tfeClient.Workspaces.Read(ctx, orgName, workspaceName); err != nil {
+		return searchToolErrorf(logger, "workspace %q not found in organization %q: %v", workspaceName, orgName, err)
 	}
 
 	// go-tfe sets BaseURL to <address>/api/v2; strip the suffix to build our own paths.
@@ -156,12 +160,14 @@ type noCodeProviderSchemaResponse struct {
 }
 
 func listSupportedProviders(ctx context.Context, baseURL, orgName, token string, httpClient *http.Client, logger *log.Logger) (*mcp.CallToolResult, error) {
-	url := fmt.Sprintf("%s/api/v2/search/provider-versions", baseURL)
+	requestURL := fmt.Sprintf("%s/api/v2/search/provider-versions", baseURL)
 	if orgName != "" {
-		url += fmt.Sprintf("?filter[organization][name]=%s", orgName)
+		query := url.Values{}
+		query.Set("filter[organization][name]", orgName)
+		requestURL += "?" + query.Encode()
 	}
 
-	body, err := doAuthenticatedGet(ctx, url, token, httpClient, logger)
+	body, err := doAuthenticatedGet(ctx, requestURL, token, httpClient, logger)
 	if err != nil {
 		return searchToolErrorf(logger, "failed to fetch supported providers: %v", err)
 	}
@@ -204,12 +210,14 @@ func listSupportedProviders(ctx context.Context, baseURL, orgName, token string,
 // ── discover version from index ───────────────────────────────────────────────
 
 func discoverProviderVersion(ctx context.Context, baseURL, orgName, namespace, name, token string, httpClient *http.Client, logger *log.Logger) (string, error) {
-	url := fmt.Sprintf("%s/api/v2/search/provider-versions", baseURL)
+	requestURL := fmt.Sprintf("%s/api/v2/search/provider-versions", baseURL)
 	if orgName != "" {
-		url += fmt.Sprintf("?filter[organization][name]=%s", orgName)
+		query := url.Values{}
+		query.Set("filter[organization][name]", orgName)
+		requestURL += "?" + query.Encode()
 	}
 
-	body, err := doAuthenticatedGet(ctx, url, token, httpClient, logger)
+	body, err := doAuthenticatedGet(ctx, requestURL, token, httpClient, logger)
 	if err != nil {
 		return "", fmt.Errorf("failed to fetch provider list to discover version: %w", err)
 	}
@@ -236,17 +244,19 @@ func discoverProviderVersion(ctx context.Context, baseURL, orgName, namespace, n
 // ── fetch schema for a specific provider ──────────────────────────────────────
 
 func fetchProviderSchema(ctx context.Context, baseURL, orgName, namespace, name, version, token string, httpClient *http.Client, logger *log.Logger) (*mcp.CallToolResult, error) {
-	url := fmt.Sprintf("%s/api/v2/search/provider-versions/%s/%s/%s",
+	requestURL := fmt.Sprintf("%s/api/v2/search/provider-versions/%s/%s/%s",
 		baseURL,
-		namespace,
-		name,
-		version,
+		url.PathEscape(namespace),
+		url.PathEscape(name),
+		url.PathEscape(version),
 	)
 	if orgName != "" {
-		url += fmt.Sprintf("?filter[organization][name]=%s", orgName)
+		query := url.Values{}
+		query.Set("filter[organization][name]", orgName)
+		requestURL += "?" + query.Encode()
 	}
 
-	body, err := doAuthenticatedGet(ctx, url, token, httpClient, logger)
+	body, err := doAuthenticatedGet(ctx, requestURL, token, httpClient, logger)
 	if err != nil {
 		return searchToolErrorf(logger, "failed to fetch schema for %s/%s@%s: %v", namespace, name, version, err)
 	}

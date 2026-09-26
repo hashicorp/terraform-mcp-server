@@ -244,9 +244,9 @@ func TestListSupportedProviders_EmptyList(t *testing.T) {
 }
 
 func TestListSupportedProviders_WithOrgFilter(t *testing.T) {
-	var capturedURL string
+	var capturedOrg string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		capturedURL = r.URL.String()
+		capturedOrg = r.URL.Query().Get("filter[organization][name]")
 		w.Header().Set("Content-Type", "application/vnd.api+json")
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"data": []any{
@@ -264,9 +264,9 @@ func TestListSupportedProviders_WithOrgFilter(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	_, err := listSupportedProviders(context.Background(), srv.URL, "my-org", "tok", srv.Client(), silentLogger())
+	_, err := listSupportedProviders(context.Background(), srv.URL, "example org&group=test", "tok", srv.Client(), silentLogger())
 	require.NoError(t, err)
-	assert.Contains(t, capturedURL, "filter[organization][name]=my-org")
+	assert.Equal(t, "example org&group=test", capturedOrg)
 }
 
 // ── discoverProviderVersion ───────────────────────────────────────────────────
@@ -282,6 +282,17 @@ func TestDiscoverProviderVersion_Found(t *testing.T) {
 	version, err := discoverProviderVersion(context.Background(), s.server.URL, "", "hashicorp", "aws", "token", s.server.Client(), silentLogger())
 	require.NoError(t, err)
 	assert.Equal(t, "5.1.0", version)
+}
+func TestDiscoverProviderVersion_WithOrgFilter(t *testing.T) {
+	var capturedOrg string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		capturedOrg = r.URL.Query().Get("filter[organization][name]")
+		_ = json.NewEncoder(w).Encode(map[string]any{"data": []any{}})
+	}))
+	defer srv.Close()
+
+	_, _ = discoverProviderVersion(context.Background(), srv.URL, "example org&group=test", "example", "provider", "tok", srv.Client(), silentLogger())
+	assert.Equal(t, "example org&group=test", capturedOrg)
 }
 
 func TestDiscoverProviderVersion_CaseInsensitive(t *testing.T) {
@@ -361,9 +372,11 @@ func TestFetchProviderSchema_NilListResourceSchemas(t *testing.T) {
 }
 
 func TestFetchProviderSchema_WithOrgFilter(t *testing.T) {
-	var capturedURL string
+	var capturedOrg string
+	var capturedPath string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		capturedURL = r.URL.String()
+		capturedOrg = r.URL.Query().Get("filter[organization][name]")
+		capturedPath = r.URL.EscapedPath()
 		w.Header().Set("Content-Type", "application/vnd.api+json")
 		schema := json.RawMessage(`{"aws_instance":{}}`)
 		type attrs struct {
@@ -387,8 +400,9 @@ func TestFetchProviderSchema_WithOrgFilter(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	_, _ = fetchProviderSchema(context.Background(), srv.URL, "my-org", "hashicorp", "aws", "5.0.0", "tok", srv.Client(), silentLogger())
-	assert.Contains(t, capturedURL, "filter[organization][name]=my-org")
+	_, _ = fetchProviderSchema(context.Background(), srv.URL, "example org&group=test", "example/namespace", "test provider", "1.0/test", "tok", srv.Client(), silentLogger())
+	assert.Equal(t, "example org&group=test", capturedOrg)
+	assert.Equal(t, "/api/v2/search/provider-versions/example%2Fnamespace/test%20provider/1.0%2Ftest", capturedPath)
 }
 
 // ── tool definition ───────────────────────────────────────────────────────────
@@ -406,6 +420,8 @@ func TestProviderListSchemaList_ToolDefinition(t *testing.T) {
 	assert.True(t, *tool.Tool.Annotations.ReadOnlyHint)
 	require.NotNil(t, tool.Tool.Annotations.DestructiveHint)
 	assert.False(t, *tool.Tool.Annotations.DestructiveHint)
+	require.NotNil(t, tool.Tool.Annotations.OpenWorldHint)
+	assert.True(t, *tool.Tool.Annotations.OpenWorldHint)
 
 	// Parameters
 	props := tool.Tool.InputSchema.Properties
