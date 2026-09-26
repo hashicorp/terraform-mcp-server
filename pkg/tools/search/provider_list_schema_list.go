@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 
 	"github.com/hashicorp/terraform-mcp-server/pkg/client"
@@ -159,12 +160,14 @@ type noCodeProviderSchemaResponse struct {
 }
 
 func listSupportedProviders(ctx context.Context, baseURL, orgName, token string, httpClient *http.Client, logger *log.Logger) (*mcp.CallToolResult, error) {
-	url := fmt.Sprintf("%s/api/v2/search/provider-versions", baseURL)
+	requestURL := fmt.Sprintf("%s/api/v2/search/provider-versions", baseURL)
 	if orgName != "" {
-		url += fmt.Sprintf("?filter[organization][name]=%s", orgName)
+		query := url.Values{}
+		query.Set("filter[organization][name]", orgName)
+		requestURL += "?" + query.Encode()
 	}
 
-	body, err := doAuthenticatedGet(ctx, url, token, httpClient, logger)
+	body, err := doAuthenticatedGet(ctx, requestURL, token, httpClient, logger)
 	if err != nil {
 		return searchToolErrorf(logger, "failed to fetch supported providers: %v", err)
 	}
@@ -207,12 +210,14 @@ func listSupportedProviders(ctx context.Context, baseURL, orgName, token string,
 // ── discover version from index ───────────────────────────────────────────────
 
 func discoverProviderVersion(ctx context.Context, baseURL, orgName, namespace, name, token string, httpClient *http.Client, logger *log.Logger) (string, error) {
-	url := fmt.Sprintf("%s/api/v2/search/provider-versions", baseURL)
+	requestURL := fmt.Sprintf("%s/api/v2/search/provider-versions", baseURL)
 	if orgName != "" {
-		url += fmt.Sprintf("?filter[organization][name]=%s", orgName)
+		query := url.Values{}
+		query.Set("filter[organization][name]", orgName)
+		requestURL += "?" + query.Encode()
 	}
 
-	body, err := doAuthenticatedGet(ctx, url, token, httpClient, logger)
+	body, err := doAuthenticatedGet(ctx, requestURL, token, httpClient, logger)
 	if err != nil {
 		return "", fmt.Errorf("failed to fetch provider list to discover version: %w", err)
 	}
@@ -239,17 +244,19 @@ func discoverProviderVersion(ctx context.Context, baseURL, orgName, namespace, n
 // ── fetch schema for a specific provider ──────────────────────────────────────
 
 func fetchProviderSchema(ctx context.Context, baseURL, orgName, namespace, name, version, token string, httpClient *http.Client, logger *log.Logger) (*mcp.CallToolResult, error) {
-	url := fmt.Sprintf("%s/api/v2/search/provider-versions/%s/%s/%s",
+	requestURL := fmt.Sprintf("%s/api/v2/search/provider-versions/%s/%s/%s",
 		baseURL,
-		namespace,
-		name,
-		version,
+		url.PathEscape(namespace),
+		url.PathEscape(name),
+		url.PathEscape(version),
 	)
 	if orgName != "" {
-		url += fmt.Sprintf("?filter[organization][name]=%s", orgName)
+		query := url.Values{}
+		query.Set("filter[organization][name]", orgName)
+		requestURL += "?" + query.Encode()
 	}
 
-	body, err := doAuthenticatedGet(ctx, url, token, httpClient, logger)
+	body, err := doAuthenticatedGet(ctx, requestURL, token, httpClient, logger)
 	if err != nil {
 		return searchToolErrorf(logger, "failed to fetch schema for %s/%s@%s: %v", namespace, name, version, err)
 	}
