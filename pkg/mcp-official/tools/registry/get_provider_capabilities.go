@@ -7,10 +7,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"strings"
 
 	"github.com/google/jsonschema-go/jsonschema"
 	registryapi "github.com/hashicorp/terraform-mcp-server/pkg/client"
+	"github.com/hashicorp/terraform-mcp-server/pkg/logging"
 	"github.com/hashicorp/terraform-mcp-server/pkg/mcp-official/client"
 	"github.com/hashicorp/terraform-mcp-server/pkg/utils"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -67,10 +69,16 @@ Returns a summary with counts and examples for each capability type.`,
 	}
 }
 
-func GetProviderCapabilitiesFunc(ctx context.Context, request *mcp.CallToolRequest, input GetProviderCapabilitiesArguments) (*mcp.CallToolResult, any, error) {
-	// TODO: Replace with structured slog logging
-	logger := log.StandardLogger()
+// GetProviderCapabilitiesFunc returns the get_provider_capabilities handler.
+// Logs from the shared registry client are forwarded to logger.
+func GetProviderCapabilitiesFunc(logger *slog.Logger) mcp.ToolHandlerFor[GetProviderCapabilitiesArguments, any] {
+	logrusLogger := logging.WrapSlog(logger)
+	return func(ctx context.Context, request *mcp.CallToolRequest, input GetProviderCapabilitiesArguments) (*mcp.CallToolResult, any, error) {
+		return getProviderCapabilities(ctx, request, input, logrusLogger)
+	}
+}
 
+func getProviderCapabilities(ctx context.Context, request *mcp.CallToolRequest, input GetProviderCapabilitiesArguments, logger *log.Logger) (*mcp.CallToolResult, any, error) {
 	namespace := strings.TrimSpace(input.Namespace)
 	if namespace == "" {
 		return nil, nil, fmt.Errorf("missing required input: namespace")

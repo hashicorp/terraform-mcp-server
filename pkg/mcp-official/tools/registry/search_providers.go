@@ -7,12 +7,14 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"path"
 	"strings"
 
 	"github.com/google/jsonschema-go/jsonschema"
 	"github.com/hashicorp/terraform-mcp-server/pkg/client"
+	"github.com/hashicorp/terraform-mcp-server/pkg/logging"
 	officialclient "github.com/hashicorp/terraform-mcp-server/pkg/mcp-official/client"
 	"github.com/hashicorp/terraform-mcp-server/pkg/utils"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -77,10 +79,16 @@ If there are multiple good matches, mention this but proceed with the most relev
 	}
 }
 
-func SearchProvidersFunc(ctx context.Context, request *mcp.CallToolRequest, input SearchProvidersArguments) (*mcp.CallToolResult, any, error) {
-	// TODO: Replace with structured slog logging
-	logger := log.StandardLogger()
+// SearchProvidersFunc returns the search_providers handler.
+// Logs from the shared registry client are forwarded to logger.
+func SearchProvidersFunc(logger *slog.Logger) mcp.ToolHandlerFor[SearchProvidersArguments, any] {
+	logrusLogger := logging.WrapSlog(logger)
+	return func(ctx context.Context, request *mcp.CallToolRequest, input SearchProvidersArguments) (*mcp.CallToolResult, any, error) {
+		return searchProviders(ctx, request, input, logrusLogger)
+	}
+}
 
+func searchProviders(ctx context.Context, request *mcp.CallToolRequest, input SearchProvidersArguments, logger *log.Logger) (*mcp.CallToolResult, any, error) {
 	defaultErrorGuide := "please check the provider name, provider namespace or the provider version you're looking for, perhaps the provider is published under a different namespace or company name"
 
 	input.ProviderName = strings.ToLower(strings.TrimSpace(input.ProviderName))

@@ -6,10 +6,12 @@ package tools
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"strings"
 
 	"github.com/google/jsonschema-go/jsonschema"
 	registryapi "github.com/hashicorp/terraform-mcp-server/pkg/client"
+	"github.com/hashicorp/terraform-mcp-server/pkg/logging"
 	"github.com/hashicorp/terraform-mcp-server/pkg/mcp-official/client"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	log "github.com/sirupsen/logrus"
@@ -47,10 +49,16 @@ func GetLatestProviderVersionTool() *mcp.Tool {
 	}
 }
 
-func GetLatestProviderVersionFunc(ctx context.Context, request *mcp.CallToolRequest, input GetLatestProviderVersionArguments) (*mcp.CallToolResult, any, error) {
-	// TODO: Replace with structured slog logging
-	logger := log.StandardLogger()
+// GetLatestProviderVersionFunc returns the get_latest_provider_version handler.
+// Logs from the shared registry client are forwarded to logger.
+func GetLatestProviderVersionFunc(logger *slog.Logger) mcp.ToolHandlerFor[GetLatestProviderVersionArguments, any] {
+	logrusLogger := logging.WrapSlog(logger)
+	return func(ctx context.Context, request *mcp.CallToolRequest, input GetLatestProviderVersionArguments) (*mcp.CallToolResult, any, error) {
+		return getLatestProviderVersion(ctx, request, input, logrusLogger)
+	}
+}
 
+func getLatestProviderVersion(ctx context.Context, request *mcp.CallToolRequest, input GetLatestProviderVersionArguments, logger *log.Logger) (*mcp.CallToolResult, any, error) {
 	namespace := strings.TrimSpace(input.Namespace)
 	if namespace == "" {
 		return nil, nil, fmt.Errorf("missing required input: namespace")

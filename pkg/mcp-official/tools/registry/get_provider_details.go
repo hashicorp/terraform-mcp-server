@@ -7,12 +7,14 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"path"
 	"strconv"
 	"strings"
 
 	"github.com/google/jsonschema-go/jsonschema"
 	registryapi "github.com/hashicorp/terraform-mcp-server/pkg/client"
+	"github.com/hashicorp/terraform-mcp-server/pkg/logging"
 	"github.com/hashicorp/terraform-mcp-server/pkg/mcp-official/client"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	log "github.com/sirupsen/logrus"
@@ -45,10 +47,16 @@ func GetProviderDetailsTool() *mcp.Tool {
 	}
 }
 
-func GetProviderDetailsFunc(ctx context.Context, request *mcp.CallToolRequest, input GetProviderDetailsArguments) (*mcp.CallToolResult, any, error) {
-	// TODO: Replace with structured slog logging
-	logger := log.StandardLogger()
+// GetProviderDetailsFunc returns the get_provider_details handler.
+// Logs from the shared registry client are forwarded to logger.
+func GetProviderDetailsFunc(logger *slog.Logger) mcp.ToolHandlerFor[GetProviderDetailsArguments, any] {
+	logrusLogger := logging.WrapSlog(logger)
+	return func(ctx context.Context, request *mcp.CallToolRequest, input GetProviderDetailsArguments) (*mcp.CallToolResult, any, error) {
+		return getProviderDetails(ctx, request, input, logrusLogger)
+	}
+}
 
+func getProviderDetails(ctx context.Context, request *mcp.CallToolRequest, input GetProviderDetailsArguments, logger *log.Logger) (*mcp.CallToolResult, any, error) {
 	providerDocID := strings.TrimSpace(input.ProviderDocID)
 	if providerDocID == "" {
 		return nil, nil, fmt.Errorf("provider_doc_id cannot be empty")

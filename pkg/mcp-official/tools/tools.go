@@ -18,45 +18,45 @@ import (
 // go-sdk so far. mcp.AddTool is generic per tool (different Arguments/Result
 // types), so each entry is a closure that calls it directly rather than a
 // plain map[string]func(*log.Logger) server.ServerTool like the mark3labs
-// side uses
+// side uses. Tools that log take the server's logger from RegisterTools.
 
-var officialFactories = map[string]func(svr *mcp.Server){
+var officialFactories = map[string]func(svr *mcp.Server, logger *slog.Logger){
 	// Add entries here as each tool gets ported to the official go-sdk
-	"list_workspaces": func(svr *mcp.Server) {
+	"list_workspaces": func(svr *mcp.Server, _ *slog.Logger) {
 		mcp.AddTool(svr, tfeTools.ListWorkspacesTool(), tfeTools.ListWorkspacesFunc)
 	},
-	"list_terraform_orgs": func(svr *mcp.Server) {
+	"list_terraform_orgs": func(svr *mcp.Server, _ *slog.Logger) {
 		mcp.AddTool(svr, tfeTools.ListTerraformOrganizationsTool(), tfeTools.ListTerraformOrganizationsFunc)
 	},
-	"search_providers": func(svr *mcp.Server) {
-		mcp.AddTool(svr, registryTools.SearchProvidersTool(), registryTools.SearchProvidersFunc)
-	},
-	"list_terraform_projects": func(svr *mcp.Server) {
+	"list_terraform_projects": func(svr *mcp.Server, _ *slog.Logger) {
 		mcp.AddTool(svr, tfeTools.ListProjectsTool(), tfeTools.ListProjectsFunc)
 	},
-	"create_project": func(svr *mcp.Server) {
+	"create_project": func(svr *mcp.Server, _ *slog.Logger) {
 		mcp.AddTool(svr, tfeTools.CreateProjectTool(), tfeTools.CreateProjectFunc)
 	},
-	"get_project": func(svr *mcp.Server) {
+	"get_project": func(svr *mcp.Server, _ *slog.Logger) {
 		mcp.AddTool(svr, tfeTools.GetProjectTool(), tfeTools.GetProjectFunc)
 	},
-	"delete_project": func(svr *mcp.Server) {
+	"delete_project": func(svr *mcp.Server, _ *slog.Logger) {
 		mcp.AddTool(svr, tfeTools.DeleteProjectTool(), tfeTools.DeleteProjectFunc)
 	},
-	"whoami": func(svr *mcp.Server) {
+	"whoami": func(svr *mcp.Server, _ *slog.Logger) {
 		mcp.AddTool(svr, tfeTools.WhoAmITool(), tfeTools.WhoAmIFunc)
 	},
-	"get_token_permissions": func(svr *mcp.Server) {
+	"get_token_permissions": func(svr *mcp.Server, _ *slog.Logger) {
 		mcp.AddTool(svr, tfeTools.GetTokenPermissionsTool(), tfeTools.GetTokenPermissionsFunc)
 	},
-	"get_provider_details": func(svr *mcp.Server) {
-		mcp.AddTool(svr, registryTools.GetProviderDetailsTool(), registryTools.GetProviderDetailsFunc)
+	"search_providers": func(svr *mcp.Server, logger *slog.Logger) {
+		mcp.AddTool(svr, registryTools.SearchProvidersTool(), registryTools.SearchProvidersFunc(logger))
 	},
-	"get_latest_provider_version": func(svr *mcp.Server) {
-		mcp.AddTool(svr, registryTools.GetLatestProviderVersionTool(), registryTools.GetLatestProviderVersionFunc)
+	"get_provider_details": func(svr *mcp.Server, logger *slog.Logger) {
+		mcp.AddTool(svr, registryTools.GetProviderDetailsTool(), registryTools.GetProviderDetailsFunc(logger))
 	},
-	"get_provider_capabilities": func(svr *mcp.Server) {
-		mcp.AddTool(svr, registryTools.GetProviderCapabilitiesTool(), registryTools.GetProviderCapabilitiesFunc)
+	"get_latest_provider_version": func(svr *mcp.Server, logger *slog.Logger) {
+		mcp.AddTool(svr, registryTools.GetLatestProviderVersionTool(), registryTools.GetLatestProviderVersionFunc(logger))
+	},
+	"get_provider_capabilities": func(svr *mcp.Server, logger *slog.Logger) {
+		mcp.AddTool(svr, registryTools.GetProviderCapabilitiesTool(), registryTools.GetProviderCapabilitiesFunc(logger))
 	},
 }
 
@@ -68,7 +68,7 @@ func RegisterTools(svr *mcp.Server, logger *slog.Logger, filter toolsets.ToolFil
 			continue
 		}
 		if register, ok := officialFactories[td.Name]; ok {
-			register(svr)
+			register(svr, logger)
 		}
 	}
 }
