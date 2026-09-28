@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/google/jsonschema-go/jsonschema"
 	"github.com/hashicorp/go-tfe"
 	"github.com/hashicorp/terraform-mcp-server/pkg/mcp-official/client"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -26,7 +27,7 @@ func AttachPolicySetToWorkspacesTool() *mcp.Tool {
 		Annotations: &mcp.ToolAnnotations{
 			Title:           "Attach policy set to workspaces",
 			ReadOnlyHint:    false,
-			DestructiveHint: ptr(false),
+			DestructiveHint: jsonschema.Ptr(false),
 		},
 	}
 }
