@@ -39,6 +39,12 @@ var officialFactories = map[string]func(svr *mcp.Server){
 	"delete_project": func(svr *mcp.Server) {
 		mcp.AddTool(svr, tfeTools.DeleteProjectTool(), tfeTools.DeleteProjectFunc)
 	},
+	"whoami": func(svr *mcp.Server) {
+		mcp.AddTool(svr, tfeTools.WhoAmITool(), tfeTools.WhoAmIFunc)
+	},
+	"get_token_permissions": func(svr *mcp.Server) {
+		mcp.AddTool(svr, tfeTools.GetTokenPermissionsTool(), tfeTools.GetTokenPermissionsFunc)
+	},
 }
 
 func RegisterTools(svr *mcp.Server, logger *slog.Logger, filter toolsets.ToolFilter) {
