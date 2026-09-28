@@ -4,200 +4,21 @@
 package main
 
 import (
-	"context"
-	_ "embed"
 	"fmt"
 	stdlog "log"
 	"os"
-	"os/signal"
 	"strings"
-	"sync"
-	"syscall"
 	"time"
 
 	"github.com/hashicorp/terraform-mcp-server/pkg/client"
-	"github.com/hashicorp/terraform-mcp-server/pkg/instructions"
 	"github.com/hashicorp/terraform-mcp-server/pkg/logging"
+	mcpmark3labs "github.com/hashicorp/terraform-mcp-server/pkg/mcp-mark3labs"
 	"github.com/hashicorp/terraform-mcp-server/pkg/otelmetrics"
 	"github.com/hashicorp/terraform-mcp-server/pkg/toolsets"
-	"github.com/hashicorp/terraform-mcp-server/version"
 
-	"github.com/mark3labs/mcp-go/mcp"
-
-	"github.com/mark3labs/mcp-go/server"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 )
-
-var sessionClientInfo sync.Map // map[string]client.ClientInfo
-
-func runHTTPServer(logger *log.Logger, host string, port string, endpointPath string, heartbeatInterval time.Duration, filter toolsets.ToolFilter, metricsConfig client.MetricsConfig, organizationAllowlist []string) error {
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	defer stop()
-
-	// Create hooks for session management
-	hooks := &server.Hooks{}
-	hooks.AddOnRegisterSession(func(ctx context.Context, session server.ClientSession) {
-		client.NewSessionHandler(ctx, session.SessionID(), logger)
-	})
-
-	serverOpts := []server.ServerOption{
-		server.WithHooks(hooks),
-	}
-
-	// Only register the middleware when an organization allowlist is configured
-	if len(organizationAllowlist) > 0 {
-		serverOpts = append(serverOpts, server.WithToolHandlerMiddleware(
-			client.OrganizationAllowlistToolMiddleware(organizationAllowlist, logger),
-		))
-	}
-	hcServer, rateLimiter := NewServer(
-		version.Version,
-		logger,
-		filter,
-		serverOpts...,
-	)
-
-	registerToolsAndResources(hcServer, logger, filter)
-
-	hooks.AddOnUnregisterSession(func(ctx context.Context, session server.ClientSession) {
-		// Clean up client info populated in the metrics hooks, for the session
-		sessionClientInfo.Delete(session.SessionID())
-		client.EndSessionHandler(ctx, session.SessionID(), rateLimiter, logger)
-	})
-	// When running multiple sessions of the MCP server (load balancing), calling client.NewSessionHandler
-	// in both BeforeListTools and BeforeCallTool ensures that a session that was not initialized during
-	// registration (e.g., due to being routed to a different instance) will still have its clients created
-	// before any tool calls are made. This provides a safety net to ensure that all sessions have
-	// the necessary clients initialized regardless of how they are routed.
-	hooks.AddBeforeListTools(func(ctx context.Context, id any, message *mcp.ListToolsRequest) {
-		session := server.ClientSessionFromContext(ctx)
-		if session != nil {
-			client.NewSessionHandler(ctx, session.SessionID(), logger)
-		}
-	})
-	hooks.AddBeforeCallTool(func(ctx context.Context, id any, message *mcp.CallToolRequest) {
-		session := server.ClientSessionFromContext(ctx)
-		if session != nil {
-			client.NewSessionHandler(ctx, session.SessionID(), logger)
-		}
-	})
-	attachMetricsHooks(hooks, metricsConfig, logger)
-
-	return streamableHTTPServerInit(ctx, hcServer, logger, host, port, endpointPath, heartbeatInterval, organizationAllowlist, filter, rateLimiter, metricsConfig)
-}
-
-func attachMetricsHooks(hooks *server.Hooks, metricsConfig client.MetricsConfig, logger *log.Logger) {
-	if !metricsConfig.Enabled {
-		return
-	}
-	hooks.AddAfterInitialize(func(ctx context.Context, id any, message *mcp.InitializeRequest, result *mcp.InitializeResult) {
-		if message != nil && message.Params.ClientInfo.Name != "" {
-			session := server.ClientSessionFromContext(ctx)
-			if session == nil {
-				logger.Debug("AddAfterInitialize hook: No session found in context")
-				return
-			}
-			ci := client.ClientInfo{
-				Name:        message.Params.ClientInfo.Name,
-				Version:     message.Params.ClientInfo.Version,
-				Title:       message.Params.ClientInfo.Title,
-				Description: message.Params.ClientInfo.Description,
-			}
-			// Record the client info in the session first so we can reuse it in the BeforeToolCall hook
-			sessionClientInfo.Store(session.SessionID(), ci)
-			// Record the metric
-			client.RecordClientType(ctx, ci, metricsConfig, logger)
-		}
-	})
-
-	var toolStartTimes sync.Map
-	hooks.AddBeforeCallTool(func(ctx context.Context, id any, message *mcp.CallToolRequest) {
-		toolStartTimes.Store(fmt.Sprintf("%v", id), time.Now())
-		session := server.ClientSessionFromContext(ctx)
-		if session == nil {
-			logger.Debug("AddBeforeCallTool hook: No session found in context")
-			return
-		}
-		value, ok := sessionClientInfo.Load(session.SessionID())
-		if !ok {
-			logger.Debugf("AddBeforeCallTool hook: Client info not found for session ID: %s", session.SessionID())
-			return
-		}
-		// Read the client info recorded in the AddAfterInitialize hook
-		info, ok := value.(client.ClientInfo)
-		if !ok || info.Name == "" {
-			logger.Debugf("AddBeforeCallTool hook: Unable to read client info for sessionID %s from sessionClientInfo map", session.SessionID())
-			return
-		}
-		client.RecordClientType(
-			ctx,
-			info,
-			metricsConfig,
-			logger,
-		)
-	})
-	hooks.AddAfterCallTool(func(ctx context.Context, id any, message *mcp.CallToolRequest, result any) {
-		startTime := time.Now()
-		if storedStart, ok := toolStartTimes.LoadAndDelete(fmt.Sprintf("%v", id)); ok {
-			if ts, ok := storedStart.(time.Time); ok {
-				startTime = ts
-			}
-		}
-
-		var toolErr bool
-		if res, ok := result.(*mcp.CallToolResult); ok && res.IsError {
-			toolErr = true
-		}
-		client.RecordToolCall(ctx, startTime, toolErr, id, message, metricsConfig, logger)
-	})
-}
-
-func runStdioServer(logger *log.Logger, filter toolsets.ToolFilter) error {
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	defer stop()
-
-	// Create hooks for session management
-	hooks := &server.Hooks{}
-	hooks.AddOnRegisterSession(func(ctx context.Context, session server.ClientSession) {
-		client.NewSessionHandler(ctx, session.SessionID(), logger)
-	})
-	hcServer, rateLimiter := NewServer(version.Version, logger, filter, server.WithHooks(hooks))
-	registerToolsAndResources(hcServer, logger, filter)
-
-	hooks.AddOnUnregisterSession(func(ctx context.Context, session server.ClientSession) {
-		client.EndSessionHandler(ctx, session.SessionID(), rateLimiter, logger)
-	})
-
-	return serverInit(ctx, hcServer, logger)
-}
-
-func NewServer(version string, logger *log.Logger, filter toolsets.ToolFilter, opts ...server.ServerOption) (*server.MCPServer, *client.RateLimitMiddleware) {
-	// filter is accepted for signature symmetry with runHTTPServer/runStdioServer, actual tool gating happens in registerToolsAndResources -> tools.RegisterTools.
-
-	// Create rate limiting middleware with environment-based configuration
-	rateLimitConfig := client.LoadRateLimitConfigFromEnv()
-	rateLimitMiddleware := client.NewRateLimitMiddleware(rateLimitConfig, logger)
-
-	// Add default options
-	defaultOpts := []server.ServerOption{
-		server.WithToolCapabilities(true),
-		server.WithResourceCapabilities(true, true),
-		server.WithInstructions(instructions.Text),
-		server.WithToolHandlerMiddleware(rateLimitMiddleware.Middleware()),
-		server.WithToolHandlerMiddleware(client.ToolLoggingMiddleware(logger)),
-		server.WithElicitation(),
-	}
-	opts = append(defaultOpts, opts...)
-
-	// Create a new MCP server
-	s := server.NewMCPServer(
-		"terraform-mcp-server",
-		version,
-		opts...,
-	)
-	return s, rateLimitMiddleware
-}
 
 // parseToolsets parses and validates the toolsets flag value
 func parseToolsets(toolsetsFlag string, logger *log.Logger) toolsets.ToolFilter {
@@ -283,7 +104,7 @@ func runDefaultCommand(cmd *cobra.Command, _ []string) {
 	// Get toolsets from the command that was passed in
 	filter := getToolsetsFromCmd(cmd, logger)
 
-	if err := runStdioServer(logger, filter); err != nil {
+	if err := mcpmark3labs.RunStdioServer(logger, filter); err != nil {
 		stdlog.Fatal("failed to run stdio server:", err)
 	}
 }
@@ -311,7 +132,7 @@ func main() {
 		if err != nil {
 			stdlog.Fatal(err)
 		}
-		if err := runHTTPServer(logger, host, port, endpointPath, heartbeatInterval, filter, metricsConfig, organizationAllowlist); err != nil {
+		if err := mcpmark3labs.RunHTTPServer(logger, host, port, endpointPath, heartbeatInterval, filter, metricsConfig, organizationAllowlist, rootCmd); err != nil {
 			stdlog.Fatal("failed to run StreamableHTTP server:", err)
 		}
 		return
@@ -347,19 +168,6 @@ func getHTTPHost() string {
 		return host
 	}
 	return "127.0.0.1"
-}
-
-// shouldUseStatelessMode returns true if the MCP_SESSION_MODE environment variable is set to "stateless"
-func shouldUseStatelessMode() bool {
-	mode := strings.ToLower(os.Getenv("MCP_SESSION_MODE"))
-
-	// Explicitly check for "stateless" value
-	if mode == "stateless" {
-		return true
-	}
-
-	// All other values (including empty string, "stateful", or any other value) default to stateful mode
-	return false
 }
 
 // Add function to get endpoint path from environment or flag
