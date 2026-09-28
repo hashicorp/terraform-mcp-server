@@ -130,11 +130,7 @@ func SearchPrivateProvidersTool() *mcp.Tool {
 }
 
 // SearchPrivateProvidersFunc searches private providers using the caller's Terraform session.
-func SearchPrivateProvidersFunc(
-	ctx context.Context,
-	request *mcp.CallToolRequest,
-	input SearchPrivateProvidersArguments,
-) (*mcp.CallToolResult, *PrivateProviderSummaryList, error) {
+func SearchPrivateProvidersFunc(ctx context.Context, request *mcp.CallToolRequest, input SearchPrivateProvidersArguments) (*mcp.CallToolResult, *PrivateProviderSummaryList, error) {
 	terraformOrgName := strings.TrimSpace(input.TerraformOrgName)
 	if terraformOrgName == "" {
 		return nil, nil, fmt.Errorf("terraform_org_name must not be blank")
