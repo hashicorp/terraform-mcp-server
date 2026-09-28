@@ -131,11 +131,7 @@ func TestPrivateRegistryModules(t *testing.T) {
 			if tc.includeVersion {
 				arguments["private_module_version"] = moduleVersion
 			}
-
 			result, resultText := callTool(t, s, "get_private_module_details", arguments)
-
-			t.Logf("Get private module details: %v", resultText)
-
 			require.False(t, result.IsError, "get_private_module_details should not return an error")
 			require.NotEmpty(t, resultText, "get_private_module_details response must not be empty")
 

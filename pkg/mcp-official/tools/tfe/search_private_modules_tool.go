@@ -116,11 +116,7 @@ func SearchPrivateModulesTool() *mcp.Tool {
 }
 
 // SearchPrivateModulesFunc searches private modules using the caller's Terraform session.
-func SearchPrivateModulesFunc(
-	ctx context.Context,
-	request *mcp.CallToolRequest,
-	input SearchPrivateModulesArguments,
-) (*mcp.CallToolResult, *PrivateModuleSummaryList, error) {
+func SearchPrivateModulesFunc(ctx context.Context, request *mcp.CallToolRequest, input SearchPrivateModulesArguments) (*mcp.CallToolResult, *PrivateModuleSummaryList, error) {
 	terraformOrgName := strings.TrimSpace(input.TerraformOrgName)
 	if terraformOrgName == "" {
 		return nil, nil, fmt.Errorf("terraform_org_name must not be blank")
