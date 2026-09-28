@@ -18,11 +18,16 @@ import (
 )
 
 type GetLatestProviderVersionArguments struct {
-	Namespace string `json:"namespace"`
-	Name      string `json:"name"`
+	Namespace string `json:"namespace" jsonschema:"The namespace of the Terraform provider, typically the company or GitHub organization that created it, e.g. hashicorp"`
+	Name      string `json:"name" jsonschema:"The name of the Terraform provider, e.g. aws, azurerm, or google"`
 }
 
 func GetLatestProviderVersionTool() *mcp.Tool {
+	input, err := jsonschema.For[GetLatestProviderVersionArguments](nil)
+	if err != nil {
+		panic(err)
+	}
+
 	return &mcp.Tool{
 		Name:        "get_latest_provider_version",
 		Description: "Fetches the latest version of a Terraform provider from the public registry",
@@ -32,20 +37,7 @@ func GetLatestProviderVersionTool() *mcp.Tool {
 			ReadOnlyHint:    true,
 			DestructiveHint: jsonschema.Ptr(false),
 		},
-		InputSchema: &jsonschema.Schema{
-			Type: "object",
-			Properties: map[string]*jsonschema.Schema{
-				"namespace": {
-					Type:        "string",
-					Description: "The namespace of the Terraform provider, typically the company or GitHub organization that created it, e.g. hashicorp",
-				},
-				"name": {
-					Type:        "string",
-					Description: "The name of the Terraform provider, e.g. aws, azurerm, or google",
-				},
-			},
-			Required: []string{"namespace", "name"},
-		},
+		InputSchema: input,
 	}
 }
 

@@ -22,14 +22,23 @@ import (
 )
 
 type SearchProvidersArguments struct {
-	ProviderName         string `json:"provider_name"`
-	ProviderNamespace    string `json:"provider_namespace,omitempty"`
-	ServiceSlug          string `json:"service_slug"`
-	ProviderDocumentType string `json:"provider_document_type,omitempty"`
-	ProviderVersion      string `json:"provider_version,omitempty"`
+	ProviderName         string `json:"provider_name" jsonschema:"The name of the Terraform provider to perform the read or deployment operation"`
+	ProviderNamespace    string `json:"provider_namespace,omitempty" jsonschema:"The publisher of the Terraform provider, typically the name of the company, or their GitHub organization name that created the provider (defaults to hashicorp)"`
+	ServiceSlug          string `json:"service_slug" jsonschema:"The slug of the service you want to deploy or read using the Terraform provider, prefer using a single word, use underscores for multiple words and if unsure about the service_slug, use the provider_name for its value"`
+	ProviderDocumentType string `json:"provider_document_type,omitempty" jsonschema:"Document category: resources (default), data-sources, functions, guides, overview, actions, or list-resources"`
+	ProviderVersion      string `json:"provider_version,omitempty" jsonschema:"Provider version in x.y.z format, or latest (default)"`
 }
 
 func SearchProvidersTool() *mcp.Tool {
+	input, err := jsonschema.For[SearchProvidersArguments](nil)
+	if err != nil {
+		panic(err)
+	}
+	input.Properties["provider_namespace"].Default = json.RawMessage(`"hashicorp"`)
+	input.Properties["provider_document_type"].Enum = []any{"resources", "data-sources", "functions", "guides", "overview", "actions", "list-resources"}
+	input.Properties["provider_document_type"].Default = json.RawMessage(`"resources"`)
+	input.Properties["provider_version"].Default = json.RawMessage(`"latest"`)
+
 	return &mcp.Tool{
 		Name: "search_providers",
 		Description: `This tool retrieves a list of potential documents based on the 'service_slug' and 'provider_document_type' provided.
@@ -46,36 +55,7 @@ If there are multiple good matches, mention this but proceed with the most relev
 			ReadOnlyHint:    true,
 			DestructiveHint: jsonschema.Ptr(false),
 		},
-		InputSchema: &jsonschema.Schema{
-			Type: "object",
-			Properties: map[string]*jsonschema.Schema{
-				"provider_name": {
-					Type:        "string",
-					Description: "The name of the Terraform provider to perform the read or deployment operation",
-				},
-				"provider_namespace": {
-					Type:        "string",
-					Description: "The publisher of the Terraform provider, typically the name of the company, or their GitHub organization name that created the provider (defaults to hashicorp)",
-					Default:     json.RawMessage(`"hashicorp"`),
-				},
-				"service_slug": {
-					Type:        "string",
-					Description: "The slug of the service you want to deploy or read using the Terraform provider, prefer using a single word, use underscores for multiple words and if unsure about the service_slug, use the provider_name for its value",
-				},
-				"provider_document_type": {
-					Type:        "string",
-					Description: "Document category: resources (default), data-sources, functions, guides, overview, actions, or list-resources",
-					Enum:        []any{"resources", "data-sources", "functions", "guides", "overview", "actions", "list-resources"},
-					Default:     json.RawMessage(`"resources"`),
-				},
-				"provider_version": {
-					Type:        "string",
-					Description: "Provider version in x.y.z format, or latest (default)",
-					Default:     json.RawMessage(`"latest"`),
-				},
-			},
-			Required: []string{"provider_name", "service_slug"},
-		},
+		InputSchema: input,
 	}
 }
 

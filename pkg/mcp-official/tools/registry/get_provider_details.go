@@ -21,10 +21,15 @@ import (
 )
 
 type GetProviderDetailsArguments struct {
-	ProviderDocID string `json:"provider_doc_id"`
+	ProviderDocID string `json:"provider_doc_id" jsonschema:"Exact tfprovider-compatible provider_doc_id, (e.g., '8894603', '8906901') retrieved from 'search_providers'"`
 }
 
 func GetProviderDetailsTool() *mcp.Tool {
+	input, err := jsonschema.For[GetProviderDetailsArguments](nil)
+	if err != nil {
+		panic(err)
+	}
+
 	return &mcp.Tool{
 		Name:        "get_provider_details",
 		Description: `Fetches up-to-date documentation for a specific service from a Terraform provider. You must call 'search_providers' tool first to obtain the exact tfprovider-compatible provider_doc_id required to use this tool.`,
@@ -34,16 +39,7 @@ func GetProviderDetailsTool() *mcp.Tool {
 			ReadOnlyHint:    true,
 			DestructiveHint: jsonschema.Ptr(false),
 		},
-		InputSchema: &jsonschema.Schema{
-			Type: "object",
-			Properties: map[string]*jsonschema.Schema{
-				"provider_doc_id": {
-					Type:        "string",
-					Description: "Exact tfprovider-compatible provider_doc_id, (e.g., '8894603', '8906901') retrieved from 'search_providers'",
-				},
-			},
-			Required: []string{"provider_doc_id"},
-		},
+		InputSchema: input,
 	}
 }
 
