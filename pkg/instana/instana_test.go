@@ -1,7 +1,7 @@
 // Copyright IBM Corp. 2025
 // SPDX-License-Identifier: MPL-2.0
 
-package main
+package instana
 
 import (
 	"io"
@@ -11,24 +11,24 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func instanaTestLogger() *log.Logger {
+func testLogger() *log.Logger {
 	logger := log.New()
 	logger.SetOutput(io.Discard)
 	return logger
 }
 
-func TestSetupInstanaDisabledReturnsNil(t *testing.T) {
+func TestSetupDisabledReturnsNil(t *testing.T) {
 	t.Setenv("INSTANA_ENABLED", "")
 
-	collector := setupInstana(instanaTestLogger())
+	collector := Setup(testLogger())
 
 	assert.Nil(t, collector)
 }
 
-func TestSetupInstanaEnabledInitializesCollector(t *testing.T) {
+func TestSetupEnabledInitializesCollector(t *testing.T) {
 	t.Setenv("INSTANA_ENABLED", "true")
 
-	collector := setupInstana(instanaTestLogger())
+	collector := Setup(testLogger())
 
 	assert.NotNil(t, collector)
 }
