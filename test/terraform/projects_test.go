@@ -18,15 +18,12 @@ func TestListAndGetProject(t *testing.T) {
 	})
 	require.False(t, projectsResult.IsError, "list_terraform_projects should not return an error")
 	require.NotEmpty(t, projectsText, "list_terraform_projects should return a non-empty response")
+	assert.NotEqual(t, 0, int(gjson.Get(projectsText, "items.#").Int()), "list_terraform_projects should return at least one project")
+	assert.NotEmpty(t, gjson.Get(projectsText, "items.0.project_id").String(), "items should contain project_id")
+	assert.NotEmpty(t, gjson.Get(projectsText, "items.0.project_name").String(), "items should contain project_name")
 
 	projectID := gjson.Get(projectsText, "items.0.project_id").String()
 	require.NotEmpty(t, projectID, "expected at least one project to be available in org %q", tfeOrgName)
-
-	t.Run("list_terraform_projects returns a non-empty list", func(t *testing.T) {
-		assert.NotEqual(t, 0, int(gjson.Get(projectsText, "items.#").Int()), "list_terraform_projects should return at least one project")
-		assert.NotEmpty(t, gjson.Get(projectsText, "items.0.project_id").String(), "items should contain project_id")
-		assert.NotEmpty(t, gjson.Get(projectsText, "items.0.project_name").String(), "items should contain project_name")
-	})
 
 	t.Run("get_project returns details for a valid project_id", func(t *testing.T) {
 		result, resultText := callTool(t, s, "get_project", map[string]any{
@@ -87,6 +84,42 @@ func TestCreateProject(t *testing.T) {
 			"project_name":       projectName,
 		})
 		assert.True(t, dupResult.IsError, "create_project should return an error when a project with the same name already exists")
+	})
+
+	t.Run("creates a project with local execution mode", func(t *testing.T) {
+		name := randomName("project-local-")
+		result, resultText := callTool(t, s, "create_project", map[string]any{
+			"terraform_org_name":     tfeOrgName,
+			"project_name":           name,
+			"default_execution_mode": "local",
+		})
+		require.False(t, result.IsError, "create_project with local execution mode should not return an error: %s", resultText)
+
+		id := gjson.Get(resultText, "project_id").String()
+		require.NotEmpty(t, id, "response should contain a project_id")
+		defer client.Projects.Delete(t.Context(), id)
+
+		project, err := client.Projects.Read(t.Context(), id)
+		require.NoError(t, err, "created project should be readable via the TFE API")
+		assert.Equal(t, "local", project.DefaultExecutionMode, "TFE API should reflect the local execution mode")
+	})
+
+	t.Run("creates a project with remote execution mode", func(t *testing.T) {
+		name := randomName("project-remote-")
+		result, resultText := callTool(t, s, "create_project", map[string]any{
+			"terraform_org_name":     tfeOrgName,
+			"project_name":           name,
+			"default_execution_mode": "remote",
+		})
+		require.False(t, result.IsError, "create_project with remote execution mode should not return an error: %s", resultText)
+
+		id := gjson.Get(resultText, "project_id").String()
+		require.NotEmpty(t, id, "response should contain a project_id")
+		defer client.Projects.Delete(t.Context(), id)
+
+		project, err := client.Projects.Read(t.Context(), id)
+		require.NoError(t, err, "created project should be readable via the TFE API")
+		assert.Equal(t, "remote", project.DefaultExecutionMode, "TFE API should reflect the remote execution mode")
 	})
 }
 

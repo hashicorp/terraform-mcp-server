@@ -107,9 +107,6 @@ func searchTerraformWorkspacesHandler(ctx context.Context, request mcp.CallToolR
 	if err != nil {
 		return ToolErrorf(logger, "failed to list workspaces in org '%s'", terraformOrgName)
 	}
-	if len(workspaces.Items) == 0 {
-		return ToolErrorf(logger, "no workspaces to list in organization %q", terraformOrgName)
-	}
 
 	summaries := make([]*WorkspaceSummary, len(workspaces.Items))
 	for i, w := range workspaces.Items {

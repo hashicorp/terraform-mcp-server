@@ -17,7 +17,7 @@ import (
 	"github.com/mark3labs/mcp-go/server"
 )
 
-var validExecutionModes = []string{"local", "agent", "remote"}
+var validExecutionModes = []string{"local", "remote"}
 var validExecutionModesStr = strings.Join(validExecutionModes, ", ")
 
 // CreateProject creates a tool to create a new Terraform project.
