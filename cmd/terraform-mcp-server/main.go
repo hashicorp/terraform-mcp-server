@@ -17,6 +17,7 @@ import (
 
 	"github.com/hashicorp/terraform-mcp-server/pkg/client"
 	"github.com/hashicorp/terraform-mcp-server/pkg/instructions"
+	"github.com/hashicorp/terraform-mcp-server/pkg/logging"
 	"github.com/hashicorp/terraform-mcp-server/pkg/toolsets"
 	"github.com/hashicorp/terraform-mcp-server/version"
 	"go.opentelemetry.io/otel"
@@ -277,9 +278,9 @@ func runDefaultCommand(cmd *cobra.Command, _ []string) {
 	if err != nil {
 		stdlog.Fatal("Failed to get log file:", err)
 	}
-	logLevel := getLogLevel(cmd)
-	logFormat := getLogFormat(cmd)
-	logger, err := initLogger(logFile, logLevel, logFormat)
+	logLevel := logging.LevelFromCommand(cmd)
+	logFormat := logging.FormatFromCommand(cmd)
+	logger, err := logging.NewLogger(logFile, logLevel, logFormat)
 	if err != nil {
 		stdlog.Fatal("Failed to initialize logger:", err)
 	}
@@ -294,9 +295,9 @@ func runDefaultCommand(cmd *cobra.Command, _ []string) {
 
 func main() {
 	logFile, _ := rootCmd.PersistentFlags().GetString("log-file")
-	logLevel := getLogLevel(rootCmd)
-	logFormat := getLogFormat(rootCmd)
-	logger, err := initLogger(logFile, logLevel, logFormat)
+	logLevel := logging.LevelFromCommand(rootCmd)
+	logFormat := logging.FormatFromCommand(rootCmd)
+	logger, err := logging.NewLogger(logFile, logLevel, logFormat)
 	if err != nil {
 		stdlog.Fatal("Failed to initialize logger:", err)
 	}

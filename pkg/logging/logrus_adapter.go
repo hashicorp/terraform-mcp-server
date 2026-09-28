@@ -1,7 +1,7 @@
 // Copyright IBM Corp. 2025
 // SPDX-License-Identifier: MPL-2.0
 
-package main
+package logging
 
 import (
 	"context"
@@ -11,15 +11,16 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-// define a concrete object for slog.Handler interface
+// logrusSlogHandler adapts a Logrus logger to the slog.Handler interface.
 type logrusSlogHandler struct {
 	logger *log.Logger
 	fields log.Fields
 	groups []string
 }
 
-// newSlogLogger wraps a Logrus logger in a *slog.Logger
-func newSlogLogger(logger *log.Logger) *slog.Logger {
+// WrapLogrus wraps a Logrus logger in a *slog.Logger, so components that only
+// accept slog (like the go-sdk transport) can log through logrus.
+func WrapLogrus(logger *log.Logger) *slog.Logger {
 	return slog.New(&logrusSlogHandler{
 		logger: logger,
 		fields: make(log.Fields),
@@ -28,7 +29,7 @@ func newSlogLogger(logger *log.Logger) *slog.Logger {
 
 // -- slog.Handler interface implemented by log.logger (logrus) --------------------------------------------------
 
-// reports whether the handler handles records at the given level.
+// Enabled checks whether the handler handles records at the given level
 func (h *logrusSlogHandler) Enabled(_ context.Context, level slog.Level) bool {
 	return h.logger.IsLevelEnabled(slogLevelToLogrus(level))
 }
