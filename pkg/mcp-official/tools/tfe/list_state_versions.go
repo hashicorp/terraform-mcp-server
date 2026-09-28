@@ -27,14 +27,13 @@ type StateVersionSummary struct {
 
 type StateVersionSummaryList struct {
 	Items []StateVersionSummary `json:"items"`
-	*tfe.Pagination
+	PaginationDetails
 }
 
 type ListStateVersionsArguments struct {
 	TerraformOrgName string `json:"terraform_org_name" jsonschema:"The Terraform organization name"`
 	WorkspaceName    string `json:"workspace_name" jsonschema:"The workspace name to list state versions for"`
-	Page             int    `json:"page,omitempty" jsonschema:"Page number for pagination (min 1)"`
-	PageSize         int    `json:"pageSize,omitempty" jsonschema:"Results per page for pagination (min 1, max 100)"`
+	Pagination
 }
 
 func ListStateVersionsTool() *mcp.Tool {
@@ -42,9 +41,9 @@ func ListStateVersionsTool() *mcp.Tool {
 	if err != nil {
 		panic(err)
 	}
-	input.Properties["page"].Minimum = jsonschema.Ptr(1.0)
-	input.Properties["pageSize"].Minimum = jsonschema.Ptr(1.0)
-	input.Properties["pageSize"].Maximum = jsonschema.Ptr(100.0)
+	for name, prop := range paginationSchemaProperties() {
+		input.Properties[name] = prop
+	}
 
 	output, err := jsonschema.For[StateVersionSummaryList](nil)
 	if err != nil {
@@ -70,14 +69,6 @@ func ListStateVersionsFunc(ctx context.Context, request *mcp.CallToolRequest, in
 	terraformOrgName := strings.TrimSpace(input.TerraformOrgName)
 	workspaceName := strings.TrimSpace(input.WorkspaceName)
 
-	listOptions := tfe.ListOptions{PageNumber: input.Page, PageSize: input.PageSize}
-	if listOptions.PageNumber == 0 {
-		listOptions.PageNumber = 1
-	}
-	if listOptions.PageSize == 0 {
-		listOptions.PageSize = 30
-	}
-
 	tfeClient, err := client.GetTfeClient(ctx, client.SessionIDFromRequest(request))
 	if err != nil {
 		return nil, nil, err
@@ -86,7 +77,7 @@ func ListStateVersionsFunc(ctx context.Context, request *mcp.CallToolRequest, in
 	stateVersions, err := tfeClient.StateVersions.List(ctx, &tfe.StateVersionListOptions{
 		Organization: terraformOrgName,
 		Workspace:    workspaceName,
-		ListOptions:  listOptions,
+		ListOptions:  input.ListOptions(),
 	})
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to list workspace state versions: %w", err)
@@ -113,7 +104,7 @@ func ListStateVersionsFunc(ctx context.Context, request *mcp.CallToolRequest, in
 	}
 
 	return result, &StateVersionSummaryList{
-		Items:      summaries,
-		Pagination: stateVersions.Pagination,
+		Items:             summaries,
+		PaginationDetails: paginationDetails(stateVersions.Pagination),
 	}, nil
 }

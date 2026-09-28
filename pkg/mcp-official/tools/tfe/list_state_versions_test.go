@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/google/jsonschema-go/jsonschema"
-	"github.com/hashicorp/go-tfe"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -75,7 +74,7 @@ func TestListStateVersionsOutputSchema(t *testing.T) {
 	assert.Empty(t, list.Types)
 	assert.Equal(t, "object", list.Items.Type)
 	assert.Empty(t, list.Items.Types)
-	assert.ElementsMatch(t, []string{"items", "current-page", "prev-page", "next-page", "total-count", "total-pages"}, schema.Required)
+	assert.Equal(t, []string{"items"}, schema.Required)
 
 	resolved, err := schema.Resolve(nil)
 	require.NoError(t, err)
@@ -98,15 +97,15 @@ func TestListStateVersionsOutputSchema(t *testing.T) {
 		{
 			name: "items with pagination",
 			output: &StateVersionSummaryList{
-				Items:      []StateVersionSummary{summary},
-				Pagination: &tfe.Pagination{CurrentPage: 1, TotalCount: 1, TotalPages: 1},
+				Items:             []StateVersionSummary{summary},
+				PaginationDetails: PaginationDetails{CurrentPage: 1, TotalCount: 1, TotalPages: 1},
 			},
 		},
 		{
 			name: "empty items with pagination",
 			output: &StateVersionSummaryList{
-				Items:      []StateVersionSummary{},
-				Pagination: &tfe.Pagination{CurrentPage: 1},
+				Items:             []StateVersionSummary{},
+				PaginationDetails: PaginationDetails{CurrentPage: 1},
 			},
 		},
 	}
