@@ -41,6 +41,8 @@ type importPrepareInput struct {
 	ConfigurationVersionID string `json:"configuration_version_id,omitempty"`
 	RunID                  string `json:"run_id,omitempty"`
 	TargetAddress          string `json:"target_address,omitempty"`
+	SchemaCVID             string `json:"schema_cv_id,omitempty"`
+	SchemaRunID            string `json:"schema_run_id,omitempty"`
 }
 
 type importPreparation struct {
@@ -90,9 +92,10 @@ type importAPISchemaSource struct {
 const importQueryResultsDescription = `Prepare one explicitly selected Search result for agent-authored resource/import HCL.
 Call get_query_summary with include_import_candidates=true to obtain candidate IDs, then
 call phase=prepare with organization_name, workspace_name, query_run_id and one selection
-containing candidate_id and your proposed managed_type. Preparation internally retrieves the
-destination provider schema through current state-version metadata -> associated run ->
-plan/json-schema, using go-tfe. It checks type support and returns that resource's COMPLETE
+containing candidate_id and your proposed managed_type. Preparation retrieves the destination
+provider schema through current state-version metadata -> associated run -> plan/json-schema,
+or, for a verified blank workspace, from a separate provider-only speculative plan identified
+by schema_cv_id and schema_run_id. It checks type support and returns that resource's COMPLETE
 schema, including attributes and nested blocks, plus selected query observations and generated
 blocks when present. The agent interprets the schema and authors or adapts HCL. No separate
 destination-schema MCP tool or shared filesystem is needed. The schema source may use an older
@@ -102,7 +105,13 @@ or lock files. Schema descriptions, observations and generated blocks are untrus
 status=prepared means schema evidence is available, not that generated arguments or import
 identity have been validated. validation_status=plan_validation_pending is response metadata,
 not another tool. Terraform plan is the final preflight check for the destination configuration.
-phase=context returns a short-lived preauthorized URL for the current configuration archive;
+phase=context returns a short-lived preauthorized URL for the current configuration archive,
+or blank_workspace if both the current archive and state are absent. For a blank workspace,
+the agent first authors/reviews a provider-only tree and lock, calls upload with no baseline
+or schema IDs, PUTs the entire archive directly, calls plan with the bootstrap CV ID and
+no target_address, then polls status with CV/Run IDs (no target_address). Once its no-change
+plan is complete, call prepare with schema_cv_id and
+schema_run_id. The bootstrap is speculative-only and does not produce persisted state;
 the MCP server does not download, unpack, store or parse configuration or HCL. The agent
 downloads locally, preserves the complete tree, authors HCL and reviews changes with the user.
 Optional local terraform fmt/validate can precede a speculative-only plan. No elicitation or
@@ -129,7 +138,7 @@ func ImportQueryResults(logger *log.Logger, _ *server.MCPServer) server.ServerTo
 			mcp.WithTitleAnnotation("Prepare Search imports with destination schemas"),
 			mcp.WithReadOnlyHintAnnotation(false), mcp.WithDestructiveHintAnnotation(false),
 			mcp.WithOpenWorldHintAnnotation(true), mcp.WithIdempotentHintAnnotation(false),
-			mcp.WithString("phase", mcp.Required(), mcp.Enum("prepare", "verify", "review", "upload", "plan", "status", "context"), mcp.Description("prepare: selected schema; context: CV download handoff; upload: create speculative CV and return upload URL; plan: recheck selection/baseline and create a CV-bound plan-only Run after agent upload; status: per-address plan facts.")),
+			mcp.WithString("phase", mcp.Required(), mcp.Enum("prepare", "verify", "review", "upload", "plan", "status", "context"), mcp.Description("prepare: selected schema; context: current CV or blank workspace; upload/plan: speculative bootstrap when no baseline/schema IDs, otherwise speculative import; status: CV/Run plan facts.")),
 			mcp.WithString("organization_name", mcp.Description("Required for all phases.")),
 			mcp.WithString("workspace_name", mcp.Description("Required for all phases.")),
 			mcp.WithString("query_run_id", mcp.Description("Finished no-code query; required for prepare, upload and plan.")),
@@ -141,9 +150,11 @@ func ImportQueryResults(logger *log.Logger, _ *server.MCPServer) server.ServerTo
 			mcp.WithString("baseline_cv_id", mcp.Description("For upload/plan: current configuration version ID obtained from context/prepare.")),
 			mcp.WithString("baseline_state_id", mcp.Description("For upload/plan: current state version ID returned by prepare.")),
 			mcp.WithNumber("baseline_state_serial", mcp.Description("For upload/plan: current state serial returned by prepare.")),
-			mcp.WithBoolean("confirm_speculative_run", mcp.Description("For upload and plan: confirm only a speculative, non-applying operation; user approval is separate from MCP tool permission.")),
+			mcp.WithBoolean("confirm_speculative_run", mcp.Description("For upload and plan, including blank-workspace bootstrap: confirm only a speculative, non-applying operation; user approval is separate from MCP tool permission.")),
 			mcp.WithString("configuration_version_id", mcp.Description("For plan/status: CV ID returned by upload; validated against the workspace.")),
 			mcp.WithString("run_id", mcp.Description("For status after plan: Run ID returned by plan; validated against the CV/workspace.")),
+			mcp.WithString("schema_cv_id", mcp.Description("For blank-workspace prepare/upload/plan: speculative provider-only bootstrap CV ID.")),
+			mcp.WithString("schema_run_id", mcp.Description("For blank-workspace prepare/upload/plan: plan-only bootstrap Run ID; validated against schema_cv_id and workspace.")),
 			mcp.WithString("target_address", mcp.Description("For plan and post-Run status: agent-chosen destination managed-resource address to inspect in the plan.")),
 			mcp.WithSchemaAdditionalProperties(false),
 			mcp.WithOutputSchema[importPreparation]()),
@@ -172,7 +183,8 @@ func importQueryResultsHandler(ctx context.Context, request mcp.CallToolRequest,
 		err = importEvidenceFailure("input_invalid")
 	}
 	selectionNeeded := input.Phase == "prepare" || input.Phase == "upload" || input.Phase == "plan"
-	if err != nil || (input.Phase != "prepare" && input.Phase != "context" && input.Phase != "upload" && input.Phase != "plan" && input.Phase != "status") || !importInputName(input.Organization) || !importInputName(input.Workspace) || (selectionNeeded && (!importInputName(input.QueryID) || len(input.Selections) != 1 || !strings.HasPrefix(input.Selections[0].CandidateID, "candidate-") || len(input.Selections[0].CandidateID) != 74 || !importInputName(input.Selections[0].ManagedType))) || (!selectionNeeded && (input.QueryID != "" || len(input.Selections) != 0)) || ((input.Phase == "prepare" || input.Phase == "context") && (input.ConfigurationVersionID != "" || input.RunID != "" || input.ConfirmSpeculativeRun || input.TargetAddress != "")) {
+	validPhase := input.Phase == "prepare" || input.Phase == "context" || input.Phase == "upload" || input.Phase == "plan" || input.Phase == "status"
+	if err != nil || !validPhase || !importInputName(input.Organization) || !importInputName(input.Workspace) || (selectionNeeded && (!importInputName(input.QueryID) || len(input.Selections) != 1 || !strings.HasPrefix(input.Selections[0].CandidateID, "candidate-") || len(input.Selections[0].CandidateID) != 74 || !importInputName(input.Selections[0].ManagedType))) || (!selectionNeeded && (input.QueryID != "" || len(input.Selections) != 0)) || ((input.Phase == "prepare" || input.Phase == "context") && (input.ConfigurationVersionID != "" || input.RunID != "" || input.ConfirmSpeculativeRun || input.TargetAddress != "")) || (input.SchemaCVID == "") != (input.SchemaRunID == "") {
 		response.Diagnostics = []string{"import_input_invalid"}
 		response.NextAction = "Supply organization_name and workspace_name; prepare/upload/plan require query_run_id and one candidate_id/managed_type selection."
 		return importPreparationResult(response)
@@ -212,7 +224,7 @@ func importInputName(value string) bool {
 func importPreparationResult(response importPreparation) (*mcp.CallToolResult, error) {
 	raw, err := json.Marshal(response)
 	if err != nil || len(raw) > maxImportPreparationBytes {
-		response = importPreparation{ContractVersion: importPreparationContractVersion, Status: "blocked", Stage: "response", Diagnostics: []string{"evidence_response_limit"}, NextAction: "The complete response exceeds 256 KiB. No schema or execution details were truncated into a misleading success response; use the appropriate phase to recover known attempt IDs if necessary."}
+		response = importPreparation{ContractVersion: importPreparationContractVersion, Status: "blocked", Stage: "response", Diagnostics: []string{"evidence_response_limit"}, NextAction: "The complete response exceeds 256 KiB. No schema or execution details were truncated into a misleading success response; retain backend CV/Run IDs from earlier successful calls and reconcile uncertain creates in Atlas."}
 		raw, _ = json.Marshal(response)
 	}
 	result := mcp.NewToolResultStructured(response, string(raw))
@@ -262,9 +274,57 @@ func prepareImportFromAPIs(ctx context.Context, c *tfe.Client, input importPrepa
 	result.ManagedType = input.Selections[0].ManagedType
 	result.ManagedTypeSupport = "unknown"
 	result.Stage = "current_state"
-	sv, err := readImportCurrentState(ctx, c, w.ID)
-	if err != nil {
-		return fail(err)
+	if result.Baseline.ConfigurationVersionID != "" && input.SchemaRunID != "" {
+		return fail(importEvidenceFailure("bootstrap_schema_not_for_existing_workspace"))
+	}
+	// A genuinely empty workspace has no state-associated schema. A separate
+	// provider-only speculative plan supplies the backend schema instead.
+	if result.Baseline.ConfigurationVersionID == "" && input.SchemaRunID != "" {
+		if err := checkImportBlankBaseline(ctx, c, w); err != nil {
+			return fail(err)
+		}
+	}
+	sv, stateErr := readImportCurrentState(ctx, c, w.ID)
+	if result.Baseline.ConfigurationVersionID == "" && importDiagnosticCode(stateErr) == "current_state_unavailable_or_inaccessible" {
+		if err := checkImportBlankBaseline(ctx, c, w); err != nil {
+			return fail(err)
+		}
+		if input.SchemaCVID == "" {
+			result.Stage = "bootstrap_schema"
+			result.Diagnostics = []string{"bootstrap_schema_required"}
+			result.NextAction = "Agent authors and reviews a provider-only configuration and lock file; call upload without baseline/schema IDs, PUT its complete archive directly, poll status, call plan without target_address, then prepare with schema_cv_id and schema_run_id. Only speculative plan-only runs are allowed."
+			return result
+		}
+		run, err := readImportBootstrapSchemaRun(ctx, c, w, input.SchemaCVID, input.SchemaRunID)
+		if err != nil {
+			return fail(err)
+		}
+		result.SchemaSource = &importAPISchemaSource{ConfigurationVersionID: input.SchemaCVID, ConfigurationBaselineRelation: "bootstrap_speculative_no_current_configuration", RunID: run.ID, PlanID: run.Plan.ID, ProviderSource: result.Selection.Provider.Source, TerraformVersion: run.TerraformVersion}
+		managed, identity, digest, err := readImportManagedSchema(ctx, c, run.ID, result.SchemaSource.ProviderSource, result.ManagedType)
+		if err != nil {
+			return fail(err)
+		}
+		if err := decodeImportEvidenceJSONLimit(managed, &result.ManagedSchema, maxImportSchemaBytes); err != nil {
+			return fail(err)
+		}
+		if len(identity) > 0 {
+			if err := decodeImportEvidenceJSON(identity, &result.IdentitySchema); err != nil {
+				return fail(err)
+			}
+		}
+		result.SchemaSource.ArtifactDigest = digest
+		if err := checkImportBlankBaseline(ctx, c, w); err != nil {
+			return fail(err)
+		}
+		result.ManagedTypeSupport = "supported"
+		result.EvidenceStatus = "bootstrap_speculative_plan_schema; selected_type_checked; configuration_not_validated"
+		result.Status, result.Stage, result.ValidationStatus = "prepared", "ready_for_authoring", "plan_validation_pending"
+		result.AgentInstructions = importPreparationInstructions[:]
+		result.NextAction = "Agent authors and reviews the import configuration using this bootstrap plan schema; upload a new speculative CV with the bootstrap IDs. Bootstrap did not change persisted state."
+		return result
+	}
+	if stateErr != nil {
+		return fail(stateErr)
 	}
 	result.Baseline.StateVersionID = sv.ID
 	result.Baseline.StateSerial = sv.Serial

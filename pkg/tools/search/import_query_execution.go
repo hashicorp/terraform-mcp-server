@@ -6,6 +6,7 @@ package search
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/url"
 	"strings"
 
@@ -29,6 +30,7 @@ type importPlanFacts struct {
 	Selected                *importPlannedResource  `json:"selected,omitempty"`
 	SelectedAddress         string                  `json:"selected_address"`
 	SelectedEntries         int                     `json:"selected_entries"`
+	ResourceChangeCount     int                     `json:"resource_change_count"`
 	OtherManagedActions     []importPlannedResource `json:"other_managed_actions"`
 	OtherImports            []importPlannedResource `json:"other_imports"`
 	OtherManagedActionCount int                     `json:"other_managed_action_count"`
@@ -64,7 +66,12 @@ func importExecutionFailure(result importPreparation, code string) importPrepara
 
 func createImportSpeculativeCV(ctx context.Context, c *tfe.Client, input importPrepareInput, logger *log.Logger) importPreparation {
 	result := importExecutionResult(input)
-	if !input.ConfirmSpeculativeRun || !importInputName(input.BaselineCVID) || !importInputName(input.BaselineStateID) || input.ConfigurationVersionID != "" || input.RunID != "" || input.TargetAddress != "" {
+	// With no baseline and no schema-source IDs, upload is the first, provider-
+	// only speculative bootstrap. Establish blankness from Atlas before POST.
+	if input.BaselineCVID == "" && input.BaselineStateID == "" && input.BaselineSerial == 0 && input.SchemaCVID == "" && input.SchemaRunID == "" {
+		return createImportBootstrapCV(ctx, c, input, logger)
+	}
+	if !input.ConfirmSpeculativeRun || input.ConfigurationVersionID != "" || input.RunID != "" || input.TargetAddress != "" || (input.SchemaRunID == "" && (!importInputName(input.BaselineCVID) || !importInputName(input.BaselineStateID))) || (input.SchemaRunID != "" && (input.BaselineCVID != "" || input.BaselineStateID != "" || input.BaselineSerial != 0)) {
 		return importExecutionFailure(result, "speculative_upload_input_invalid")
 	}
 	w, err := c.Workspaces.Read(ctx, input.Organization, input.Workspace)
@@ -162,7 +169,10 @@ func readImportExecutionCV(ctx context.Context, c *tfe.Client, input importPrepa
 
 func createImportPlanRun(ctx context.Context, c *tfe.Client, input importPrepareInput, logger *log.Logger) importPreparation {
 	result := importExecutionResult(input)
-	if !input.ConfirmSpeculativeRun || input.RunID != "" || !validImportTargetAddress(input.TargetAddress) || !importInputName(input.BaselineCVID) || !importInputName(input.BaselineStateID) {
+	if input.BaselineCVID == "" && input.BaselineStateID == "" && input.BaselineSerial == 0 && input.SchemaCVID == "" && input.SchemaRunID == "" && input.TargetAddress == "" {
+		return createImportBootstrapRun(ctx, c, input, logger)
+	}
+	if !input.ConfirmSpeculativeRun || input.RunID != "" || !validImportTargetAddress(input.TargetAddress) || (input.SchemaRunID == "" && (!importInputName(input.BaselineCVID) || !importInputName(input.BaselineStateID))) || (input.SchemaRunID != "" && (input.BaselineCVID != "" || input.BaselineStateID != "" || input.BaselineSerial != 0)) {
 		return importExecutionFailure(result, "plan_input_invalid")
 	}
 	prepared := prepareImportFromAPIs(ctx, c, input)
@@ -188,12 +198,18 @@ func createImportPlanRun(ctx context.Context, c *tfe.Client, input importPrepare
 	if importCurrentConfigurationID(w) != input.BaselineCVID || w.ExecutionMode != "remote" || w.WorkingDirectory != "" || w.VCSRepo != nil {
 		return importExecutionFailure(result, "baseline_changed")
 	}
-	sv, err := readImportCurrentState(ctx, c, w.ID)
-	if err != nil {
-		return importExecutionFailure(result, importDiagnosticCode(err))
-	}
-	if sv.ID != input.BaselineStateID || sv.Serial != input.BaselineSerial {
-		return importExecutionFailure(result, "baseline_changed")
+	if input.SchemaRunID != "" {
+		if err := checkImportBlankBaseline(ctx, c, w); err != nil {
+			return importExecutionFailure(result, importDiagnosticCode(err))
+		}
+	} else {
+		sv, err := readImportCurrentState(ctx, c, w.ID)
+		if err != nil {
+			return importExecutionFailure(result, importDiagnosticCode(err))
+		}
+		if sv.ID != input.BaselineStateID || sv.Serial != input.BaselineSerial {
+			return importExecutionFailure(result, "baseline_changed")
+		}
 	}
 	if cv.Status != tfe.ConfigurationUploaded {
 		return importExecutionFailure(result, "execution_cv_not_uploaded")
@@ -227,7 +243,7 @@ func validImportTargetAddress(address string) bool {
 // workspace/CV/Run IDs. An upload URL cannot be reacquired from a CV read.
 func readImportExecutionStatus(ctx context.Context, c *tfe.Client, input importPrepareInput) importPreparation {
 	result := importExecutionResult(input)
-	if input.ConfirmSpeculativeRun || (input.RunID != "" && !validImportTargetAddress(input.TargetAddress)) || (input.RunID == "" && input.TargetAddress != "") || (input.RunID != "" && !importInputName(input.RunID)) {
+	if input.ConfirmSpeculativeRun || (input.TargetAddress != "" && !validImportTargetAddress(input.TargetAddress)) || (input.RunID == "" && input.TargetAddress != "") || (input.RunID != "" && !importInputName(input.RunID)) {
 		return importExecutionFailure(result, "execution_input_invalid")
 	}
 	w, cv, err := readImportExecutionCV(ctx, c, input)
@@ -247,7 +263,7 @@ func readImportExecutionStatus(ctx context.Context, c *tfe.Client, input importP
 			return result
 		}
 		result.Status, result.Stage = "ready_for_plan", "status"
-		result.NextAction = "CV is uploaded. If no prior Run create had an uncertain outcome, call plan with this CV ID, query selection, baseline markers, address and confirmation. Otherwise reconcile existing Runs in Atlas first."
+		result.NextAction = "CV is uploaded. If no prior Run create had an uncertain outcome, call plan with this CV ID, query selection and confirmation: omit baseline/schema IDs and target_address for a verified blank-workspace schema bootstrap; for an import include baseline or schema IDs and target_address. Otherwise reconcile existing Runs in Atlas first."
 		return result
 	}
 	r, err := c.Runs.Read(ctx, input.RunID)
@@ -278,6 +294,17 @@ func readImportExecutionStatus(ctx context.Context, c *tfe.Client, input importP
 	if p.Status != tfe.PlanFinished || r.Status != tfe.RunPlannedAndFinished {
 		result.Status, result.Stage = "pending", "status"
 		result.NextAction = "Poll this exact Run until the plan and required run stages finish."
+		return result
+	}
+	if input.TargetAddress == "" {
+		if err := checkImportBlankBaseline(ctx, c, w); err != nil {
+			return importExecutionFailure(result, importDiagnosticCode(err))
+		}
+		if _, err := readImportBootstrapSchemaRun(ctx, c, w, cv.ID, r.ID); err != nil {
+			return importExecutionFailure(result, importDiagnosticCode(err))
+		}
+		result.Status, result.Stage = "bootstrap_schema_ready", "status"
+		result.NextAction = "Call prepare with the same query selection and schema_cv_id/schema_run_id. It will verify that the selected managed type exists in the completed bootstrap plan schema. No state was changed."
 		return result
 	}
 	facts, err := readImportPlanFacts(ctx, c, r.Plan.ID, input.TargetAddress)
@@ -320,7 +347,7 @@ func readImportPlanFacts(ctx context.Context, c *tfe.Client, planID, address str
 	if len(plan.ResourceChanges) > 10000 {
 		return nil, importEvidenceFailure("plan_resource_limit")
 	}
-	f := &importPlanFacts{FormatVersion: plan.FormatVersion, SelectedAddress: address, OtherManagedActions: []importPlannedResource{}, OtherImports: []importPlannedResource{}, OutputChangeCount: len(plan.OutputChanges), DriftCount: len(plan.ResourceDrift), DeferredCount: len(plan.DeferredChanges)}
+	f := &importPlanFacts{FormatVersion: plan.FormatVersion, SelectedAddress: address, ResourceChangeCount: len(plan.ResourceChanges), OtherManagedActions: []importPlannedResource{}, OtherImports: []importPlannedResource{}, OutputChangeCount: len(plan.OutputChanges), DriftCount: len(plan.ResourceDrift), DeferredCount: len(plan.DeferredChanges)}
 	for _, entry := range plan.ResourceChanges {
 		imported := len(entry.Change.Importing) > 0 && string(entry.Change.Importing) != "null"
 		var importing struct {
@@ -355,4 +382,168 @@ func readImportPlanFacts(ctx context.Context, c *tfe.Client, planID, address str
 		}
 	}
 	return f, nil
+}
+
+// Absence must be established by the backend, not inferred from a missing CV
+// relationship alone. An inaccessible state is not an empty workspace.
+func checkImportBlankBaseline(ctx context.Context, c *tfe.Client, w *tfe.Workspace) error {
+	current, err := c.Workspaces.ReadByID(ctx, w.ID)
+	if err != nil {
+		return importReadError(err, 0)
+	}
+	if current.ID != w.ID || current.Organization == nil || w.Organization == nil || !strings.EqualFold(current.Organization.Name, w.Organization.Name) || importCurrentConfigurationID(current) != "" || current.ExecutionMode != "remote" || current.WorkingDirectory != "" || current.VCSRepo != nil {
+		return importEvidenceFailure("blank_workspace_baseline_changed_or_unsupported")
+	}
+	_, err = c.StateVersions.ReadCurrent(ctx, w.ID)
+	if errors.Is(err, tfe.ErrResourceNotFound) {
+		return nil
+	}
+	if err != nil {
+		return importReadError(err, 0)
+	}
+	return importEvidenceFailure("blank_workspace_has_state")
+}
+
+// The bootstrap must be a completed, plan-only speculative run on a CV in the
+// intended workspace, with no changes whatsoever. The agent, not MCP, reviews
+// the intended provider-only tree: an empty plan cannot prove HCL content.
+// The speculative plan is the backend schema source.
+func readImportBootstrapSchemaRun(ctx context.Context, c *tfe.Client, w *tfe.Workspace, cvID, runID string) (*tfe.Run, error) {
+	if !importInputName(cvID) || !importInputName(runID) {
+		return nil, importEvidenceFailure("bootstrap_schema_input_invalid")
+	}
+	_, cv, err := readImportExecutionCV(ctx, c, importPrepareInput{Organization: w.Organization.Name, Workspace: w.Name, ConfigurationVersionID: cvID})
+	if err != nil {
+		return nil, err
+	}
+	if cv.Status != tfe.ConfigurationUploaded {
+		return nil, importEvidenceFailure("bootstrap_cv_not_uploaded")
+	}
+	r, err := c.Runs.Read(ctx, runID)
+	if err != nil {
+		return nil, importReadError(err, 0)
+	}
+	if r.ID != runID || !r.PlanOnly || r.Workspace == nil || r.Workspace.ID != w.ID || r.ConfigurationVersion == nil || r.ConfigurationVersion.ID != cv.ID || r.Plan == nil || r.Plan.ID == "" || r.Status != tfe.RunPlannedAndFinished {
+		return nil, importEvidenceFailure("bootstrap_run_not_ready_or_unverified")
+	}
+	p, err := c.Plans.Read(ctx, r.Plan.ID)
+	if err != nil {
+		return nil, importReadError(err, 0)
+	}
+	if p.Status != tfe.PlanFinished {
+		return nil, importEvidenceFailure("bootstrap_plan_not_finished")
+	}
+	facts, err := readImportPlanFacts(ctx, c, r.Plan.ID, "__bootstrap_must_be_empty__")
+	if err != nil {
+		return nil, err
+	}
+	if facts.ResourceChangeCount != 0 || facts.OutputChangeCount != 0 || facts.DriftCount != 0 || facts.DeferredCount != 0 {
+		return nil, importEvidenceFailure("bootstrap_plan_not_empty")
+	}
+	return r, nil
+}
+
+func createImportBootstrapCV(ctx context.Context, c *tfe.Client, input importPrepareInput, logger *log.Logger) importPreparation {
+	result := importExecutionResult(input)
+	if !input.ConfirmSpeculativeRun || input.BaselineCVID != "" || input.BaselineStateID != "" || input.BaselineSerial != 0 || input.ConfigurationVersionID != "" || input.RunID != "" || input.SchemaCVID != "" || input.SchemaRunID != "" || input.TargetAddress != "" {
+		return importExecutionFailure(result, "bootstrap_input_invalid")
+	}
+	w, err := c.Workspaces.Read(ctx, input.Organization, input.Workspace)
+	if err != nil {
+		return importExecutionFailure(result, importDiagnosticCode(importReadError(err, 0)))
+	}
+	if w.Organization == nil || !strings.EqualFold(w.Organization.Name, input.Organization) {
+		return importExecutionFailure(result, "workspace_ownership_unverified")
+	}
+	result.WorkspaceID = w.ID
+	if err := checkImportBlankBaseline(ctx, c, w); err != nil {
+		return importExecutionFailure(result, importDiagnosticCode(err))
+	}
+	discovery, err := readImportDiscovery(ctx, c, input.QueryID)
+	if err != nil {
+		return importExecutionFailure(result, importDiagnosticCode(err))
+	}
+	if discovery.WorkspaceID != w.ID || !importSelectionPresent(discovery, input.Selections[0].CandidateID) {
+		return importExecutionFailure(result, "selected_candidate_not_found")
+	}
+	if err := checkImportBlankBaseline(ctx, c, w); err != nil {
+		return importExecutionFailure(result, importDiagnosticCode(err))
+	}
+	result.Execution = &importExecutionResponse{Stage: "cv_create_outcome_unknown"}
+	mutation, err := client.NewTfeClientForImportMutation(ctx, logger)
+	if err != nil {
+		return importExecutionFailure(result, "backend_client_unavailable")
+	}
+	no, yes := false, true
+	cv, err := mutation.ConfigurationVersions.Create(ctx, w.ID, tfe.ConfigurationVersionCreateOptions{AutoQueueRuns: &no, Speculative: &yes})
+	if err != nil {
+		result.NextAction = "Bootstrap CV create outcome unknown; reconcile in Atlas before another create."
+		return importExecutionFailure(result, "cv_create_outcome_unknown")
+	}
+	result.Execution.ConfigurationVersionID = cv.ID
+	if cv.ID == "" || !cv.Speculative || cv.Provisional || cv.AutoQueueRuns || !validImportArtifactLocation(ctx, cv.UploadURL) {
+		return importExecutionFailure(result, "cv_create_response_invalid")
+	}
+	result.Status, result.Stage, result.Execution.Stage = "awaiting_agent_upload", "upload", "bootstrap_awaiting_agent_upload"
+	result.Execution.UploadURL = cv.UploadURL
+	result.Execution.UploadInstructions = "Agent PUTs the complete reviewed provider-only archive to this URL with Content-Type: application/octet-stream. Do not include resources, imports, outputs or secrets. Poll status with this CV ID."
+	result.NextAction = "After direct agent upload and uploaded status, call plan using this CV ID and the same query selection, without baseline IDs, schema IDs or target_address."
+	return result
+}
+
+func importSelectionPresent(discovery *importDiscovery, id string) bool {
+	for _, candidate := range discovery.Candidates {
+		if candidate.CandidateID == id {
+			return true
+		}
+	}
+	return false
+}
+
+func createImportBootstrapRun(ctx context.Context, c *tfe.Client, input importPrepareInput, logger *log.Logger) importPreparation {
+	result := importExecutionResult(input)
+	if !input.ConfirmSpeculativeRun || input.BaselineCVID != "" || input.BaselineStateID != "" || input.BaselineSerial != 0 || input.RunID != "" || input.SchemaCVID != "" || input.SchemaRunID != "" || input.TargetAddress != "" {
+		return importExecutionFailure(result, "bootstrap_input_invalid")
+	}
+	lookup := importPrepareInput{Organization: input.Organization, Workspace: input.Workspace, ConfigurationVersionID: input.ConfigurationVersionID}
+	w, cv, err := readImportExecutionCV(ctx, c, lookup)
+	if err != nil {
+		return importExecutionFailure(result, importDiagnosticCode(err))
+	}
+	result.WorkspaceID = w.ID
+	result.Execution = &importExecutionResponse{ConfigurationVersionID: cv.ID, Stage: "ready_for_bootstrap_plan"}
+	if cv.Status != tfe.ConfigurationUploaded {
+		return importExecutionFailure(result, "execution_cv_not_uploaded")
+	}
+	if err := checkImportBlankBaseline(ctx, c, w); err != nil {
+		return importExecutionFailure(result, importDiagnosticCode(err))
+	}
+	discovery, err := readImportDiscovery(ctx, c, input.QueryID)
+	if err != nil {
+		return importExecutionFailure(result, importDiagnosticCode(err))
+	}
+	if discovery.WorkspaceID != w.ID || !importSelectionPresent(discovery, input.Selections[0].CandidateID) {
+		return importExecutionFailure(result, "selected_candidate_not_found")
+	}
+	if err := checkImportBlankBaseline(ctx, c, w); err != nil {
+		return importExecutionFailure(result, importDiagnosticCode(err))
+	}
+	result.Execution.Stage = "run_create_outcome_unknown"
+	mutation, err := client.NewTfeClientForImportMutation(ctx, logger)
+	if err != nil {
+		return importExecutionFailure(result, "backend_client_unavailable")
+	}
+	message := "Speculative Search provider-schema bootstrap"
+	r, err := mutation.Runs.Create(ctx, tfe.RunCreateOptions{Workspace: w, ConfigurationVersion: cv, PlanOnly: tfe.Bool(true), AutoApply: tfe.Bool(false), AllowConfigGeneration: tfe.Bool(false), Message: &message})
+	if err != nil {
+		result.NextAction = "Bootstrap Run create outcome unknown; reconcile Atlas before another create."
+		return importExecutionFailure(result, "run_create_outcome_unknown")
+	}
+	result.Execution.RunID = r.ID
+	if r.ID == "" || !r.PlanOnly || r.Workspace == nil || r.Workspace.ID != w.ID || r.ConfigurationVersion == nil || r.ConfigurationVersion.ID != cv.ID {
+		return importExecutionFailure(result, "run_association_unverified")
+	}
+	result.Status, result.Stage, result.Execution.Stage = "pending", "plan", "bootstrap_run_created"
+	result.NextAction = "Poll status with bootstrap CV and Run IDs (no target_address); then call prepare with schema_cv_id and schema_run_id. No state was applied."
+	return result
 }

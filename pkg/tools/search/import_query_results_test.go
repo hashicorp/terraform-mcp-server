@@ -153,6 +153,16 @@ func importFixtureInput(t *testing.T) importPrepareInput {
 	return input
 }
 
+func TestImportDiscoveryAcceptsLiveNoCodeResourceTypeWireName(t *testing.T) {
+	f := importBackendFixture(t)
+	path := "/api/v2/search/no-code-query/ncqry-fixture"
+	f.responses[path] = []byte(strings.ReplaceAll(string(f.responses[path]), `"resource_type"`, `"resource-type"`))
+	discovery, err := readImportDiscovery(context.Background(), f.client, "qry-fixture")
+	require.NoError(t, err)
+	require.Len(t, discovery.Candidates, 1)
+	assert.Equal(t, "registry.terraform.io/hashicorp/aws", discovery.Candidates[0].Provider.Source)
+}
+
 func TestImportQueryAPIOnlyPreparation(t *testing.T) {
 	f := importBackendFixture(t)
 	// Newer current runs and different CVs do not select the schema source.
@@ -283,6 +293,10 @@ func TestImportQueryResultsDefinitionAndLegacyMigration(t *testing.T) {
 	assert.False(t, *tool.Tool.Annotations.ReadOnlyHint, "the tool can create speculative CVs and runs")
 	require.NotNil(t, tool.Tool.Annotations.IdempotentHint)
 	assert.False(t, *tool.Tool.Annotations.IdempotentHint, "create requests require scoped recovery")
+	inputSchema, err := json.Marshal(tool.Tool.InputSchema)
+	require.NoError(t, err)
+	assert.NotContains(t, string(inputSchema), `"bootstrap_upload"`)
+	assert.NotContains(t, string(inputSchema), `"bootstrap_plan"`)
 	for _, args := range []map[string]any{
 		{"phase": "verify", "confirm_speculative_run": true, "configuration_path": "/must-not-be-read"},
 		{"phase": "review", "generated_configuration": "resource \"aws_iam_role\" \"x\" {}", "output_file": "imports.tf"},

@@ -140,7 +140,8 @@ func readImportDiscovery(ctx context.Context, c *tfe.Client, queryID string) (*i
 					Version   string `json:"version"`
 					Resources []struct {
 						Body struct {
-							Type string `json:"resource_type"`
+							Type       string `json:"resource_type"`
+							HyphenType string `json:"resource-type"`
 						} `json:"body"`
 					} `json:"no-code-query-resources"`
 				} `json:"no-code-query-providers"`
@@ -163,10 +164,17 @@ func readImportDiscovery(ctx context.Context, c *tfe.Client, queryID string) (*i
 		}
 		provider := workspaceProvider{Source: "registry.terraform.io/" + p.Namespace + "/" + p.Name, Name: p.Name, Version: p.Version}
 		for _, r := range p.Resources {
-			if existing, ok := providers[r.Body.Type]; ok && existing != provider {
+			resourceType := r.Body.Type
+			if resourceType == "" {
+				resourceType = r.Body.HyphenType
+			}
+			if resourceType == "" || (r.Body.Type != "" && r.Body.HyphenType != "" && r.Body.Type != r.Body.HyphenType) {
+				return nil, importEvidenceFailure("query_provider_source_unresolved")
+			}
+			if existing, ok := providers[resourceType]; ok && existing != provider {
 				return nil, importEvidenceFailure("query_provider_ambiguous")
 			}
-			providers[r.Body.Type] = provider
+			providers[resourceType] = provider
 		}
 	}
 	logs, err := c.QueryRuns.Logs(ctx, queryID)

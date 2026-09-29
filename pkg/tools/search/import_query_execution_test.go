@@ -281,3 +281,159 @@ func TestImportPlanFactsReportsAbsentOrExtraImports(t *testing.T) {
 	assert.Equal(t, []string{"update"}, facts.Selected.Actions)
 	assert.Equal(t, 1, facts.OtherImportCount)
 }
+
+func blankImportFixture(t *testing.T) (*importBackendTest, *bool) {
+	t.Helper()
+	f, uploaded, _ := importExecutionFixture(t)
+	f.stateStatus = http.StatusNotFound
+	for _, path := range []string{"/api/v2/organizations/fixture-org/workspaces/import-root", "/api/v2/workspaces/ws-fixture"} {
+		// Update structured fixture data, independent of whitespace or field order.
+		var document map[string]any
+		require.NoError(t, json.Unmarshal(f.responses[path], &document))
+		rel := document["data"].(map[string]any)["relationships"].(map[string]any)
+		rel["current-configuration-version"] = map[string]any{"data": nil}
+		var err error
+		f.responses[path], err = json.Marshal(document)
+		require.NoError(t, err)
+	}
+	original := f.mutationHandler
+	f.mutationHandler = func(w http.ResponseWriter, r *http.Request) bool {
+		if r.Method == http.MethodGet {
+			switch r.URL.Path {
+			case "/api/v2/plans/plan-import/json-output":
+				_, _ = io.WriteString(w, `{"format_version":"1.2","resource_changes":[]}`)
+				return true
+			case "/api/v2/runs/run-import/plan/json-schema":
+				http.Redirect(w, r, f.url+"/schema-download?signed=fixture", http.StatusTemporaryRedirect)
+				return true
+			}
+		}
+		return original(w, r)
+	}
+	return f, uploaded
+}
+
+func TestImportBlankWorkspaceBootstrapSchemaAndExecution(t *testing.T) {
+	f, uploaded := blankImportFixture(t)
+	i := importFixtureInput(t)
+	initial := prepareImportFromAPIs(context.Background(), f.client, i)
+	assert.Contains(t, initial.Diagnostics, "bootstrap_schema_required")
+	assert.Empty(t, initial.Baseline.ConfigurationVersionID)
+	assert.Empty(t, initial.Baseline.StateVersionID)
+	contextResult := callImportPhase(t, importPrepareInput{Phase: "context", Organization: i.Organization, Workspace: i.Workspace})
+	assert.Equal(t, "blank_workspace", contextResult.Status)
+	assert.Nil(t, contextResult.Context)
+	i.Phase, i.ConfirmSpeculativeRun = "upload", true
+	created := callImportPhase(t, i)
+	require.Equal(t, "awaiting_agent_upload", created.Status, created.Diagnostics)
+	status := importPrepareInput{Phase: "status", Organization: i.Organization, Workspace: i.Workspace, ConfigurationVersionID: created.Execution.ConfigurationVersionID}
+	assert.Equal(t, "awaiting_agent_upload", callImportPhase(t, status).Status)
+	i.Phase, i.ConfigurationVersionID = "plan", created.Execution.ConfigurationVersionID
+	assert.Contains(t, callImportPhase(t, i).Diagnostics, "execution_cv_not_uploaded")
+	*uploaded = true
+	assert.Equal(t, "ready_for_plan", callImportPhase(t, status).Status)
+	started := callImportPhase(t, i)
+	require.Equal(t, "pending", started.Status, started.Diagnostics)
+	status.RunID = started.Execution.RunID
+	// A completed bootstrap Run is required: a pending one is not schema proof.
+	i.Phase, i.ConfigurationVersionID, i.ConfirmSpeculativeRun = "prepare", "", false
+	i.SchemaCVID, i.SchemaRunID = created.Execution.ConfigurationVersionID, started.Execution.RunID
+	assert.Contains(t, callImportPhase(t, i).Diagnostics, "bootstrap_run_not_ready_or_unverified")
+	// The fixture's Run and Plan are now terminal.
+	previous := f.mutationHandler
+	f.mutationHandler = func(w http.ResponseWriter, r *http.Request) bool {
+		if r.Method == http.MethodGet && r.URL.Path == "/api/v2/runs/run-import" {
+			_, _ = io.WriteString(w, `{"data":{"id":"run-import","type":"runs","attributes":{"status":"planned_and_finished","plan-only":true},"relationships":{"workspace":{"data":{"id":"ws-fixture","type":"workspaces"}},"configuration-version":{"data":{"id":"cv-import","type":"configuration-versions"}},"plan":{"data":{"id":"plan-import","type":"plans"}}}}}`)
+			return true
+		}
+		if r.Method == http.MethodGet && r.URL.Path == "/api/v2/plans/plan-import" {
+			_, _ = io.WriteString(w, `{"data":{"id":"plan-import","type":"plans","attributes":{"status":"finished"}}}`)
+			return true
+		}
+		if r.Method == http.MethodGet && r.URL.Path == "/api/v2/plans/plan-import/json-output" {
+			_, _ = io.WriteString(w, `{"format_version":"1.2","resource_changes":[]}`)
+			return true
+		}
+		if r.Method == http.MethodGet && r.URL.Path == "/api/v2/runs/run-import/plan/json-schema" {
+			http.Redirect(w, r, f.url+"/schema-download?signed=fixture", http.StatusTemporaryRedirect)
+			return true
+		}
+		return previous(w, r)
+	}
+	prepared := callImportPhase(t, i)
+	require.Equal(t, "prepared", prepared.Status, prepared.Diagnostics)
+	assert.Equal(t, "bootstrap_schema_ready", callImportPhase(t, status).Status)
+	assert.Equal(t, "bootstrap_speculative_no_current_configuration", prepared.SchemaSource.ConfigurationBaselineRelation)
+	assert.Contains(t, prepared.ManagedSchema, "block")
+	i.Phase, i.ConfirmSpeculativeRun = "upload", true
+	i.SchemaRunID = "run-schema"
+	assert.Contains(t, callImportPhase(t, i).Diagnostics, "bootstrap_run_not_ready_or_unverified")
+	i.SchemaRunID = started.Execution.RunID
+	secondOriginal := f.mutationHandler
+	f.mutationHandler = func(w http.ResponseWriter, r *http.Request) bool {
+		if r.Method == http.MethodPost && r.URL.Path == "/api/v2/workspaces/ws-fixture/configuration-versions" {
+			w.WriteHeader(http.StatusCreated)
+			_, _ = io.WriteString(w, `{"data":{"id":"cv-import-final","type":"configuration-versions","attributes":{"status":"pending","speculative":true,"auto-queue-runs":false,"upload-url":"`+f.url+`/upload"}}}`)
+			return true
+		}
+		if r.Method == http.MethodGet && r.URL.Path == "/api/v2/workspaces/ws-fixture/configuration-versions" {
+			_, _ = io.WriteString(w, `{"data":[{"id":"cv-import","type":"configuration-versions"},{"id":"cv-import-final","type":"configuration-versions"}],"meta":{"pagination":{"current-page":1,"next-page":0,"total-count":2,"total-pages":1}}}`)
+			return true
+		}
+		return secondOriginal(w, r)
+	}
+	i.Phase, i.ConfirmSpeculativeRun = "upload", true
+	finalCV := callImportPhase(t, i)
+	require.Equal(t, "awaiting_agent_upload", finalCV.Status, finalCV.Diagnostics)
+	assert.Equal(t, "cv-import-final", finalCV.Execution.ConfigurationVersionID)
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	assert.Equal(t, 2, f.requests["POST /api/v2/workspaces/ws-fixture/configuration-versions"])
+	assert.Equal(t, 1, f.requests["POST /api/v2/runs"])
+}
+
+func TestImportBlankWorkspaceDoesNotTreatStateAsEmpty(t *testing.T) {
+	f, _ := blankImportFixture(t)
+	f.stateStatus = http.StatusForbidden
+	i := importFixtureInput(t)
+	assert.NotContains(t, prepareImportFromAPIs(context.Background(), f.client, i).Diagnostics, "bootstrap_schema_required")
+	i.Phase, i.ConfirmSpeculativeRun = "upload", true
+	assert.NotEqual(t, "awaiting_agent_upload", callImportPhase(t, i).Status)
+	i.Phase, i.ConfigurationVersionID = "plan", "cv-import"
+	assert.NotEqual(t, "pending", callImportPhase(t, i).Status)
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	assert.Zero(t, f.requests["POST /api/v2/workspaces/ws-fixture/configuration-versions"])
+	assert.Zero(t, f.requests["POST /api/v2/runs"])
+}
+
+func TestImportBootstrapSchemaRejectsNonEmptyPlanAndUnrelatedRun(t *testing.T) {
+	f, uploaded := blankImportFixture(t)
+	*uploaded = true
+	original := f.mutationHandler
+	f.mutationHandler = func(w http.ResponseWriter, r *http.Request) bool {
+		if r.Method == http.MethodGet && r.URL.Path == "/api/v2/runs/run-import" {
+			_, _ = io.WriteString(w, `{"data":{"id":"run-import","type":"runs","attributes":{"status":"planned_and_finished","plan-only":true},"relationships":{"workspace":{"data":{"id":"ws-fixture","type":"workspaces"}},"configuration-version":{"data":{"id":"cv-import","type":"configuration-versions"}},"plan":{"data":{"id":"plan-import","type":"plans"}}}}}`)
+			return true
+		}
+		if r.Method == http.MethodGet && r.URL.Path == "/api/v2/plans/plan-import" {
+			_, _ = io.WriteString(w, `{"data":{"id":"plan-import","type":"plans","attributes":{"status":"finished"}}}`)
+			return true
+		}
+		if r.Method == http.MethodGet && r.URL.Path == "/api/v2/plans/plan-import/json-output" {
+			_, _ = io.WriteString(w, `{"format_version":"1.2","resource_changes":[{"address":"aws_iam_role.unexpected","mode":"managed","change":{"actions":["no-op"]}}]}`)
+			return true
+		}
+		return original(w, r)
+	}
+	i := importFixtureInput(t)
+	i.SchemaCVID, i.SchemaRunID = "cv-import", "run-import"
+	assert.Contains(t, callImportPhase(t, i).Diagnostics, "bootstrap_plan_not_empty")
+	i.SchemaRunID = "run-schema"
+	assert.Contains(t, callImportPhase(t, i).Diagnostics, "bootstrap_run_not_ready_or_unverified")
+	i.Phase, i.ConfirmSpeculativeRun = "upload", true
+	assert.NotEqual(t, "awaiting_agent_upload", callImportPhase(t, i).Status)
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	assert.Zero(t, f.requests["POST /api/v2/workspaces/ws-fixture/configuration-versions"])
+}
