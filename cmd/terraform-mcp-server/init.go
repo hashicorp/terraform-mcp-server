@@ -17,15 +17,17 @@ import (
 	"time"
 
 	"github.com/hashicorp/terraform-mcp-server/pkg/client"
+	"github.com/hashicorp/terraform-mcp-server/pkg/instana"
 	"github.com/hashicorp/terraform-mcp-server/pkg/instructions"
 	"github.com/hashicorp/terraform-mcp-server/pkg/logging"
 	mcpofficial "github.com/hashicorp/terraform-mcp-server/pkg/mcp-official"
 	"github.com/hashicorp/terraform-mcp-server/pkg/mcp-official/tools/middleware"
+	"github.com/hashicorp/terraform-mcp-server/pkg/otelmetrics"
 	"github.com/hashicorp/terraform-mcp-server/pkg/resources"
 	"github.com/hashicorp/terraform-mcp-server/pkg/tools"
 	"github.com/hashicorp/terraform-mcp-server/pkg/toolsets"
 	"github.com/hashicorp/terraform-mcp-server/version"
-	instana "github.com/instana/go-sensor"
+	instanasdk "github.com/instana/go-sensor"
 	"github.com/mark3labs/mcp-go/server"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	log "github.com/sirupsen/logrus"
@@ -116,7 +118,7 @@ var (
 				stdlog.Fatal(err)
 			}
 			logger.Printf("Starting StreamableHTTP server with host: %s, port: %s, endpoint: %s, heartbeatInterval: %v, enabledToolsets: %v, organizationAllowlistConfigured: %t, organizationAllowlistCount: %d", host, port, endpointPath, heartbeatInterval, enabledToolsets, len(organizationAllowlist) > 0, len(organizationAllowlist))
-			metricsConfig, shutdownMetrics := setupMetrics(logger)
+			metricsConfig, shutdownMetrics := otelmetrics.Setup(logger)
 			defer shutdownMetrics()
 
 			if err := runHTTPServer(logger, host, port, endpointPath, heartbeatInterval, enabledToolsets, metricsConfig, organizationAllowlist); err != nil {
@@ -204,31 +206,13 @@ func serverInit(ctx context.Context, hcServer *server.MCPServer, logger *log.Log
 	return nil
 }
 
-// setupInstana initializes the Instana collector when INSTANA_ENABLED is set,
-// Once it is initialized, the application metrics such as (CPU,
-// memory, goroutines) will be collected automatically;
-func setupInstana(logger *log.Logger) instana.TracerLogger {
-	if os.Getenv("INSTANA_ENABLED") != "true" {
-		return nil
-	}
-	serviceName := "terraform-mcp-server"
-	if n := os.Getenv("INSTANA_SERVICE_NAME"); n != "" {
-		serviceName = n
-	}
-	logger.Info("Instana instrumentation enabled")
-	return instana.InitCollector(&instana.Options{
-		Service: serviceName,
-		Tracer:  instana.DefaultTracerOptions(),
-	})
-}
-
 func streamableHTTPServerInit(ctx context.Context, hcServer *server.MCPServer, logger *log.Logger, host string, port string, endpointPath string, heartbeatInterval time.Duration, organizationAllowlist []string, filter toolsets.ToolFilter, rateLimiter *client.RateLimitMiddleware, metricsConfig client.MetricsConfig) error {
 	// Ensure endpoint path starts with /
 	endpointPath = path.Join("/", endpointPath)
 	var handler http.Handler
 
 	// Initialize the Instana collector if enabled (nil when disabled).
-	instanaCollector := setupInstana(logger)
+	instanaCollector := instana.Setup(logger)
 
 	// Create StreamableHTTP server which implements the new streamable-http transport
 	// This is the modern MCP transport that supports both direct HTTP responses and SSE streams
@@ -350,7 +334,7 @@ func streamableHTTPServerInit(ctx context.Context, hcServer *server.MCPServer, l
 	}
 	if instanaCollector != nil {
 		// Wrapping the handler so incoming HTTP requests will be able to be traced by Instana
-		handler = instana.TracingHandlerFunc(instanaCollector, "", handler.ServeHTTP)
+		handler = instanasdk.TracingHandlerFunc(instanaCollector, "", handler.ServeHTTP)
 	}
 
 	httpServer := &http.Server{
