@@ -45,6 +45,15 @@ var officialFactories = map[string]func(svr *mcp.Server){
 	"get_token_permissions": func(svr *mcp.Server) {
 		mcp.AddTool(svr, tfeTools.GetTokenPermissionsTool(), tfeTools.GetTokenPermissionsFunc)
 	},
+	"list_workspace_variables": func(svr *mcp.Server) {
+		mcp.AddTool(svr, tfeTools.ListWorkspaceVariablesTool(), tfeTools.ListWorkspaceVariablesFunc)
+	},
+	"create_workspace_variable": func(svr *mcp.Server) {
+		mcp.AddTool(svr, tfeTools.CreateWorkspaceVariableTool(), tfeTools.CreateWorkspaceVariableFunc)
+	},
+	"update_workspace_variable": func(svr *mcp.Server) {
+		mcp.AddTool(svr, tfeTools.UpdateWorkspaceVariableTool(), tfeTools.UpdateWorkspaceVariableFunc)
+	},
 }
 
 func RegisterTools(svr *mcp.Server, logger *slog.Logger, filter toolsets.ToolFilter) {
