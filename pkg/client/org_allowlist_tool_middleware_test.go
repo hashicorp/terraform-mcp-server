@@ -37,6 +37,27 @@ func TestOrganizationAllowlistToolMiddleware(t *testing.T) {
 			arguments:   map[string]any{OrgNameArgument: "blocked-org"},
 			wantAllowed: false,
 		},
+		{
+			name:        "accepts normalized Search alias",
+			allowlist:   []string{" Allowed-Org "},
+			arguments:   map[string]any{"organization_name": "ALLOWED-ORG"},
+			wantAllowed: true,
+		},
+		{
+			name:      "rejects conflicting aliases",
+			allowlist: []string{"allowed-org"},
+			arguments: map[string]any{OrgNameArgument: "allowed-org", "organization_name": "blocked-org"},
+		},
+		{
+			name:      "rejects nonstring alias",
+			allowlist: []string{"allowed-org"},
+			arguments: map[string]any{"organization_name": true},
+		},
+		{
+			name:        "empty policy permits any backend-authorized organization",
+			arguments:   map[string]any{"organization_name": "example"},
+			wantAllowed: true,
+		},
 	}
 
 	logger := log.New()
@@ -70,6 +91,24 @@ func TestOrganizationAllowlistToolMiddleware(t *testing.T) {
 			assert.NoError(t, err)
 			assert.Equal(t, test.wantAllowed, nextCalled)
 			assert.Equal(t, !test.wantAllowed, result.IsError)
+		})
+	}
+}
+
+func TestOrganizationAllowlistResolvedTarget(t *testing.T) {
+	for _, org := range []string{"allowed", "other", ""} {
+		t.Run(org, func(t *testing.T) {
+			handler := OrganizationAllowlistToolMiddleware([]string{"allowed"}, nil)(func(ctx context.Context, _ mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+				// Handle-only handlers must resolve their stored target, then check
+				// both this deployment policy and current backend authorization.
+				if err := AuthorizeOrganization(ctx, org); err != nil {
+					return mcp.NewToolResultError(err.Error()), nil
+				}
+				return mcp.NewToolResultText("allowed"), nil
+			})
+			result, err := handler(context.Background(), mcp.CallToolRequest{Params: mcp.CallToolParams{Arguments: map[string]any{"attempt_id": "opaque"}}})
+			assert.NoError(t, err)
+			assert.Equal(t, org != "allowed", result.IsError)
 		})
 	}
 }

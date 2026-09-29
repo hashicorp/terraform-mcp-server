@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"strings"
+	"time"
 
 	"github.com/hashicorp/go-tfe"
 	"github.com/hashicorp/terraform-mcp-server/pkg/client"
@@ -64,6 +65,7 @@ func GetQuerySummary(logger *log.Logger) server.ServerTool {
 				mcp.Required(),
 				mcp.Description("Query run ID previously passed to get_query_status."),
 			),
+			mcp.WithBoolean("include_import_candidates", mcp.Description("Return bounded, explicitly selectable import candidate IDs, recorded no-code provider selections, and observations/generated blocks when available. Then call import_query_results phase=prepare with one candidate_id and proposed managed_type for destination schema guidance. Requires a finished no-code query and complete results.")),
 		),
 		Handler: func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			return getQuerySummaryHandler(ctx, request, logger)
@@ -80,6 +82,25 @@ func getQuerySummaryHandler(ctx context.Context, request mcp.CallToolRequest, lo
 	tfeClient, err := client.GetTfeClientFromContext(ctx, logger)
 	if err != nil {
 		return toolErrorf(logger, "get_query_summary", "failed to get Terraform client: %v", err)
+	}
+	if raw, exists := request.GetArguments()["include_import_candidates"]; exists {
+		include, ok := raw.(bool)
+		if !ok {
+			return mcp.NewToolResultError("include_import_candidates must be a boolean"), nil
+		}
+		if include {
+			ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+			defer cancel()
+			discovery, err := readImportDiscovery(ctx, tfeClient, strings.TrimSpace(queryRunID))
+			if err != nil {
+				return mcp.NewToolResultError(importDiagnosticCode(err)), nil
+			}
+			encoded, err := json.Marshal(discovery)
+			if err != nil || len(encoded) > 64*1024 {
+				return mcp.NewToolResultError("import_candidate_response_limit"), nil
+			}
+			return mcp.NewToolResultStructured(discovery, string(encoded)), nil
+		}
 	}
 
 	summary, err := readQuerySummary(ctx, tfeClient, strings.TrimSpace(queryRunID))
@@ -150,4 +171,11 @@ Call get_query_status first and wait for it to return a terminal status, then pa
 same query_run_id to this tool. The result contains resources_discovered and one
 resources entry per discovered resource with its display name and identity. It also
 contains one list_completions entry per list block with its address, resource_type,
-and total, plus any Terraform diagnostics that explain an errored query.`
+and total, plus any Terraform diagnostics that explain an errored query.
+Set include_import_candidates=true for an explicit-selection response containing candidate IDs
+and provider selections from that query's stored no-code inputs, plus resource_object,
+configuration and import_configuration when available. Generated blocks are optional evidence.
+This mode requires complete, unambiguous results and current workspace authorization.
+Call import_query_results phase=prepare with one selected candidate_id and your proposed
+managed_type to obtain the destination resource schema and authoring guidance. Preparation
+does not require source-provider schemas; Terraform plan validates the proposed import.`

@@ -16,7 +16,7 @@ import (
 )
 
 func TestToolLoggingMiddleware(t *testing.T) {
-	t.Run("logs tool call name and args at info level", func(t *testing.T) {
+	t.Run("logs tool call name without argument contents", func(t *testing.T) {
 		var buf bytes.Buffer
 		logger := log.New()
 		logger.SetOutput(&buf)
@@ -49,8 +49,8 @@ func TestToolLoggingMiddleware(t *testing.T) {
 		t.Logf("Captured log output:\n%s", logOutput)
 		assert.Contains(t, logOutput, "level=info")
 		assert.Contains(t, logOutput, "list_workspaces")
-		assert.Contains(t, logOutput, "terraform_org_name")
-		assert.Contains(t, logOutput, "my-org")
+		assert.NotContains(t, logOutput, "terraform_org_name")
+		assert.NotContains(t, logOutput, "my-org")
 	})
 
 	t.Run("handles nil logger gracefully", func(t *testing.T) {

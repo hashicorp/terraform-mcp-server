@@ -9,7 +9,6 @@ import (
 	"sync"
 
 	"github.com/hashicorp/terraform-mcp-server/pkg/client"
-	searchTools "github.com/hashicorp/terraform-mcp-server/pkg/tools/search"
 	tfeTools "github.com/hashicorp/terraform-mcp-server/pkg/tools/tfe"
 	"github.com/hashicorp/terraform-mcp-server/pkg/toolsets"
 	"github.com/hashicorp/terraform-mcp-server/pkg/utils"
@@ -121,10 +120,6 @@ func (r *DynamicToolRegistry) registerTFETools() {
 			tool := r.createDynamicTFEToolWithElicitation(td.Name, tfeTools.CreateNoCodeWorkspace)
 			r.mcpServer.AddTool(tool.Tool, tool.Handler)
 			continue
-		case "import_query_results":
-			tool := r.createDynamicTFEToolWithElicitation(td.Name, searchTools.ImportQueryResults)
-			r.mcpServer.AddTool(tool.Tool, tool.Handler)
-			continue
 		case "create_run":
 			// create_run is always registered when its toolset is enabled. Unlike the
 			// other RequiresTFOps tools, ENABLE_TF_OPERATIONS doesn't hide it — it just
@@ -172,7 +167,11 @@ func (r *DynamicToolRegistry) wrapWithAvailabilityCheck(toolName string, origina
 	return func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		// Get session from context
 		session := server.ClientSessionFromContext(ctx)
-		if session == nil {
+		if session == nil || session.SessionID() == "" {
+			// Stateless requests authorize against their current request credentials.
+			if client.GetTokenFromContext(ctx) != "" {
+				return originalHandler(ctx, req)
+			}
 			r.logger.WithField("tool", toolName).Warn("TFE tool called without session context")
 			return mcp.NewToolResultError("This tool requires an active session with valid Terraform Cloud/Enterprise configuration."), nil
 		}

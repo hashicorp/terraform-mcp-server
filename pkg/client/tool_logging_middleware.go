@@ -15,7 +15,9 @@ func ToolLoggingMiddleware(logger *log.Logger) server.ToolHandlerMiddleware {
 	return func(nextToolHandler server.ToolHandlerFunc) server.ToolHandlerFunc {
 		return func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			if logger != nil {
-				logger.Infof("Tool call %q executed with args: %v", request.Params.Name, request.Params.Arguments)
+				// Arguments may contain configuration, credentials or observed values.
+				// Do not serialize them even before handler-side validation/redaction.
+				logger.WithField("tool", request.Params.Name).Info("Tool call")
 			}
 			return nextToolHandler(ctx, request)
 		}

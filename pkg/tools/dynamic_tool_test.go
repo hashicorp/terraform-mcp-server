@@ -4,10 +4,19 @@
 package tools
 
 import (
+	"context"
+	"io"
 	"os"
 	"testing"
+	"time"
 
+	"github.com/hashicorp/terraform-mcp-server/pkg/client"
+	mcpclient "github.com/mark3labs/mcp-go/client"
+	"github.com/mark3labs/mcp-go/mcp"
+	"github.com/mark3labs/mcp-go/server"
+	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestIsTerraformOperationsEnabled(t *testing.T) {
@@ -38,5 +47,31 @@ func TestIsTerraformOperationsEnabled(t *testing.T) {
 			}
 			assert.Equal(t, tt.expected, isTerraformOperationsEnabled())
 		})
+	}
+}
+
+func TestDynamicToolStatelessRequestCredentials(t *testing.T) {
+	logger := log.New()
+	logger.SetOutput(io.Discard)
+	r := &DynamicToolRegistry{logger: logger, sessionsWithTFE: map[string]bool{}}
+	s := server.NewMCPServer("stateless-test", "1", server.WithToolCapabilities(true))
+	s.AddTool(mcp.NewTool("credential_test"), r.wrapWithAvailabilityCheck("credential_test", func(context.Context, mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		return mcp.NewToolResultText("handler invoked"), nil
+	}))
+	h := server.NewTestStreamableHTTPServer(s, server.WithStateLess(true))
+	defer h.Close()
+	c, err := mcpclient.NewStreamableHttpClient(h.URL)
+	require.NoError(t, err)
+	defer c.Close()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	require.NoError(t, c.Start(ctx))
+	_, err = c.Initialize(ctx, mcp.InitializeRequest{Params: mcp.InitializeParams{ProtocolVersion: mcp.LATEST_PROTOCOL_VERSION, ClientInfo: mcp.Implementation{Name: "test", Version: "1"}}})
+	require.NoError(t, err)
+	for _, token := range []string{"fixture-token", ""} {
+		t.Setenv(client.TerraformToken, token)
+		result, err := c.CallTool(ctx, mcp.CallToolRequest{Params: mcp.CallToolParams{Name: "credential_test", Arguments: map[string]any{}}})
+		require.NoError(t, err)
+		assert.Equal(t, token == "", result.IsError)
 	}
 }

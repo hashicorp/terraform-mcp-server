@@ -8,8 +8,11 @@ import (
 	"crypto/sha256"
 	"fmt"
 	"net/http"
+	"net/url"
+	"strings"
 	"sync"
 
+	"github.com/hashicorp/go-retryablehttp"
 	"github.com/hashicorp/go-tfe"
 	"github.com/hashicorp/terraform-mcp-server/pkg/utils"
 	"github.com/hashicorp/terraform-mcp-server/version"
@@ -31,8 +34,12 @@ const (
 var activeTfeClients sync.Map
 
 type cachedTfeClient struct {
-	client *tfe.Client
-	token  [32]byte // Store the hash of the token instead of raw value
+	client        *tfe.Client
+	token         [32]byte // Store the hash of the token instead of raw value
+	address       string
+	skipTLSVerify bool
+	clientIP      string
+	sharedSecret  [32]byte
 }
 
 // NewTfeClient creates a new TFE client for the given session
@@ -43,8 +50,12 @@ func NewTfeClient(sessionId string, terraformAddress string, terraformSkipTLSVer
 	}
 	// Store the token and address along with the client per session ID
 	activeTfeClients.Store(sessionId, cachedTfeClient{
-		client: client,
-		token:  sha256.Sum256([]byte(terraformToken)),
+		client:        client,
+		token:         sha256.Sum256([]byte(terraformToken)),
+		address:       normalizeTFEAddress(terraformAddress),
+		skipTLSVerify: terraformSkipTLSVerify,
+		clientIP:      clientIP,
+		sharedSecret:  sha256.Sum256([]byte(utils.GetEnv(SharedSecretEnv, ""))),
 	})
 	logger.Info("Created TFE client")
 	return client, nil
@@ -53,6 +64,45 @@ func NewTfeClient(sessionId string, terraformAddress string, terraformSkipTLSVer
 // NewTfeClientForToken creates a TFE client without storing it in session state.
 func NewTfeClientForToken(terraformAddress string, terraformSkipTLSVerify bool, terraformToken string, clientIP string, logger *log.Logger) (*tfe.Client, error) {
 	return newTfeClient(terraformAddress, terraformSkipTLSVerify, terraformToken, clientIP, logger)
+}
+
+// NewTfeClientForDownloadLocation uses the same SDK configuration and credentials
+// as normal calls, but stops at the configuration archive's 302 so callers can
+// return its Location without downloading the archive into the MCP server.
+// This is not an artifact credential policy: SDK authentication and transport
+// remain unchanged, and no request is made to the redirect destination.
+func NewTfeClientForDownloadLocation(ctx context.Context, logger *log.Logger) (*tfe.Client, error) {
+	token := GetTokenFromContext(ctx)
+	if token == "" {
+		return nil, fmt.Errorf("Terraform token unavailable")
+	}
+	clientIP, _ := ctx.Value(contextKey(ClientIPKey)).(string)
+	config := buildTFEConfig(TFEAddressFromContext(ctx), parseTerraformSkipTLSVerify(ctx), token, clientIP, logger)
+	// CreateHTTPClient's StandardClient wraps an inner retryable HTTP client.
+	// The inner client handles redirects before the outer client's policy runs.
+	// Both are new for this invocation; the normal cached SDK client is untouched.
+	noRedirect := func(_ *http.Request, _ []*http.Request) error { return http.ErrUseLastResponse }
+	config.HTTPClient.CheckRedirect = noRedirect
+	roundTripper, ok := config.HTTPClient.Transport.(*retryablehttp.RoundTripper)
+	if !ok {
+		return nil, fmt.Errorf("Terraform HTTP client transport unavailable")
+	}
+	roundTripper.Client.HTTPClient.CheckRedirect = noRedirect
+	return tfe.NewClient(config)
+}
+
+// NewTfeClientForImportMutation retains normal SDK auth/transport but disables
+// automatic retries on transport/server errors for non-idempotent create calls.
+// An uncertain create must be reconciled, not silently resubmitted by the SDK.
+func NewTfeClientForImportMutation(ctx context.Context, logger *log.Logger) (*tfe.Client, error) {
+	token := GetTokenFromContext(ctx)
+	if token == "" {
+		return nil, fmt.Errorf("Terraform token unavailable")
+	}
+	clientIP, _ := ctx.Value(contextKey(ClientIPKey)).(string)
+	config := buildTFEConfig(TFEAddressFromContext(ctx), parseTerraformSkipTLSVerify(ctx), token, clientIP, logger)
+	config.RetryServerErrors = false
+	return tfe.NewClient(config)
 }
 
 func newTfeClient(terraformAddress string, terraformSkipTLSVerify bool, terraformToken string, clientIP string, logger *log.Logger) (*tfe.Client, error) {
@@ -158,7 +208,7 @@ func DeleteTfeClient(sessionId string) {
 func GetTfeClientFromContext(ctx context.Context, logger *log.Logger) (*tfe.Client, error) {
 	session := server.ClientSessionFromContext(ctx)
 	if session == nil {
-		return nil, fmt.Errorf("No active session found")
+		return GetTfeClientForSession(ctx, "", logger)
 	}
 	return GetTfeClientForSession(ctx, session.SessionID(), logger)
 }
@@ -173,22 +223,23 @@ func GetTfeClientForSession(ctx context.Context, sessionID string, logger *log.L
 	if currentToken == "" {
 		currentToken = utils.GetEnv(TerraformToken, "")
 	}
+	currentAddress := TFEAddressFromContext(ctx)
+	clientIP, _ := ctx.Value(contextKey(ClientIPKey)).(string)
+	skipTLS := parseTerraformSkipTLSVerify(ctx)
 
 	// In a stateless mode the server does not assign any session ID to requests. We need to create new TF clients for every request in that case
 	if sessionID == "" {
 		logger.Info("Session ID is empty. Creating a new TF client")
-		currentAddress, _ := ctx.Value(contextKey(TerraformAddress)).(string)
-		if currentAddress == "" {
-			currentAddress = utils.GetEnv(TerraformAddress, DefaultTerraformAddress)
-		}
-		clientIP, _ := ctx.Value(contextKey(ClientIPKey)).(string)
-		return NewTfeClientForToken(currentAddress, parseTerraformSkipTLSVerify(ctx), currentToken, clientIP, logger)
+		return NewTfeClientForToken(currentAddress, skipTLS, currentToken, clientIP, logger)
 	}
 
 	// Check if the cached session ID's token+address match the current token+address
 	if value, ok := activeTfeClients.Load(sessionID); ok {
 		cachedClient := value.(cachedTfeClient)
-		if cachedClient.token == sha256.Sum256([]byte(currentToken)) {
+		if cachedClient.token == sha256.Sum256([]byte(currentToken)) &&
+			cachedClient.address == normalizeTFEAddress(currentAddress) &&
+			cachedClient.skipTLSVerify == skipTLS && cachedClient.clientIP == clientIP &&
+			cachedClient.sharedSecret == sha256.Sum256([]byte(utils.GetEnv(SharedSecretEnv, ""))) {
 			return cachedClient.client, nil
 		}
 		// Current request token and address not found in cache. Delete the session ID from the sync map.
@@ -196,6 +247,36 @@ func GetTfeClientForSession(ctx context.Context, sessionID string, logger *log.L
 	}
 	logger.Warnf("TFE client not found, creating a new one")
 	return CreateTfeClientForSession(ctx, sessionID, logger)
+}
+
+// TFEAddressFromContext resolves the backend consistently for clients and
+// owner-partitioned artifacts. Paths are retained for deployments under a prefix.
+func TFEAddressFromContext(ctx context.Context) string {
+	address, _ := ctx.Value(contextKey(TerraformAddress)).(string)
+	if address == "" {
+		address = utils.GetEnv(TerraformAddress, DefaultTerraformAddress)
+	}
+	return normalizeTFEAddress(address)
+}
+
+func normalizeTFEAddress(address string) string {
+	u, err := url.Parse(address)
+	if err != nil {
+		return address
+	}
+	u.Scheme = strings.ToLower(u.Scheme)
+	u.Host = strings.ToLower(u.Host)
+	u.Path = strings.TrimRight(u.Path, "/")
+	return u.String()
+}
+
+// GetTokenFromContext extracts the TFE bearer token from the MCP request context.
+// It checks the context value first, then the TFE_TOKEN environment variable.
+func GetTokenFromContext(ctx context.Context) string {
+	if token, ok := ctx.Value(contextKey(TerraformToken)).(string); ok && token != "" {
+		return token
+	}
+	return utils.GetEnv(TerraformToken, "")
 }
 
 // CreateTfeClientForSession creates only a TFE client for the session

@@ -4,8 +4,11 @@
 package client
 
 import (
+	"bytes"
 	"context"
 	"io"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	"github.com/hashicorp/go-tfe"
@@ -32,6 +35,80 @@ func TestBuildTFEConfig_SharedSecret(t *testing.T) {
 		cfg := buildTFEConfig("https://app.terraform.io", false, "token", "", logger)
 		assert.Empty(t, cfg.Headers.Get(SharedSecretHeader))
 	})
+}
+
+func TestTFEClientCacheIncludesBackendAndTransport(t *testing.T) {
+	logger := log.New()
+	logger.SetOutput(io.Discard)
+	backend := func() *httptest.Server {
+		s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			assert.Equal(t, "/api/v2/ping", r.URL.Path)
+			w.WriteHeader(http.StatusOK)
+		}))
+		t.Cleanup(s.Close)
+		return s
+	}
+	a, b := backend(), backend()
+	ctx := context.WithValue(ctxWithTfeValues("fixture-token"), contextKey(TerraformAddress), a.URL)
+	t.Cleanup(func() { DeleteTfeClient("cache-settings") })
+	first, err := GetTfeClientForSession(ctx, "cache-settings", logger)
+	require.NoError(t, err)
+	ctx = context.WithValue(ctx, contextKey(TerraformAddress), b.URL)
+	second, err := GetTfeClientForSession(ctx, "cache-settings", logger)
+	require.NoError(t, err)
+	assert.NotSame(t, first, second)
+	assert.Equal(t, b.Listener.Addr().String(), second.BaseURL().Host)
+	ctx = context.WithValue(ctx, contextKey(ClientIPKey), "192.0.2.1")
+	third, err := GetTfeClientForSession(ctx, "cache-settings", logger)
+	require.NoError(t, err)
+	assert.NotSame(t, second, third)
+	t.Setenv(SharedSecretEnv, "rotated-fixture-secret")
+	fourth, err := GetTfeClientForSession(ctx, "cache-settings", logger)
+	require.NoError(t, err)
+	assert.NotSame(t, third, fourth)
+	reused, err := GetTfeClientForSession(ctx, "cache-settings", logger)
+	require.NoError(t, err)
+	assert.Same(t, fourth, reused)
+}
+
+func TestTFEClientFromStatelessContext(t *testing.T) {
+	logger := log.New()
+	logger.SetOutput(io.Discard)
+	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "/api/v2/ping", r.URL.Path)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer s.Close()
+	ctx := context.WithValue(ctxWithTfeValues("fixture-token"), contextKey(TerraformAddress), s.URL)
+	c, err := GetTfeClientFromContext(ctx, logger)
+	require.NoError(t, err)
+	assert.Equal(t, s.Listener.Addr().String(), c.BaseURL().Host)
+}
+
+func TestTFEArtifactFollowsPresignedRedirect(t *testing.T) {
+	logger := log.New()
+	logger.SetOutput(io.Discard)
+	storage := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "/schema", r.URL.Path)
+		assert.Equal(t, "signed=fixture", r.URL.RawQuery)
+		_, _ = w.Write([]byte(`{"format_version":"1.0"}`))
+	}))
+	defer storage.Close()
+	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/v2/ping" {
+			return
+		}
+		assert.Equal(t, "Bearer fixture-token", r.Header.Get("Authorization"))
+		http.Redirect(w, r, storage.URL+"/schema?signed=fixture", http.StatusTemporaryRedirect)
+	}))
+	defer backend.Close()
+	c, err := NewTfeClientForToken(backend.URL, false, "fixture-token", "192.0.2.1", logger)
+	require.NoError(t, err)
+	req, err := c.NewRequest(http.MethodGet, "plans/plan-fixture/json-schema", nil)
+	require.NoError(t, err)
+	var body bytes.Buffer
+	require.NoError(t, req.Do(context.Background(), &body))
+	assert.JSONEq(t, `{"format_version":"1.0"}`, body.String())
 }
 
 func TestBuildTFEConfig_ForwardedFor(t *testing.T) {

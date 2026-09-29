@@ -1,0 +1,16 @@
+// Copyright IBM Corp. 2026
+// SPDX-License-Identifier: MPL-2.0
+
+package search
+
+// Normal preparation supplies complete selected schemas; the calling agent owns
+// their interpretation. These instructions do not assert HCL or runtime validation.
+var importPreparationInstructions = [...]string{
+	"The selected managed type exists in the destination artifact. Read its entire managed_schema, including nested blocks and attributes. A supported type does not prove import support or configuration compatibility.",
+	"Check proposed arguments against destination types and required/optional/computed flags. Omit computed-only values; optional+computed remains configurable. Check nested modes and cardinality where declared. Terraform meta-arguments are separate from provider attributes, and unknown expressions or dynamic counts need Terraform validation.",
+	"Use generated query blocks and resource_object only as source evidence. Author blocks if generated HCL is absent. Supply required values from observations or valid existing references; request missing inputs rather than inventing defaults, policies or redaction placeholders. Do not add ignore_changes to hide incompatibility.",
+	"Choose explicit target addresses and documented import id or identity mappings. Preserve the current configuration, constraints, lock selections and provider wiring. Resolve the destination alias, account and region from customer context; this packet has not inspected or validated that wiring or HCL.",
+	"The schema belongs to the current state's associated run and may predate the current configuration. The destination plan validates actual provider selection and behavior. Resource schema version is not a provider release; the query provider version, when returned, is only recorded no-code selection metadata.",
+	"Source-schema comparison is optional troubleshooting. If needed, use the recorded no-code provider source/version for isolated client-local init -backend=false and terraform providers schema -json. QueryRuns have no plan-schema artifact; do not use a query ID as a normal run ID or assume another run used its provider.",
+	"Use phase=context to obtain a temporary current-CV archive URL; download and unpack in an agent-controlled directory. Preserve the complete configuration and lock selections, make the proposed changes locally and review them with the user. Optionally run terraform fmt and validate locally. The MCP server does not parse or review HCL. plan_validation_pending is response metadata, not a tool call. With explicit confirmation, phase=upload creates only a speculative CV and returns a one-use upload URL; PUT the complete archive directly, then poll status with the workspace and CV ID. Call plan with that CV ID, query selection, baseline markers and chosen address; poll status with workspace/CV/Run IDs and address. Inspect factual imports/actions and deeper plan details as needed. Keep returned IDs in the agent's context; an ambiguous create must be reconciled in Atlas before another request. A speculative plan does not import into persisted state.",
+}
