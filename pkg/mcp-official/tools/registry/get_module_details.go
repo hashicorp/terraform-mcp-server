@@ -7,11 +7,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"strings"
 
 	"github.com/google/jsonschema-go/jsonschema"
 	registryapi "github.com/hashicorp/terraform-mcp-server/pkg/client"
+	"github.com/hashicorp/terraform-mcp-server/pkg/logging"
 	"github.com/hashicorp/terraform-mcp-server/pkg/mcp-official/client"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	log "github.com/sirupsen/logrus"
@@ -20,10 +22,15 @@ import (
 const moduleBasePath = "registry://modules"
 
 type GetModuleDetailsArguments struct {
-	ModuleID string `json:"module_id"`
+	ModuleID string `json:"module_id" jsonschema:"Exact valid and compatible module_id retrieved from search_modules (e.g., 'squareops/terraform-kubernetes-mongodb/mongodb/2.1.1', 'GoogleCloudPlatform/vertex-ai/google/0.2.0')"`
 }
 
 func GetModuleDetailsTool() *mcp.Tool {
+	input, err := jsonschema.For[GetModuleDetailsArguments](nil)
+	if err != nil {
+		panic(err)
+	}
+
 	return &mcp.Tool{
 		Name:        "get_module_details",
 		Description: "Fetches up-to-date documentation on how to use a Terraform module. You must call 'search_modules' first to obtain the exact valid and compatible module_id required to use this tool.",
@@ -33,23 +40,19 @@ func GetModuleDetailsTool() *mcp.Tool {
 			ReadOnlyHint:    true,
 			DestructiveHint: jsonschema.Ptr(false),
 		},
-		InputSchema: &jsonschema.Schema{
-			Type: "object",
-			Properties: map[string]*jsonschema.Schema{
-				"module_id": {
-					Type:        "string",
-					Description: "Exact valid and compatible module_id retrieved from search_modules (e.g., 'squareops/terraform-kubernetes-mongodb/mongodb/2.1.1', 'GoogleCloudPlatform/vertex-ai/google/0.2.0')",
-				},
-			},
-			Required: []string{"module_id"},
-		},
+		InputSchema: input,
 	}
 }
 
-func GetModuleDetailsFunc(ctx context.Context, request *mcp.CallToolRequest, input GetModuleDetailsArguments) (*mcp.CallToolResult, any, error) {
-	logger := log.StandardLogger()
+func GetModuleDetailsFunc(logger *slog.Logger) mcp.ToolHandlerFor[GetModuleDetailsArguments, any] {
+	logrusLogger := logging.WrapSlog(logger)
+	return func(ctx context.Context, request *mcp.CallToolRequest, input GetModuleDetailsArguments) (*mcp.CallToolResult, any, error) {
+		return getModuleDetailsHandler(ctx, request, input, logrusLogger)
+	}
+}
 
-	moduleID := input.ModuleID
+func getModuleDetailsHandler(ctx context.Context, request *mcp.CallToolRequest, input GetModuleDetailsArguments, logger *log.Logger) (*mcp.CallToolResult, any, error) {
+	moduleID := strings.TrimSpace(input.ModuleID)
 	if moduleID == "" {
 		return nil, nil, fmt.Errorf("module_id cannot be empty")
 	}

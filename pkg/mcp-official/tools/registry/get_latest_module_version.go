@@ -7,23 +7,30 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"strings"
 
 	"github.com/google/jsonschema-go/jsonschema"
 	registryapi "github.com/hashicorp/terraform-mcp-server/pkg/client"
+	"github.com/hashicorp/terraform-mcp-server/pkg/logging"
 	"github.com/hashicorp/terraform-mcp-server/pkg/mcp-official/client"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	log "github.com/sirupsen/logrus"
 )
 
 type GetLatestModuleVersionArguments struct {
-	ModulePublisher string `json:"module_publisher"`
-	ModuleName      string `json:"module_name"`
-	ModuleProvider  string `json:"module_provider"`
+	ModulePublisher string `json:"module_publisher" jsonschema:"The publisher of the module, e.g., 'hashicorp', 'aws-ia', 'terraform-google-modules', or 'Azure'"`
+	ModuleName      string `json:"module_name" jsonschema:"The name of the module, usually the service or group of services being deployed, e.g. 'security-group' or 'secrets-manager'"`
+	ModuleProvider  string `json:"module_provider" jsonschema:"The Terraform provider for the module, e.g. 'aws', 'google', or 'azurerm'"`
 }
 
 func GetLatestModuleVersionTool() *mcp.Tool {
+	input, err := jsonschema.For[GetLatestModuleVersionArguments](nil)
+	if err != nil {
+		panic(err)
+	}
+
 	return &mcp.Tool{
 		Name:        "get_latest_module_version",
 		Description: "Fetches the latest version of a Terraform module from the public registry",
@@ -33,41 +40,29 @@ func GetLatestModuleVersionTool() *mcp.Tool {
 			ReadOnlyHint:    true,
 			DestructiveHint: jsonschema.Ptr(false),
 		},
-		InputSchema: &jsonschema.Schema{
-			Type: "object",
-			Properties: map[string]*jsonschema.Schema{
-				"module_publisher": {
-					Type:        "string",
-					Description: "The publisher of the module, e.g., 'hashicorp', 'aws-ia', 'terraform-google-modules', or 'Azure'",
-				},
-				"module_name": {
-					Type:        "string",
-					Description: "The name of the module, usually the service or group of services being deployed, e.g. 'security-group' or 'secrets-manager'",
-				},
-				"module_provider": {
-					Type:        "string",
-					Description: "The Terraform provider for the module, e.g. 'aws', 'google', or 'azurerm'",
-				},
-			},
-			Required: []string{"module_publisher", "module_name", "module_provider"},
-		},
+		InputSchema: input,
 	}
 }
 
-func GetLatestModuleVersionFunc(ctx context.Context, request *mcp.CallToolRequest, input GetLatestModuleVersionArguments) (*mcp.CallToolResult, any, error) {
-	logger := log.StandardLogger()
+func GetLatestModuleVersionFunc(logger *slog.Logger) mcp.ToolHandlerFor[GetLatestModuleVersionArguments, any] {
+	logrusLogger := logging.WrapSlog(logger)
+	return func(ctx context.Context, request *mcp.CallToolRequest, input GetLatestModuleVersionArguments) (*mcp.CallToolResult, any, error) {
+		return getLatestModuleVersion(ctx, request, input, logrusLogger)
+	}
+}
 
-	modulePublisher := strings.ToLower(input.ModulePublisher)
+func getLatestModuleVersion(ctx context.Context, request *mcp.CallToolRequest, input GetLatestModuleVersionArguments, logger *log.Logger) (*mcp.CallToolResult, any, error) {
+	modulePublisher := strings.ToLower(strings.TrimSpace(input.ModulePublisher))
 	if modulePublisher == "" {
 		return nil, nil, fmt.Errorf("missing required input: module_publisher")
 	}
 
-	moduleName := strings.ToLower(input.ModuleName)
+	moduleName := strings.ToLower(strings.TrimSpace(input.ModuleName))
 	if moduleName == "" {
 		return nil, nil, fmt.Errorf("missing required input: module_name")
 	}
 
-	moduleProvider := strings.ToLower(input.ModuleProvider)
+	moduleProvider := strings.ToLower(strings.TrimSpace(input.ModuleProvider))
 	if moduleProvider == "" {
 		return nil, nil, fmt.Errorf("missing required input: module_provider")
 	}
