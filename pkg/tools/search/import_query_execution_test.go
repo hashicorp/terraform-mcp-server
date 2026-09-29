@@ -282,9 +282,9 @@ func TestImportPlanFactsReportsAbsentOrExtraImports(t *testing.T) {
 	assert.Equal(t, 1, facts.OtherImportCount)
 }
 
-func blankImportFixture(t *testing.T) (*importBackendTest, *bool) {
+func blankImportFixture(t *testing.T) (*importBackendTest, *bool, *bool) {
 	t.Helper()
-	f, uploaded, _ := importExecutionFixture(t)
+	f, uploaded, finished := importExecutionFixture(t)
 	f.stateStatus = http.StatusNotFound
 	for _, path := range []string{"/api/v2/organizations/fixture-org/workspaces/import-root", "/api/v2/workspaces/ws-fixture"} {
 		// Update structured fixture data, independent of whitespace or field order.
@@ -310,19 +310,23 @@ func blankImportFixture(t *testing.T) (*importBackendTest, *bool) {
 		}
 		return original(w, r)
 	}
-	return f, uploaded
+	return f, uploaded, finished
 }
 
 func TestImportBlankWorkspaceBootstrapSchemaAndExecution(t *testing.T) {
-	f, uploaded := blankImportFixture(t)
+	f, uploaded, _ := blankImportFixture(t)
 	i := importFixtureInput(t)
 	initial := prepareImportFromAPIs(context.Background(), f.client, i)
-	assert.Contains(t, initial.Diagnostics, "bootstrap_schema_required")
+	assert.Equal(t, "ready_for_authoring", initial.Status)
+	assert.Equal(t, "unknown", initial.ManagedTypeSupport)
+	assert.Nil(t, initial.SchemaSource)
 	assert.Empty(t, initial.Baseline.ConfigurationVersionID)
 	assert.Empty(t, initial.Baseline.StateVersionID)
 	contextResult := callImportPhase(t, importPrepareInput{Phase: "context", Organization: i.Organization, Workspace: i.Workspace})
 	assert.Equal(t, "blank_workspace", contextResult.Status)
 	assert.Nil(t, contextResult.Context)
+	assert.Contains(t, contextResult.NextAction, "target_address")
+	assert.Contains(t, contextResult.NextAction, "optional, not required")
 	i.Phase, i.ConfirmSpeculativeRun = "upload", true
 	created := callImportPhase(t, i)
 	require.Equal(t, "awaiting_agent_upload", created.Status, created.Diagnostics)
@@ -393,10 +397,10 @@ func TestImportBlankWorkspaceBootstrapSchemaAndExecution(t *testing.T) {
 }
 
 func TestImportBlankWorkspaceDoesNotTreatStateAsEmpty(t *testing.T) {
-	f, _ := blankImportFixture(t)
+	f, _, _ := blankImportFixture(t)
 	f.stateStatus = http.StatusForbidden
 	i := importFixtureInput(t)
-	assert.NotContains(t, prepareImportFromAPIs(context.Background(), f.client, i).Diagnostics, "bootstrap_schema_required")
+	assert.NotEqual(t, "ready_for_authoring", prepareImportFromAPIs(context.Background(), f.client, i).Status)
 	i.Phase, i.ConfirmSpeculativeRun = "upload", true
 	assert.NotEqual(t, "awaiting_agent_upload", callImportPhase(t, i).Status)
 	i.Phase, i.ConfigurationVersionID = "plan", "cv-import"
@@ -407,8 +411,64 @@ func TestImportBlankWorkspaceDoesNotTreatStateAsEmpty(t *testing.T) {
 	assert.Zero(t, f.requests["POST /api/v2/runs"])
 }
 
+func TestImportDirectBlankWorkspacePlanWithoutSchemaSource(t *testing.T) {
+	f, uploaded, finished := blankImportFixture(t)
+	previous := f.mutationHandler
+	f.mutationHandler = func(w http.ResponseWriter, r *http.Request) bool {
+		if r.Method == http.MethodGet && r.URL.Path == "/api/v2/plans/plan-import/json-output" {
+			_, _ = io.WriteString(w, `{"format_version":"1.2","resource_changes":[{"address":"aws_iam_role.selected","mode":"managed","type":"aws_iam_role","provider_name":"registry.terraform.io/hashicorp/aws","change":{"actions":["no-op"],"importing":{"id":"secret-not-returned"}}}]}`)
+			return true
+		}
+		return previous(w, r)
+	}
+	i := importFixtureInput(t)
+	i.Phase, i.ConfirmSpeculativeRun, i.TargetAddress = "upload", true, "aws_iam_role.selected"
+	created := callImportPhase(t, i)
+	require.Equal(t, "awaiting_agent_upload", created.Status, created.Diagnostics)
+	assert.Equal(t, i.TargetAddress, created.Execution.TargetAddress)
+	*uploaded = true
+	i.Phase, i.ConfigurationVersionID = "plan", created.Execution.ConfigurationVersionID
+	started := callImportPhase(t, i)
+	require.Equal(t, "pending", started.Status, started.Diagnostics)
+	assert.Equal(t, "run_created", started.Execution.Stage)
+	*finished = true
+	status := importPrepareInput{Phase: "status", Organization: i.Organization, Workspace: i.Workspace, ConfigurationVersionID: i.ConfigurationVersionID, RunID: started.Execution.RunID, TargetAddress: i.TargetAddress}
+	done := callImportPhase(t, status)
+	require.Equal(t, "plan_available_for_agent_assessment", done.Status, done.Diagnostics)
+	require.NotNil(t, done.Execution.PlanFacts.Selected)
+	assert.True(t, done.Execution.PlanFacts.Selected.ImportPresent)
+	encoded, err := json.Marshal(done)
+	require.NoError(t, err)
+	assert.NotContains(t, string(encoded), "secret-not-returned")
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	assert.Equal(t, 1, f.requests["POST /api/v2/workspaces/ws-fixture/configuration-versions"])
+	assert.Equal(t, 1, f.requests["POST /api/v2/runs"])
+	assert.Zero(t, f.requests["GET /api/v2/runs/run-import/plan/json-schema"])
+}
+
+func TestImportDirectBlankWorkspaceRejectsUnverifiedTypeAndState(t *testing.T) {
+	f, uploaded, _ := blankImportFixture(t)
+	i := importFixtureInput(t)
+	i.Phase, i.ConfirmSpeculativeRun, i.TargetAddress = "upload", true, "aws_iam_role.selected"
+	i.Selections[0].ManagedType = "aws_iam_policy"
+	assert.Contains(t, callImportPhase(t, i).Diagnostics, "blank_managed_type_unverified")
+	i.Selections[0].ManagedType = "aws_iam_role"
+	f.stateStatus = http.StatusForbidden
+	assert.NotEqual(t, "awaiting_agent_upload", callImportPhase(t, i).Status)
+	f.stateStatus = http.StatusNotFound
+	*uploaded = true
+	i.Phase, i.ConfigurationVersionID = "plan", "cv-import"
+	i.Selections[0].ManagedType = "aws_iam_policy"
+	assert.Contains(t, callImportPhase(t, i).Diagnostics, "blank_managed_type_unverified")
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	assert.Zero(t, f.requests["POST /api/v2/workspaces/ws-fixture/configuration-versions"])
+	assert.Zero(t, f.requests["POST /api/v2/runs"])
+}
+
 func TestImportBootstrapSchemaRejectsNonEmptyPlanAndUnrelatedRun(t *testing.T) {
-	f, uploaded := blankImportFixture(t)
+	f, uploaded, _ := blankImportFixture(t)
 	*uploaded = true
 	original := f.mutationHandler
 	f.mutationHandler = func(w http.ResponseWriter, r *http.Request) bool {

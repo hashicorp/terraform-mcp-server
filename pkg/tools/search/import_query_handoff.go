@@ -76,7 +76,7 @@ func importConfigurationContextFromAPIs(ctx context.Context, c *tfe.Client, inpu
 		if err := checkImportBlankBaseline(ctx, c, w); err == nil {
 			result.Status, result.Stage = "blank_workspace", "configuration_handoff"
 			result.Baseline = &importAPIBaseline{WorkingDirectory: w.WorkingDirectory}
-			result.NextAction = "There is no current configuration archive or state. Agent must author the entire provider-only bootstrap tree and lock file locally; create a speculative schema-source Run before importing."
+			result.NextAction = "There is no current configuration archive or state. Select a finished query candidate, author and locally validate the complete provider/resource/import configuration and lock, then use upload and plan with target_address for a speculative-only import inspection. A separate provider-only schema probe is optional, not required."
 			return result
 		} else if importDiagnosticCode(err) == "evidence_access_denied" || importDiagnosticCode(err) == "backend_evidence_unavailable" || importDiagnosticCode(err) == "evidence_read_interrupted" {
 			return fail(err)

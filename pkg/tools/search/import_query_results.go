@@ -94,8 +94,11 @@ Call get_query_summary with include_import_candidates=true to obtain candidate I
 call phase=prepare with organization_name, workspace_name, query_run_id and one selection
 containing candidate_id and your proposed managed_type. Preparation retrieves the destination
 provider schema through current state-version metadata -> associated run -> plan/json-schema,
-or, for a verified blank workspace, from a separate provider-only speculative plan identified
-by schema_cv_id and schema_run_id. It checks type support and returns that resource's COMPLETE
+or, optionally, for a verified blank workspace, from a provider-only speculative plan identified
+by schema_cv_id and schema_run_id. When no schema IDs are supplied for a blank workspace,
+preparation returns query evidence without asserting managed-type support: the agent locally
+validates the authored configuration and the speculative plan establishes runtime facts.
+Where available, preparation checks type support and returns that resource's COMPLETE
 schema, including attributes and nested blocks, plus selected query observations and generated
 blocks when present. The agent interprets the schema and authors or adapts HCL. No separate
 destination-schema MCP tool or shared filesystem is needed. The schema source may use an older
@@ -107,11 +110,10 @@ identity have been validated. validation_status=plan_validation_pending is respo
 not another tool. Terraform plan is the final preflight check for the destination configuration.
 phase=context returns a short-lived preauthorized URL for the current configuration archive,
 or blank_workspace if both the current archive and state are absent. For a blank workspace,
-the agent first authors/reviews a provider-only tree and lock, calls upload with no baseline
-or schema IDs, PUTs the entire archive directly, calls plan with the bootstrap CV ID and
-no target_address, then polls status with CV/Run IDs (no target_address). Once its no-change
-plan is complete, call prepare with schema_cv_id and
-schema_run_id. The bootstrap is speculative-only and does not produce persisted state;
+the agent authors/reviews resource/import HCL and a lock locally, calls upload with the chosen
+target_address and no baseline/schema IDs, PUTs the entire archive directly, calls plan with
+the CV ID and target_address, then polls status with CV/Run IDs and target_address. A separate
+provider-only schema bootstrap is optional, not a prerequisite;
 the MCP server does not download, unpack, store or parse configuration or HCL. The agent
 downloads locally, preserves the complete tree, authors HCL and reviews changes with the user.
 Optional local terraform fmt/validate can precede a speculative-only plan. No elicitation or
@@ -138,7 +140,7 @@ func ImportQueryResults(logger *log.Logger, _ *server.MCPServer) server.ServerTo
 			mcp.WithTitleAnnotation("Prepare Search imports with destination schemas"),
 			mcp.WithReadOnlyHintAnnotation(false), mcp.WithDestructiveHintAnnotation(false),
 			mcp.WithOpenWorldHintAnnotation(true), mcp.WithIdempotentHintAnnotation(false),
-			mcp.WithString("phase", mcp.Required(), mcp.Enum("prepare", "verify", "review", "upload", "plan", "status", "context"), mcp.Description("prepare: selected schema; context: current CV or blank workspace; upload/plan: speculative bootstrap when no baseline/schema IDs, otherwise speculative import; status: CV/Run plan facts.")),
+			mcp.WithString("phase", mcp.Required(), mcp.Enum("prepare", "verify", "review", "upload", "plan", "status", "context"), mcp.Description("prepare: selected evidence/schema when available; context: current CV or blank workspace; upload/plan: speculative import with target_address, or optional blank-workspace schema probe without it; status: CV/Run plan facts.")),
 			mcp.WithString("organization_name", mcp.Description("Required for all phases.")),
 			mcp.WithString("workspace_name", mcp.Description("Required for all phases.")),
 			mcp.WithString("query_run_id", mcp.Description("Finished no-code query; required for prepare, upload and plan.")),
@@ -155,7 +157,7 @@ func ImportQueryResults(logger *log.Logger, _ *server.MCPServer) server.ServerTo
 			mcp.WithString("run_id", mcp.Description("For status after plan: Run ID returned by plan; validated against the CV/workspace.")),
 			mcp.WithString("schema_cv_id", mcp.Description("For blank-workspace prepare/upload/plan: speculative provider-only bootstrap CV ID.")),
 			mcp.WithString("schema_run_id", mcp.Description("For blank-workspace prepare/upload/plan: plan-only bootstrap Run ID; validated against schema_cv_id and workspace.")),
-			mcp.WithString("target_address", mcp.Description("For plan and post-Run status: agent-chosen destination managed-resource address to inspect in the plan.")),
+			mcp.WithString("target_address", mcp.Description("For blank-workspace direct-import upload, plan and post-Run status: agent-chosen destination managed-resource address to inspect in the plan. Omit only for an optional provider-only schema probe.")),
 			mcp.WithSchemaAdditionalProperties(false),
 			mcp.WithOutputSchema[importPreparation]()),
 		Handler: func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -290,9 +292,11 @@ func prepareImportFromAPIs(ctx context.Context, c *tfe.Client, input importPrepa
 			return fail(err)
 		}
 		if input.SchemaCVID == "" {
-			result.Stage = "bootstrap_schema"
-			result.Diagnostics = []string{"bootstrap_schema_required"}
-			result.NextAction = "Agent authors and reviews a provider-only configuration and lock file; call upload without baseline/schema IDs, PUT its complete archive directly, poll status, call plan without target_address, then prepare with schema_cv_id and schema_run_id. Only speculative plan-only runs are allowed."
+			result.Status, result.Stage = "ready_for_authoring", "blank_workspace"
+			result.ValidationStatus = "plan_validation_pending"
+			result.EvidenceStatus = "selected_query_candidate_only; managed_schema_not_verified; configuration_not_validated"
+			result.Notes = append(result.Notes, "No destination provider schema exists in this empty workspace. The agent must validate its proposed provider configuration, resource and import blocks locally; the speculative plan establishes runtime facts.")
+			result.NextAction = "Agent authors and reviews the complete resource/import configuration and lock locally. Call upload with target_address and no baseline/schema IDs, PUT the archive directly, then call plan with that CV ID and target_address. Inspect per-address plan facts; never claim an apply or persisted import."
 			return result
 		}
 		run, err := readImportBootstrapSchemaRun(ctx, c, w, input.SchemaCVID, input.SchemaRunID)
