@@ -10,6 +10,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/hashicorp/go-tfe"
 	"github.com/mark3labs/mcp-go/mcp"
 	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
@@ -20,6 +21,17 @@ func silentLogger() *log.Logger {
 	l := log.New()
 	l.SetLevel(log.PanicLevel)
 	return l
+}
+
+func newProviderListTFEClient(t *testing.T, server *httptest.Server) *tfe.Client {
+	t.Helper()
+	tfeClient, err := tfe.NewClient(&tfe.Config{
+		Address:    server.URL,
+		Token:      "test-token",
+		HTTPClient: server.Client(),
+	})
+	require.NoError(t, err)
+	return tfeClient
 }
 
 // ── helpers ───────────────────────────────────────────────────────────────────
@@ -146,67 +158,6 @@ func splitKey(key string) [3]string {
 	return parts
 }
 
-// ── doAuthenticatedGet ────────────────────────────────────────────────────────
-
-func TestDoAuthenticatedGet_Success(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		assert.Equal(t, "Bearer test-token", r.Header.Get("Authorization"))
-		assert.Equal(t, "application/vnd.api+json", r.Header.Get("Accept"))
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(`{"ok":true}`))
-	}))
-	defer srv.Close()
-
-	body, err := doAuthenticatedGet(context.Background(), srv.URL, "test-token", srv.Client(), silentLogger())
-	require.NoError(t, err)
-	assert.JSONEq(t, `{"ok":true}`, string(body))
-}
-
-func TestDoAuthenticatedGet_NotFound(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusNotFound)
-	}))
-	defer srv.Close()
-
-	_, err := doAuthenticatedGet(context.Background(), srv.URL, "tok", srv.Client(), silentLogger())
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "404 Not Found")
-}
-
-func TestDoAuthenticatedGet_Unauthorized(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusUnauthorized)
-	}))
-	defer srv.Close()
-
-	_, err := doAuthenticatedGet(context.Background(), srv.URL, "bad", srv.Client(), silentLogger())
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "HTTP 401")
-}
-
-func TestDoAuthenticatedGet_Forbidden(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusForbidden)
-	}))
-	defer srv.Close()
-
-	_, err := doAuthenticatedGet(context.Background(), srv.URL, "bad", srv.Client(), silentLogger())
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "HTTP 403")
-}
-
-func TestDoAuthenticatedGet_UnexpectedStatus(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusInternalServerError)
-		_, _ = w.Write([]byte("internal error"))
-	}))
-	defer srv.Close()
-
-	_, err := doAuthenticatedGet(context.Background(), srv.URL, "tok", srv.Client(), silentLogger())
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "unexpected HTTP 500")
-}
-
 // ── listSupportedProviders ────────────────────────────────────────────────────
 
 func TestListSupportedProviders_ReturnsList(t *testing.T) {
@@ -217,7 +168,7 @@ func TestListSupportedProviders_ReturnsList(t *testing.T) {
 	s := newProviderListServer(providers, nil)
 	defer s.server.Close()
 
-	result, err := listSupportedProviders(context.Background(), s.server.URL, "", "token", s.server.Client(), silentLogger())
+	result, err := listSupportedProviders(context.Background(), newProviderListTFEClient(t, s.server), "", silentLogger())
 	require.NoError(t, err)
 	require.NotNil(t, result)
 	require.Len(t, result.Content, 1)
@@ -237,7 +188,7 @@ func TestListSupportedProviders_EmptyList(t *testing.T) {
 	s := newProviderListServer(nil, nil)
 	defer s.server.Close()
 
-	result, err := listSupportedProviders(context.Background(), s.server.URL, "", "token", s.server.Client(), silentLogger())
+	result, err := listSupportedProviders(context.Background(), newProviderListTFEClient(t, s.server), "", silentLogger())
 	require.NoError(t, err)
 	// Empty list → tool error result
 	assert.True(t, result.IsError)
@@ -264,7 +215,7 @@ func TestListSupportedProviders_WithOrgFilter(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	_, err := listSupportedProviders(context.Background(), srv.URL, "example org&group=test", "tok", srv.Client(), silentLogger())
+	_, err := listSupportedProviders(context.Background(), newProviderListTFEClient(t, srv), "example org&group=test", silentLogger())
 	require.NoError(t, err)
 	assert.Equal(t, "example org&group=test", capturedOrg)
 }
@@ -279,7 +230,7 @@ func TestDiscoverProviderVersion_Found(t *testing.T) {
 	s := newProviderListServer(providers, nil)
 	defer s.server.Close()
 
-	version, err := discoverProviderVersion(context.Background(), s.server.URL, "", "hashicorp", "aws", "token", s.server.Client(), silentLogger())
+	version, err := discoverProviderVersion(context.Background(), newProviderListTFEClient(t, s.server), "", "hashicorp", "aws")
 	require.NoError(t, err)
 	assert.Equal(t, "5.1.0", version)
 }
@@ -291,7 +242,7 @@ func TestDiscoverProviderVersion_WithOrgFilter(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	_, _ = discoverProviderVersion(context.Background(), srv.URL, "example org&group=test", "example", "provider", "tok", srv.Client(), silentLogger())
+	_, _ = discoverProviderVersion(context.Background(), newProviderListTFEClient(t, srv), "example org&group=test", "example", "provider")
 	assert.Equal(t, "example org&group=test", capturedOrg)
 }
 
@@ -302,7 +253,7 @@ func TestDiscoverProviderVersion_CaseInsensitive(t *testing.T) {
 	s := newProviderListServer(providers, nil)
 	defer s.server.Close()
 
-	version, err := discoverProviderVersion(context.Background(), s.server.URL, "", "hashicorp", "aws", "token", s.server.Client(), silentLogger())
+	version, err := discoverProviderVersion(context.Background(), newProviderListTFEClient(t, s.server), "", "hashicorp", "aws")
 	require.NoError(t, err)
 	assert.Equal(t, "5.1.0", version)
 }
@@ -314,7 +265,7 @@ func TestDiscoverProviderVersion_NotFound(t *testing.T) {
 	s := newProviderListServer(providers, nil)
 	defer s.server.Close()
 
-	_, err := discoverProviderVersion(context.Background(), s.server.URL, "", "hashicorp", "aws", "token", s.server.Client(), silentLogger())
+	_, err := discoverProviderVersion(context.Background(), newProviderListTFEClient(t, s.server), "", "hashicorp", "aws")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "hashicorp/aws is not in the search-compatible catalog")
 }
@@ -329,7 +280,7 @@ func TestFetchProviderSchema_Success(t *testing.T) {
 	s := newProviderListServer(nil, schemas)
 	defer s.server.Close()
 
-	result, err := fetchProviderSchema(context.Background(), s.server.URL, "", "hashicorp", "aws", "5.0.0", "tok", s.server.Client(), silentLogger())
+	result, err := fetchProviderSchema(context.Background(), newProviderListTFEClient(t, s.server), "", "hashicorp", "aws", "5.0.0", silentLogger())
 	require.NoError(t, err)
 	require.NotNil(t, result)
 	assert.False(t, result.IsError)
@@ -350,7 +301,7 @@ func TestFetchProviderSchema_NotInCatalog(t *testing.T) {
 	s := newProviderListServer(nil, map[string]json.RawMessage{})
 	defer s.server.Close()
 
-	result, err := fetchProviderSchema(context.Background(), s.server.URL, "", "hashicorp", "aws", "5.0.0", "tok", s.server.Client(), silentLogger())
+	result, err := fetchProviderSchema(context.Background(), newProviderListTFEClient(t, s.server), "", "hashicorp", "aws", "5.0.0", silentLogger())
 	require.NoError(t, err)
 	assert.True(t, result.IsError)
 }
@@ -363,7 +314,7 @@ func TestFetchProviderSchema_NilListResourceSchemas(t *testing.T) {
 	s := newProviderListServer(nil, schemas)
 	defer s.server.Close()
 
-	result, err := fetchProviderSchema(context.Background(), s.server.URL, "", "hashicorp", "aws", "5.0.0", "tok", s.server.Client(), silentLogger())
+	result, err := fetchProviderSchema(context.Background(), newProviderListTFEClient(t, s.server), "", "hashicorp", "aws", "5.0.0", silentLogger())
 	require.NoError(t, err)
 	assert.True(t, result.IsError)
 	tc, ok := mcp.AsTextContent(result.Content[0])
@@ -400,7 +351,7 @@ func TestFetchProviderSchema_WithOrgFilter(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	_, _ = fetchProviderSchema(context.Background(), srv.URL, "example org&group=test", "example/namespace", "test provider", "1.0/test", "tok", srv.Client(), silentLogger())
+	_, _ = fetchProviderSchema(context.Background(), newProviderListTFEClient(t, srv), "example org&group=test", "example/namespace", "test provider", "1.0/test", silentLogger())
 	assert.Equal(t, "example org&group=test", capturedOrg)
 	assert.Equal(t, "/api/v2/search/provider-versions/example%2Fnamespace/test%20provider/1.0%2Ftest", capturedPath)
 }
