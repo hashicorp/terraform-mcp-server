@@ -397,10 +397,10 @@ func TestProviderListSchemaList_RejectsMissingScopeBeforeRequest(t *testing.T) {
 	assert.Contains(t, tc.Text, "ask the user")
 }
 
-// ── searchToolErrorf ──────────────────────────────────────────────────────────
+// ── toolErrorf ────────────────────────────────────────────────────────────────
 
-func TestSearchToolErrorf(t *testing.T) {
-	result, err := searchToolErrorf(silentLogger(), "something went wrong: %v", "boom")
+func TestToolErrorf(t *testing.T) {
+	result, err := toolErrorf(silentLogger(), "test_tool", "something went wrong: %v", "boom")
 	require.NoError(t, err)
 	require.NotNil(t, result)
 	assert.True(t, result.IsError)
@@ -409,8 +409,8 @@ func TestSearchToolErrorf(t *testing.T) {
 	assert.Equal(t, "something went wrong: boom", tc.Text)
 }
 
-func TestSearchToolErrorf_NilLogger(t *testing.T) {
-	result, err := searchToolErrorf(nil, "msg")
+func TestToolErrorf_NilLogger(t *testing.T) {
+	result, err := toolErrorf(nil, "test_tool", "msg")
 	require.NoError(t, err)
 	assert.True(t, result.IsError)
 }

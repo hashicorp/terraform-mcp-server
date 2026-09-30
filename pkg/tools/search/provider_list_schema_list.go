@@ -82,15 +82,15 @@ func providerListSchemaListHandler(ctx context.Context, request mcp.CallToolRequ
 	orgName := strings.TrimSpace(request.GetString("organization_name", ""))
 	workspaceName := strings.TrimSpace(request.GetString("workspace_name", ""))
 	if orgName == "" || workspaceName == "" {
-		return searchToolErrorf(logger, "organization_name and workspace_name are required; ask the user to provide both before fetching provider schemas")
+		return toolErrorf(logger, "provider_list_schema_list", "organization_name and workspace_name are required; ask the user to provide both before fetching provider schemas")
 	}
 
 	tfeClient, err := client.GetTfeClientFromContext(ctx, logger)
 	if err != nil {
-		return searchToolErrorf(logger, "failed to get Terraform client — ensure TFE_TOKEN and TFE_ADDRESS are configured: %v", err)
+		return toolErrorf(logger, "provider_list_schema_list", "failed to get Terraform client — ensure TFE_TOKEN and TFE_ADDRESS are configured: %v", err)
 	}
 	if _, err := tfeClient.Workspaces.Read(ctx, orgName, workspaceName); err != nil {
-		return searchToolErrorf(logger, "workspace %q not found in organization %q: %v", workspaceName, orgName, err)
+		return toolErrorf(logger, "provider_list_schema_list", "workspace %q not found in organization %q: %v", workspaceName, orgName, err)
 	}
 
 	// ── Branch: list all providers ────────────────────────────────────────────
@@ -104,7 +104,7 @@ func providerListSchemaListHandler(ctx context.Context, request mcp.CallToolRequ
 	// model-supplied version because it may not have list-resource schemas.
 	providerVersion, err := discoverProviderVersion(ctx, tfeClient, orgName, providerNamespace, providerName)
 	if err != nil {
-		return searchToolErrorf(logger, "%v", err)
+		return toolErrorf(logger, "provider_list_schema_list", "%v", err)
 	}
 
 	return fetchProviderSchema(ctx, tfeClient, orgName, providerNamespace, providerName, providerVersion, logger)
@@ -144,11 +144,11 @@ type noCodeProviderSchemaResponse struct {
 func listSupportedProviders(ctx context.Context, tfeClient *tfe.Client, orgName string, logger *log.Logger) (*mcp.CallToolResult, error) {
 	resp, err := readProviderVersions(ctx, tfeClient, orgName)
 	if err != nil {
-		return searchToolErrorf(logger, "failed to fetch supported providers: %v", err)
+		return toolErrorf(logger, "provider_list_schema_list", "failed to fetch supported providers: %v", err)
 	}
 
 	if len(resp.Data) == 0 {
-		return searchToolErrorf(logger, "no search-compatible providers are available for this organization")
+		return toolErrorf(logger, "provider_list_schema_list", "no search-compatible providers are available for this organization")
 	}
 
 	type providerSummary struct {
@@ -171,7 +171,7 @@ func listSupportedProviders(ctx context.Context, tfeClient *tfe.Client, orgName 
 		"note":                "Call provider_list_schema_list again with the same organization_name and workspace_name, plus provider_namespace and provider_name (and optionally provider_version), to fetch the full list_resource_schemas for a specific provider.",
 	}, "", "  ")
 	if err != nil {
-		return searchToolErrorf(logger, "failed to marshal provider list: %v", err)
+		return toolErrorf(logger, "provider_list_schema_list", "failed to marshal provider list: %v", err)
 	}
 
 	return mcp.NewToolResultText(string(out)), nil
@@ -215,17 +215,17 @@ func fetchProviderSchema(ctx context.Context, tfeClient *tfe.Client, orgName, na
 
 	request, err := tfeClient.NewRequest(http.MethodGet, requestPath, nil)
 	if err != nil {
-		return searchToolErrorf(logger, "failed to build schema request for %s/%s@%s: %v", namespace, name, version, err)
+		return toolErrorf(logger, "provider_list_schema_list", "failed to build schema request for %s/%s@%s: %v", namespace, name, version, err)
 	}
 
 	var resp noCodeProviderSchemaResponse
 	if err := request.DoJSON(ctx, &resp); err != nil {
-		return searchToolErrorf(logger, "failed to fetch schema for %s/%s@%s: %v", namespace, name, version, err)
+		return toolErrorf(logger, "provider_list_schema_list", "failed to fetch schema for %s/%s@%s: %v", namespace, name, version, err)
 	}
 
 	lrs := resp.Data.Attributes.ListResourceSchemas
 	if lrs == nil || string(lrs) == "null" {
-		return searchToolErrorf(logger,
+		return toolErrorf(logger, "provider_list_schema_list",
 			"provider %s/%s@%s exists in the catalog but has no list_resource_schemas — "+
 				"schema generation may not have run for this version yet",
 			namespace, name, version,
@@ -248,7 +248,7 @@ func fetchProviderSchema(ctx context.Context, tfeClient *tfe.Client, orgName, na
 		),
 	}, "", "  ")
 	if err != nil {
-		return searchToolErrorf(logger, "failed to marshal schema response: %v", err)
+		return toolErrorf(logger, "provider_list_schema_list", "failed to marshal schema response: %v", err)
 	}
 
 	return mcp.NewToolResultText(string(out)), nil
@@ -272,15 +272,6 @@ func readProviderVersions(ctx context.Context, tfeClient *tfe.Client, orgName st
 		return nil, err
 	}
 	return &resp, nil
-}
-
-// searchToolErrorf returns a tool error result and logs the message.
-func searchToolErrorf(logger *log.Logger, format string, args ...any) (*mcp.CallToolResult, error) {
-	msg := fmt.Sprintf(format, args...)
-	if logger != nil {
-		logger.Errorf("provider_list_schema_list: %s", msg)
-	}
-	return mcp.NewToolResultError(msg), nil
 }
 
 const providerListSchemaListDescription = `Fetches list_resource_schemas for a search-compatible Terraform provider from the
