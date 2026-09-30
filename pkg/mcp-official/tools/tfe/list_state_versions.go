@@ -31,32 +31,63 @@ type StateVersionSummaryList struct {
 }
 
 type ListStateVersionsArguments struct {
-	TerraformOrgName string `json:"terraform_org_name" jsonschema:"The Terraform organization name"`
-	WorkspaceName    string `json:"workspace_name" jsonschema:"The workspace name to list state versions for"`
+	TerraformOrgName string `json:"terraform_org_name"`
+	WorkspaceName    string `json:"workspace_name"`
 	Pagination
 }
 
 func ListStateVersionsTool() *mcp.Tool {
-	input, err := jsonschema.For[ListStateVersionsArguments](nil)
-	if err != nil {
-		panic(err)
+	properties := paginationSchemaProperties()
+	properties["terraform_org_name"] = &jsonschema.Schema{
+		Type:        "string",
+		Description: "The Terraform organization name",
 	}
-	for name, prop := range paginationSchemaProperties() {
-		input.Properties[name] = prop
+	properties["workspace_name"] = &jsonschema.Schema{
+		Type:        "string",
+		Description: "The workspace name to list state versions for",
 	}
-
-	output, err := jsonschema.For[StateVersionSummaryList](nil)
-	if err != nil {
-		panic(err)
-	}
-	items := output.Properties["items"]
-	items.Types, items.Type = nil, "array"
 
 	return &mcp.Tool{
-		Name:         "list_state_versions",
-		Description:  "List all the state versions for a given Terraform workspace and organization.",
-		InputSchema:  input,
-		OutputSchema: output,
+		Name:        "list_state_versions",
+		Description: "List all the state versions for a given Terraform workspace and organization.",
+		InputSchema: &jsonschema.Schema{
+			Type:                 "object",
+			Properties:           properties,
+			PropertyOrder:        []string{"terraform_org_name", "workspace_name", "page", "pageSize"},
+			Required:             []string{"terraform_org_name", "workspace_name"},
+			AdditionalProperties: &jsonschema.Schema{Not: &jsonschema.Schema{}},
+		},
+		OutputSchema: &jsonschema.Schema{
+			Type: "object",
+			Properties: map[string]*jsonschema.Schema{
+				"items": {
+					Type: "array",
+					Items: &jsonschema.Schema{
+						Type: "object",
+						Properties: map[string]*jsonschema.Schema{
+							"id":                {Type: "string"},
+							"created_at":        {Type: "string"},
+							"serial":            {Type: "integer"},
+							"terraform_version": {Type: "string"},
+							"vcs_commit_sha":    {Type: "string"},
+							"vcs_commit_url":    {Type: "string"},
+							"state_version":     {Type: "integer"},
+						},
+						PropertyOrder:        []string{"id", "created_at", "serial", "terraform_version", "vcs_commit_sha", "vcs_commit_url", "state_version"},
+						Required:             []string{"id", "created_at", "serial", "terraform_version", "vcs_commit_sha", "vcs_commit_url", "state_version"},
+						AdditionalProperties: &jsonschema.Schema{Not: &jsonschema.Schema{}},
+					},
+				},
+				"current-page": {Type: "integer"},
+				"prev-page":    {Type: "integer"},
+				"next-page":    {Type: "integer"},
+				"total-count":  {Type: "integer"},
+				"total-pages":  {Type: "integer"},
+			},
+			PropertyOrder:        []string{"items", "current-page", "prev-page", "next-page", "total-count", "total-pages"},
+			Required:             []string{"items"},
+			AdditionalProperties: &jsonschema.Schema{Not: &jsonschema.Schema{}},
+		},
 		Annotations: &mcp.ToolAnnotations{
 			Title:           "List Terraform state versions",
 			ReadOnlyHint:    true,
@@ -68,10 +99,16 @@ func ListStateVersionsTool() *mcp.Tool {
 func ListStateVersionsFunc(ctx context.Context, request *mcp.CallToolRequest, input ListStateVersionsArguments) (*mcp.CallToolResult, *StateVersionSummaryList, error) {
 	terraformOrgName := strings.TrimSpace(input.TerraformOrgName)
 	workspaceName := strings.TrimSpace(input.WorkspaceName)
+	if terraformOrgName == "" {
+		return nil, nil, fmt.Errorf("terraform_org_name must not be blank")
+	}
+	if workspaceName == "" {
+		return nil, nil, fmt.Errorf("workspace_name must not be blank")
+	}
 
 	tfeClient, err := client.GetTfeClient(ctx, client.SessionIDFromRequest(request))
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, fmt.Errorf("getting Terraform client: %w", err)
 	}
 
 	stateVersions, err := tfeClient.StateVersions.List(ctx, &tfe.StateVersionListOptions{
