@@ -76,6 +76,7 @@ func importConfigurationContextFromAPIs(ctx context.Context, c *tfe.Client, inpu
 		if err := checkImportBlankBaseline(ctx, c, w); err == nil {
 			result.Status, result.Stage = "blank_workspace", "configuration_handoff"
 			result.Baseline = &importAPIBaseline{WorkingDirectory: w.WorkingDirectory}
+			result.AgentInstructions = importBlankWorkspaceInstructions
 			result.NextAction = "There is no current configuration archive or state. Select a finished query candidate, author and locally validate the complete provider/resource/import configuration and lock, then use upload and plan with target_address for a speculative-only import inspection. A separate provider-only schema probe is optional, not required."
 			return result
 		} else if importDiagnosticCode(err) == "evidence_access_denied" || importDiagnosticCode(err) == "backend_evidence_unavailable" || importDiagnosticCode(err) == "evidence_read_interrupted" {
@@ -111,6 +112,7 @@ func importConfigurationContextFromAPIs(ctx context.Context, c *tfe.Client, inpu
 	}
 	result.Context = &importConfigurationHandoff{ConfigurationVersionID: cvID, DownloadURL: location, URLValidity: "temporary; use immediately and request a fresh context handoff if expired (nominally one minute)", WorkingDirectory: w.WorkingDirectory}
 	result.Status, result.Stage = "available", "configuration_handoff"
+	result.AgentInstructions = importExistingConfigurationInstructions
 	result.NextAction = "Download and unpack the archive in an agent-controlled directory immediately. Preserve the complete tree and provider lock selections; author resource/import HCL, optionally run terraform fmt/validate locally, and review the proposed changes with the user. The URL is a temporary bearer capability; do not log or share it. No archive was downloaded by the MCP server."
 	return result
 }

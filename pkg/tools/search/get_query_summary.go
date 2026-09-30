@@ -65,7 +65,7 @@ func GetQuerySummary(logger *log.Logger) server.ServerTool {
 				mcp.Required(),
 				mcp.Description("Query run ID previously passed to get_query_status."),
 			),
-			mcp.WithBoolean("include_import_candidates", mcp.Description("Return bounded, explicitly selectable import candidate IDs, recorded no-code provider selections, and observations/generated blocks when available. Then call import_query_results phase=prepare with one candidate_id and proposed managed_type for destination schema guidance. Requires a finished no-code query and complete results.")),
+			mcp.WithBoolean("include_import_candidates", mcp.Description("Return bounded, explicitly selectable import candidate IDs, recorded no-code provider selections, and observations/generated configuration/import_configuration drafts when available. Generated blocks may contain null or incomplete values; check them against the speculative import plan. Then call import_query_results phase=prepare with one candidate_id and proposed managed_type. Requires a finished no-code query and complete results.")),
 		),
 		Handler: func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			return getQuerySummaryHandler(ctx, request, logger)

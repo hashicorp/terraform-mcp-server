@@ -289,7 +289,8 @@ func readImportExecutionStatus(ctx context.Context, c *tfe.Client, input importP
 	if p.Status == tfe.PlanErrored || p.Status == tfe.PlanCanceled || p.Status == tfe.PlanUnreachable || r.Status == tfe.RunErrored || r.Status == tfe.RunCanceled || r.Status == tfe.RunDiscarded {
 		result.Status, result.Stage = "failed", "status"
 		result.Diagnostics = []string{"speculative_plan_failed"}
-		result.NextAction = "Use existing run/plan/log tools to inspect sanitized diagnostics; repair locally and create a new speculative attempt."
+		result.AgentInstructions = []string{"Inspect the exact failed Run/Plan and bounded logs for diagnostic evidence. A partial change summary is not a completed import plan; do not apply or infer a replacement cause without plan evidence.", "Repair the agent-owned configuration, review changes, and create a new speculative CV/Run only after the prior outcome is known. Never blindly retry an uncertain create."}
+		result.NextAction = "Use existing run/plan/log tools to inspect diagnostics; repair and review HCL locally before a new speculative CV/Run."
 		return result
 	}
 	if p.Status != tfe.PlanFinished || r.Status != tfe.RunPlannedAndFinished {
@@ -314,7 +315,8 @@ func readImportExecutionStatus(ctx context.Context, c *tfe.Client, input importP
 	}
 	result.Execution.PlanFacts = facts
 	result.Status, result.Stage = "plan_available_for_agent_assessment", "status"
-	result.NextAction = "Agent: compare selected address/import evidence and all other actions with query identity, provider scope and user intent. This factual projection is not an import-verification verdict; the speculative run made no state change."
+	result.AgentInstructions = []string{"Compare the selected address, provider source, import marker and every action with the selected query identity and user intent. The compact plan facts do not include the import ID value or attribute differences.", "For any replacement or update, inspect get_plan_json_output with this plan_id for replace_paths and changed attributes; do not apply. Repair agent-owned HCL, review it and use a new speculative CV/Run.", "Even a no-op import marker is only a speculative plan, not proof of persisted state or exactly-once execution. Check other resource, output, drift and deferred counts before reporting facts."}
+	result.NextAction = "Agent: inspect import and action facts; for replacements or updates, read get_plan_json_output(plan_id) before another reviewed CV/Run. A speculative plan made no persisted state change."
 	return result
 }
 

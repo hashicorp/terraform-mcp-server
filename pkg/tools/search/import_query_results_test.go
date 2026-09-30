@@ -4,6 +4,7 @@
 package search
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -161,6 +162,71 @@ func TestImportDiscoveryAcceptsLiveNoCodeResourceTypeWireName(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, discovery.Candidates, 1)
 	assert.Equal(t, "registry.terraform.io/hashicorp/aws", discovery.Candidates[0].Provider.Source)
+}
+
+func TestImportGeneratedBlocksFromQueryLogWireNames(t *testing.T) {
+	for _, tt := range []struct {
+		name   string
+		fields map[string]string
+		want   string
+	}{
+		{"current", map[string]string{"config": "resource draft", "import_config": "import draft"}, ""},
+		{"legacy", map[string]string{"configuration": "resource draft", "import_configuration": "import draft"}, ""},
+		{"both matching", map[string]string{"config": "resource draft", "configuration": "resource draft", "import_config": "import draft", "import_configuration": "import draft"}, ""},
+		{"none", nil, ""},
+		{"conflicting config", map[string]string{"config": "resource draft", "configuration": "other"}, "query_generated_block_conflict"},
+		{"conflicting import", map[string]string{"import_config": "import draft", "import_configuration": "other"}, "query_generated_block_conflict"},
+		{"conflicting empty", map[string]string{"config": "", "configuration": "other"}, "query_generated_block_conflict"},
+		{"oversized", map[string]string{"config": strings.Repeat("x", 32*1024+1)}, "query_generated_block_size_limit"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			f := importBackendFixture(t)
+			lines := bytes.Split(bytes.TrimSpace(f.queryLog), []byte("\n"))
+			var found map[string]any
+			require.NoError(t, json.Unmarshal(lines[0], &found))
+			resource := found["list_resource_found"].(map[string]any)
+			for key, value := range tt.fields {
+				resource[key] = value
+			}
+			first, err := json.Marshal(found)
+			require.NoError(t, err)
+			f.queryLog = append(append(first, '\n'), lines[1]...)
+			discovery, err := readImportDiscovery(context.Background(), f.client, "qry-fixture")
+			if tt.want != "" {
+				assert.Equal(t, tt.want, importDiagnosticCode(err))
+				return
+			}
+			require.NoError(t, err)
+			require.Len(t, discovery.Candidates, 1)
+			candidate := discovery.Candidates[0]
+			if tt.fields == nil {
+				assert.Empty(t, candidate.Configuration)
+				assert.Empty(t, candidate.ImportConfig)
+				return
+			}
+			assert.Equal(t, "resource draft", candidate.Configuration)
+			assert.Equal(t, "import draft", candidate.ImportConfig)
+			t.Setenv(client.TerraformAddress, f.url)
+			t.Setenv(client.TerraformToken, "fixture-token")
+			toolResult, err := GetQuerySummary(silentLogger()).Handler(context.Background(), mcp.CallToolRequest{Params: mcp.CallToolParams{Arguments: map[string]any{"query_run_id": "qry-fixture", "include_import_candidates": true}}})
+			require.NoError(t, err)
+			assert.False(t, toolResult.IsError)
+			listed, ok := toolResult.StructuredContent.(*importDiscovery)
+			require.True(t, ok)
+			require.Len(t, listed.Candidates, 1)
+			assert.Equal(t, candidate.Configuration, listed.Candidates[0].Configuration)
+			// Both the candidate-list and prepare path use the same bounded
+			// decoder, preserving the stable outward field names.
+			result := prepareImportFromAPIs(context.Background(), f.client, importFixtureInput(t))
+			require.Equal(t, "prepared", result.Status, result.Diagnostics)
+			assert.Equal(t, candidate.Configuration, result.Selection.Configuration)
+			assert.Equal(t, candidate.ImportConfig, result.Selection.ImportConfig)
+			encoded, err := json.Marshal(candidate)
+			require.NoError(t, err)
+			assert.Contains(t, string(encoded), `"import_configuration"`)
+			assert.NotContains(t, string(encoded), `"import_config"`)
+		})
+	}
 }
 
 func TestImportQueryAPIOnlyPreparation(t *testing.T) {

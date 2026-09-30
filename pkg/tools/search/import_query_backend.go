@@ -78,6 +78,40 @@ type importDiscoveryCandidate struct {
 	ImportConfig    string            `json:"import_configuration,omitempty"`
 }
 
+// Query logs currently use config/import_config. Keep the public candidate
+// names stable while also accepting the older configuration spellings.
+type importDiscoveryFound struct {
+	importDiscoveryCandidate
+	ConfigurationWire *string `json:"configuration"`
+	ImportWire        *string `json:"import_configuration"`
+	Config            *string `json:"config"`
+	ImportConfig      *string `json:"import_config"`
+}
+
+func (f *importDiscoveryFound) candidate() (importDiscoveryCandidate, error) {
+	c := f.importDiscoveryCandidate
+	if f.Config != nil && f.ConfigurationWire != nil && *f.Config != *f.ConfigurationWire {
+		return c, importEvidenceFailure("query_generated_block_conflict")
+	}
+	if f.ImportConfig != nil && f.ImportWire != nil && *f.ImportConfig != *f.ImportWire {
+		return c, importEvidenceFailure("query_generated_block_conflict")
+	}
+	if f.Config != nil {
+		c.Configuration = *f.Config
+	} else if f.ConfigurationWire != nil {
+		c.Configuration = *f.ConfigurationWire
+	}
+	if f.ImportConfig != nil {
+		c.ImportConfig = *f.ImportConfig
+	} else if f.ImportWire != nil {
+		c.ImportConfig = *f.ImportWire
+	}
+	if len(c.Configuration) > 32*1024 || len(c.ImportConfig) > 32*1024 {
+		return c, importEvidenceFailure("query_generated_block_size_limit")
+	}
+	return c, nil
+}
+
 type importDiscovery struct {
 	QueryRunID    string                     `json:"query_run_id"`
 	WorkspaceID   string                     `json:"workspace_id"`
@@ -211,9 +245,9 @@ func parseImportDiscovery(data []byte, queryID string, providers map[string]work
 			continue
 		}
 		var record struct {
-			Type       string                    `json:"type"`
-			Found      *importDiscoveryCandidate `json:"list_resource_found"`
-			Complete   *queryListCompletion      `json:"list_complete"`
+			Type       string                `json:"type"`
+			Found      *importDiscoveryFound `json:"list_resource_found"`
+			Complete   *queryListCompletion  `json:"list_complete"`
 			Diagnostic *struct {
 				Severity string `json:"severity"`
 			} `json:"diagnostic"`
@@ -230,7 +264,10 @@ func parseImportDiscovery(data []byte, queryID string, providers map[string]work
 			if record.Found == nil {
 				return nil, importEvidenceFailure("query_evidence_invalid")
 			}
-			candidate := *record.Found
+			candidate, err := record.Found.candidate()
+			if err != nil {
+				return nil, err
+			}
 			provider, ok := providers[candidate.ResourceType]
 			if !ok || candidate.Address == "" {
 				return nil, importEvidenceFailure("query_provider_source_unresolved")

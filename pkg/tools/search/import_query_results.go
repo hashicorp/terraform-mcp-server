@@ -22,7 +22,7 @@ type workspaceProvider struct {
 	Version string `json:"version,omitempty"`
 }
 
-const importPreparationContractVersion = "3"
+const importPreparationContractVersion = "4"
 const maxImportPreparationBytes = 256 * 1024
 
 type importPrepareInput struct {
@@ -69,6 +69,35 @@ type importPreparation struct {
 	NextAction             string                      `json:"next_action"`
 	Context                *importConfigurationHandoff `json:"configuration_context,omitempty"`
 	Execution              *importExecutionResponse    `json:"execution,omitempty"`
+	WorkflowContext        *importWorkflowContext      `json:"workflow_context,omitempty"`
+	Continuation           *importContinuation         `json:"continuation,omitempty"`
+}
+
+// These are copy-forward hints, not a server-side attempt record. In
+// particular, a status lookup does not establish the query that authored a CV.
+type importWorkflowContext struct {
+	Organization           string `json:"organization_name"`
+	Workspace              string `json:"workspace_name"`
+	WorkspaceID            string `json:"workspace_id"`
+	QueryRunID             string `json:"query_run_id,omitempty"`
+	CandidateID            string `json:"candidate_id,omitempty"`
+	ManagedType            string `json:"managed_type,omitempty"`
+	TargetAddress          string `json:"target_address,omitempty"`
+	BaselineCVID           string `json:"baseline_cv_id,omitempty"`
+	BaselineStateID        string `json:"baseline_state_id,omitempty"`
+	BaselineSerial         int64  `json:"baseline_state_serial,omitempty"`
+	SchemaCVID             string `json:"schema_cv_id,omitempty"`
+	SchemaRunID            string `json:"schema_run_id,omitempty"`
+	ConfigurationVersionID string `json:"configuration_version_id,omitempty"`
+	RunID                  string `json:"run_id,omitempty"`
+	PlanID                 string `json:"plan_id,omitempty"`
+}
+
+type importContinuation struct {
+	NextPhase      string         `json:"next_phase"`
+	Arguments      map[string]any `json:"arguments"`
+	RequiredInputs []string       `json:"required_inputs,omitempty"`
+	Precondition   string         `json:"precondition"`
 }
 
 type importAPIBaseline struct {
@@ -126,6 +155,11 @@ returns bounded per-address JSON-plan facts for agent assessment, never an impor
 Each request carries the relevant workspace, CV, Run and selected address. The server
 does not persist workflow records. Preserve returned IDs in the calling agent. An
 uncertain create outcome is not safe to retry blindly: reconcile with Atlas first.
+Successful responses include workflow_context with only validated or explicitly
+caller-carried IDs, and a continuation with safe copy-forward arguments and missing
+inputs. Continuations never pre-confirm a create or contain temporary URLs. A status
+read cannot recover query selection or archive provenance from a CV ID alone; keep
+those in the agent's per-CV ledger along with the locally reviewed archive digest.
 Legacy verify/review
 and first-N max_resources inputs return migration diagnostics without writing files or
 creating runs. Do not claim that a resource has been imported into state. The calling agent owns
@@ -216,7 +250,79 @@ func importQueryResultsHandler(ctx context.Context, request mcp.CallToolRequest,
 	default:
 		response = prepareImportFromAPIs(ctx, c, input)
 	}
+	addImportContinuation(input, &response)
 	return importPreparationResult(response)
+}
+
+func addImportContinuation(input importPrepareInput, response *importPreparation) {
+	if response.WorkspaceID == "" || (response.Status == "blocked" && response.Execution == nil) {
+		return
+	}
+	refs := &importWorkflowContext{Organization: response.Organization, Workspace: input.Workspace, WorkspaceID: response.WorkspaceID}
+	if refs.Organization == "" {
+		refs.Organization = input.Organization
+	}
+	if response.Execution != nil {
+		refs.ConfigurationVersionID = response.Execution.ConfigurationVersionID
+		refs.RunID = response.Execution.RunID
+		refs.PlanID = response.Execution.PlanID
+		refs.TargetAddress = response.Execution.TargetAddress
+	}
+	if input.Phase == "prepare" && (response.Status == "prepared" || response.Status == "ready_for_authoring") || input.Phase == "upload" && response.Status == "awaiting_agent_upload" || input.Phase == "plan" && response.Status == "pending" {
+		refs.QueryRunID = input.QueryID
+		refs.CandidateID = input.Selections[0].CandidateID
+		refs.ManagedType = input.Selections[0].ManagedType
+		refs.TargetAddress = input.TargetAddress
+		if input.Phase == "prepare" {
+			if response.Baseline != nil {
+				refs.BaselineCVID = response.Baseline.ConfigurationVersionID
+				refs.BaselineStateID = response.Baseline.StateVersionID
+				refs.BaselineSerial = response.Baseline.StateSerial
+			}
+		} else {
+			refs.BaselineCVID, refs.BaselineStateID, refs.BaselineSerial = input.BaselineCVID, input.BaselineStateID, input.BaselineSerial
+		}
+		refs.SchemaCVID, refs.SchemaRunID = input.SchemaCVID, input.SchemaRunID
+	}
+	response.WorkflowContext = refs
+	args := map[string]any{"organization_name": refs.Organization, "workspace_name": refs.Workspace}
+	switch {
+	case input.Phase == "prepare" && (response.Status == "prepared" || response.Status == "ready_for_authoring"):
+		args["phase"], args["query_run_id"] = "upload", refs.QueryRunID
+		args["selections"] = []map[string]string{{"candidate_id": refs.CandidateID, "managed_type": refs.ManagedType}}
+		if refs.BaselineCVID != "" {
+			args["baseline_cv_id"], args["baseline_state_id"], args["baseline_state_serial"] = refs.BaselineCVID, refs.BaselineStateID, refs.BaselineSerial
+		}
+		if refs.SchemaCVID != "" {
+			args["schema_cv_id"], args["schema_run_id"] = refs.SchemaCVID, refs.SchemaRunID
+		}
+		required := []string{"confirm_speculative_run"}
+		if refs.BaselineCVID == "" && refs.SchemaCVID == "" {
+			required = append(required, "target_address")
+		}
+		response.Continuation = &importContinuation{NextPhase: "upload", Arguments: args, RequiredInputs: required, Precondition: "Agent must author, locally validate and obtain review of the complete configuration and lock. Add target_address for a direct blank-workspace import and explicitly confirm only a speculative CV create."}
+	case input.Phase == "upload" && response.Status == "awaiting_agent_upload":
+		args["phase"], args["configuration_version_id"] = "status", refs.ConfigurationVersionID
+		response.Continuation = &importContinuation{NextPhase: "status", Arguments: args, Precondition: "Agent directly PUTs the reviewed complete archive to execution.upload_url before polling. Never put that URL in a persistent ledger or continuation."}
+	case input.Phase == "plan" && response.Status == "pending":
+		args["phase"], args["configuration_version_id"], args["run_id"] = "status", refs.ConfigurationVersionID, refs.RunID
+		if refs.TargetAddress != "" {
+			args["target_address"] = refs.TargetAddress
+		}
+		response.Continuation = &importContinuation{NextPhase: "status", Arguments: args, Precondition: "Poll this exact CV/Run pair. The Run is plan-only and no resource has been imported into persisted state."}
+	case input.Phase == "status" && response.Status == "pending":
+		args["phase"], args["configuration_version_id"], args["run_id"] = "status", refs.ConfigurationVersionID, refs.RunID
+		if refs.TargetAddress != "" {
+			args["target_address"] = refs.TargetAddress
+		}
+		response.Continuation = &importContinuation{NextPhase: "status", Arguments: args, Precondition: "Read this same CV/Run pair again; do not create another Run merely because it is pending."}
+	case input.Phase == "status" && response.Status == "ready_for_plan":
+		args["phase"], args["configuration_version_id"] = "plan", refs.ConfigurationVersionID
+		response.Continuation = &importContinuation{NextPhase: "plan", Arguments: args, RequiredInputs: []string{"query_run_id", "selections", "confirm_speculative_run"}, Precondition: "Incomplete call: bring the reviewed selection and target_address for an import, plus baseline_cv_id/baseline_state_id/baseline_state_serial for existing workspaces or schema_cv_id/schema_run_id when applicable. Omit target_address only for an optional provider-schema probe. This CV read cannot prove which selection created the archive; reconcile uncertain Run creates before POST."}
+	case input.Phase == "status" && response.Status == "awaiting_agent_upload":
+		args["phase"], args["configuration_version_id"] = "status", refs.ConfigurationVersionID
+		response.Continuation = &importContinuation{NextPhase: "status", Arguments: args, Precondition: "Use the original upload URL to PUT the agent-owned archive before polling. The URL cannot be reacquired from this CV status response."}
+	}
 }
 
 func importInputName(value string) bool {
@@ -293,6 +399,7 @@ func prepareImportFromAPIs(ctx context.Context, c *tfe.Client, input importPrepa
 		}
 		if input.SchemaCVID == "" {
 			result.Status, result.Stage = "ready_for_authoring", "blank_workspace"
+			result.AgentInstructions = importBlankWorkspaceInstructions
 			result.ValidationStatus = "plan_validation_pending"
 			result.EvidenceStatus = "selected_query_candidate_only; managed_schema_not_verified; configuration_not_validated"
 			result.Notes = append(result.Notes, "No destination provider schema exists in this empty workspace. The agent must validate its proposed provider configuration, resource and import blocks locally; the speculative plan establishes runtime facts.")
