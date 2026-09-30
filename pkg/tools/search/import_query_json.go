@@ -14,6 +14,8 @@ import (
 
 const maxImportEvidenceBytes = 4 * 1024 * 1024
 const maxImportSchemaBytes = 32 * 1024 * 1024
+const maxImportEvidenceDepth = 32
+const maxImportSchemaDepth = 64
 
 type importEvidenceError struct{ Code string }
 
@@ -51,11 +53,18 @@ func decodeImportEvidenceJSONLimit(raw []byte, target any, limit int) error {
 	if len(raw) > limit {
 		return importEvidenceFailure("evidence_size_limit")
 	}
+	maxDepth := maxImportEvidenceDepth
+	// Real provider schema artifacts contain deeply nested blocks (the AWS
+	// 6.66.0 artifact reaches depth 50). Keep ordinary query evidence at the
+	// tighter limit while still bounding schema and plan JSON traversal.
+	if limit == maxImportSchemaBytes {
+		maxDepth = maxImportSchemaDepth
+	}
 	d := json.NewDecoder(bytes.NewReader(raw))
 	d.UseNumber()
 	var walk func(int) error
 	walk = func(depth int) error {
-		if depth > 32 {
+		if depth > maxDepth {
 			return importEvidenceFailure("evidence_depth_limit")
 		}
 		token, err := d.Token()

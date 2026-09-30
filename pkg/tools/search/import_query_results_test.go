@@ -493,6 +493,29 @@ func TestImportPreparationReturnsCompleteSelectedSchema(t *testing.T) {
 	assert.Equal(t, importFixtureInput(t).Selections[0].CandidateID, result.Selection.CandidateID)
 }
 
+func TestImportPreparationAcceptsDeepUnselectedProviderSchema(t *testing.T) {
+	f := importBackendFixture(t)
+	var artifact map[string]any
+	require.NoError(t, json.Unmarshal(f.responses["/schema-download"], &artifact))
+	providers := artifact["provider_schemas"].(map[string]any)
+	resources := providers["registry.terraform.io/hashicorp/aws"].(map[string]any)["resource_schemas"].(map[string]any)
+	var nested any = "unselected"
+	for range 45 {
+		nested = map[string]any{"block_types": nested}
+	}
+	resources["aws_unselected_deep"] = map[string]any{"version": 1, "block": nested}
+	var err error
+	f.responses["/schema-download"], err = json.Marshal(artifact)
+	require.NoError(t, err)
+
+	result := prepareImportFromAPIs(context.Background(), f.client, importFixtureInput(t))
+	require.Equal(t, "prepared", result.Status, result.Diagnostics)
+	assert.Equal(t, "supported", result.ManagedTypeSupport)
+	encoded, err := json.Marshal(result)
+	require.NoError(t, err)
+	assert.NotContains(t, string(encoded), "unselected")
+}
+
 func TestImportSchemaPreparationIndependentOfUploadEligibility(t *testing.T) {
 	for _, mode := range []string{"remote", "agent", "local"} {
 		t.Run(mode, func(t *testing.T) {
