@@ -59,7 +59,7 @@ func GetStateVersionFunc(ctx context.Context, request *mcp.CallToolRequest, inpu
 
 	tfeClient, err := client.GetTfeClient(ctx, client.SessionIDFromRequest(request))
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, fmt.Errorf("getting Terraform client: %w", err)
 	}
 
 	var sv *tfe.StateVersion

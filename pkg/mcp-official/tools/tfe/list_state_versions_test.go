@@ -64,6 +64,28 @@ func TestListStateVersionsParameterValidation(t *testing.T) {
 	}
 }
 
+func TestListStateVersionsFunc_RequiresNames(t *testing.T) {
+	tests := []struct {
+		name      string
+		input     ListStateVersionsArguments
+		wantError string
+	}{
+		{name: "empty organization", input: ListStateVersionsArguments{TerraformOrgName: "", WorkspaceName: "my-workspace"}, wantError: "terraform_org_name must not be blank"},
+		{name: "whitespace-only organization", input: ListStateVersionsArguments{TerraformOrgName: "   ", WorkspaceName: "my-workspace"}, wantError: "terraform_org_name must not be blank"},
+		{name: "empty workspace", input: ListStateVersionsArguments{TerraformOrgName: "my-org", WorkspaceName: ""}, wantError: "workspace_name must not be blank"},
+		{name: "whitespace-only workspace", input: ListStateVersionsArguments{TerraformOrgName: "my-org", WorkspaceName: "   "}, wantError: "workspace_name must not be blank"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, _, err := ListStateVersionsFunc(t.Context(), nil, tt.input)
+
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), tt.wantError)
+		})
+	}
+}
+
 func TestListStateVersionsOutputSchema(t *testing.T) {
 	tool := ListStateVersionsTool()
 	schema, ok := tool.OutputSchema.(*jsonschema.Schema)
