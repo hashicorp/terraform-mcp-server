@@ -4,45 +4,17 @@
 package main
 
 import (
-	"context"
-	"encoding/json"
 	"fmt"
-	"io"
 	stdlog "log"
-	"log/slog"
-	"net/http"
-	"os"
-	"path"
-	"strings"
-	"time"
 
-	"github.com/hashicorp/terraform-mcp-server/pkg/client"
-	"github.com/hashicorp/terraform-mcp-server/pkg/instana"
-	"github.com/hashicorp/terraform-mcp-server/pkg/instructions"
 	"github.com/hashicorp/terraform-mcp-server/pkg/logging"
-	mcpofficial "github.com/hashicorp/terraform-mcp-server/pkg/mcp-official"
-	"github.com/hashicorp/terraform-mcp-server/pkg/mcp-official/tools/middleware"
+	mcpmark3labs "github.com/hashicorp/terraform-mcp-server/pkg/mcp-mark3labs"
 	"github.com/hashicorp/terraform-mcp-server/pkg/otelmetrics"
-	"github.com/hashicorp/terraform-mcp-server/pkg/resources"
-	"github.com/hashicorp/terraform-mcp-server/pkg/tools"
 	"github.com/hashicorp/terraform-mcp-server/pkg/toolsets"
 	"github.com/hashicorp/terraform-mcp-server/version"
-	instanasdk "github.com/instana/go-sensor"
-	"github.com/mark3labs/mcp-go/server"
-	"github.com/modelcontextprotocol/go-sdk/mcp"
-	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
-	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 )
-
-type healthResponse struct {
-	Status    string `json:"status"`
-	Service   string `json:"service"`
-	Transport string `json:"transport"`
-	Endpoint  string `json:"endpoint"`
-	Version   string `json:"version"`
-}
 
 var (
 	rootCmd = &cobra.Command{
@@ -71,7 +43,7 @@ var (
 
 			enabledToolsets := getToolsetsFromCmd(cmd.Root(), logger)
 
-			if err := runStdioServer(logger, enabledToolsets); err != nil {
+			if err := mcpmark3labs.RunStdioServer(logger, enabledToolsets); err != nil {
 				stdlog.Fatal("failed to run stdio server:", err)
 			}
 		},
@@ -121,7 +93,7 @@ var (
 			metricsConfig, shutdownMetrics := otelmetrics.Setup(logger)
 			defer shutdownMetrics()
 
-			if err := runHTTPServer(logger, host, port, endpointPath, heartbeatInterval, enabledToolsets, metricsConfig, organizationAllowlist); err != nil {
+			if err := mcpmark3labs.RunHTTPServer(logger, host, port, endpointPath, heartbeatInterval, enabledToolsets, metricsConfig, organizationAllowlist, rootCmd); err != nil {
 				stdlog.Fatal("failed to run streamableHTTP server:", err)
 			}
 		},
@@ -170,270 +142,4 @@ func init() {
 
 func initConfig() {
 	viper.AutomaticEnv()
-}
-
-// registerToolsAndResources registers tools and resources with the MCP server
-func registerToolsAndResources(hcServer *server.MCPServer, logger *log.Logger, filter toolsets.ToolFilter) {
-	tools.RegisterTools(hcServer, logger, filter)
-	resources.RegisterResources(hcServer, logger)
-	resources.RegisterResourceTemplates(hcServer, logger)
-}
-
-func serverInit(ctx context.Context, hcServer *server.MCPServer, logger *log.Logger) error {
-	stdioServer := server.NewStdioServer(hcServer)
-	stdLogger := stdlog.New(logger.Writer(), "stdioserver", 0)
-	stdioServer.SetErrorLogger(stdLogger)
-
-	// Start listening for messages
-	errC := make(chan error, 1)
-	go func() {
-		in, out := io.Reader(os.Stdin), io.Writer(os.Stdout)
-		errC <- stdioServer.Listen(ctx, in, out)
-	}()
-
-	_, _ = fmt.Fprintf(os.Stderr, "Terraform MCP Server running on stdio\n")
-
-	// Wait for shutdown signal
-	select {
-	case <-ctx.Done():
-		logger.Infof("shutting down server...")
-	case err := <-errC:
-		if err != nil {
-			return fmt.Errorf("error running server: %w", err)
-		}
-	}
-
-	return nil
-}
-
-func streamableHTTPServerInit(ctx context.Context, hcServer *server.MCPServer, logger *log.Logger, host string, port string, endpointPath string, heartbeatInterval time.Duration, organizationAllowlist []string, filter toolsets.ToolFilter, rateLimiter *client.RateLimitMiddleware, metricsConfig client.MetricsConfig) error {
-	// Ensure endpoint path starts with /
-	endpointPath = path.Join("/", endpointPath)
-	var handler http.Handler
-
-	// Initialize the Instana collector if enabled (nil when disabled).
-	instanaCollector := instana.Setup(logger)
-
-	// Create StreamableHTTP server which implements the new streamable-http transport
-	// This is the modern MCP transport that supports both direct HTTP responses and SSE streams
-	opts := []server.StreamableHTTPOption{
-		server.WithEndpointPath(endpointPath), // Default MCP endpoint path
-		server.WithStreamableHTTPLogger(logging.WrapLogrus(logger)),
-	}
-
-	// Load TLS configuration
-	tlsConfig, err := client.GetTLSConfigFromEnv()
-	if err != nil {
-		return fmt.Errorf("TLS configuration error: %w", err)
-	}
-	if tlsConfig != nil {
-		opts = append(opts, server.WithTLSCert(tlsConfig.CertFile, tlsConfig.KeyFile))
-	}
-
-	// Log the endpoint path being used
-	logger.Infof("Using endpoint path: %s", endpointPath)
-
-	// Check if stateless mode is enabled
-	isStateless := shouldUseStatelessMode()
-	opts = append(opts, server.WithStateLess(isStateless))
-	logger.Infof("Running with stateless mode: %v", isStateless)
-
-	// Configure heartbeat interval if enabled
-	if heartbeatInterval > 0 {
-		opts = append(opts, server.WithHeartbeatInterval(heartbeatInterval))
-		logger.Infof("HTTP heartbeat enabled with interval: %v", heartbeatInterval)
-	}
-
-	baseStreamableServer := server.NewStreamableHTTPServer(hcServer, opts...)
-
-	// Load CORS configuration
-	corsConfig := client.LoadCORSConfigFromEnv()
-
-	// Log CORS configuration
-	logger.Infof("CORS Mode: %s", corsConfig.Mode)
-	if len(corsConfig.AllowedOrigins) > 0 {
-		logger.Infof("Allowed Origins: %s", strings.Join(corsConfig.AllowedOrigins, ", "))
-	} else if corsConfig.Mode == "strict" {
-		logger.Warnf("No allowed origins configured in strict mode. All cross-origin requests will be rejected.")
-	} else if corsConfig.Mode == "development" {
-		logger.Infof("Development mode: localhost origins are automatically allowed")
-	} else if corsConfig.Mode == "disabled" {
-		logger.Warnf("CORS validation is disabled. This is not recommended for production.")
-	}
-
-	mux := http.NewServeMux()
-
-	// Apply middleware
-	streamableServer := client.OrganizationAllowlistMiddleware(organizationAllowlist, logger)(baseStreamableServer)
-	streamableServer = client.TerraformContextMiddleware(logger)(streamableServer)
-	streamableServer = client.NewSecurityHandler(streamableServer, corsConfig.AllowedOrigins, corsConfig.Mode, logger)
-
-	// Handle the /mcp endpoint with the streamable server (with security wrapper)
-	mux.Handle(endpointPath, streamableServer)
-	mux.Handle(endpointPath+"/", streamableServer)
-
-	// Create the official go-sdk streamable server
-	if enableOfficialSDK := os.Getenv("TF_X_OFFICIAL_SDK_ENABLED"); enableOfficialSDK == "true" {
-		logger.Info("TF_X_OFFICIAL_SDK_ENABLED set to true in env, enabling the official mcp go-sdk server")
-		logFile, err := rootCmd.PersistentFlags().GetString("log-file")
-		if err != nil {
-			return fmt.Errorf("failed to get log file: %w", err)
-		}
-		slogLevel := logging.SlogLevelFromCommand(rootCmd)
-		slogFormat := logging.FormatFromCommand(rootCmd)
-		officialLogger, officialLogFile, err := logging.NewSlogLogger(logFile, slogLevel, slogFormat)
-		if err != nil {
-			return fmt.Errorf("failed to initialize official MCP slog logger: %w", err)
-		}
-		if officialLogFile != nil {
-			defer func() {
-				if err := officialLogFile.Close(); err != nil {
-					logger.Errorf("Failed to close official MCP log file at %s: %v", logFile, err)
-				}
-			}()
-		}
-
-		officialLogger = officialLogger.With("component", "mcp-official")
-		officialStreamableServer := getOfficialStreamableServer(ctx, heartbeatInterval, isStateless, corsConfig, logger, officialLogger, organizationAllowlist, filter, rateLimiter, metricsConfig)
-		// Handle the /mcp endpoint with the official go-sdk streamable server (with security wrapper)
-		mux.Handle(endpointPath+"/official", officialStreamableServer)
-		mux.Handle(endpointPath+"/official/", officialStreamableServer)
-	}
-
-	if redirectURL := os.Getenv("MCP_REDIRECT_ROOT_URL"); redirectURL != "" {
-		logger.Infof("Requests to `/` will be redirected to %s", redirectURL)
-		// handle root direct if it's configured
-		mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-			http.Redirect(w, r, redirectURL, http.StatusSeeOther)
-		})
-	}
-
-	// Add health check endpoint
-	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
-		response, err := json.Marshal(healthResponse{
-			Status:    "ok",
-			Service:   "terraform-mcp-server",
-			Transport: "streamable-http",
-			Endpoint:  endpointPath,
-			Version:   version.GetHumanVersion(),
-		})
-		if err != nil {
-			logger.Errorf("Failed to marshal health response: %v", err)
-			http.Error(w, "internal server error", http.StatusInternalServerError)
-			return
-		}
-		w.Header().Set("Content-Type", "application/json")
-		w.Write(response)
-	})
-
-	addr := fmt.Sprintf("%s:%s", host, port)
-	handler = mux
-	if enableOtelMetrics := os.Getenv("OTEL_METRICS_ENABLED"); enableOtelMetrics == "true" {
-		// Add http server instrumentation for standard server metrics
-		handler = otelhttp.NewHandler(handler, "terraform-mcp-server")
-	}
-	if instanaCollector != nil {
-		// Wrapping the handler so incoming HTTP requests will be able to be traced by Instana
-		handler = instanasdk.TracingHandlerFunc(instanaCollector, "", handler.ServeHTTP)
-	}
-
-	httpServer := &http.Server{
-		Addr:              addr,
-		Handler:           handler,
-		ReadTimeout:       30 * time.Second,
-		ReadHeaderTimeout: 30 * time.Second,
-		WriteTimeout:      30 * time.Second,
-		IdleTimeout:       60 * time.Second,
-	}
-
-	if tlsConfig != nil {
-		httpServer.TLSConfig = tlsConfig.Config
-		logger.Infof("TLS enabled with certificate: %s", tlsConfig.CertFile)
-	} else {
-		if !client.IsLocalHost(host) {
-			return fmt.Errorf("TLS is required for non-localhost binding (%s). Set MCP_TLS_CERT_FILE and MCP_TLS_KEY_FILE environment variables", host)
-		}
-		logger.Warnf("TLS is disabled on StreamableHTTP server; this is not recommended for production")
-	}
-
-	// Start server in goroutine
-	errC := make(chan error, 1)
-	go func() {
-		logger.Infof("Starting StreamableHTTP server on %s%s", addr, endpointPath)
-		if tlsConfig != nil {
-			errC <- httpServer.ListenAndServeTLS(tlsConfig.CertFile, tlsConfig.KeyFile)
-		} else {
-			errC <- httpServer.ListenAndServe()
-		}
-	}()
-
-	// Wait for shutdown signal
-	select {
-	case <-ctx.Done():
-		logger.Infof("Shutting down StreamableHTTP server...")
-		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		return httpServer.Shutdown(shutdownCtx)
-	case err := <-errC:
-		if err != nil && err != http.ErrServerClosed {
-			return fmt.Errorf("StreamableHTTP server error: %w", err)
-		}
-	}
-
-	return nil
-}
-
-func getOfficialStreamableServer(ctx context.Context, heartbeatInterval time.Duration, isStateless bool, corsConfig client.CORSConfig, logger *log.Logger, officialLogger *slog.Logger, organizationAllowlist []string, filter toolsets.ToolFilter, rateLimiter *client.RateLimitMiddleware, metricsConfig client.MetricsConfig) http.Handler {
-	officialLogger.Info("Creating a go-sdk StreamableHTTP server...")
-
-	// Metrics is added first so it wraps every other middleware, measuring
-	// the full round trip and always recording the result — the go-sdk
-	// equivalent of AddBeforeCallTool/AddAfterCallTool wrapping the whole
-	// mark3labs middleware chain in attachMetricsHooks
-	middlewares := []mcp.Middleware{
-		middleware.Metrics(metricsConfig, logger),
-		middleware.RateLimit(rateLimiter),
-		middleware.ToolLogging(officialLogger),
-	}
-	if len(organizationAllowlist) > 0 {
-		middlewares = append(middlewares, middleware.OrganizationAllowlist(organizationAllowlist, officialLogger))
-	}
-	serverOpts := []mcpofficial.Option{
-		mcpofficial.WithMiddlewares(middlewares...),
-		// Runs once per session: creates the session's TFE/HTTP clients right
-		// away, then waits in the background for the client to disconnect so we
-		// can clean up (cached clients, rate-limit state, dynamic tool registry).
-		// This replaces the old session-registration/cleanup hooks so its basically
-		// the go-sdk equivalent of AddOnRegisterSession + AddOnUnregisterSession
-		// (and the BeforeListTools/BeforeCallTool safety net)
-		mcpofficial.WithOnSession(func(ctx context.Context, session *mcp.ServerSession) {
-			if session == nil {
-				return
-			}
-			sessionID := session.ID()
-			client.NewSessionHandler(ctx, sessionID, logger)
-			go func() {
-				_ = session.Wait()
-				client.EndSessionHandler(context.Background(), sessionID, rateLimiter, logger)
-			}()
-		}),
-	}
-	hcServer := mcpofficial.NewServer(version.Version, instructions.Text, heartbeatInterval, officialLogger, filter, serverOpts...)
-
-	opts := &mcp.StreamableHTTPOptions{
-		Stateless:             isStateless,
-		Logger:                officialLogger,
-		CrossOriginProtection: nil, // disables the SDK's built-in cross-origin protection entirely. CORS already enforced by client.NewSecurityHandler below.
-	}
-
-	// Create the base MCP handler
-	mcpHandler := mcp.NewStreamableHTTPHandler(func(r *http.Request) *mcp.Server {
-		return hcServer
-	}, opts)
-
-	// Create a security wrappers around the streamable server
-	streamableServer := client.OrganizationAllowlistMiddleware(organizationAllowlist, logger)(mcpHandler)
-	streamableServer = client.TerraformContextMiddleware(logger)(streamableServer)
-	streamableServer = client.NewSecurityHandler(streamableServer, corsConfig.AllowedOrigins, corsConfig.Mode, logger)
-	return streamableServer
 }
