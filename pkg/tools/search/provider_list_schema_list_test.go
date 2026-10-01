@@ -11,7 +11,9 @@ import (
 	"testing"
 
 	"github.com/hashicorp/go-tfe"
+	"github.com/hashicorp/terraform-mcp-server/pkg/client"
 	"github.com/mark3labs/mcp-go/mcp"
+	"github.com/mark3labs/mcp-go/server"
 	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -395,6 +397,78 @@ func TestProviderListSchemaList_RejectsMissingScopeBeforeRequest(t *testing.T) {
 	require.True(t, ok, "expected TextContent")
 	assert.Contains(t, tc.Text, "organization_name and workspace_name are required")
 	assert.Contains(t, tc.Text, "ask the user")
+}
+
+func TestProviderListSchemaList_ValidatesWorkspaceBeforeProviderRequest(t *testing.T) {
+	tests := []struct {
+		name              string
+		workspaceStatus   int
+		wantProviderCalls int
+		wantError         string
+	}{
+		{
+			name:              "valid workspace proceeds to provider endpoint",
+			workspaceStatus:   http.StatusOK,
+			wantProviderCalls: 1,
+		},
+		{
+			name:            "failed workspace read stops before provider endpoint",
+			workspaceStatus: http.StatusNotFound,
+			wantError:       `failed to read workspace "test-workspace" in organization "test-org"`,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			providerCalls := 0
+			tfeServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "application/vnd.api+json")
+				switch r.URL.Path {
+				case "/api/v2/organizations/test-org/workspaces/test-workspace":
+					w.WriteHeader(test.workspaceStatus)
+					if test.workspaceStatus == http.StatusOK {
+						_, _ = w.Write([]byte(`{"data":{"id":"ws-test","type":"workspaces","attributes":{"name":"test-workspace"}}}`))
+					} else {
+						_, _ = w.Write([]byte(`{"errors":[{"status":"404","title":"not found"}]}`))
+					}
+				case "/api/v2/search/provider-versions":
+					providerCalls++
+					_, _ = w.Write([]byte(`{"data":[{"id":"hashicorp/aws/5.0.0","type":"provider-versions","attributes":{"namespace":"hashicorp","name":"aws","version":"5.0.0"}}]}`))
+				default:
+					w.WriteHeader(http.StatusNotFound)
+				}
+			}))
+			defer tfeServer.Close()
+
+			const token = "test-token"
+			sessionID := t.Name()
+			_, err := client.NewTfeClient(sessionID, tfeServer.URL, false, token, "", silentLogger())
+			require.NoError(t, err)
+			t.Cleanup(func() { client.DeleteTfeClient(sessionID) })
+			t.Setenv(client.TerraformToken, token)
+
+			mcpServer := new(server.MCPServer)
+			ctx := mcpServer.WithContext(context.Background(), server.NewInProcessSession(sessionID, nil))
+			request := mcp.CallToolRequest{Params: mcp.CallToolParams{Arguments: map[string]any{
+				"organization_name": "test-org",
+				"workspace_name":    "test-workspace",
+			}}}
+
+			result, err := providerListSchemaListHandler(ctx, request, silentLogger())
+
+			require.NoError(t, err)
+			require.NotNil(t, result)
+			assert.Equal(t, test.wantProviderCalls, providerCalls)
+			if test.wantError == "" {
+				assert.False(t, result.IsError)
+			} else {
+				require.True(t, result.IsError)
+				tc, ok := mcp.AsTextContent(result.Content[0])
+				require.True(t, ok, "expected TextContent")
+				assert.Contains(t, tc.Text, test.wantError)
+			}
+		})
+	}
 }
 
 // ── toolErrorf ────────────────────────────────────────────────────────────────

@@ -90,7 +90,7 @@ func providerListSchemaListHandler(ctx context.Context, request mcp.CallToolRequ
 		return toolErrorf(logger, "provider_list_schema_list", "failed to get Terraform client — ensure TFE_TOKEN and TFE_ADDRESS are configured: %v", err)
 	}
 	if _, err := tfeClient.Workspaces.Read(ctx, orgName, workspaceName); err != nil {
-		return toolErrorf(logger, "provider_list_schema_list", "workspace %q not found in organization %q: %v", workspaceName, orgName, err)
+		return toolErrorf(logger, "provider_list_schema_list", "failed to read workspace %q in organization %q: %v", workspaceName, orgName, err)
 	}
 
 	// ── Branch: list all providers ────────────────────────────────────────────
