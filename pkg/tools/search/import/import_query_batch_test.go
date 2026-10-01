@@ -1,7 +1,7 @@
 // Copyright IBM Corp. 2026
 // SPDX-License-Identifier: MPL-2.0
 
-package search
+package importworkflow
 
 import (
 	"context"
@@ -76,7 +76,7 @@ func TestImportBatchCandidatePlanCorrelation(t *testing.T) {
 	encoded, err := json.Marshal(done)
 	require.NoError(t, err)
 	assert.NotContains(t, string(encoded), "first-id", "do not expose raw import IDs")
-	schemaJSON, err := json.Marshal(ImportQueryResults(silentLogger(), nil).Tool.OutputSchema)
+	schemaJSON, err := json.Marshal(importTestTool(silentLogger()).Tool.OutputSchema)
 	require.NoError(t, err)
 	var schema jsonschema.Schema
 	require.NoError(t, json.Unmarshal(schemaJSON, &schema))

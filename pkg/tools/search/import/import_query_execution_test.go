@@ -1,7 +1,7 @@
 // Copyright IBM Corp. 2026
 // SPDX-License-Identifier: MPL-2.0
 
-package search
+package importworkflow
 
 import (
 	"context"
@@ -82,7 +82,7 @@ func callImportPhase(t *testing.T, input importPrepareInput) importPreparation {
 	require.NoError(t, err)
 	var args map[string]any
 	require.NoError(t, json.Unmarshal(raw, &args))
-	res, err := ImportQueryResults(silentLogger(), nil).Handler(context.Background(), mcp.CallToolRequest{Params: mcp.CallToolParams{Arguments: args}})
+	res, err := importTestTool(silentLogger()).Handler(context.Background(), mcp.CallToolRequest{Params: mcp.CallToolParams{Arguments: args}})
 	require.NoError(t, err)
 	packet, ok := res.StructuredContent.(importPreparation)
 	require.True(t, ok)
@@ -160,7 +160,7 @@ func TestImportBlankPhaseInputGuidanceBeforeCreates(t *testing.T) {
 }
 
 func TestImportPhaseDescriptionsSeparateExistingAndBlankInputs(t *testing.T) {
-	tool := ImportQueryResults(silentLogger(), nil).Tool
+	tool := importTestTool(silentLogger()).Tool
 	assert.Contains(t, tool.Description, "OMITS target_address")
 	assert.Contains(t, tool.Description, "requires that same baseline")
 	assert.Contains(t, tool.Description, "provider-only schema probe")
@@ -248,7 +248,7 @@ func TestImportStatelessCVRunAndPlanFacts(t *testing.T) {
 	encoded, err := json.Marshal(done)
 	require.NoError(t, err)
 	assert.NotContains(t, string(encoded), "MUST-NOT-LEAK")
-	schemaJSON, err := json.Marshal(ImportQueryResults(silentLogger(), nil).Tool.OutputSchema)
+	schemaJSON, err := json.Marshal(importTestTool(silentLogger()).Tool.OutputSchema)
 	require.NoError(t, err)
 	var schema jsonschema.Schema
 	require.NoError(t, json.Unmarshal(schemaJSON, &schema))

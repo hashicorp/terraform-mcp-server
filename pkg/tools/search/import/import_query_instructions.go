@@ -1,7 +1,7 @@
 // Copyright IBM Corp. 2026
 // SPDX-License-Identifier: MPL-2.0
 
-package search
+package importworkflow
 
 // Normal preparation supplies complete selected schemas; the calling agent owns
 // their interpretation. These instructions do not assert HCL or runtime validation.

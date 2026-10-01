@@ -1,7 +1,7 @@
 // Copyright IBM Corp. 2026
 // SPDX-License-Identifier: MPL-2.0
 
-package search
+package importworkflow
 
 import (
 	"bytes"
@@ -245,9 +245,13 @@ func parseImportDiscovery(data []byte, queryID string, providers map[string]work
 			continue
 		}
 		var record struct {
-			Type       string                `json:"type"`
-			Found      *importDiscoveryFound `json:"list_resource_found"`
-			Complete   *queryListCompletion  `json:"list_complete"`
+			Type     string                `json:"type"`
+			Found    *importDiscoveryFound `json:"list_resource_found"`
+			Complete *struct {
+				Address      string `json:"address"`
+				ResourceType string `json:"resource_type"`
+				Total        int    `json:"total"`
+			} `json:"list_complete"`
 			Diagnostic *struct {
 				Severity string `json:"severity"`
 			} `json:"diagnostic"`
@@ -410,4 +414,15 @@ func importDiagnosticCode(err error) string {
 		return evidence.Code
 	}
 	return "backend_evidence_unavailable"
+}
+
+// ReadDiscovery supplies the bounded candidate response to get_query_summary.
+// The concrete type stays private to the import workflow.
+func ReadDiscovery(ctx context.Context, c *tfe.Client, queryID string) (any, error) {
+	return readImportDiscovery(ctx, c, queryID)
+}
+
+// DiagnosticCode preserves the Search tool's existing evidence error mapping.
+func DiagnosticCode(err error) string {
+	return importDiagnosticCode(err)
 }

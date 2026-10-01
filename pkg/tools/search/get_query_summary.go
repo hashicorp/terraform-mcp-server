@@ -14,6 +14,7 @@ import (
 
 	"github.com/hashicorp/go-tfe"
 	"github.com/hashicorp/terraform-mcp-server/pkg/client"
+	importworkflow "github.com/hashicorp/terraform-mcp-server/pkg/tools/search/import"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 	log "github.com/sirupsen/logrus"
@@ -91,9 +92,9 @@ func getQuerySummaryHandler(ctx context.Context, request mcp.CallToolRequest, lo
 		if include {
 			ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 			defer cancel()
-			discovery, err := readImportDiscovery(ctx, tfeClient, strings.TrimSpace(queryRunID))
+			discovery, err := importworkflow.ReadDiscovery(ctx, tfeClient, strings.TrimSpace(queryRunID))
 			if err != nil {
-				return mcp.NewToolResultError(importDiagnosticCode(err)), nil
+				return mcp.NewToolResultError(importworkflow.DiagnosticCode(err)), nil
 			}
 			encoded, err := json.Marshal(discovery)
 			if err != nil || len(encoded) > 64*1024 {

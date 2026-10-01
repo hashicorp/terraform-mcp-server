@@ -1,7 +1,7 @@
 // Copyright IBM Corp. 2026
 // SPDX-License-Identifier: MPL-2.0
 
-package search
+package importworkflow
 
 import (
 	"context"
@@ -21,7 +21,7 @@ func TestImportConfigurationHandoffDoesNotDownloadArchive(t *testing.T) {
 	f := importBackendFixture(t)
 	t.Setenv(client.TerraformAddress, f.url)
 	t.Setenv(client.TerraformToken, "fixture-token")
-	tool := ImportQueryResults(silentLogger(), nil)
+	tool := importTestTool(silentLogger())
 	args := map[string]any{"phase": "context", "organization_name": "fixture-org", "workspace_name": "import-root"}
 	result, err := tool.Handler(context.Background(), mcp.CallToolRequest{Params: mcp.CallToolParams{Arguments: args}})
 	require.NoError(t, err)
