@@ -312,9 +312,57 @@ func TestFetchProviderSchema_Success(t *testing.T) {
 	assert.Equal(t, "hashicorp", out["namespace"])
 	assert.Equal(t, "aws", out["name"])
 	assert.Equal(t, "5.0.0", out["version"])
+	assert.Equal(t, "catalog_index_and_detail", out["identity_source"])
 	assert.NotNil(t, out["list_resource_schemas"])
 	assert.Contains(t, out["note"].(string), "generate_query_configuration")
 	assert.Contains(t, out["note"].(string), "exact resource type keys")
+}
+
+func TestFetchProviderSchemaIncompleteAndMismatchedIdentity(t *testing.T) {
+	for _, tc := range []struct {
+		name, attributes, source string
+		invalid                  bool
+	}{
+		{"missing detail identity", `{"list-resource-schemas":{"aws_instance":{}}}`, "catalog_index; detail identity incomplete", false},
+		{"partial matching detail identity", `{"namespace":"hashicorp","list-resource-schemas":{"aws_instance":{}}}`, "catalog_index; detail identity incomplete", false},
+		{"different detail release", `{"namespace":"hashicorp","name":"aws","version":"6.0.0","list-resource-schemas":{"aws_instance":{}}}`, "", true},
+		{"different detail name", `{"namespace":"hashicorp","name":"google","version":"5.0.0","list-resource-schemas":{"aws_instance":{}}}`, "", true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.URL.Path == "/api/v2/search/provider-versions" {
+					_, _ = w.Write([]byte(`{"data":[{"attributes":{"namespace":"hashicorp","name":"aws","version":"5.0.0"}}]}`))
+					return
+				}
+				if r.URL.Path == "/api/v2/ping" {
+					w.WriteHeader(http.StatusNoContent)
+					return
+				}
+				assert.Equal(t, "/api/v2/search/provider-versions/hashicorp/aws/5.0.0", r.URL.Path)
+				_, _ = w.Write([]byte(`{"data":{"attributes":` + tc.attributes + `}}`))
+			}))
+			defer srv.Close()
+			tfeClient := newProviderListTFEClient(t, srv)
+			version, err := discoverProviderVersion(context.Background(), tfeClient, "fixture-org", "hashicorp", "aws")
+			require.NoError(t, err)
+			result, err := fetchProviderSchema(context.Background(), tfeClient, "fixture-org", "hashicorp", "aws", version, silentLogger())
+			require.NoError(t, err)
+			if tc.invalid {
+				assert.True(t, result.IsError)
+				return
+			}
+			require.False(t, result.IsError)
+			text, ok := mcp.AsTextContent(result.Content[0])
+			require.True(t, ok)
+			var out map[string]any
+			require.NoError(t, json.Unmarshal([]byte(text.Text), &out))
+			assert.Equal(t, "hashicorp", out["namespace"])
+			assert.Equal(t, "aws", out["name"])
+			assert.Equal(t, "5.0.0", out["version"])
+			assert.Equal(t, tc.source, out["identity_source"])
+			assert.Contains(t, out["note"], `provider_version="5.0.0"`)
+		})
+	}
 }
 
 func TestFetchProviderSchema_NotInCatalog(t *testing.T) {
@@ -482,6 +530,8 @@ func TestProviderListSchemaList_ValidatesWorkspaceBeforeProviderRequest(t *testi
 			require.NoError(t, err)
 			t.Cleanup(func() { client.DeleteTfeClient(sessionID) })
 			t.Setenv(client.TerraformToken, token)
+			t.Setenv(client.TerraformAddress, tfeServer.URL)
+			t.Setenv(client.TerraformSkipTLSVerify, "false")
 
 			mcpServer := new(server.MCPServer)
 			ctx := mcpServer.WithContext(context.Background(), server.NewInProcessSession(sessionID, nil))

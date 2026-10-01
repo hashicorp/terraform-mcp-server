@@ -169,7 +169,7 @@ func listSupportedProviders(ctx context.Context, tfeClient *tfe.Client, orgName 
 
 	out, err := json.MarshalIndent(map[string]any{
 		"supported_providers": summaries,
-		"note":                "Call provider_list_schema_list again with the same organization_name and workspace_name, plus provider_namespace and provider_name (and optionally provider_version), to fetch the full list_resource_schemas for a specific provider.",
+		"note":                "Call provider_list_schema_list again with the same organization_name and workspace_name, plus provider_namespace and provider_name, to fetch the catalog-selected version's full list_resource_schemas. Do not supply a provider version.",
 	}, "", "  ")
 	if err != nil {
 		return toolErrorf(logger, "provider_list_schema_list", "failed to marshal provider list: %v", err)
@@ -232,20 +232,32 @@ func fetchProviderSchema(ctx context.Context, tfeClient *tfe.Client, orgName, na
 			namespace, name, version,
 		)
 	}
+	// The scoped catalog index selected this exact provider release. Some detail
+	// responses omit identity attributes; use the index values, but never hide a
+	// contradiction in any identity attribute that the detail did supply.
+	attrs := resp.Data.Attributes
+	if attrs.Namespace != "" && !strings.EqualFold(attrs.Namespace, namespace) || attrs.Name != "" && !strings.EqualFold(attrs.Name, name) || attrs.Version != "" && attrs.Version != version {
+		return toolErrorf(logger, "provider_list_schema_list", "provider schema detail identity disagrees with catalog selection %s/%s@%s; do not use this schema", namespace, name, version)
+	}
+	metadataSource := "catalog_index_and_detail"
+	if attrs.Namespace == "" || attrs.Name == "" || attrs.Version == "" {
+		metadataSource = "catalog_index; detail identity incomplete"
+	}
 
 	out, err := json.MarshalIndent(map[string]any{
-		"namespace":             resp.Data.Attributes.Namespace,
-		"name":                  resp.Data.Attributes.Name,
-		"version":               resp.Data.Attributes.Version,
+		"namespace":             namespace,
+		"name":                  name,
+		"version":               version,
+		"identity_source":       metadataSource,
 		"list_resource_schemas": lrs,
 		"note": fmt.Sprintf(
 			"Pass list_resource_schemas to generate_query_configuration "+
 				"(with provider_namespace=%q, provider_name=%q, provider_version=%q) "+
 				"to get a full schema guide and example configuration. Use only exact resource type keys present in list_resource_schemas; "+
 				"ordinary managed resource names are not automatically supported list resources. Then pass the configuration with organization_name and workspace_name to execute_query.",
-			resp.Data.Attributes.Namespace,
-			resp.Data.Attributes.Name,
-			resp.Data.Attributes.Version,
+			namespace,
+			name,
+			version,
 		),
 	}, "", "  ")
 	if err != nil {

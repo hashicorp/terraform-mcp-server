@@ -25,6 +25,13 @@ type importPlannedResource struct {
 	ImportIDPresent bool     `json:"import_id_present"`
 }
 
+// Refresh drift is separate from planned resource_changes. Attribute values
+// remain in the detailed plan JSON, not in the compact status response.
+type importResourceDrift struct {
+	Address string   `json:"address"`
+	Actions []string `json:"actions"`
+}
+
 type importPlanFacts struct {
 	FormatVersion           string                  `json:"format_version"`
 	Selected                *importPlannedResource  `json:"selected,omitempty"`
@@ -37,6 +44,7 @@ type importPlanFacts struct {
 	OtherImportCount        int                     `json:"other_import_count"`
 	OutputChangeCount       int                     `json:"output_change_count"`
 	DriftCount              int                     `json:"drift_count"`
+	DriftEntries            []importResourceDrift   `json:"drift_entries"`
 	DeferredCount           int                     `json:"deferred_count"`
 	Truncated               bool                    `json:"truncated"`
 }
@@ -64,6 +72,14 @@ func importExecutionFailure(result importPreparation, code string) importPrepara
 	return result
 }
 
+// Input failures occur before either create POST. Keep the phase code for
+// existing callers, and add a field-level reason for the agent to repair.
+func importPhaseInputFailure(result importPreparation, code, fieldCode, guidance string) importPreparation {
+	result.Diagnostics = append(result.Diagnostics, code, fieldCode)
+	result.NextAction = guidance + " No CV or Run was created by this request."
+	return result
+}
+
 func createImportSpeculativeCV(ctx context.Context, c *tfe.Client, input importPrepareInput, logger *log.Logger) importPreparation {
 	result := importExecutionResult(input)
 	// With no baseline or schema-source IDs, the target address distinguishes
@@ -72,8 +88,20 @@ func createImportSpeculativeCV(ctx context.Context, c *tfe.Client, input importP
 	if input.BaselineCVID == "" && input.BaselineStateID == "" && input.BaselineSerial == 0 && input.SchemaCVID == "" && input.SchemaRunID == "" {
 		return createImportBlankCV(ctx, c, input, logger)
 	}
+	if input.TargetAddress != "" {
+		if input.SchemaRunID != "" {
+			return importPhaseInputFailure(result, "speculative_upload_input_invalid", "target_address_not_allowed_on_schema_upload", "Omit target_address on blank-workspace upload with bootstrap schema IDs; supply it later on the import plan.")
+		}
+		return importPhaseInputFailure(result, "speculative_upload_input_invalid", "target_address_not_allowed_on_existing_upload", "Omit target_address on existing-workspace upload; supply it later on the import plan after the reviewed archive is uploaded.")
+	}
+	if !input.ConfirmSpeculativeRun {
+		return importPhaseInputFailure(result, "speculative_upload_input_invalid", "confirm_speculative_run_required", "After review, set confirm_speculative_run=true to authorize only a speculative CV create.")
+	}
+	if input.SchemaRunID == "" && (input.BaselineCVID == "" || input.BaselineStateID == "") {
+		return importPhaseInputFailure(result, "speculative_upload_input_invalid", "baseline_ids_required", "Existing-workspace upload requires baseline_cv_id, baseline_state_id and baseline_state_serial from preparation; do not treat missing state as blank.")
+	}
 	if !input.ConfirmSpeculativeRun || input.ConfigurationVersionID != "" || input.RunID != "" || input.TargetAddress != "" || (input.SchemaRunID == "" && (!importInputName(input.BaselineCVID) || !importInputName(input.BaselineStateID))) || (input.SchemaRunID != "" && (input.BaselineCVID != "" || input.BaselineStateID != "" || input.BaselineSerial != 0)) {
-		return importExecutionFailure(result, "speculative_upload_input_invalid")
+		return importPhaseInputFailure(result, "speculative_upload_input_invalid", "upload_phase_fields_invalid", "Upload requires the verified baseline fields for an existing workspace OR bootstrap schema IDs for a blank workspace; omit configuration_version_id, run_id and target_address, and never mix baseline and schema IDs.")
 	}
 	w, err := c.Workspaces.Read(ctx, input.Organization, input.Workspace)
 	if err != nil {
@@ -90,7 +118,7 @@ func createImportSpeculativeCV(ctx context.Context, c *tfe.Client, input importP
 	if prepared.Status != "prepared" {
 		return prepared
 	}
-	if prepared.Baseline.ConfigurationVersionID != input.BaselineCVID || prepared.Baseline.StateVersionID != input.BaselineStateID || prepared.Baseline.StateSerial != input.BaselineSerial {
+	if prepared.Baseline.ConfigurationVersionID != input.BaselineCVID || prepared.Baseline.StateVersionID != input.BaselineStateID || (input.SchemaRunID == "" && (prepared.Baseline.StateSerial == nil || *prepared.Baseline.StateSerial != input.BaselineSerial)) {
 		return importExecutionFailure(result, "baseline_changed")
 	}
 	result.Execution = &importExecutionResponse{Stage: "cv_create_outcome_unknown"}
@@ -112,8 +140,8 @@ func createImportSpeculativeCV(ctx context.Context, c *tfe.Client, input importP
 	result.Execution.Stage = "awaiting_agent_upload"
 	result.Status, result.Stage = "awaiting_agent_upload", "upload"
 	result.Execution.UploadURL = cv.UploadURL
-	result.Execution.UploadInstructions = "PUT the complete agent-owned .tar.gz to upload_url with Content-Type: application/octet-stream; keep the URL secret. Poll status using the workspace and configuration_version_id. Never upload individual .tf files or use this CV for apply."
-	result.NextAction = "Agent uploads the complete archive directly; MCP has not read configuration or created a run."
+	result.Execution.UploadInstructions = "Retain this one-use upload_url securely until the client-local PUT of the complete agent-owned .tar.gz succeeds (Content-Type: application/octet-stream). Do not log or persist the URL. Poll status using the workspace and configuration_version_id. If the URL is lost, status cannot reacquire it: reconcile the pending CV before considering a new reviewed speculative CV; do not blindly create another. Never upload individual .tf files or use this CV for apply."
+	result.NextAction = "Agent uploads the complete archive directly; retain the one-use URL securely until transfer is confirmed. If it is lost, reconcile the pending CV before considering another reviewed create. MCP has not read configuration or created a run."
 	return result
 }
 
@@ -173,14 +201,26 @@ func createImportPlanRun(ctx context.Context, c *tfe.Client, input importPrepare
 	if input.BaselineCVID == "" && input.BaselineStateID == "" && input.BaselineSerial == 0 && input.SchemaCVID == "" && input.SchemaRunID == "" {
 		return createImportBlankRun(ctx, c, input, logger)
 	}
+	if !validImportTargetAddress(input.TargetAddress) {
+		return importPhaseInputFailure(result, "plan_input_invalid", "target_address_required_for_import_plan", "Provide a valid target_address for the reviewed resource/import block; only a blank-workspace provider-only schema probe omits it.")
+	}
+	if !input.ConfirmSpeculativeRun {
+		return importPhaseInputFailure(result, "plan_input_invalid", "confirm_speculative_run_required", "After review, set confirm_speculative_run=true to authorize only a CV-bound plan-only Run.")
+	}
+	if input.ConfigurationVersionID == "" {
+		return importPhaseInputFailure(result, "plan_input_invalid", "configuration_version_id_required", "Supply the uploaded speculative configuration_version_id returned by upload.")
+	}
+	if input.SchemaRunID == "" && (input.BaselineCVID == "" || input.BaselineStateID == "") {
+		return importPhaseInputFailure(result, "plan_input_invalid", "baseline_ids_required", "Existing-workspace plan requires baseline_cv_id, baseline_state_id and baseline_state_serial from preparation.")
+	}
 	if !input.ConfirmSpeculativeRun || input.RunID != "" || !validImportTargetAddress(input.TargetAddress) || (input.SchemaRunID == "" && (!importInputName(input.BaselineCVID) || !importInputName(input.BaselineStateID))) || (input.SchemaRunID != "" && (input.BaselineCVID != "" || input.BaselineStateID != "" || input.BaselineSerial != 0)) {
-		return importExecutionFailure(result, "plan_input_invalid")
+		return importPhaseInputFailure(result, "plan_input_invalid", "plan_phase_fields_invalid", "Use an uploaded CV ID, target_address, and verified baseline fields OR blank-workspace bootstrap schema IDs; omit run_id and never mix baseline and schema IDs.")
 	}
 	prepared := prepareImportFromAPIs(ctx, c, input)
 	if prepared.Status != "prepared" {
 		return prepared
 	}
-	if prepared.Baseline.ConfigurationVersionID != input.BaselineCVID || prepared.Baseline.StateVersionID != input.BaselineStateID || prepared.Baseline.StateSerial != input.BaselineSerial {
+	if prepared.Baseline.ConfigurationVersionID != input.BaselineCVID || prepared.Baseline.StateVersionID != input.BaselineStateID || (input.SchemaRunID == "" && (prepared.Baseline.StateSerial == nil || *prepared.Baseline.StateSerial != input.BaselineSerial)) {
 		return importExecutionFailure(result, "baseline_changed")
 	}
 	// The baseline is supplied by the agent and verified against current Atlas
@@ -260,7 +300,7 @@ func readImportExecutionStatus(ctx context.Context, c *tfe.Client, input importP
 				return importExecutionFailure(result, "execution_cv_unavailable")
 			}
 			result.Status, result.Stage = "awaiting_agent_upload", "status"
-			result.NextAction = "Use the original upload URL if still valid; otherwise reconcile the CV in Atlas. Poll by configuration_version_id after agent upload. No Run ID was supplied; this does not establish that a Run does not exist."
+			result.NextAction = "Use the original upload URL if still valid. If lost or expired, status cannot reacquire it: reconcile the pending CV in Atlas before considering another reviewed speculative CV; do not blindly create. Poll by configuration_version_id after agent upload. No Run ID was supplied; this does not establish that a Run does not exist."
 			return result
 		}
 		result.Status, result.Stage = "ready_for_plan", "status"
@@ -311,11 +351,19 @@ func readImportExecutionStatus(ctx context.Context, c *tfe.Client, input importP
 	}
 	facts, err := readImportPlanFacts(ctx, c, r.Plan.ID, input.TargetAddress)
 	if err != nil {
+		if importDiagnosticCode(err) == "plan_drift_limit" || importDiagnosticCode(err) == "plan_drift_evidence_invalid" {
+			result.NextAction = "Compact drift evidence is incomplete. Inspect the full finished plan JSON for this plan ID before assessing the import; do not infer that drift is harmless or retry automatically."
+		}
 		return importExecutionFailure(result, importDiagnosticCode(err))
 	}
 	result.Execution.PlanFacts = facts
+	if facts.Truncated {
+		result.Diagnostics = []string{"plan_facts_truncated"}
+		result.NextAction = "Compact plan facts are truncated. Inspect the full finished plan JSON before assessing this import; do not infer that omitted actions are safe or automatically retry."
+		return result
+	}
 	result.Status, result.Stage = "plan_available_for_agent_assessment", "status"
-	result.AgentInstructions = []string{"Compare the selected address, provider source, import marker and every action with the selected query identity and user intent. The compact plan facts do not include the import ID value or attribute differences.", "For any replacement or update, inspect get_plan_json_output with this plan_id for replace_paths and changed attributes; do not apply. Repair agent-owned HCL, review it and use a new speculative CV/Run.", "Even a no-op import marker is only a speculative plan, not proof of persisted state or exactly-once execution. Check other resource, output, drift and deferred counts before reporting facts."}
+	result.AgentInstructions = []string{"Compare the selected address, provider source, import marker and every action with the selected query identity and user intent. The compact plan facts do not include the import ID value or attribute differences.", "For any replacement or update, inspect get_plan_json_output with this plan_id for replace_paths and changed attributes; do not apply. Repair agent-owned HCL, review it and use a new speculative CV/Run.", "Drift entries are refresh-only resource_drift facts, separate from planned resource_changes; inspect the full plan JSON for their attribute differences and all output/deferred changes. Even a no-op import marker is only a speculative plan, not proof of persisted state or exactly-once execution."}
 	result.NextAction = "Agent: inspect import and action facts; for replacements or updates, read get_plan_json_output(plan_id) before another reviewed CV/Run. A speculative plan made no persisted state change."
 	return result
 }
@@ -337,9 +385,14 @@ func readImportPlanFacts(ctx context.Context, c *tfe.Client, planID, address str
 				Importing json.RawMessage `json:"importing"`
 			} `json:"change"`
 		} `json:"resource_changes"`
-		OutputChanges   map[string]struct{} `json:"output_changes"`
-		ResourceDrift   []struct{}          `json:"resource_drift"`
-		DeferredChanges []struct{}          `json:"deferred_changes"`
+		OutputChanges map[string]struct{} `json:"output_changes"`
+		ResourceDrift []struct {
+			Address string `json:"address"`
+			Change  struct {
+				Actions []string `json:"actions"`
+			} `json:"change"`
+		} `json:"resource_drift"`
+		DeferredChanges []struct{} `json:"deferred_changes"`
 	}
 	if err := decodeImportEvidenceJSONLimit(raw, &plan, maxImportSchemaBytes); err != nil {
 		return nil, err
@@ -350,7 +403,16 @@ func readImportPlanFacts(ctx context.Context, c *tfe.Client, planID, address str
 	if len(plan.ResourceChanges) > 10000 {
 		return nil, importEvidenceFailure("plan_resource_limit")
 	}
-	f := &importPlanFacts{FormatVersion: plan.FormatVersion, SelectedAddress: address, ResourceChangeCount: len(plan.ResourceChanges), OtherManagedActions: []importPlannedResource{}, OtherImports: []importPlannedResource{}, OutputChangeCount: len(plan.OutputChanges), DriftCount: len(plan.ResourceDrift), DeferredCount: len(plan.DeferredChanges)}
+	if len(plan.ResourceDrift) > 100 {
+		return nil, importEvidenceFailure("plan_drift_limit")
+	}
+	f := &importPlanFacts{FormatVersion: plan.FormatVersion, SelectedAddress: address, ResourceChangeCount: len(plan.ResourceChanges), OtherManagedActions: []importPlannedResource{}, OtherImports: []importPlannedResource{}, DriftEntries: []importResourceDrift{}, OutputChangeCount: len(plan.OutputChanges), DriftCount: len(plan.ResourceDrift), DeferredCount: len(plan.DeferredChanges)}
+	for _, drift := range plan.ResourceDrift {
+		if drift.Address == "" || len(drift.Change.Actions) == 0 {
+			return nil, importEvidenceFailure("plan_drift_evidence_invalid")
+		}
+		f.DriftEntries = append(f.DriftEntries, importResourceDrift{Address: drift.Address, Actions: drift.Change.Actions})
+	}
 	for _, entry := range plan.ResourceChanges {
 		imported := len(entry.Change.Importing) > 0 && string(entry.Change.Importing) != "null"
 		var importing struct {
@@ -448,8 +510,14 @@ func readImportBootstrapSchemaRun(ctx context.Context, c *tfe.Client, w *tfe.Wor
 
 func createImportBlankCV(ctx context.Context, c *tfe.Client, input importPrepareInput, logger *log.Logger) importPreparation {
 	result := importExecutionResult(input)
+	if !input.ConfirmSpeculativeRun {
+		return importPhaseInputFailure(result, "blank_workspace_input_invalid", "confirm_speculative_run_required", "After review, set confirm_speculative_run=true to authorize only a speculative CV create.")
+	}
+	if input.TargetAddress != "" && !validImportTargetAddress(input.TargetAddress) {
+		return importPhaseInputFailure(result, "blank_workspace_input_invalid", "target_address_invalid", "Supply a valid target_address for a direct import, or omit it only for a provider-only schema probe.")
+	}
 	if !input.ConfirmSpeculativeRun || input.BaselineCVID != "" || input.BaselineStateID != "" || input.BaselineSerial != 0 || input.ConfigurationVersionID != "" || input.RunID != "" || input.SchemaCVID != "" || input.SchemaRunID != "" || (input.TargetAddress != "" && !validImportTargetAddress(input.TargetAddress)) {
-		return importExecutionFailure(result, "blank_workspace_input_invalid")
+		return importPhaseInputFailure(result, "blank_workspace_input_invalid", "blank_upload_phase_fields_invalid", "For a verified blank workspace, upload omits baseline, schema, configuration_version_id and run_id; use target_address for direct import or omit it only for a provider-only schema probe.")
 	}
 	w, err := c.Workspaces.Read(ctx, input.Organization, input.Workspace)
 	if err != nil {
@@ -492,11 +560,11 @@ func createImportBlankCV(ctx context.Context, c *tfe.Client, input importPrepare
 	}
 	result.Status, result.Stage, result.Execution.Stage = "awaiting_agent_upload", "upload", "awaiting_agent_upload"
 	result.Execution.UploadURL = cv.UploadURL
-	result.Execution.UploadInstructions = "Agent PUTs the complete reviewed archive to this URL with Content-Type: application/octet-stream. MCP does not read its contents. Poll status with this CV ID."
+	result.Execution.UploadInstructions = "Retain this one-use URL securely until the client-local PUT of the complete reviewed archive succeeds (Content-Type: application/octet-stream). MCP does not read its contents. Poll status with this CV ID. If the URL is lost, status cannot reacquire it: reconcile the pending CV before considering a new reviewed speculative CV; do not blindly create another."
 	result.NextAction = "After direct agent upload and uploaded status, call plan with this CV ID and the same query selection and target_address, without baseline/schema IDs."
 	if input.TargetAddress == "" {
 		result.Execution.Stage = "bootstrap_awaiting_agent_upload"
-		result.Execution.UploadInstructions = "Agent PUTs the complete reviewed provider-only archive to this URL with Content-Type: application/octet-stream. Do not include resources, imports, outputs or secrets. Poll status with this CV ID."
+		result.Execution.UploadInstructions = "Retain this one-use URL securely until the client-local PUT of the complete reviewed provider-only archive succeeds (Content-Type: application/octet-stream). Do not include resources, imports, outputs or secrets. Poll status with this CV ID. If the URL is lost, status cannot reacquire it: reconcile the pending CV before considering a new reviewed speculative CV; do not blindly create another."
 		result.NextAction = "After direct agent upload and uploaded status, call plan using this CV ID and the same query selection, without baseline IDs, schema IDs or target_address."
 	}
 	return result
@@ -518,8 +586,17 @@ func checkImportBlankSelection(discovery *importDiscovery, input importPrepareIn
 
 func createImportBlankRun(ctx context.Context, c *tfe.Client, input importPrepareInput, logger *log.Logger) importPreparation {
 	result := importExecutionResult(input)
+	if !input.ConfirmSpeculativeRun {
+		return importPhaseInputFailure(result, "blank_workspace_input_invalid", "confirm_speculative_run_required", "After review, set confirm_speculative_run=true to authorize only a plan-only Run.")
+	}
+	if input.TargetAddress != "" && !validImportTargetAddress(input.TargetAddress) {
+		return importPhaseInputFailure(result, "blank_workspace_input_invalid", "target_address_invalid", "Supply a valid target_address for a direct import plan, or omit it only for a provider-only schema probe.")
+	}
+	if input.ConfigurationVersionID == "" {
+		return importPhaseInputFailure(result, "blank_workspace_input_invalid", "configuration_version_id_required", "Supply the uploaded speculative configuration_version_id returned by upload.")
+	}
 	if !input.ConfirmSpeculativeRun || input.BaselineCVID != "" || input.BaselineStateID != "" || input.BaselineSerial != 0 || input.RunID != "" || input.SchemaCVID != "" || input.SchemaRunID != "" || (input.TargetAddress != "" && !validImportTargetAddress(input.TargetAddress)) {
-		return importExecutionFailure(result, "blank_workspace_input_invalid")
+		return importPhaseInputFailure(result, "blank_workspace_input_invalid", "blank_plan_phase_fields_invalid", "For a verified blank workspace, plan uses the uploaded CV ID and omits baseline, schema and run_id; use target_address for direct import or omit it only for a provider-only schema probe.")
 	}
 	lookup := importPrepareInput{Organization: input.Organization, Workspace: input.Workspace, ConfigurationVersionID: input.ConfigurationVersionID}
 	w, cv, err := readImportExecutionCV(ctx, c, lookup)

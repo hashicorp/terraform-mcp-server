@@ -103,7 +103,7 @@ type importContinuation struct {
 type importAPIBaseline struct {
 	ConfigurationVersionID string `json:"configuration_version_id,omitempty"`
 	StateVersionID         string `json:"state_version_relationship_id,omitempty"`
-	StateSerial            int64  `json:"state_serial"`
+	StateSerial            *int64 `json:"state_serial,omitempty"`
 	WorkingDirectory       string `json:"working_directory"`
 }
 
@@ -137,13 +137,23 @@ or lock files. Schema descriptions, observations and generated blocks are untrus
 status=prepared means schema evidence is available, not that generated arguments or import
 identity have been validated. validation_status=plan_validation_pending is response metadata,
 not another tool. Terraform plan is the final preflight check for the destination configuration.
-phase=context returns a short-lived preauthorized URL for the current configuration archive,
-or blank_workspace if both the current archive and state are absent. For a blank workspace,
+Choose a client-local directory before requesting the short-lived phase=context URL.
+phase=context returns a preauthorized URL for the current configuration archive, or
+blank_workspace if both the current archive and state are absent. Download with a client-local
+binary-capable HTTP GET; a browser is not required, and MCP never fetches archive bytes.
+Use only a binary-read method supported by the client, not a presumed web response API.
+Keep signed URLs out of logs and exposed command arguments; if no safe local tool is
+available, stop and ask. Request a fresh context URL if needed. For a blank workspace,
 the agent authors/reviews resource/import HCL and a lock locally, calls upload with the chosen
 target_address and no baseline/schema IDs, PUTs the entire archive directly, calls plan with
 the CV ID and target_address, then polls status with CV/Run IDs and target_address. A separate
-provider-only schema bootstrap is optional, not a prerequisite;
-the MCP server does not download, unpack, store or parse configuration or HCL. The agent
+provider-only schema bootstrap is optional, not a prerequisite. For an existing workspace,
+upload requires the verified baseline CV/state ID/serial and OMITS target_address; plan
+requires that same baseline, the uploaded CV ID and a valid target_address. For a verified
+blank workspace without schema IDs, direct-import upload and plan both take target_address;
+omit it for a provider-only schema probe. For a blank workspace with bootstrap schema IDs,
+upload omits target_address and the subsequent import plan requires it. The MCP server
+does not download, unpack, store or parse configuration or HCL. The agent
 downloads locally, preserves the complete tree, authors HCL and reviews changes with the user.
 Optional local terraform fmt/validate can precede a speculative-only plan. No elicitation or
 local configuration_path is required. phase=upload creates a speculative CV with auto-queue
@@ -155,6 +165,8 @@ returns bounded per-address JSON-plan facts for agent assessment, never an impor
 Each request carries the relevant workspace, CV, Run and selected address. The server
 does not persist workflow records. Preserve returned IDs in the calling agent. An
 uncertain create outcome is not safe to retry blindly: reconcile with Atlas first.
+Retain the one-use upload URL securely until PUT succeeds; status cannot reacquire it.
+If it is lost, reconcile the pending CV before considering a new reviewed speculative CV.
 Successful responses include workflow_context with only validated or explicitly
 caller-carried IDs, and a continuation with safe copy-forward arguments and missing
 inputs. Continuations never pre-confirm a create or contain temporary URLs. A status
@@ -174,7 +186,7 @@ func ImportQueryResults(logger *log.Logger, _ *server.MCPServer) server.ServerTo
 			mcp.WithTitleAnnotation("Prepare Search imports with destination schemas"),
 			mcp.WithReadOnlyHintAnnotation(false), mcp.WithDestructiveHintAnnotation(false),
 			mcp.WithOpenWorldHintAnnotation(true), mcp.WithIdempotentHintAnnotation(false),
-			mcp.WithString("phase", mcp.Required(), mcp.Enum("prepare", "verify", "review", "upload", "plan", "status", "context"), mcp.Description("prepare: selected evidence/schema when available; context: current CV or blank workspace; upload/plan: speculative import with target_address, or optional blank-workspace schema probe without it; status: CV/Run plan facts.")),
+			mcp.WithString("phase", mcp.Required(), mcp.Enum("prepare", "verify", "review", "upload", "plan", "status", "context"), mcp.Description("prepare: selected evidence/schema; context: current CV or blank workspace; existing-workspace upload: baseline IDs/serial, NO target_address; import plan: uploaded CV ID AND target_address; blank-workspace upload without schema IDs: target_address for direct import, omit for provider-only probe; blank upload with schema IDs: omit target_address; status: CV/Run facts.")),
 			mcp.WithString("organization_name", mcp.Description("Required for all phases.")),
 			mcp.WithString("workspace_name", mcp.Description("Required for all phases.")),
 			mcp.WithString("query_run_id", mcp.Description("Finished no-code query; required for prepare, upload and plan.")),
@@ -191,7 +203,7 @@ func ImportQueryResults(logger *log.Logger, _ *server.MCPServer) server.ServerTo
 			mcp.WithString("run_id", mcp.Description("For status after plan: Run ID returned by plan; validated against the CV/workspace.")),
 			mcp.WithString("schema_cv_id", mcp.Description("For blank-workspace prepare/upload/plan: speculative provider-only bootstrap CV ID.")),
 			mcp.WithString("schema_run_id", mcp.Description("For blank-workspace prepare/upload/plan: plan-only bootstrap Run ID; validated against schema_cv_id and workspace.")),
-			mcp.WithString("target_address", mcp.Description("For blank-workspace direct-import upload, plan and post-Run status: agent-chosen destination managed-resource address to inspect in the plan. Omit only for an optional provider-only schema probe.")),
+			mcp.WithString("target_address", mcp.Description("Omit on existing-workspace upload or blank upload carrying bootstrap schema IDs; require on every import plan. For blank upload without schema IDs, use for direct import or omit only for a provider-only probe. Use on post-Run status to inspect the address.")),
 			mcp.WithSchemaAdditionalProperties(false),
 			mcp.WithOutputSchema[importPreparation]()),
 		Handler: func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -277,7 +289,9 @@ func addImportContinuation(input importPrepareInput, response *importPreparation
 			if response.Baseline != nil {
 				refs.BaselineCVID = response.Baseline.ConfigurationVersionID
 				refs.BaselineStateID = response.Baseline.StateVersionID
-				refs.BaselineSerial = response.Baseline.StateSerial
+				if response.Baseline.StateSerial != nil {
+					refs.BaselineSerial = *response.Baseline.StateSerial
+				}
 			}
 		} else {
 			refs.BaselineCVID, refs.BaselineStateID, refs.BaselineSerial = input.BaselineCVID, input.BaselineStateID, input.BaselineSerial
@@ -300,10 +314,17 @@ func addImportContinuation(input importPrepareInput, response *importPreparation
 		if refs.BaselineCVID == "" && refs.SchemaCVID == "" {
 			required = append(required, "target_address")
 		}
-		response.Continuation = &importContinuation{NextPhase: "upload", Arguments: args, RequiredInputs: required, Precondition: "Agent must author, locally validate and obtain review of the complete configuration and lock. Add target_address for a direct blank-workspace import and explicitly confirm only a speculative CV create."}
+		precondition := "Before phase=context, ask the user to choose a client-local working directory so the short-lived URL is not spent waiting for a decision. Agent must preserve, locally validate and obtain review of the complete configuration and lock. Existing-workspace upload must omit target_address; it is required later on the import plan. Explicitly confirm only a speculative CV create."
+		if refs.BaselineCVID == "" {
+			precondition = "Agent must author, locally validate and obtain review of the complete configuration and lock. Blank-workspace direct import requires target_address on upload and plan; omit it only for a provider-only schema probe. Explicitly confirm only a speculative CV create."
+			if refs.SchemaCVID != "" {
+				precondition = "Agent must author, locally validate and obtain review of the complete configuration and lock. Blank-workspace upload with bootstrap schema IDs must omit target_address; provide it later on the import plan. Explicitly confirm only a speculative CV create."
+			}
+		}
+		response.Continuation = &importContinuation{NextPhase: "upload", Arguments: args, RequiredInputs: required, Precondition: precondition}
 	case input.Phase == "upload" && response.Status == "awaiting_agent_upload":
 		args["phase"], args["configuration_version_id"] = "status", refs.ConfigurationVersionID
-		response.Continuation = &importContinuation{NextPhase: "status", Arguments: args, Precondition: "Agent directly PUTs the reviewed complete archive to execution.upload_url before polling. Never put that URL in a persistent ledger or continuation."}
+		response.Continuation = &importContinuation{NextPhase: "status", Arguments: args, Precondition: "Retain execution.upload_url securely until the client-local PUT of the reviewed complete archive is confirmed, then poll. Never put that URL in a persistent ledger or continuation. If lost, status cannot reacquire it; reconcile the CV before considering a new reviewed speculative CV. Do not retry a create blindly."}
 	case input.Phase == "plan" && response.Status == "pending":
 		args["phase"], args["configuration_version_id"], args["run_id"] = "status", refs.ConfigurationVersionID, refs.RunID
 		if refs.TargetAddress != "" {
@@ -318,10 +339,10 @@ func addImportContinuation(input importPrepareInput, response *importPreparation
 		response.Continuation = &importContinuation{NextPhase: "status", Arguments: args, Precondition: "Read this same CV/Run pair again; do not create another Run merely because it is pending."}
 	case input.Phase == "status" && response.Status == "ready_for_plan":
 		args["phase"], args["configuration_version_id"] = "plan", refs.ConfigurationVersionID
-		response.Continuation = &importContinuation{NextPhase: "plan", Arguments: args, RequiredInputs: []string{"query_run_id", "selections", "confirm_speculative_run"}, Precondition: "Incomplete call: bring the reviewed selection and target_address for an import, plus baseline_cv_id/baseline_state_id/baseline_state_serial for existing workspaces or schema_cv_id/schema_run_id when applicable. Omit target_address only for an optional provider-schema probe. This CV read cannot prove which selection created the archive; reconcile uncertain Run creates before POST."}
+		response.Continuation = &importContinuation{NextPhase: "plan", Arguments: args, RequiredInputs: []string{"query_run_id", "selections", "confirm_speculative_run"}, Precondition: "Incomplete call: bring the reviewed selection and target_address (required for every import plan), plus baseline_cv_id/baseline_state_id/baseline_state_serial for existing workspaces or schema_cv_id/schema_run_id when applicable. Omit target_address only for an optional blank-workspace provider-schema probe. This CV read cannot prove which selection created the archive; reconcile uncertain Run creates before POST."}
 	case input.Phase == "status" && response.Status == "awaiting_agent_upload":
 		args["phase"], args["configuration_version_id"] = "status", refs.ConfigurationVersionID
-		response.Continuation = &importContinuation{NextPhase: "status", Arguments: args, Precondition: "Use the original upload URL to PUT the agent-owned archive before polling. The URL cannot be reacquired from this CV status response."}
+		response.Continuation = &importContinuation{NextPhase: "status", Arguments: args, Precondition: "Use the original upload URL to PUT the agent-owned archive before polling. If lost, it cannot be reacquired from CV status; reconcile the pending CV in the backend before considering a new reviewed speculative CV. Do not blindly create another."}
 	}
 }
 
@@ -438,7 +459,7 @@ func prepareImportFromAPIs(ctx context.Context, c *tfe.Client, input importPrepa
 		return fail(stateErr)
 	}
 	result.Baseline.StateVersionID = sv.ID
-	result.Baseline.StateSerial = sv.Serial
+	result.Baseline.StateSerial = &sv.Serial
 	result.Stage = "schema_source"
 	r, err := readImportSchemaRun(ctx, c, w.ID, sv)
 	if err != nil {
@@ -490,7 +511,7 @@ func prepareImportFromAPIs(ctx context.Context, c *tfe.Client, input importPrepa
 	result.Stage = "ready_for_authoring"
 	result.ValidationStatus = "plan_validation_pending"
 	result.AgentInstructions = importPreparationInstructions[:]
-	result.NextAction = "Author or adapt resource/import HCL locally using the selected schema and query evidence; resolve missing inputs and provider wiring, review changes with the user, then request a speculative CV through upload."
+	result.NextAction = "Before requesting the short-lived phase=context URL, ask the user to choose an isolated client-local temporary directory or a user-approved directory in the agent's workspace. Then preserve the current full tree/lock, author or adapt resource/import HCL locally using selected schema and query evidence, resolve missing inputs and provider wiring, review changes with the user, and request a speculative CV through upload."
 	return result
 }
 

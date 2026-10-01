@@ -30,10 +30,25 @@ func TestImportConfigurationHandoffDoesNotDownloadArchive(t *testing.T) {
 	require.True(t, ok)
 	require.NotNil(t, packet.Context)
 	assert.Equal(t, "cv-current", packet.Baseline.ConfigurationVersionID)
+	assert.Nil(t, packet.Baseline.StateSerial, "context does not read current state")
+	assert.Empty(t, packet.Baseline.StateVersionID)
+	assert.Contains(t, packet.Notes, "current_state_not_observed_by_context; use prepare to verify current state ID and serial before upload or plan")
 	assert.Equal(t, "cv-current", packet.Context.ConfigurationVersionID)
 	assert.Equal(t, f.url+"/cv-archive?signed=fixture", packet.Context.DownloadURL)
 	assert.Equal(t, "configuration_handoff", packet.Stage)
-	assert.Contains(t, packet.NextAction, "agent-controlled")
+	assert.Contains(t, packet.NextAction, "isolated temporary directory")
+	assert.Contains(t, packet.NextAction, "user-approved directory")
+	assert.Contains(t, packet.NextAction, "fresh context URL")
+	assert.Contains(t, packet.NextAction, "working_directory")
+	assert.Contains(t, packet.NextAction, "binary-capable HTTP GET")
+	assert.Contains(t, packet.NextAction, "a browser is not required")
+	assert.Contains(t, packet.NextAction, "archive bytes, not text/JSON")
+	assert.Contains(t, packet.NextAction, "exposed command arguments")
+	assert.Contains(t, packet.NextAction, "stop and ask")
+	assert.Contains(t, strings.Join(packet.AgentInstructions, " "), ".terraform.lock.hcl")
+	assert.Contains(t, strings.Join(packet.AgentInstructions, " "), "client-local choice")
+	assert.Contains(t, strings.Join(packet.AgentInstructions, " "), "binary-read method your client actually supports")
+	assert.NotContains(t, packet.NextAction, packet.Context.DownloadURL, "signed URL stays only in configuration_context")
 	schemaJSON, err := json.Marshal(tool.Tool.OutputSchema)
 	require.NoError(t, err)
 	var schema jsonschema.Schema
@@ -42,6 +57,7 @@ func TestImportConfigurationHandoffDoesNotDownloadArchive(t *testing.T) {
 	require.NoError(t, err)
 	encoded, err := json.Marshal(packet)
 	require.NoError(t, err)
+	assert.NotContains(t, string(encoded), `"state_serial":0`)
 	var object any
 	require.NoError(t, json.Unmarshal(encoded, &object))
 	require.NoError(t, resolved.Validate(object))
@@ -83,4 +99,19 @@ func TestImportConfigurationHandoffFailures(t *testing.T) {
 			f.mu.Unlock()
 		})
 	}
+}
+
+func TestImportBlankContextDoesNotClaimUnobservedState(t *testing.T) {
+	f, _, _ := blankImportFixture(t)
+	result := callImportPhase(t, importPrepareInput{Phase: "context", Organization: "fixture-org", Workspace: "import-root"})
+	require.Equal(t, "blank_workspace", result.Status, result.Diagnostics)
+	require.NotNil(t, result.Baseline)
+	assert.Nil(t, result.Baseline.StateSerial)
+	encoded, err := json.Marshal(result)
+	require.NoError(t, err)
+	assert.NotContains(t, string(encoded), `"state_serial":0`)
+	f.stateStatus = http.StatusForbidden
+	blocked := callImportPhase(t, importPrepareInput{Phase: "context", Organization: "fixture-org", Workspace: "import-root"})
+	assert.Equal(t, "blocked", blocked.Status)
+	assert.NotEqual(t, "blank_workspace", blocked.Status, "inaccessible state is not an empty workspace")
 }

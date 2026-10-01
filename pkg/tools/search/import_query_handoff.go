@@ -112,8 +112,9 @@ func importConfigurationContextFromAPIs(ctx context.Context, c *tfe.Client, inpu
 	}
 	result.Context = &importConfigurationHandoff{ConfigurationVersionID: cvID, DownloadURL: location, URLValidity: "temporary; use immediately and request a fresh context handoff if expired (nominally one minute)", WorkingDirectory: w.WorkingDirectory}
 	result.Status, result.Stage = "available", "configuration_handoff"
+	result.Notes = append(result.Notes, "current_state_not_observed_by_context; use prepare to verify current state ID and serial before upload or plan")
 	result.AgentInstructions = importExistingConfigurationInstructions
-	result.NextAction = "Download and unpack the archive in an agent-controlled directory immediately. Preserve the complete tree and provider lock selections; author resource/import HCL, optionally run terraform fmt/validate locally, and review the proposed changes with the user. The URL is a temporary bearer capability; do not log or share it. No archive was downloaded by the MCP server."
+	result.NextAction = "Choose an isolated temporary directory or a user-approved directory in the agent's workspace before client download; neither is an MCP filesystem path. This URL is short-lived: if the choice takes time or the URL expires, request a fresh context URL. Use a client-local binary-capable HTTP GET to a file; a browser is not required. Read archive bytes, not text/JSON, using a method supported by your client. Keep the signed URL out of printed output, logs and exposed command arguments; if no safe method exists, stop and ask instead of retrying a disconnected browser. Verify the archive before unpacking, preserve the full tree and provider lock, exclude client-generated .terraform caches and do not add secrets; review sensitive existing files rather than dropping them. Check working_directory (only remote root is supported) before uploading the complete reviewed archive. MCP downloaded no archive."
 	return result
 }
 

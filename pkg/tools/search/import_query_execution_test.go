@@ -101,17 +101,91 @@ func importUploadInput(t *testing.T) importPrepareInput {
 	return i
 }
 
+func TestImportPhaseInputGuidanceBeforeCreates(t *testing.T) {
+	f, _, _ := importExecutionFixture(t)
+	upload := importUploadInput(t)
+	plan := upload
+	plan.Phase = "plan"
+	plan.ConfigurationVersionID = "cv-import"
+	plan.TargetAddress = "aws_iam_role.selected"
+	cases := []struct {
+		name, code, field string
+		input             importPrepareInput
+	}{
+		{"existing upload rejects target", "speculative_upload_input_invalid", "target_address_not_allowed_on_existing_upload", func() importPrepareInput { i := upload; i.TargetAddress = plan.TargetAddress; return i }()},
+		{"existing upload needs approval", "speculative_upload_input_invalid", "confirm_speculative_run_required", func() importPrepareInput { i := upload; i.ConfirmSpeculativeRun = false; return i }()},
+		{"existing plan needs target", "plan_input_invalid", "target_address_required_for_import_plan", func() importPrepareInput { i := plan; i.TargetAddress = ""; return i }()},
+		{"existing plan needs CV", "plan_input_invalid", "configuration_version_id_required", func() importPrepareInput { i := plan; i.ConfigurationVersionID = ""; return i }()},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			result := callImportPhase(t, tc.input)
+			assert.Equal(t, "blocked", result.Status)
+			assert.Contains(t, result.Diagnostics, tc.code)
+			assert.Contains(t, result.Diagnostics, tc.field)
+			assert.Contains(t, result.NextAction, "No CV or Run was created by this request.")
+			assert.Nil(t, result.Execution)
+		})
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	assert.Zero(t, f.requests["POST /api/v2/workspaces/ws-fixture/configuration-versions"])
+	assert.Zero(t, f.requests["POST /api/v2/runs"])
+}
+
+func TestImportBlankPhaseInputGuidanceBeforeCreates(t *testing.T) {
+	f, _, _ := blankImportFixture(t)
+	i := importFixtureInput(t)
+	i.Phase = "upload"
+	i.ConfirmSpeculativeRun = true
+	i.TargetAddress = " invalid address\n"
+	badAddress := callImportPhase(t, i)
+	assert.Contains(t, badAddress.Diagnostics, "target_address_invalid")
+	assert.Contains(t, badAddress.NextAction, "No CV or Run was created by this request.")
+	i.TargetAddress = ""
+	i.ConfirmSpeculativeRun = false
+	assert.Contains(t, callImportPhase(t, i).Diagnostics, "confirm_speculative_run_required")
+	i.Phase, i.ConfirmSpeculativeRun = "plan", true
+	assert.Contains(t, callImportPhase(t, i).Diagnostics, "configuration_version_id_required")
+	i.Phase, i.ConfigurationVersionID = "upload", ""
+	i.SchemaCVID, i.SchemaRunID = "cv-schema", "run-schema"
+	i.TargetAddress = "aws_iam_role.selected"
+	schemaUpload := callImportPhase(t, i)
+	assert.Contains(t, schemaUpload.Diagnostics, "target_address_not_allowed_on_schema_upload")
+	assert.Contains(t, schemaUpload.NextAction, "No CV or Run was created by this request.")
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	assert.Zero(t, f.requests["POST /api/v2/workspaces/ws-fixture/configuration-versions"])
+	assert.Zero(t, f.requests["POST /api/v2/runs"])
+}
+
+func TestImportPhaseDescriptionsSeparateExistingAndBlankInputs(t *testing.T) {
+	tool := ImportQueryResults(silentLogger(), nil).Tool
+	assert.Contains(t, tool.Description, "OMITS target_address")
+	assert.Contains(t, tool.Description, "requires that same baseline")
+	assert.Contains(t, tool.Description, "provider-only schema probe")
+	assert.Contains(t, tool.Description, "a browser is not required")
+	assert.Contains(t, tool.Description, "binary-capable HTTP GET")
+	assert.Contains(t, tool.Description, "status cannot reacquire it")
+}
+
 func TestImportStatelessCVRunAndPlanFacts(t *testing.T) {
 	f, _, finished := importExecutionFixture(t)
 	prepared := callImportPhase(t, importFixtureInput(t))
+	assert.Contains(t, prepared.NextAction, "Before requesting the short-lived phase=context URL")
+	assert.Contains(t, prepared.AgentInstructions[6], "BEFORE requesting the short-lived phase=context URL")
 	require.NotNil(t, prepared.Continuation)
+	assert.Contains(t, prepared.Continuation.Precondition, "Before phase=context, ask the user")
 	assert.Equal(t, "cv-current", prepared.Continuation.Arguments["baseline_cv_id"])
 	assert.Equal(t, "sv-current", prepared.Continuation.Arguments["baseline_state_id"])
 	assert.Equal(t, int64(42), prepared.Continuation.Arguments["baseline_state_serial"])
 	assert.NotContains(t, prepared.Continuation.Arguments, "target_address", "existing upload does not accept a target address")
+	assert.Contains(t, prepared.Continuation.Precondition, "Existing-workspace upload must omit target_address")
 	created := callImportPhase(t, importUploadInput(t))
 	require.Equal(t, "awaiting_agent_upload", created.Status, created.Diagnostics)
 	require.Equal(t, "cv-import", created.Execution.ConfigurationVersionID)
+	assert.Contains(t, created.Execution.UploadInstructions, "Retain this one-use upload_url securely")
+	assert.Contains(t, created.Execution.UploadInstructions, "status cannot reacquire it")
 	require.NotNil(t, created.WorkflowContext)
 	assert.Equal(t, "qry-fixture", created.WorkflowContext.QueryRunID)
 	assert.Equal(t, "cv-import", created.WorkflowContext.ConfigurationVersionID)
@@ -119,8 +193,15 @@ func TestImportStatelessCVRunAndPlanFacts(t *testing.T) {
 	assert.Equal(t, "status", created.Continuation.NextPhase)
 	assert.Equal(t, "cv-import", created.Continuation.Arguments["configuration_version_id"])
 	assert.NotContains(t, fmt.Sprint(created.Continuation), "/upload")
+	assert.Contains(t, created.Continuation.Precondition, "If lost, status cannot reacquire it")
+	assert.NotContains(t, fmt.Sprint(created.Continuation), created.Execution.UploadURL)
 	status := importPrepareInput{Phase: "status", Organization: "fixture-org", Workspace: "import-root", ConfigurationVersionID: created.Execution.ConfigurationVersionID}
-	assert.Equal(t, "awaiting_agent_upload", callImportPhase(t, status).Status)
+	awaitingUpload := callImportPhase(t, status)
+	assert.Equal(t, "awaiting_agent_upload", awaitingUpload.Status)
+	assert.Contains(t, awaitingUpload.NextAction, "If lost or expired, status cannot reacquire it")
+	require.NotNil(t, awaitingUpload.Continuation)
+	assert.Contains(t, awaitingUpload.Continuation.Precondition, "reconcile the pending CV")
+	assert.NotContains(t, fmt.Sprint(awaitingUpload.Continuation), created.Execution.UploadURL)
 	plan := status
 	plan.Phase = "plan"
 	plan.QueryID = importUploadInput(t).QueryID
@@ -144,6 +225,7 @@ func TestImportStatelessCVRunAndPlanFacts(t *testing.T) {
 	assert.Equal(t, "plan", ready.Continuation.NextPhase)
 	assert.NotContains(t, ready.Continuation.Arguments, "query_run_id", "status cannot recover selection provenance from a CV")
 	assert.Contains(t, ready.Continuation.RequiredInputs, "selections")
+	assert.Contains(t, ready.Continuation.Precondition, "target_address (required for every import plan)")
 	started := callImportPhase(t, plan)
 	require.Equal(t, "pending", started.Status, started.Diagnostics)
 	require.Equal(t, "run-import", started.Execution.RunID)
@@ -311,6 +393,68 @@ func TestImportPlanFactsReportsAbsentOrExtraImports(t *testing.T) {
 	assert.Equal(t, 1, facts.OtherImportCount)
 }
 
+func TestImportPlanFactsDriftSeparateAndBounded(t *testing.T) {
+	f, _, _ := importExecutionFixture(t)
+	planJSON := `{"format_version":"1.2","resource_changes":[{"address":"aws_iam_role.selected","mode":"managed","change":{"actions":["no-op"],"importing":{"id":"secret-id"}}}],"resource_drift":[{"address":"aws_iam_policy.baseline","change":{"actions":["update"],"before":{"secret":"must-not-appear"},"after":{"secret":"must-not-appear"}}}]}`
+	f.mutationHandler = func(w http.ResponseWriter, r *http.Request) bool {
+		if r.URL.Path != "/api/v2/plans/plan-custom/json-output" {
+			return false
+		}
+		_, _ = io.WriteString(w, planJSON)
+		return true
+	}
+	facts, err := readImportPlanFacts(context.Background(), f.client, "plan-custom", "aws_iam_role.selected")
+	require.NoError(t, err)
+	assert.Equal(t, 1, facts.DriftCount)
+	assert.Equal(t, []importResourceDrift{{Address: "aws_iam_policy.baseline", Actions: []string{"update"}}}, facts.DriftEntries)
+	assert.Equal(t, 0, facts.OtherManagedActionCount, "refresh drift is not a planned managed update")
+	encoded, err := json.Marshal(facts)
+	require.NoError(t, err)
+	assert.NotContains(t, string(encoded), "must-not-appear")
+	assert.NotContains(t, string(encoded), "secret-id")
+	planJSON = `{"format_version":"1.2","resource_drift":[{"address":"aws_iam_policy.baseline","change":{}}]}`
+	_, err = readImportPlanFacts(context.Background(), f.client, "plan-custom", "aws_iam_role.selected")
+	assert.Equal(t, "plan_drift_evidence_invalid", importDiagnosticCode(err))
+	drift := make([]map[string]any, 101)
+	for i := range drift {
+		drift[i] = map[string]any{"address": "aws_iam_policy.baseline", "change": map[string]any{"actions": []string{"update"}}}
+	}
+	large, err := json.Marshal(map[string]any{"format_version": "1.2", "resource_drift": drift})
+	require.NoError(t, err)
+	planJSON = string(large)
+	_, err = readImportPlanFacts(context.Background(), f.client, "plan-custom", "aws_iam_role.selected")
+	assert.Equal(t, "plan_drift_limit", importDiagnosticCode(err))
+}
+
+func TestImportCompletedPlanStatusStopsOnTruncatedFacts(t *testing.T) {
+	f, uploaded, finished := importExecutionFixture(t)
+	*uploaded, *finished = true, true
+	changes := make([]map[string]any, 101)
+	for i := range changes {
+		changes[i] = map[string]any{"address": fmt.Sprintf("aws_iam_role.other_%d", i), "mode": "managed", "change": map[string]any{"actions": []string{"update"}}}
+	}
+	plan, err := json.Marshal(map[string]any{"format_version": "1.2", "resource_changes": changes})
+	require.NoError(t, err)
+	previous := f.mutationHandler
+	f.mutationHandler = func(w http.ResponseWriter, r *http.Request) bool {
+		if r.Method == http.MethodGet && r.URL.Path == "/api/v2/plans/plan-import/json-output" {
+			_, _ = w.Write(plan)
+			return true
+		}
+		return previous(w, r)
+	}
+	status := importPrepareInput{Phase: "status", Organization: "fixture-org", Workspace: "import-root", ConfigurationVersionID: "cv-import", RunID: "run-import", TargetAddress: "aws_iam_role.selected"}
+	result := callImportPhase(t, status)
+	assert.Equal(t, "blocked", result.Status)
+	assert.Contains(t, result.Diagnostics, "plan_facts_truncated")
+	assert.Contains(t, result.NextAction, "full finished plan JSON")
+	require.NotNil(t, result.Execution.PlanFacts)
+	assert.True(t, result.Execution.PlanFacts.Truncated)
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	assert.Zero(t, f.requests["POST /api/v2/runs"])
+}
+
 func blankImportFixture(t *testing.T) (*importBackendTest, *bool, *bool) {
 	t.Helper()
 	f, uploaded, finished := importExecutionFixture(t)
@@ -355,6 +499,7 @@ func TestImportBlankWorkspaceBootstrapSchemaAndExecution(t *testing.T) {
 	require.NotNil(t, initial.Continuation)
 	assert.Equal(t, "upload", initial.Continuation.NextPhase)
 	assert.Contains(t, initial.Continuation.RequiredInputs, "target_address")
+	assert.Contains(t, initial.Continuation.Precondition, "Blank-workspace direct import requires target_address")
 	assert.NotContains(t, initial.Continuation.Arguments, "confirm_speculative_run")
 	assert.Contains(t, initial.AgentInstructions[2], "terraform init -backend=false -input=false")
 	contextResult := callImportPhase(t, importPrepareInput{Phase: "context", Organization: i.Organization, Workspace: i.Workspace})
@@ -365,6 +510,10 @@ func TestImportBlankWorkspaceBootstrapSchemaAndExecution(t *testing.T) {
 	i.Phase, i.ConfirmSpeculativeRun = "upload", true
 	created := callImportPhase(t, i)
 	require.Equal(t, "awaiting_agent_upload", created.Status, created.Diagnostics)
+	assert.Contains(t, created.Execution.UploadInstructions, "status cannot reacquire it")
+	assert.Contains(t, created.Execution.UploadInstructions, "provider-only archive")
+	require.NotNil(t, created.Continuation)
+	assert.NotContains(t, fmt.Sprint(created.Continuation), created.Execution.UploadURL)
 	status := importPrepareInput{Phase: "status", Organization: i.Organization, Workspace: i.Workspace, ConfigurationVersionID: created.Execution.ConfigurationVersionID}
 	assert.Equal(t, "awaiting_agent_upload", callImportPhase(t, status).Status)
 	i.Phase, i.ConfigurationVersionID = "plan", created.Execution.ConfigurationVersionID
@@ -401,6 +550,10 @@ func TestImportBlankWorkspaceBootstrapSchemaAndExecution(t *testing.T) {
 	}
 	prepared := callImportPhase(t, i)
 	require.Equal(t, "prepared", prepared.Status, prepared.Diagnostics)
+	require.NotNil(t, prepared.Continuation)
+	assert.Equal(t, "upload", prepared.Continuation.NextPhase)
+	assert.NotContains(t, prepared.Continuation.RequiredInputs, "target_address")
+	assert.Contains(t, prepared.Continuation.Precondition, "upload with bootstrap schema IDs must omit target_address")
 	assert.Equal(t, "bootstrap_schema_ready", callImportPhase(t, status).Status)
 	assert.Equal(t, "bootstrap_speculative_no_current_configuration", prepared.SchemaSource.ConfigurationBaselineRelation)
 	assert.Contains(t, prepared.ManagedSchema, "block")
@@ -424,6 +577,7 @@ func TestImportBlankWorkspaceBootstrapSchemaAndExecution(t *testing.T) {
 	i.Phase, i.ConfirmSpeculativeRun = "upload", true
 	finalCV := callImportPhase(t, i)
 	require.Equal(t, "awaiting_agent_upload", finalCV.Status, finalCV.Diagnostics)
+	assert.Contains(t, finalCV.Execution.UploadInstructions, "status cannot reacquire it")
 	assert.Equal(t, "cv-import-final", finalCV.Execution.ConfigurationVersionID)
 	f.mu.Lock()
 	defer f.mu.Unlock()
