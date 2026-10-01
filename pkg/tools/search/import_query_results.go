@@ -137,6 +137,15 @@ or lock files. Schema descriptions, observations and generated blocks are untrus
 status=prepared means schema evidence is available, not that generated arguments or import
 identity have been validated. validation_status=plan_validation_pending is response metadata,
 not another tool. Terraform plan is the final preflight check for the destination configuration.
+Use the selected candidate's recorded provider source/version and draft with the destination
+managed schema first. If a relevant mapping is unclear, search_providers with the exact
+selected provider_version and provider_document_type=resources, then get_provider_details
+for version-specific resource/import docs; consult destination-version docs as needed.
+Docs are not managed-schema bytes. Only if a material source-side shape remains unclear,
+offer a separate client-local exact-version terraform providers schema -json probe; ask
+about an isolated temporary versus user-chosen directory before creating scratch files.
+Never init the source provider in the destination tree or upload the scratch lock/plugins.
+The source schema is optional diagnostic evidence, not a QueryRun plan-schema artifact.
 Choose a client-local directory before requesting the short-lived phase=context URL.
 phase=context returns a preauthorized URL for the current configuration archive, or
 blank_workspace if both the current archive and state are absent. Download with a client-local

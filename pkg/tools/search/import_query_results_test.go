@@ -303,6 +303,50 @@ func TestImportQueryAPIOnlyPreparation(t *testing.T) {
 	}
 }
 
+func TestImportConditionalSourceSchemaGuidance(t *testing.T) {
+	f := importBackendFixture(t)
+	result := prepareImportFromAPIs(context.Background(), f.client, importFixtureInput(t))
+	require.Equal(t, "prepared", result.Status, result.Diagnostics)
+	require.NotNil(t, result.Selection)
+	assert.Equal(t, "registry.terraform.io/hashicorp/aws", result.Selection.Provider.Source)
+	assert.Equal(t, "6.62.0", result.Selection.Provider.Version, "use the selected QueryRun version, not today's catalog")
+	assert.Equal(t, "not_requested", result.SourceSchemaComparison)
+	guidance := strings.Join(result.AgentInstructions, " ")
+	assert.Contains(t, guidance, "selected query's observations/draft and recorded provider source/version")
+	assert.Contains(t, guidance, "destination managed schema and locked provider")
+	assert.Contains(t, guidance, "For an unclear argument, import identity or behavior")
+	assert.Contains(t, guidance, "search_providers with the exact selected provider_version and provider_document_type=resources, then get_provider_details")
+	assert.Contains(t, guidance, "consult destination-version docs as needed")
+	assert.Contains(t, guidance, "Docs are not complete managed schemas")
+	assert.Contains(t, guidance, "not_requested and differing releases are not blockers")
+	assert.Contains(t, guidance, "proceed to the full finished speculative plan")
+	assert.Contains(t, guidance, "Only for a material unresolved source shape or plan diagnostic")
+	assert.Contains(t, guidance, "client-local exact QueryRun-version terraform providers schema -json")
+	assert.Contains(t, guidance, "Ask about an isolated temporary or user-chosen scratch directory first")
+	assert.Contains(t, guidance, "separate sibling/subdirectory without repeating the choice")
+	assert.Contains(t, guidance, "Never init inside the destination tree")
+	assert.Contains(t, guidance, "terraform init -backend=false -input=false in scratch")
+	assert.Contains(t, guidance, "exclude the scratch lock/.terraform from the uploaded archive")
+	assert.Contains(t, guidance, "Explain retention/cleanup")
+	assert.Contains(t, guidance, "not backend-attested Search schema")
+	assert.Contains(t, guidance, "QueryRuns have no plan-schema artifact")
+	assert.Contains(t, guidance, "explain the gap and ask rather than inventing a conversion")
+
+	description := ImportQueryResults(silentLogger(), nil).Tool.Description
+	assert.Contains(t, description, "Only if a material source-side shape remains unclear")
+	assert.Contains(t, description, "The source schema is optional diagnostic evidence")
+	assert.Contains(t, description, "Never init the source provider in the destination tree")
+	assert.Contains(t, strings.Join(importBlankWorkspaceInstructions, " "), "offer a separate client-local scratch directory")
+
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	assert.Equal(t, 1, f.requests["GET /api/v2/runs/run-schema/plan/json-schema"], "destination schema only")
+	for request := range f.requests {
+		assert.True(t, strings.HasPrefix(request, "GET "), "prepare remains API-only: %s", request)
+		assert.NotContains(t, request, "/search/provider-versions", "documentation lookup is agent-conditional")
+	}
+}
+
 func TestImportQueryAPIFailures(t *testing.T) {
 	for _, tc := range []struct {
 		name, code string
