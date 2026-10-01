@@ -50,17 +50,18 @@ type importPlanFacts struct {
 }
 
 type importExecutionResponse struct {
-	Stage                  string           `json:"stage"`
-	ConfigurationVersionID string           `json:"configuration_version_id,omitempty"`
-	ConfigurationStatus    string           `json:"configuration_status,omitempty"`
-	UploadURL              string           `json:"upload_url,omitempty"`
-	UploadInstructions     string           `json:"upload_instructions,omitempty"`
-	RunID                  string           `json:"run_id,omitempty"`
-	RunStatus              string           `json:"run_status,omitempty"`
-	PlanID                 string           `json:"plan_id,omitempty"`
-	PlanStatus             string           `json:"plan_status,omitempty"`
-	TargetAddress          string           `json:"target_address,omitempty"`
-	PlanFacts              *importPlanFacts `json:"plan_facts,omitempty"`
+	Stage                  string                `json:"stage"`
+	ConfigurationVersionID string                `json:"configuration_version_id,omitempty"`
+	ConfigurationStatus    string                `json:"configuration_status,omitempty"`
+	UploadURL              string                `json:"upload_url,omitempty"`
+	UploadInstructions     string                `json:"upload_instructions,omitempty"`
+	RunID                  string                `json:"run_id,omitempty"`
+	RunStatus              string                `json:"run_status,omitempty"`
+	PlanID                 string                `json:"plan_id,omitempty"`
+	PlanStatus             string                `json:"plan_status,omitempty"`
+	TargetAddress          string                `json:"target_address,omitempty"`
+	PlanFacts              *importPlanFacts      `json:"plan_facts,omitempty"`
+	BatchPlanFacts         *importBatchPlanFacts `json:"batch_plan_facts,omitempty"`
 }
 
 func importExecutionResult(input importPrepareInput) importPreparation {
@@ -284,15 +285,21 @@ func validImportTargetAddress(address string) bool {
 // workspace/CV/Run IDs. An upload URL cannot be reacquired from a CV read.
 func readImportExecutionStatus(ctx context.Context, c *tfe.Client, input importPrepareInput) importPreparation {
 	result := importExecutionResult(input)
+	batch := len(input.Selections) > 1
 	if input.ConfirmSpeculativeRun || (input.TargetAddress != "" && !validImportTargetAddress(input.TargetAddress)) || (input.RunID == "" && input.TargetAddress != "") || (input.RunID != "" && !importInputName(input.RunID)) {
 		return importExecutionFailure(result, "execution_input_invalid")
 	}
-	w, cv, err := readImportExecutionCV(ctx, c, input)
+	lookup := input
+	if batch {
+		lookup.QueryID, lookup.Selections = "", nil
+		lookup.TargetAddress = input.Selections[0].TargetAddress
+	}
+	w, cv, err := readImportExecutionCV(ctx, c, lookup)
 	if err != nil {
 		return importExecutionFailure(result, importDiagnosticCode(err))
 	}
 	result.WorkspaceID = w.ID
-	result.Execution = &importExecutionResponse{Stage: "status", ConfigurationVersionID: cv.ID, RunID: input.RunID, TargetAddress: input.TargetAddress}
+	result.Execution = &importExecutionResponse{Stage: "status", ConfigurationVersionID: cv.ID, RunID: input.RunID, TargetAddress: lookup.TargetAddress}
 	result.Execution.ConfigurationStatus = string(cv.Status)
 	if input.RunID == "" {
 		if cv.Status != tfe.ConfigurationUploaded {
@@ -304,7 +311,7 @@ func readImportExecutionStatus(ctx context.Context, c *tfe.Client, input importP
 			return result
 		}
 		result.Status, result.Stage = "ready_for_plan", "status"
-		result.NextAction = "CV is uploaded. If no prior Run create had an uncertain outcome, call plan with this CV ID, query selection and confirmation. For a blank-workspace import, include the selected target_address and omit baseline/schema IDs. Otherwise reconcile existing Runs in Atlas first."
+		result.NextAction = "CV is uploaded. If no prior Run create had an uncertain outcome, call plan with this CV ID, reviewed query selection, address bindings and confirmation. For a blank-workspace import, include the single target_address or complete batch selections[].target_address and omit baseline/schema IDs. Otherwise reconcile existing Runs in Atlas first."
 		return result
 	}
 	r, err := c.Runs.Read(ctx, input.RunID)
@@ -336,6 +343,27 @@ func readImportExecutionStatus(ctx context.Context, c *tfe.Client, input importP
 	if p.Status != tfe.PlanFinished || r.Status != tfe.RunPlannedAndFinished {
 		result.Status, result.Stage = "pending", "status"
 		result.NextAction = "Poll this exact Run until the plan and required run stages finish."
+		return result
+	}
+	if batch {
+		candidates, err := readImportBatchCandidates(ctx, c, input, w.ID)
+		if err != nil {
+			return importExecutionFailure(result, importDiagnosticCode(err))
+		}
+		facts, err := readImportBatchPlanFacts(ctx, c, r.Plan.ID, input.Selections, candidates)
+		if err != nil {
+			return importExecutionFailure(result, importDiagnosticCode(err))
+		}
+		result.Execution.TargetAddress = ""
+		result.Execution.BatchPlanFacts = facts
+		if facts.Truncated {
+			result.Diagnostics = []string{"plan_facts_truncated"}
+			result.NextAction = "Batch facts are truncated. Inspect full finished plan JSON before assessing any import; no import has persisted."
+			return result
+		}
+		result.Status, result.Stage = "plan_available_for_agent_assessment", "status"
+		result.AgentInstructions = []string{"For each candidate, check plan_binding and object_identity separately. A Terraform plan does not contain Search candidate IDs: these are caller-carried bindings rechecked against the finished QueryRun, not proof of the archive's contents.", "A matching address and import marker do not prove object identity. after_identity is provider-returned evidence when comparable; importing.identity may only echo authored HCL. Review the exact import ID/identity and account/region/alias scope in full plan JSON when identity is unverified. Inspect all extra imports, actions, output/deferred changes and refresh drift before another reviewed CV/Run. A plan-only Run has not changed persisted state."}
+		result.NextAction = "Review every candidate's plan binding and identity status and the whole finished plan JSON. Repair incorrect HCL/selection/provider wiring only through a new reviewed speculative CV/Run; no import was applied."
 		return result
 	}
 	if input.TargetAddress == "" {

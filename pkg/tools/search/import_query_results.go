@@ -22,27 +22,31 @@ type workspaceProvider struct {
 	Version string `json:"version,omitempty"`
 }
 
-const importPreparationContractVersion = "4"
+const importPreparationContractVersion = "5"
 const maxImportPreparationBytes = 256 * 1024
+const maxImportSelections = 100
+
+type importSelection struct {
+	CandidateID   string `json:"candidate_id"`
+	ManagedType   string `json:"managed_type"`
+	TargetAddress string `json:"target_address,omitempty"`
+}
 
 type importPrepareInput struct {
-	Phase        string `json:"phase"`
-	Organization string `json:"organization_name"`
-	Workspace    string `json:"workspace_name"`
-	QueryID      string `json:"query_run_id"`
-	Selections   []struct {
-		CandidateID string `json:"candidate_id"`
-		ManagedType string `json:"managed_type"`
-	} `json:"selections"`
-	BaselineCVID           string `json:"baseline_cv_id,omitempty"`
-	BaselineStateID        string `json:"baseline_state_id,omitempty"`
-	BaselineSerial         int64  `json:"baseline_state_serial,omitempty"`
-	ConfirmSpeculativeRun  bool   `json:"confirm_speculative_run,omitempty"`
-	ConfigurationVersionID string `json:"configuration_version_id,omitempty"`
-	RunID                  string `json:"run_id,omitempty"`
-	TargetAddress          string `json:"target_address,omitempty"`
-	SchemaCVID             string `json:"schema_cv_id,omitempty"`
-	SchemaRunID            string `json:"schema_run_id,omitempty"`
+	Phase                  string            `json:"phase"`
+	Organization           string            `json:"organization_name"`
+	Workspace              string            `json:"workspace_name"`
+	QueryID                string            `json:"query_run_id"`
+	Selections             []importSelection `json:"selections"`
+	BaselineCVID           string            `json:"baseline_cv_id,omitempty"`
+	BaselineStateID        string            `json:"baseline_state_id,omitempty"`
+	BaselineSerial         int64             `json:"baseline_state_serial,omitempty"`
+	ConfirmSpeculativeRun  bool              `json:"confirm_speculative_run,omitempty"`
+	ConfigurationVersionID string            `json:"configuration_version_id,omitempty"`
+	RunID                  string            `json:"run_id,omitempty"`
+	TargetAddress          string            `json:"target_address,omitempty"`
+	SchemaCVID             string            `json:"schema_cv_id,omitempty"`
+	SchemaRunID            string            `json:"schema_run_id,omitempty"`
 }
 
 type importPreparation struct {
@@ -55,6 +59,7 @@ type importPreparation struct {
 	ExecutionMode          string                      `json:"execution_mode,omitempty"`
 	Baseline               *importAPIBaseline          `json:"baseline,omitempty"`
 	Selection              *importDiscoveryCandidate   `json:"selection,omitempty"`
+	SelectedCandidates     []importDiscoveryCandidate  `json:"selected_candidates,omitempty"`
 	SchemaSource           *importAPISchemaSource      `json:"schema_source,omitempty"`
 	ManagedType            string                      `json:"managed_type,omitempty"`
 	ManagedTypeSupport     string                      `json:"managed_type_support,omitempty"`
@@ -76,21 +81,22 @@ type importPreparation struct {
 // These are copy-forward hints, not a server-side attempt record. In
 // particular, a status lookup does not establish the query that authored a CV.
 type importWorkflowContext struct {
-	Organization           string `json:"organization_name"`
-	Workspace              string `json:"workspace_name"`
-	WorkspaceID            string `json:"workspace_id"`
-	QueryRunID             string `json:"query_run_id,omitempty"`
-	CandidateID            string `json:"candidate_id,omitempty"`
-	ManagedType            string `json:"managed_type,omitempty"`
-	TargetAddress          string `json:"target_address,omitempty"`
-	BaselineCVID           string `json:"baseline_cv_id,omitempty"`
-	BaselineStateID        string `json:"baseline_state_id,omitempty"`
-	BaselineSerial         int64  `json:"baseline_state_serial,omitempty"`
-	SchemaCVID             string `json:"schema_cv_id,omitempty"`
-	SchemaRunID            string `json:"schema_run_id,omitempty"`
-	ConfigurationVersionID string `json:"configuration_version_id,omitempty"`
-	RunID                  string `json:"run_id,omitempty"`
-	PlanID                 string `json:"plan_id,omitempty"`
+	Organization           string            `json:"organization_name"`
+	Workspace              string            `json:"workspace_name"`
+	WorkspaceID            string            `json:"workspace_id"`
+	QueryRunID             string            `json:"query_run_id,omitempty"`
+	CandidateID            string            `json:"candidate_id,omitempty"`
+	ManagedType            string            `json:"managed_type,omitempty"`
+	TargetAddress          string            `json:"target_address,omitempty"`
+	Selections             []importSelection `json:"selections,omitempty"`
+	BaselineCVID           string            `json:"baseline_cv_id,omitempty"`
+	BaselineStateID        string            `json:"baseline_state_id,omitempty"`
+	BaselineSerial         int64             `json:"baseline_state_serial,omitempty"`
+	SchemaCVID             string            `json:"schema_cv_id,omitempty"`
+	SchemaRunID            string            `json:"schema_run_id,omitempty"`
+	ConfigurationVersionID string            `json:"configuration_version_id,omitempty"`
+	RunID                  string            `json:"run_id,omitempty"`
+	PlanID                 string            `json:"plan_id,omitempty"`
 }
 
 type importContinuation struct {
@@ -118,10 +124,15 @@ type importAPISchemaSource struct {
 	ArtifactDigest                string `json:"artifact_digest,omitempty"`
 }
 
-const importQueryResultsDescription = `Prepare one explicitly selected Search result for agent-authored resource/import HCL.
+const importQueryResultsDescription = `Prepare 1–100 explicitly selected Search results for agent-authored resource/import HCL.
 Call get_query_summary with include_import_candidates=true to obtain candidate IDs, then
-call phase=prepare with organization_name, workspace_name, query_run_id and one selection
-containing candidate_id and your proposed managed_type. Preparation retrieves the destination
+call phase=prepare with organization_name, workspace_name, query_run_id and selections
+containing candidate_id and proposed managed_type. For multiple candidates, prepare checks selected
+type support where a destination schema exists; call single-selection prepare for each complete type
+schema. Author one individual resource/import binding per candidate; do not use first-N results.
+On batch upload, plan and post-Run status, each selection also needs a unique target_address;
+carry query_run_id and the complete reviewed binding list on post-Run batch status. The legacy
+scalar target_address remains for single-selection calls. Preparation retrieves the destination
 provider schema through current state-version metadata -> associated run -> plan/json-schema,
 or, optionally, for a verified blank workspace, from a provider-only speculative plan identified
 by schema_cv_id and schema_run_id. When no schema IDs are supplied for a blank workspace,
@@ -153,14 +164,16 @@ binary-capable HTTP GET; a browser is not required, and MCP never fetches archiv
 Use only a binary-read method supported by the client, not a presumed web response API.
 Keep signed URLs out of logs and exposed command arguments; if no safe local tool is
 available, stop and ask. Request a fresh context URL if needed. For a blank workspace,
-the agent authors/reviews resource/import HCL and a lock locally, calls upload with the chosen
-target_address and no baseline/schema IDs, PUTs the entire archive directly, calls plan with
-the CV ID and target_address, then polls status with CV/Run IDs and target_address. A separate
+the agent authors/reviews resource/import HCL and a lock locally, calls upload with chosen
+target addresses and no baseline/schema IDs, PUTs the entire archive directly, calls plan with
+the CV ID and addresses, then polls status with CV/Run IDs and the reviewed bindings. A separate
 provider-only schema bootstrap is optional, not a prerequisite. For an existing workspace,
-upload requires the verified baseline CV/state ID/serial and OMITS target_address; plan
-requires that same baseline, the uploaded CV ID and a valid target_address. For a verified
-blank workspace without schema IDs, direct-import upload and plan both take target_address;
-omit it for a provider-only schema probe. For a blank workspace with bootstrap schema IDs,
+single-selection upload requires the verified baseline CV/state ID/serial and OMITS target_address;
+batch upload carries addresses in selections (never the scalar). Plan requires that same baseline,
+the uploaded CV ID and valid addresses. For a verified
+blank workspace without schema IDs, a single direct-import upload and plan both take target_address;
+omit it for a single provider-only schema probe. Batch import uses selections[].target_address.
+For a blank workspace with bootstrap schema IDs, single-selection
 upload omits target_address and the subsequent import plan requires it. The MCP server
 does not download, unpack, store or parse configuration or HCL. The agent
 downloads locally, preserves the complete tree, authors HCL and reviews changes with the user.
@@ -171,7 +184,13 @@ agent PUTs the entire .tar.gz directly to that URL. phase=plan rechecks the expl
 query selection and baseline, then checks the CV is uploaded before creating a CV-bound
 PlanOnly normal Run; phase=status observes caller-supplied IDs and
 returns bounded per-address JSON-plan facts for agent assessment, never an import verdict.
-Each request carries the relevant workspace, CV, Run and selected address. The server
+Each request carries the relevant workspace, CV, Run and reviewed target addresses. Completed
+batch status correlates each caller-carried candidate/address with an import marker and provider-
+returned after_identity when a complete primitive comparison is possible. It separately reports
+plan_binding and object_identity (matched/mismatched/unverified), not an exact-import verdict;
+the plan never contains Search candidate IDs. Importing.identity may only echo authored HCL.
+For id-based or non-comparable identities, inspect the full plan ID and provider scope rather
+than treating a matching address as object identity proof. The server
 does not persist workflow records. Preserve returned IDs in the calling agent. An
 uncertain create outcome is not safe to retry blindly: reconcile with Atlas first.
 Retain the one-use upload URL securely until PUT succeeds; status cannot reacquire it.
@@ -198,10 +217,10 @@ func ImportQueryResults(logger *log.Logger, _ *server.MCPServer) server.ServerTo
 			mcp.WithString("phase", mcp.Required(), mcp.Enum("prepare", "verify", "review", "upload", "plan", "status", "context"), mcp.Description("prepare: selected evidence/schema; context: current CV or blank workspace; existing-workspace upload: baseline IDs/serial, NO target_address; import plan: uploaded CV ID AND target_address; blank-workspace upload without schema IDs: target_address for direct import, omit for provider-only probe; blank upload with schema IDs: omit target_address; status: CV/Run facts.")),
 			mcp.WithString("organization_name", mcp.Description("Required for all phases.")),
 			mcp.WithString("workspace_name", mcp.Description("Required for all phases.")),
-			mcp.WithString("query_run_id", mcp.Description("Finished no-code query; required for prepare, upload and plan.")),
-			mcp.WithArray("selections", mcp.Description("Exactly one candidate from get_query_summary and an agent-proposed managed resource type; list-resource names do not establish managed-type mappings."), mcp.MinItems(1), mcp.MaxItems(1), mcp.Items(map[string]any{
+			mcp.WithString("query_run_id", mcp.Description("Finished no-code query; required for prepare, upload and plan, and for post-Run batch status with selections.")),
+			mcp.WithArray("selections", mcp.Description("One to 100 explicit candidates from one finished QueryRun. Each needs candidate_id and proposed managed_type; for a batch, add a distinct target_address on upload/plan and post-Run status. One resource/import block per candidate; list types do not establish managed-type mappings."), mcp.MinItems(1), mcp.MaxItems(maxImportSelections), mcp.Items(map[string]any{
 				"type": "object", "required": []string{"candidate_id", "managed_type"},
-				"properties":           map[string]any{"candidate_id": map[string]any{"type": "string"}, "managed_type": map[string]any{"type": "string"}},
+				"properties":           map[string]any{"candidate_id": map[string]any{"type": "string"}, "managed_type": map[string]any{"type": "string"}, "target_address": map[string]any{"type": "string"}},
 				"additionalProperties": false,
 			})),
 			mcp.WithString("baseline_cv_id", mcp.Description("For upload/plan: current configuration version ID obtained from context/prepare.")),
@@ -212,7 +231,7 @@ func ImportQueryResults(logger *log.Logger, _ *server.MCPServer) server.ServerTo
 			mcp.WithString("run_id", mcp.Description("For status after plan: Run ID returned by plan; validated against the CV/workspace.")),
 			mcp.WithString("schema_cv_id", mcp.Description("For blank-workspace prepare/upload/plan: speculative provider-only bootstrap CV ID.")),
 			mcp.WithString("schema_run_id", mcp.Description("For blank-workspace prepare/upload/plan: plan-only bootstrap Run ID; validated against schema_cv_id and workspace.")),
-			mcp.WithString("target_address", mcp.Description("Omit on existing-workspace upload or blank upload carrying bootstrap schema IDs; require on every import plan. For blank upload without schema IDs, use for direct import or omit only for a provider-only probe. Use on post-Run status to inspect the address.")),
+			mcp.WithString("target_address", mcp.Description("Legacy single-selection address: omit on existing-workspace upload or blank upload carrying bootstrap schema IDs; require on import plan. For multiple candidates use selections[].target_address on upload/plan/post-Run status, not this scalar. For a blank single upload without schema IDs, omit only for a provider-only probe.")),
 			mcp.WithSchemaAdditionalProperties(false),
 			mcp.WithOutputSchema[importPreparation]()),
 		Handler: func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -241,9 +260,15 @@ func importQueryResultsHandler(ctx context.Context, request mcp.CallToolRequest,
 	}
 	selectionNeeded := input.Phase == "prepare" || input.Phase == "upload" || input.Phase == "plan"
 	validPhase := input.Phase == "prepare" || input.Phase == "context" || input.Phase == "upload" || input.Phase == "plan" || input.Phase == "status"
-	if err != nil || !validPhase || !importInputName(input.Organization) || !importInputName(input.Workspace) || (selectionNeeded && (!importInputName(input.QueryID) || len(input.Selections) != 1 || !strings.HasPrefix(input.Selections[0].CandidateID, "candidate-") || len(input.Selections[0].CandidateID) != 74 || !importInputName(input.Selections[0].ManagedType))) || (!selectionNeeded && (input.QueryID != "" || len(input.Selections) != 0)) || ((input.Phase == "prepare" || input.Phase == "context") && (input.ConfigurationVersionID != "" || input.RunID != "" || input.ConfirmSpeculativeRun || input.TargetAddress != "")) || (input.SchemaCVID == "") != (input.SchemaRunID == "") {
+	batchStatus := input.Phase == "status" && len(input.Selections) > 1 && input.RunID != "" && input.QueryID != ""
+	if err != nil || !validPhase || !importInputName(input.Organization) || !importInputName(input.Workspace) || (selectionNeeded && (!importInputName(input.QueryID) || len(input.Selections) < 1 || len(input.Selections) > maxImportSelections)) || (input.Phase == "status" && (!batchStatus && (input.QueryID != "" || len(input.Selections) != 0) || len(input.Selections) > maxImportSelections)) || (input.Phase == "context" && (input.QueryID != "" || len(input.Selections) != 0)) || ((input.Phase == "prepare" || input.Phase == "context") && (input.ConfigurationVersionID != "" || input.RunID != "" || input.ConfirmSpeculativeRun || input.TargetAddress != "")) || (input.SchemaCVID == "") != (input.SchemaRunID == "") {
 		response.Diagnostics = []string{"import_input_invalid"}
-		response.NextAction = "Supply organization_name and workspace_name; prepare/upload/plan require query_run_id and one candidate_id/managed_type selection."
+		response.NextAction = "Supply organization_name and workspace_name; prepare/upload/plan require query_run_id and 1–100 explicit candidate_id/managed_type selections. Batch status also requires query_run_id and the complete reviewed selection/address list."
+		return importPreparationResult(response)
+	}
+	if (selectionNeeded || batchStatus) && !validImportSelections(input) {
+		response.Diagnostics = []string{"import_selection_invalid"}
+		response.NextAction = "Provide distinct candidate IDs from the same finished query; batch upload/plan/status require distinct target_address values on every selection. Do not mix a batch with the legacy scalar target_address. No CV or Run was created."
 		return importPreparationResult(response)
 	}
 	if err := client.AuthorizeOrganization(ctx, input.Organization); err != nil {
@@ -263,20 +288,59 @@ func importQueryResultsHandler(ctx context.Context, request mcp.CallToolRequest,
 	case "context":
 		response = importConfigurationContextFromAPIs(ctx, c, input, logger)
 	case "upload":
-		response = createImportSpeculativeCV(ctx, c, input, logger)
+		if len(input.Selections) > 1 {
+			response = createImportBatchCV(ctx, c, input, logger)
+		} else {
+			response = createImportSpeculativeCV(ctx, c, input, logger)
+		}
 	case "plan":
-		response = createImportPlanRun(ctx, c, input, logger)
+		if len(input.Selections) > 1 {
+			response = createImportBatchRun(ctx, c, input, logger)
+		} else {
+			response = createImportPlanRun(ctx, c, input, logger)
+		}
 	case "status":
 		response = readImportExecutionStatus(ctx, c, input)
 	default:
-		response = prepareImportFromAPIs(ctx, c, input)
+		if len(input.Selections) > 1 {
+			response = prepareImportBatchFromAPIs(ctx, c, input)
+		} else {
+			response = prepareImportFromAPIs(ctx, c, input)
+		}
 	}
 	addImportContinuation(input, &response)
 	return importPreparationResult(response)
 }
 
+func validImportSelections(input importPrepareInput) bool {
+	seenCandidates, seenAddresses := map[string]bool{}, map[string]bool{}
+	batch := len(input.Selections) > 1
+	if batch && input.TargetAddress != "" {
+		return false
+	}
+	for _, s := range input.Selections {
+		if !strings.HasPrefix(s.CandidateID, "candidate-") || len(s.CandidateID) != 74 || !importInputName(s.ManagedType) || seenCandidates[s.CandidateID] {
+			return false
+		}
+		seenCandidates[s.CandidateID] = true
+		if s.TargetAddress != "" {
+			if !validImportTargetAddress(s.TargetAddress) || seenAddresses[s.TargetAddress] || !batch {
+				return false
+			}
+			seenAddresses[s.TargetAddress] = true
+		} else if batch && (input.Phase == "upload" || input.Phase == "plan" || input.Phase == "status") {
+			return false
+		}
+	}
+	return true
+}
+
 func addImportContinuation(input importPrepareInput, response *importPreparation) {
 	if response.WorkspaceID == "" || (response.Status == "blocked" && response.Execution == nil) {
+		return
+	}
+	if len(input.Selections) > 1 {
+		addImportBatchContinuation(input, response)
 		return
 	}
 	refs := &importWorkflowContext{Organization: response.Organization, Workspace: input.Workspace, WorkspaceID: response.WorkspaceID}
@@ -348,7 +412,7 @@ func addImportContinuation(input importPrepareInput, response *importPreparation
 		response.Continuation = &importContinuation{NextPhase: "status", Arguments: args, Precondition: "Read this same CV/Run pair again; do not create another Run merely because it is pending."}
 	case input.Phase == "status" && response.Status == "ready_for_plan":
 		args["phase"], args["configuration_version_id"] = "plan", refs.ConfigurationVersionID
-		response.Continuation = &importContinuation{NextPhase: "plan", Arguments: args, RequiredInputs: []string{"query_run_id", "selections", "confirm_speculative_run"}, Precondition: "Incomplete call: bring the reviewed selection and target_address (required for every import plan), plus baseline_cv_id/baseline_state_id/baseline_state_serial for existing workspaces or schema_cv_id/schema_run_id when applicable. Omit target_address only for an optional blank-workspace provider-schema probe. This CV read cannot prove which selection created the archive; reconcile uncertain Run creates before POST."}
+		response.Continuation = &importContinuation{NextPhase: "plan", Arguments: args, RequiredInputs: []string{"query_run_id", "selections", "confirm_speculative_run"}, Precondition: "Incomplete call: bring the reviewed selection and target_address (required for every import plan) when using one candidate, or the complete batch with selections[].target_address, plus baseline_cv_id/baseline_state_id/baseline_state_serial for existing workspaces or schema_cv_id/schema_run_id when applicable. Omit the scalar target_address only for an optional blank-workspace provider-schema probe. This CV read cannot prove which selection created the archive; reconcile uncertain Run creates before POST."}
 	case input.Phase == "status" && response.Status == "awaiting_agent_upload":
 		args["phase"], args["configuration_version_id"] = "status", refs.ConfigurationVersionID
 		response.Continuation = &importContinuation{NextPhase: "status", Arguments: args, Precondition: "Use the original upload URL to PUT the agent-owned archive before polling. If lost, it cannot be reacquired from CV status; reconcile the pending CV in the backend before considering a new reviewed speculative CV. Do not blindly create another."}
