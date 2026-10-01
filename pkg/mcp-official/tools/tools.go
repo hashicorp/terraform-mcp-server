@@ -40,6 +40,9 @@ var officialFactories = map[string]func(svr *mcp.Server, logger *slog.Logger){
 	"delete_project": func(svr *mcp.Server, _ *slog.Logger) {
 		mcp.AddTool(svr, tfeTools.DeleteProjectTool(), tfeTools.DeleteProjectFunc)
 	},
+	"delete_team": func(svr *mcp.Server, _ *slog.Logger) {
+		mcp.AddTool(svr, tfeTools.DeleteTeamTool(), tfeTools.DeleteTeamFunc)
+	},
 	"whoami": func(svr *mcp.Server, _ *slog.Logger) {
 		mcp.AddTool(svr, tfeTools.WhoAmITool(), tfeTools.WhoAmIFunc)
 	},
