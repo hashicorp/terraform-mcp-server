@@ -60,12 +60,12 @@ func GetQueryStatus(logger *log.Logger) server.ServerTool {
 func getQueryStatusHandler(ctx context.Context, request mcp.CallToolRequest, logger *log.Logger) (*mcp.CallToolResult, error) {
 	queryRunID, err := request.RequireString("query_run_id")
 	if err != nil || strings.TrimSpace(queryRunID) == "" {
-		return getQueryStatusToolErrorf(logger, "missing required input: query_run_id")
+		return toolErrorf(logger, "get_query_status", "missing required input: query_run_id")
 	}
 
 	tfeClient, err := client.GetTfeClientFromContext(ctx, logger)
 	if err != nil {
-		return getQueryStatusToolErrorf(logger, "failed to get Terraform client: %v", err)
+		return toolErrorf(logger, "get_query_status", "failed to get Terraform client: %v", err)
 	}
 
 	pollCtx, cancel := context.WithTimeout(ctx, queryStatusTimeout)
@@ -73,7 +73,7 @@ func getQueryStatusHandler(ctx context.Context, request mcp.CallToolRequest, log
 
 	response, status, err := waitForQueryStatus(pollCtx, tfeClient, strings.TrimSpace(queryRunID), queryStatusPollInterval)
 	if err != nil {
-		return getQueryStatusToolErrorf(logger, "failed to get query run %q: %v", queryRunID, err)
+		return toolErrorf(logger, "get_query_status", "failed to get query run %q: %v", queryRunID, err)
 	}
 
 	return mcp.NewToolResultText(fmt.Sprintf(
@@ -157,14 +157,6 @@ func queryStatusTimestamps(timestamps *tfe.QueryRunStatusTimestamps) *queryStatu
 		response.RunningAt = &timestamps.RunningAt
 	}
 	return response
-}
-
-func getQueryStatusToolErrorf(logger *log.Logger, format string, args ...any) (*mcp.CallToolResult, error) {
-	message := fmt.Sprintf(format, args...)
-	if logger != nil {
-		logger.Errorf("get_query_status: %s", message)
-	}
-	return mcp.NewToolResultError(message), nil
 }
 
 const getQueryStatusDescription = `Fetches an HCP Terraform query run using go-tfe.
