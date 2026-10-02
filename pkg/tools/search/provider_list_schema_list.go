@@ -4,6 +4,7 @@
 package search
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -219,7 +220,7 @@ func fetchProviderSchema(ctx context.Context, tfeClient *tfe.Client, orgName, na
 	}
 
 	var resp noCodeProviderSchemaResponse
-	if err := request.DoJSON(ctx, &resp); err != nil {
+	if err := doProviderRequest(ctx, request, &resp); err != nil {
 		return toolErrorf(logger, "provider_list_schema_list", "failed to fetch schema for %s/%s@%s: %v", namespace, name, version, err)
 	}
 
@@ -268,10 +269,18 @@ func readProviderVersions(ctx context.Context, tfeClient *tfe.Client, orgName st
 	}
 
 	var resp noCodeProviderVersionsResponse
-	if err := request.DoJSON(ctx, &resp); err != nil {
+	if err := doProviderRequest(ctx, request, &resp); err != nil {
 		return nil, err
 	}
 	return &resp, nil
+}
+
+func doProviderRequest(ctx context.Context, request *tfe.ClientRequest, response any) error {
+	var body bytes.Buffer
+	if err := request.Do(ctx, &body); err != nil {
+		return err
+	}
+	return json.Unmarshal(body.Bytes(), response)
 }
 
 const providerListSchemaListDescription = `Fetches list_resource_schemas for a search-compatible Terraform provider from the

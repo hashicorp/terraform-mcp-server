@@ -196,6 +196,24 @@ func TestListSupportedProviders_EmptyList(t *testing.T) {
 	assert.True(t, result.IsError)
 }
 
+func TestListSupportedProviders_PreservesAPIErrorDetails(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/vnd.api+json")
+		w.WriteHeader(http.StatusUnprocessableEntity)
+		_, _ = w.Write([]byte(`{"errors":[{"status":"422","title":"Invalid organization","detail":"Organization is not enabled for search"}]}`))
+	}))
+	defer srv.Close()
+
+	result, err := listSupportedProviders(context.Background(), newProviderListTFEClient(t, srv), "test-org", silentLogger())
+
+	require.NoError(t, err)
+	require.True(t, result.IsError)
+	tc, ok := mcp.AsTextContent(result.Content[0])
+	require.True(t, ok, "expected TextContent")
+	assert.Contains(t, tc.Text, "Invalid organization")
+	assert.Contains(t, tc.Text, "Organization is not enabled for search")
+}
+
 func TestListSupportedProviders_WithOrgFilter(t *testing.T) {
 	var capturedOrg string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -306,6 +324,24 @@ func TestFetchProviderSchema_NotInCatalog(t *testing.T) {
 	result, err := fetchProviderSchema(context.Background(), newProviderListTFEClient(t, s.server), "", "hashicorp", "aws", "5.0.0", silentLogger())
 	require.NoError(t, err)
 	assert.True(t, result.IsError)
+}
+
+func TestFetchProviderSchema_PreservesAPIErrorDetails(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/vnd.api+json")
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = w.Write([]byte(`{"errors":[{"status":"400","title":"Invalid provider version","detail":"The requested version has no search schema"}]}`))
+	}))
+	defer srv.Close()
+
+	result, err := fetchProviderSchema(context.Background(), newProviderListTFEClient(t, srv), "test-org", "hashicorp", "aws", "5.0.0", silentLogger())
+
+	require.NoError(t, err)
+	require.True(t, result.IsError)
+	tc, ok := mcp.AsTextContent(result.Content[0])
+	require.True(t, ok, "expected TextContent")
+	assert.Contains(t, tc.Text, "Invalid provider version")
+	assert.Contains(t, tc.Text, "The requested version has no search schema")
 }
 
 func TestFetchProviderSchema_NilListResourceSchemas(t *testing.T) {
