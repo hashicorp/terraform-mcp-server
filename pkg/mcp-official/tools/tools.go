@@ -49,18 +49,6 @@ var officialFactories = map[string]func(svr *mcp.Server, logger *slog.Logger){
 	"get_token_permissions": func(svr *mcp.Server, _ *slog.Logger) {
 		mcp.AddTool(svr, tfeTools.GetTokenPermissionsTool(), tfeTools.GetTokenPermissionsFunc)
 	},
-	"search_providers": func(svr *mcp.Server, logger *slog.Logger) {
-		mcp.AddTool(svr, registryTools.SearchProvidersTool(), registryTools.SearchProvidersFunc(logger))
-	},
-	"get_provider_details": func(svr *mcp.Server, logger *slog.Logger) {
-		mcp.AddTool(svr, registryTools.GetProviderDetailsTool(), registryTools.GetProviderDetailsFunc(logger))
-	},
-	"get_latest_provider_version": func(svr *mcp.Server, logger *slog.Logger) {
-		mcp.AddTool(svr, registryTools.GetLatestProviderVersionTool(), registryTools.GetLatestProviderVersionFunc(logger))
-	},
-	"get_provider_capabilities": func(svr *mcp.Server, logger *slog.Logger) {
-		mcp.AddTool(svr, registryTools.GetProviderCapabilitiesTool(), registryTools.GetProviderCapabilitiesFunc(logger))
-	},
 	"list_teams": func(svr *mcp.Server, _ *slog.Logger) {
 		mcp.AddTool(svr, tfeTools.ListTeamsTool(), tfeTools.ListTeamsFunc)
 	},
@@ -75,6 +63,25 @@ var officialFactories = map[string]func(svr *mcp.Server, logger *slog.Logger){
 	},
 	"grant_team_access": func(svr *mcp.Server, _ *slog.Logger) {
 		mcp.AddTool(svr, tfeTools.GrantTeamAccessTool(), tfeTools.GrantTeamAccessFunc)
+	},
+	"list_state_versions": func(svr *mcp.Server, _ *slog.Logger) {
+		mcp.AddTool(svr, tfeTools.ListStateVersionsTool(), tfeTools.ListStateVersionsFunc)
+	},
+	"get_state_version": func(svr *mcp.Server, _ *slog.Logger) {
+		mcp.AddTool(svr, tfeTools.GetStateVersionTool(), tfeTools.GetStateVersionFunc)
+	},
+	// public registry tools
+	"search_providers": func(svr *mcp.Server, logger *slog.Logger) {
+		mcp.AddTool(svr, registryTools.SearchProvidersTool(), registryTools.SearchProvidersFunc(logger))
+	},
+	"get_provider_details": func(svr *mcp.Server, logger *slog.Logger) {
+		mcp.AddTool(svr, registryTools.GetProviderDetailsTool(), registryTools.GetProviderDetailsFunc(logger))
+	},
+	"get_latest_provider_version": func(svr *mcp.Server, logger *slog.Logger) {
+		mcp.AddTool(svr, registryTools.GetLatestProviderVersionTool(), registryTools.GetLatestProviderVersionFunc(logger))
+	},
+	"get_provider_capabilities": func(svr *mcp.Server, logger *slog.Logger) {
+		mcp.AddTool(svr, registryTools.GetProviderCapabilitiesTool(), registryTools.GetProviderCapabilitiesFunc(logger))
 	},
 }
 
