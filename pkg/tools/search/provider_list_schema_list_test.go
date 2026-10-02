@@ -10,7 +10,10 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/hashicorp/go-tfe"
+	"github.com/hashicorp/terraform-mcp-server/pkg/client"
 	"github.com/mark3labs/mcp-go/mcp"
+	"github.com/mark3labs/mcp-go/server"
 	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -20,6 +23,17 @@ func silentLogger() *log.Logger {
 	l := log.New()
 	l.SetLevel(log.PanicLevel)
 	return l
+}
+
+func newProviderListTFEClient(t *testing.T, server *httptest.Server) *tfe.Client {
+	t.Helper()
+	tfeClient, err := tfe.NewClient(&tfe.Config{
+		Address:    server.URL,
+		Token:      "test-token",
+		HTTPClient: server.Client(),
+	})
+	require.NoError(t, err)
+	return tfeClient
 }
 
 // ── helpers ───────────────────────────────────────────────────────────────────
@@ -146,67 +160,6 @@ func splitKey(key string) [3]string {
 	return parts
 }
 
-// ── doAuthenticatedGet ────────────────────────────────────────────────────────
-
-func TestDoAuthenticatedGet_Success(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		assert.Equal(t, "Bearer test-token", r.Header.Get("Authorization"))
-		assert.Equal(t, "application/vnd.api+json", r.Header.Get("Accept"))
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(`{"ok":true}`))
-	}))
-	defer srv.Close()
-
-	body, err := doAuthenticatedGet(context.Background(), srv.URL, "test-token", srv.Client(), silentLogger())
-	require.NoError(t, err)
-	assert.JSONEq(t, `{"ok":true}`, string(body))
-}
-
-func TestDoAuthenticatedGet_NotFound(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusNotFound)
-	}))
-	defer srv.Close()
-
-	_, err := doAuthenticatedGet(context.Background(), srv.URL, "tok", srv.Client(), silentLogger())
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "404 Not Found")
-}
-
-func TestDoAuthenticatedGet_Unauthorized(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusUnauthorized)
-	}))
-	defer srv.Close()
-
-	_, err := doAuthenticatedGet(context.Background(), srv.URL, "bad", srv.Client(), silentLogger())
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "HTTP 401")
-}
-
-func TestDoAuthenticatedGet_Forbidden(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusForbidden)
-	}))
-	defer srv.Close()
-
-	_, err := doAuthenticatedGet(context.Background(), srv.URL, "bad", srv.Client(), silentLogger())
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "HTTP 403")
-}
-
-func TestDoAuthenticatedGet_UnexpectedStatus(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusInternalServerError)
-		_, _ = w.Write([]byte("internal error"))
-	}))
-	defer srv.Close()
-
-	_, err := doAuthenticatedGet(context.Background(), srv.URL, "tok", srv.Client(), silentLogger())
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "unexpected HTTP 500")
-}
-
 // ── listSupportedProviders ────────────────────────────────────────────────────
 
 func TestListSupportedProviders_ReturnsList(t *testing.T) {
@@ -217,7 +170,7 @@ func TestListSupportedProviders_ReturnsList(t *testing.T) {
 	s := newProviderListServer(providers, nil)
 	defer s.server.Close()
 
-	result, err := listSupportedProviders(context.Background(), s.server.URL, "", "token", s.server.Client(), silentLogger())
+	result, err := listSupportedProviders(context.Background(), newProviderListTFEClient(t, s.server), "", silentLogger())
 	require.NoError(t, err)
 	require.NotNil(t, result)
 	require.Len(t, result.Content, 1)
@@ -237,16 +190,34 @@ func TestListSupportedProviders_EmptyList(t *testing.T) {
 	s := newProviderListServer(nil, nil)
 	defer s.server.Close()
 
-	result, err := listSupportedProviders(context.Background(), s.server.URL, "", "token", s.server.Client(), silentLogger())
+	result, err := listSupportedProviders(context.Background(), newProviderListTFEClient(t, s.server), "", silentLogger())
 	require.NoError(t, err)
 	// Empty list → tool error result
 	assert.True(t, result.IsError)
 }
 
-func TestListSupportedProviders_WithOrgFilter(t *testing.T) {
-	var capturedURL string
+func TestListSupportedProviders_PreservesAPIErrorDetails(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		capturedURL = r.URL.String()
+		w.Header().Set("Content-Type", "application/vnd.api+json")
+		w.WriteHeader(http.StatusUnprocessableEntity)
+		_, _ = w.Write([]byte(`{"errors":[{"status":"422","title":"Invalid organization","detail":"Organization is not enabled for search"}]}`))
+	}))
+	defer srv.Close()
+
+	result, err := listSupportedProviders(context.Background(), newProviderListTFEClient(t, srv), "test-org", silentLogger())
+
+	require.NoError(t, err)
+	require.True(t, result.IsError)
+	tc, ok := mcp.AsTextContent(result.Content[0])
+	require.True(t, ok, "expected TextContent")
+	assert.Contains(t, tc.Text, "Invalid organization")
+	assert.Contains(t, tc.Text, "Organization is not enabled for search")
+}
+
+func TestListSupportedProviders_WithOrgFilter(t *testing.T) {
+	var capturedOrg string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		capturedOrg = r.URL.Query().Get("filter[organization][name]")
 		w.Header().Set("Content-Type", "application/vnd.api+json")
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"data": []any{
@@ -264,9 +235,9 @@ func TestListSupportedProviders_WithOrgFilter(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	_, err := listSupportedProviders(context.Background(), srv.URL, "my-org", "tok", srv.Client(), silentLogger())
+	_, err := listSupportedProviders(context.Background(), newProviderListTFEClient(t, srv), "example org&group=test", silentLogger())
 	require.NoError(t, err)
-	assert.Contains(t, capturedURL, "filter[organization][name]=my-org")
+	assert.Equal(t, "example org&group=test", capturedOrg)
 }
 
 // ── discoverProviderVersion ───────────────────────────────────────────────────
@@ -279,9 +250,20 @@ func TestDiscoverProviderVersion_Found(t *testing.T) {
 	s := newProviderListServer(providers, nil)
 	defer s.server.Close()
 
-	version, err := discoverProviderVersion(context.Background(), s.server.URL, "", "hashicorp", "aws", "token", s.server.Client(), silentLogger())
+	version, err := discoverProviderVersion(context.Background(), newProviderListTFEClient(t, s.server), "", "hashicorp", "aws")
 	require.NoError(t, err)
 	assert.Equal(t, "5.1.0", version)
+}
+func TestDiscoverProviderVersion_WithOrgFilter(t *testing.T) {
+	var capturedOrg string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		capturedOrg = r.URL.Query().Get("filter[organization][name]")
+		_ = json.NewEncoder(w).Encode(map[string]any{"data": []any{}})
+	}))
+	defer srv.Close()
+
+	_, _ = discoverProviderVersion(context.Background(), newProviderListTFEClient(t, srv), "example org&group=test", "example", "provider")
+	assert.Equal(t, "example org&group=test", capturedOrg)
 }
 
 func TestDiscoverProviderVersion_CaseInsensitive(t *testing.T) {
@@ -291,7 +273,7 @@ func TestDiscoverProviderVersion_CaseInsensitive(t *testing.T) {
 	s := newProviderListServer(providers, nil)
 	defer s.server.Close()
 
-	version, err := discoverProviderVersion(context.Background(), s.server.URL, "", "hashicorp", "aws", "token", s.server.Client(), silentLogger())
+	version, err := discoverProviderVersion(context.Background(), newProviderListTFEClient(t, s.server), "", "hashicorp", "aws")
 	require.NoError(t, err)
 	assert.Equal(t, "5.1.0", version)
 }
@@ -303,7 +285,7 @@ func TestDiscoverProviderVersion_NotFound(t *testing.T) {
 	s := newProviderListServer(providers, nil)
 	defer s.server.Close()
 
-	_, err := discoverProviderVersion(context.Background(), s.server.URL, "", "hashicorp", "aws", "token", s.server.Client(), silentLogger())
+	_, err := discoverProviderVersion(context.Background(), newProviderListTFEClient(t, s.server), "", "hashicorp", "aws")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "hashicorp/aws is not in the search-compatible catalog")
 }
@@ -318,7 +300,7 @@ func TestFetchProviderSchema_Success(t *testing.T) {
 	s := newProviderListServer(nil, schemas)
 	defer s.server.Close()
 
-	result, err := fetchProviderSchema(context.Background(), s.server.URL, "", "hashicorp", "aws", "5.0.0", "tok", s.server.Client(), silentLogger())
+	result, err := fetchProviderSchema(context.Background(), newProviderListTFEClient(t, s.server), "", "hashicorp", "aws", "5.0.0", silentLogger())
 	require.NoError(t, err)
 	require.NotNil(t, result)
 	assert.False(t, result.IsError)
@@ -339,9 +321,27 @@ func TestFetchProviderSchema_NotInCatalog(t *testing.T) {
 	s := newProviderListServer(nil, map[string]json.RawMessage{})
 	defer s.server.Close()
 
-	result, err := fetchProviderSchema(context.Background(), s.server.URL, "", "hashicorp", "aws", "5.0.0", "tok", s.server.Client(), silentLogger())
+	result, err := fetchProviderSchema(context.Background(), newProviderListTFEClient(t, s.server), "", "hashicorp", "aws", "5.0.0", silentLogger())
 	require.NoError(t, err)
 	assert.True(t, result.IsError)
+}
+
+func TestFetchProviderSchema_PreservesAPIErrorDetails(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/vnd.api+json")
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = w.Write([]byte(`{"errors":[{"status":"400","title":"Invalid provider version","detail":"The requested version has no search schema"}]}`))
+	}))
+	defer srv.Close()
+
+	result, err := fetchProviderSchema(context.Background(), newProviderListTFEClient(t, srv), "test-org", "hashicorp", "aws", "5.0.0", silentLogger())
+
+	require.NoError(t, err)
+	require.True(t, result.IsError)
+	tc, ok := mcp.AsTextContent(result.Content[0])
+	require.True(t, ok, "expected TextContent")
+	assert.Contains(t, tc.Text, "Invalid provider version")
+	assert.Contains(t, tc.Text, "The requested version has no search schema")
 }
 
 func TestFetchProviderSchema_NilListResourceSchemas(t *testing.T) {
@@ -352,7 +352,7 @@ func TestFetchProviderSchema_NilListResourceSchemas(t *testing.T) {
 	s := newProviderListServer(nil, schemas)
 	defer s.server.Close()
 
-	result, err := fetchProviderSchema(context.Background(), s.server.URL, "", "hashicorp", "aws", "5.0.0", "tok", s.server.Client(), silentLogger())
+	result, err := fetchProviderSchema(context.Background(), newProviderListTFEClient(t, s.server), "", "hashicorp", "aws", "5.0.0", silentLogger())
 	require.NoError(t, err)
 	assert.True(t, result.IsError)
 	tc, ok := mcp.AsTextContent(result.Content[0])
@@ -361,9 +361,11 @@ func TestFetchProviderSchema_NilListResourceSchemas(t *testing.T) {
 }
 
 func TestFetchProviderSchema_WithOrgFilter(t *testing.T) {
-	var capturedURL string
+	var capturedOrg string
+	var capturedPath string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		capturedURL = r.URL.String()
+		capturedOrg = r.URL.Query().Get("filter[organization][name]")
+		capturedPath = r.URL.EscapedPath()
 		w.Header().Set("Content-Type", "application/vnd.api+json")
 		schema := json.RawMessage(`{"aws_instance":{}}`)
 		type attrs struct {
@@ -387,8 +389,9 @@ func TestFetchProviderSchema_WithOrgFilter(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	_, _ = fetchProviderSchema(context.Background(), srv.URL, "my-org", "hashicorp", "aws", "5.0.0", "tok", srv.Client(), silentLogger())
-	assert.Contains(t, capturedURL, "filter[organization][name]=my-org")
+	_, _ = fetchProviderSchema(context.Background(), newProviderListTFEClient(t, srv), "example org&group=test", "example/namespace", "test provider", "1.0/test", silentLogger())
+	assert.Equal(t, "example org&group=test", capturedOrg)
+	assert.Equal(t, "/api/v2/search/provider-versions/example%2Fnamespace/test%20provider/1.0%2Ftest", capturedPath)
 }
 
 // ── tool definition ───────────────────────────────────────────────────────────
@@ -406,6 +409,8 @@ func TestProviderListSchemaList_ToolDefinition(t *testing.T) {
 	assert.True(t, *tool.Tool.Annotations.ReadOnlyHint)
 	require.NotNil(t, tool.Tool.Annotations.DestructiveHint)
 	assert.False(t, *tool.Tool.Annotations.DestructiveHint)
+	require.NotNil(t, tool.Tool.Annotations.OpenWorldHint)
+	assert.True(t, *tool.Tool.Annotations.OpenWorldHint)
 
 	// Parameters
 	props := tool.Tool.InputSchema.Properties
@@ -430,10 +435,82 @@ func TestProviderListSchemaList_RejectsMissingScopeBeforeRequest(t *testing.T) {
 	assert.Contains(t, tc.Text, "ask the user")
 }
 
-// ── searchToolErrorf ──────────────────────────────────────────────────────────
+func TestProviderListSchemaList_ValidatesWorkspaceBeforeProviderRequest(t *testing.T) {
+	tests := []struct {
+		name              string
+		workspaceStatus   int
+		wantProviderCalls int
+		wantError         string
+	}{
+		{
+			name:              "valid workspace proceeds to provider endpoint",
+			workspaceStatus:   http.StatusOK,
+			wantProviderCalls: 1,
+		},
+		{
+			name:            "failed workspace read stops before provider endpoint",
+			workspaceStatus: http.StatusNotFound,
+			wantError:       `failed to read workspace "test-workspace" in organization "test-org"`,
+		},
+	}
 
-func TestSearchToolErrorf(t *testing.T) {
-	result, err := searchToolErrorf(silentLogger(), "something went wrong: %v", "boom")
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			providerCalls := 0
+			tfeServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "application/vnd.api+json")
+				switch r.URL.Path {
+				case "/api/v2/organizations/test-org/workspaces/test-workspace":
+					w.WriteHeader(test.workspaceStatus)
+					if test.workspaceStatus == http.StatusOK {
+						_, _ = w.Write([]byte(`{"data":{"id":"ws-test","type":"workspaces","attributes":{"name":"test-workspace"}}}`))
+					} else {
+						_, _ = w.Write([]byte(`{"errors":[{"status":"404","title":"not found"}]}`))
+					}
+				case "/api/v2/search/provider-versions":
+					providerCalls++
+					_, _ = w.Write([]byte(`{"data":[{"id":"hashicorp/aws/5.0.0","type":"provider-versions","attributes":{"namespace":"hashicorp","name":"aws","version":"5.0.0"}}]}`))
+				default:
+					w.WriteHeader(http.StatusNotFound)
+				}
+			}))
+			defer tfeServer.Close()
+
+			const token = "test-token"
+			sessionID := t.Name()
+			_, err := client.NewTfeClient(sessionID, tfeServer.URL, false, token, "", silentLogger())
+			require.NoError(t, err)
+			t.Cleanup(func() { client.DeleteTfeClient(sessionID) })
+			t.Setenv(client.TerraformToken, token)
+
+			mcpServer := new(server.MCPServer)
+			ctx := mcpServer.WithContext(context.Background(), server.NewInProcessSession(sessionID, nil))
+			request := mcp.CallToolRequest{Params: mcp.CallToolParams{Arguments: map[string]any{
+				"organization_name": "test-org",
+				"workspace_name":    "test-workspace",
+			}}}
+
+			result, err := providerListSchemaListHandler(ctx, request, silentLogger())
+
+			require.NoError(t, err)
+			require.NotNil(t, result)
+			assert.Equal(t, test.wantProviderCalls, providerCalls)
+			if test.wantError == "" {
+				assert.False(t, result.IsError)
+			} else {
+				require.True(t, result.IsError)
+				tc, ok := mcp.AsTextContent(result.Content[0])
+				require.True(t, ok, "expected TextContent")
+				assert.Contains(t, tc.Text, test.wantError)
+			}
+		})
+	}
+}
+
+// ── toolErrorf ────────────────────────────────────────────────────────────────
+
+func TestToolErrorf(t *testing.T) {
+	result, err := toolErrorf(silentLogger(), "test_tool", "something went wrong: %v", "boom")
 	require.NoError(t, err)
 	require.NotNil(t, result)
 	assert.True(t, result.IsError)
@@ -442,8 +519,8 @@ func TestSearchToolErrorf(t *testing.T) {
 	assert.Equal(t, "something went wrong: boom", tc.Text)
 }
 
-func TestSearchToolErrorf_NilLogger(t *testing.T) {
-	result, err := searchToolErrorf(nil, "msg")
+func TestToolErrorf_NilLogger(t *testing.T) {
+	result, err := toolErrorf(nil, "test_tool", "msg")
 	require.NoError(t, err)
 	assert.True(t, result.IsError)
 }

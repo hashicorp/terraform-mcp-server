@@ -74,17 +74,17 @@ func GetQuerySummary(logger *log.Logger) server.ServerTool {
 func getQuerySummaryHandler(ctx context.Context, request mcp.CallToolRequest, logger *log.Logger) (*mcp.CallToolResult, error) {
 	queryRunID, err := request.RequireString("query_run_id")
 	if err != nil || strings.TrimSpace(queryRunID) == "" {
-		return getQuerySummaryToolErrorf(logger, "missing required input: query_run_id")
+		return toolErrorf(logger, "get_query_summary", "missing required input: query_run_id")
 	}
 
 	tfeClient, err := client.GetTfeClientFromContext(ctx, logger)
 	if err != nil {
-		return getQuerySummaryToolErrorf(logger, "failed to get Terraform client: %v", err)
+		return toolErrorf(logger, "get_query_summary", "failed to get Terraform client: %v", err)
 	}
 
 	summary, err := readQuerySummary(ctx, tfeClient, strings.TrimSpace(queryRunID))
 	if err != nil {
-		return getQuerySummaryToolErrorf(logger, "failed to get query summary for %q: %v", queryRunID, err)
+		return toolErrorf(logger, "get_query_summary", "failed to get query summary for %q: %v", queryRunID, err)
 	}
 
 	return mcp.NewToolResultText(summary), nil
@@ -142,14 +142,6 @@ func parseQuerySummary(reader io.Reader) (*querySummary, error) {
 	}
 
 	return summary, nil
-}
-
-func getQuerySummaryToolErrorf(logger *log.Logger, format string, args ...any) (*mcp.CallToolResult, error) {
-	message := fmt.Sprintf(format, args...)
-	if logger != nil {
-		logger.Errorf("get_query_summary: %s", message)
-	}
-	return mcp.NewToolResultError(message), nil
 }
 
 const getQuerySummaryDescription = `Retrieves and parses the NDJSON log for an HCP Terraform query run.
