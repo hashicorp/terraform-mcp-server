@@ -82,6 +82,24 @@ var officialFactories = map[string]func(svr *mcp.Server, logger *slog.Logger){
 	"get_stack_details": func(svr *mcp.Server, _ *slog.Logger) {
 		mcp.AddTool(svr, tfeTools.GetStackDetailsTool(), tfeTools.GetStackDetailsFunc)
 	},
+	"list_variable_sets": func(svr *mcp.Server, _ *slog.Logger) {
+		mcp.AddTool(svr, tfeTools.ListVariableSetsTool(), tfeTools.ListVariableSetsFunc)
+	},
+	"create_variable_set": func(svr *mcp.Server, _ *slog.Logger) {
+		mcp.AddTool(svr, tfeTools.CreateVariableSetTool(), tfeTools.CreateVariableSetFunc)
+	},
+	"create_variable_in_variable_set": func(svr *mcp.Server, _ *slog.Logger) {
+		mcp.AddTool(svr, tfeTools.CreateVariableInVariableSetTool(), tfeTools.CreateVariableInVariableSetFunc)
+	},
+	"delete_variable_in_variable_set": func(svr *mcp.Server, _ *slog.Logger) {
+		mcp.AddTool(svr, tfeTools.DeleteVariableInVariableSetTool(), tfeTools.DeleteVariableInVariableSetFunc)
+	},
+	"attach_variable_set_to_workspaces": func(svr *mcp.Server, _ *slog.Logger) {
+		mcp.AddTool(svr, tfeTools.AttachVariableSetToWorkspacesTool(), tfeTools.AttachVariableSetToWorkspacesFunc)
+	},
+	"detach_variable_set_from_workspaces": func(svr *mcp.Server, _ *slog.Logger) {
+		mcp.AddTool(svr, tfeTools.DetachVariableSetFromWorkspacesTool(), tfeTools.DetachVariableSetFromWorkspacesFunc)
+	},
 }
 
 func RegisterTools(svr *mcp.Server, logger *slog.Logger, filter toolsets.ToolFilter) {
