@@ -76,6 +76,16 @@ var officialFactories = map[string]func(svr *mcp.Server, logger *slog.Logger){
 	"grant_team_access": func(svr *mcp.Server, _ *slog.Logger) {
 		mcp.AddTool(svr, tfeTools.GrantTeamAccessTool(), tfeTools.GrantTeamAccessFunc)
 	},
+	// public registry tools
+	"search_modules": func(svr *mcp.Server, logger *slog.Logger) {
+		mcp.AddTool(svr, registryTools.SearchModulesTool(), registryTools.SearchModulesFunc(logger))
+	},
+	"get_latest_module_version": func(svr *mcp.Server, logger *slog.Logger) {
+		mcp.AddTool(svr, registryTools.GetLatestModuleVersionTool(), registryTools.GetLatestModuleVersionFunc(logger))
+	},
+	"get_module_details": func(svr *mcp.Server, logger *slog.Logger) {
+		mcp.AddTool(svr, registryTools.GetModuleDetailsTool(), registryTools.GetModuleDetailsFunc(logger))
+	},
 }
 
 func RegisterTools(svr *mcp.Server, logger *slog.Logger, filter toolsets.ToolFilter) {
