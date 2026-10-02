@@ -27,5 +27,4 @@ func RegisterTools(hcServer *server.MCPServer, logger *log.Logger, filter toolse
 		tool := factory(logger)
 		hcServer.AddTool(tool.Tool, tool.Handler)
 	}
-
 }
