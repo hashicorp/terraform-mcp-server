@@ -281,6 +281,156 @@ func TestRunLifecycle(t *testing.T) {
 	})
 }
 
+// TODO: remove once the run tools are migrated; TestRunLifecycle covers the same checks.
+func TestPlanAndApplyTools(t *testing.T) {
+	requireTfOperations(t)
+
+	s := newTestingSession(t)
+	defer s.Close()
+
+	// Create an isolated remote workspace for the run.
+	client := tfeClient(t)
+	workspaceName := randomName("plan-apply-test-")
+	executionMode := "remote"
+
+	workspace, err := client.Workspaces.Create(t.Context(), tfeOrgName, tfe.WorkspaceCreateOptions{
+		Name:          &workspaceName,
+		ExecutionMode: &executionMode,
+		AutoApply:     tfe.Bool(false),
+	})
+	require.NoError(t, err, "failed to create test workspace")
+	defer client.Workspaces.DeleteByID(t.Context(), workspace.ID)
+
+	// Upload the configuration without automatically queuing a run.
+	uploadRunTestConfiguration(t, client, workspace.ID)
+
+	createdRun, err := client.Runs.Create(t.Context(), tfe.RunCreateOptions{
+		Workspace: workspace,
+		Message:   tfe.String("Created by terraform-mcp-server integration tests"),
+	})
+	require.NoError(t, err, "failed to create a run with the TFE client")
+	runID := createdRun.ID
+
+	// Planning is asynchronous; wait until the run can be applied.
+	plannedRun := waitForRun(t, client, runID, "become confirmable", func(run *tfe.Run) bool {
+		return run.Actions != nil && run.Actions.IsConfirmable
+	})
+	require.NotNil(t, plannedRun.Plan, "the planned run should have a plan")
+	planID := plannedRun.Plan.ID
+	require.NotEmpty(t, planID, "the planned run should have a plan ID")
+
+	t.Run("Get plan details", func(t *testing.T) {
+		result, resultText := callTool(t, s, "get_plan_details", map[string]any{"plan_id": planID})
+		require.False(t, result.IsError, "get_plan_details should not return an error")
+		require.NotEmpty(t, resultText, "get_plan_details response must not be empty")
+		toolPlanID := gjson.Get(resultText, "data.id").String()
+		toolPlanStatus := gjson.Get(resultText, "data.attributes.status").String()
+		toolPlanHasChanges := gjson.Get(resultText, "data.attributes.has-changes").Bool()
+
+		plan, err := client.Plans.Read(t.Context(), planID)
+		require.NoError(t, err)
+		assert.Equal(t, plan.ID, toolPlanID)
+		assert.Equal(t, string(plan.Status), toolPlanStatus)
+		assert.Equal(t, plan.HasChanges, toolPlanHasChanges)
+		assert.Equal(t, tfe.PlanFinished, plan.Status)
+		assert.True(t, plan.HasChanges)
+	})
+
+	t.Run("Get plan logs", func(t *testing.T) {
+		result, resultText := callTool(t, s, "get_plan_logs", map[string]any{"plan_id": planID})
+		require.False(t, result.IsError, "get_plan_logs should not return an error")
+		require.NotEmpty(t, resultText, "get_plan_logs response must not be empty")
+		assert.Contains(t, resultText, "terraform_data.run_test")
+
+		logReader, err := client.Plans.Logs(t.Context(), planID)
+		require.NoError(t, err)
+		directLogs, err := io.ReadAll(logReader)
+		require.NoError(t, err)
+		assert.Equal(t, string(directLogs), resultText)
+	})
+
+	t.Run("Get plan JSON output", func(t *testing.T) {
+		result, resultText := callTool(t, s, "get_plan_json_output", map[string]any{"plan_id": planID})
+		require.False(t, result.IsError, "get_plan_json_output should not return an error")
+		require.NotEmpty(t, resultText, "get_plan_json_output response must not be empty")
+		require.True(t, gjson.Valid(resultText), "get_plan_json_output should return valid JSON")
+		resourceAction := gjson.Get(resultText, `resource_changes.#(address=="terraform_data.run_test").change.actions.0`).String()
+		assert.Equal(t, "create", resourceAction)
+
+		directJSON, err := client.Plans.ReadJSONOutput(t.Context(), planID)
+		require.NoError(t, err)
+		assert.JSONEq(t, string(directJSON), resultText)
+	})
+
+	t.Run("Get Sentinel mock", func(t *testing.T) {
+		requireSentinelEntitlement(t, client)
+
+		result, resultText := callTool(t, s, "get_sentinel_mock", map[string]any{"plan_id": planID})
+		require.False(t, result.IsError, "get_sentinel_mock should not return an error")
+		require.True(t, gjson.Valid(resultText), "get_sentinel_mock should return valid JSON")
+
+		assert.Equal(t, planID, gjson.Get(resultText, "plan_id").String())
+		assert.Equal(t, "sentinel-mock-bundle-v0", gjson.Get(resultText, "data_type").String())
+		assert.Equal(t, "base64-tar-gz", gjson.Get(resultText, "format").String())
+		planExportID := gjson.Get(resultText, "plan_export_id").String()
+		require.NotEmpty(t, planExportID, "response should include the plan export ID")
+		defer client.PlanExports.Delete(t.Context(), planExportID)
+
+		archiveData, err := base64.StdEncoding.DecodeString(gjson.Get(resultText, "data").String())
+		require.NoError(t, err, "Sentinel mock data should be valid base64")
+		require.NotEmpty(t, archiveData, "Sentinel mock archive should not be empty")
+
+		// direct verification of the plan export from TFE
+		planExport, err := client.PlanExports.Read(t.Context(), planExportID)
+		require.NoError(t, err, "failed to read the plan export directly from TFE")
+		assert.Equal(t, tfe.PlanExportFinished, planExport.Status)
+		assert.Equal(t, tfe.PlanExportSentinelMockBundleV0, planExport.DataType)
+		directArchiveData, err := client.PlanExports.Download(t.Context(), planExportID)
+		require.NoError(t, err, "failed to download the plan export directly from TFE")
+		assert.Equal(t, directArchiveData, archiveData)
+	})
+
+	err = client.Runs.Apply(t.Context(), runID, tfe.RunApplyOptions{
+		Comment: tfe.String("Approved by integration tests"),
+	})
+	require.NoError(t, err, "failed to apply the run with the TFE client")
+
+	// Applying is asynchronous; wait until the apply finishes.
+	appliedRun := waitForRun(t, client, runID, "finish applying", func(run *tfe.Run) bool {
+		return run.Status == tfe.RunApplied
+	})
+	require.NotNil(t, appliedRun.Apply, "the applied run should have an apply")
+	applyID := appliedRun.Apply.ID
+	require.NotEmpty(t, applyID, "the applied run should have an apply ID")
+
+	t.Run("Get apply details", func(t *testing.T) {
+		result, resultText := callTool(t, s, "get_apply_details", map[string]any{"apply_id": applyID})
+		require.False(t, result.IsError, "get_apply_details should not return an error")
+		require.NotEmpty(t, resultText, "get_apply_details response must not be empty")
+		toolApplyID := gjson.Get(resultText, "data.id").String()
+		toolApplyStatus := gjson.Get(resultText, "data.attributes.status").String()
+
+		apply, err := client.Applies.Read(t.Context(), applyID)
+		require.NoError(t, err)
+		assert.Equal(t, apply.ID, toolApplyID)
+		assert.Equal(t, string(apply.Status), toolApplyStatus)
+		assert.Equal(t, tfe.ApplyFinished, apply.Status)
+	})
+
+	t.Run("Get apply logs", func(t *testing.T) {
+		result, resultText := callTool(t, s, "get_apply_logs", map[string]any{"apply_id": applyID})
+		require.False(t, result.IsError, "get_apply_logs should not return an error")
+		require.NotEmpty(t, resultText, "get_apply_logs response must not be empty")
+		assert.Contains(t, resultText, "Apply complete!")
+
+		logReader, err := client.Applies.Logs(t.Context(), applyID)
+		require.NoError(t, err)
+		directLogs, err := io.ReadAll(logReader)
+		require.NoError(t, err)
+		assert.Equal(t, string(directLogs), resultText)
+	})
+}
+
 // uploadRunTestConfiguration uploads the shared run test fixture to the workspace.
 func uploadRunTestConfiguration(t *testing.T, client *tfe.Client, workspaceID string) {
 	t.Helper()
