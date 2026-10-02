@@ -49,6 +49,21 @@ var officialFactories = map[string]func(svr *mcp.Server, logger *slog.Logger){
 	"get_token_permissions": func(svr *mcp.Server, _ *slog.Logger) {
 		mcp.AddTool(svr, tfeTools.GetTokenPermissionsTool(), tfeTools.GetTokenPermissionsFunc)
 	},
+	"list_teams": func(svr *mcp.Server, _ *slog.Logger) {
+		mcp.AddTool(svr, tfeTools.ListTeamsTool(), tfeTools.ListTeamsFunc)
+	},
+	"get_team": func(svr *mcp.Server, _ *slog.Logger) {
+		mcp.AddTool(svr, tfeTools.GetTeamTool(), tfeTools.GetTeamFunc)
+	},
+	"create_team": func(svr *mcp.Server, _ *slog.Logger) {
+		mcp.AddTool(svr, tfeTools.CreateTeamTool(), tfeTools.CreateTeamFunc)
+	},
+	"add_team_member": func(svr *mcp.Server, _ *slog.Logger) {
+		mcp.AddTool(svr, tfeTools.AddTeamMemberTool(), tfeTools.AddTeamMemberFunc)
+	},
+	"grant_team_access": func(svr *mcp.Server, _ *slog.Logger) {
+		mcp.AddTool(svr, tfeTools.GrantTeamAccessTool(), tfeTools.GrantTeamAccessFunc)
+	},
 	"list_state_versions": func(svr *mcp.Server, _ *slog.Logger) {
 		mcp.AddTool(svr, tfeTools.ListStateVersionsTool(), tfeTools.ListStateVersionsFunc)
 	},
@@ -67,12 +82,6 @@ var officialFactories = map[string]func(svr *mcp.Server, logger *slog.Logger){
 	},
 	"get_provider_capabilities": func(svr *mcp.Server, logger *slog.Logger) {
 		mcp.AddTool(svr, registryTools.GetProviderCapabilitiesTool(), registryTools.GetProviderCapabilitiesFunc(logger))
-	},
-	"list_state_versions": func(svr *mcp.Server, _ *slog.Logger) {
-		mcp.AddTool(svr, tfeTools.ListStateVersionsTool(), tfeTools.ListStateVersionsFunc)
-	},
-	"get_state_version": func(svr *mcp.Server, _ *slog.Logger) {
-		mcp.AddTool(svr, tfeTools.GetStateVersionTool(), tfeTools.GetStateVersionFunc)
 	},
 }
 
