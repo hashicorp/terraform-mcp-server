@@ -83,38 +83,38 @@ func ExecuteQuery(logger *log.Logger) server.ServerTool {
 func executeQueryHandler(ctx context.Context, request mcp.CallToolRequest, logger *log.Logger) (*mcp.CallToolResult, error) {
 	organizationName, err := request.RequireString("organization_name")
 	if err != nil || strings.TrimSpace(organizationName) == "" {
-		return executeQueryToolErrorf(logger, "missing required input: organization_name")
+		return toolErrorf(logger, "execute_query", "missing required input: organization_name")
 	}
 	organizationName = strings.TrimSpace(organizationName)
 
 	workspaceName, err := request.RequireString("workspace_name")
 	if err != nil || strings.TrimSpace(workspaceName) == "" {
-		return executeQueryToolErrorf(logger, "missing required input: workspace_name")
+		return toolErrorf(logger, "execute_query", "missing required input: workspace_name")
 	}
 	workspaceName = strings.TrimSpace(workspaceName)
 
 	rawConfiguration, err := request.RequireString("query_configuration")
 	if err != nil || strings.TrimSpace(rawConfiguration) == "" {
-		return executeQueryToolErrorf(logger, "missing required input: query_configuration")
+		return toolErrorf(logger, "execute_query", "missing required input: query_configuration")
 	}
 
 	configuration, err := parseExecuteQueryConfiguration(rawConfiguration)
 	if err != nil {
-		return executeQueryToolErrorf(logger, "invalid query_configuration: %v", err)
+		return toolErrorf(logger, "execute_query", "invalid query_configuration: %v", err)
 	}
 
 	tfeClient, err := client.GetTfeClientFromContext(ctx, logger)
 	if err != nil {
-		return executeQueryToolErrorf(logger, "failed to get Terraform client: %v", err)
+		return toolErrorf(logger, "execute_query", "failed to get Terraform client: %v", err)
 	}
 	workspace, err := tfeClient.Workspaces.Read(ctx, organizationName, workspaceName)
 	if err != nil {
-		return executeQueryToolErrorf(logger, "workspace %q not found in organization %q: %v", workspaceName, organizationName, err)
+		return toolErrorf(logger, "execute_query", "workspace %q not found in organization %q: %v", workspaceName, organizationName, err)
 	}
 
 	response, err := submitExecuteQuery(ctx, tfeClient, workspace.ID, configuration)
 	if err != nil {
-		return executeQueryToolErrorf(logger, "failed to create no-code query: %v", err)
+		return toolErrorf(logger, "execute_query", "failed to create no-code query: %v", err)
 	}
 
 	return mcp.NewToolResultText(response), nil
@@ -211,14 +211,6 @@ func submitExecuteQuery(ctx context.Context, tfeClient *tfe.Client, workspaceID 
 		return "", err
 	}
 	return response.String(), nil
-}
-
-func executeQueryToolErrorf(logger *log.Logger, format string, args ...any) (*mcp.CallToolResult, error) {
-	message := fmt.Sprintf(format, args...)
-	if logger != nil {
-		logger.Errorf("execute_query: %s", message)
-	}
-	return mcp.NewToolResultError(message), nil
 }
 
 const executeQueryDescription = `Creates and immediately executes an HCP Terraform Search query.
