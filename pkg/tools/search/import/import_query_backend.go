@@ -117,6 +117,7 @@ type importDiscovery struct {
 	WorkspaceID   string                     `json:"workspace_id"`
 	NoCodeQueryID string                     `json:"no_code_query_id"`
 	Provenance    string                     `json:"provenance"`
+	LogDigest     string                     `json:"log_digest"`
 	Candidates    []importDiscoveryCandidate `json:"candidates"`
 }
 
@@ -226,7 +227,14 @@ func readImportDiscovery(ctx context.Context, c *tfe.Client, queryID string) (*i
 	if err != nil {
 		return nil, err
 	}
-	return &importDiscovery{QueryRunID: queryID, WorkspaceID: w.ID, NoCodeQueryID: nc.ID, Provenance: "query_bound_no_code_selections", Candidates: candidates}, nil
+	return &importDiscovery{QueryRunID: queryID, WorkspaceID: w.ID, NoCodeQueryID: nc.ID, Provenance: "query_bound_no_code_selections", LogDigest: importEvidenceDigest(data), Candidates: candidates}, nil
+}
+
+// importCandidateID derives a stable ID from Search-side facts only. It can be
+// recomputed from a carried selection, but it cannot be reversed.
+func importCandidateID(queryID string, provider workspaceProvider, listType string, identity map[string]any) string {
+	encoded, _ := json.Marshal(map[string]any{"query_run_id": queryID, "provider_source": provider.Source, "provider_version": provider.Version, "list_type": listType, "identity": identity})
+	return "candidate-" + strings.TrimPrefix(importEvidenceDigest(encoded), "sha256:")
 }
 
 func parseImportDiscovery(data []byte, queryID string, providers map[string]workspaceProvider) ([]importDiscoveryCandidate, error) {
@@ -280,8 +288,7 @@ func parseImportDiscovery(data []byte, queryID string, providers map[string]work
 			if len(identity) == 0 {
 				return nil, importEvidenceFailure("query_identity_invalid")
 			}
-			encoded, _ := json.Marshal(map[string]any{"query_run_id": queryID, "provider_source": provider.Source, "provider_version": provider.Version, "list_type": candidate.ResourceType, "identity": identity})
-			candidate.CandidateID = "candidate-" + strings.TrimPrefix(importEvidenceDigest(encoded), "sha256:")
+			candidate.CandidateID = importCandidateID(queryID, provider, candidate.ResourceType, identity)
 			candidate.Provider = provider
 			if seen[candidate.CandidateID] {
 				return nil, importEvidenceFailure("query_duplicate_identity")
@@ -289,9 +296,6 @@ func parseImportDiscovery(data []byte, queryID string, providers map[string]work
 			seen[candidate.CandidateID] = true
 			counts[candidate.Address]++
 			candidates = append(candidates, candidate)
-			if len(candidates) > 100 {
-				return nil, importEvidenceFailure("query_selection_limit")
-			}
 		case "list_complete":
 			if record.Complete == nil || record.Complete.Total < 0 {
 				return nil, importEvidenceFailure("query_evidence_invalid")
@@ -355,7 +359,23 @@ func readImportSchemaRun(ctx context.Context, c *tfe.Client, workspaceID string,
 	return r, nil
 }
 
+type importManagedSchemaEntry struct {
+	Managed  json.RawMessage
+	Identity json.RawMessage
+}
+
 func readImportManagedSchema(ctx context.Context, c *tfe.Client, runID, source, managedType string) (json.RawMessage, json.RawMessage, string, error) {
+	entries, digest, err := readImportManagedSchemaSet(ctx, c, runID, map[string][]string{source: {managedType}})
+	if err != nil {
+		return nil, nil, "", err
+	}
+	entry := entries[source+"/"+managedType]
+	return entry.Managed, entry.Identity, digest, nil
+}
+
+// readImportManagedSchemaSet downloads the plan schema artifact once and
+// extracts every requested provider/type pair, keyed by "source/type".
+func readImportManagedSchemaSet(ctx context.Context, c *tfe.Client, runID string, wanted map[string][]string) (map[string]importManagedSchemaEntry, string, error) {
 	endpoint := "runs/" + url.PathEscape(runID) + "/plan/json-schema"
 	raw, status, err := readImportBackendJSON(ctx, c, endpoint, maxImportSchemaBytes)
 	// An expired presigned download can return 403. Reacquire through the stable
@@ -365,13 +385,13 @@ func readImportManagedSchema(ctx context.Context, c *tfe.Client, runID, source, 
 		raw, status, err = readImportBackendJSON(ctx, c, endpoint, maxImportSchemaBytes)
 	}
 	if err != nil && (status == 0 || status == 200) {
-		return nil, nil, "", importReadError(err, status)
+		return nil, "", importReadError(err, status)
 	}
 	if code := importSchemaHTTPStatus(status); code != "" {
-		return nil, nil, "", importEvidenceFailure(code)
+		return nil, "", importEvidenceFailure(code)
 	}
 	if err != nil {
-		return nil, nil, "", importReadError(err, status)
+		return nil, "", importReadError(err, status)
 	}
 	var schema struct {
 		FormatVersion string `json:"format_version"`
@@ -381,26 +401,32 @@ func readImportManagedSchema(ctx context.Context, c *tfe.Client, runID, source, 
 		} `json:"provider_schemas"`
 	}
 	if err := decodeImportEvidenceJSONLimit(raw, &schema, maxImportSchemaBytes); err != nil {
-		return nil, nil, "", err
+		return nil, "", err
 	}
 	if !importCompatibleFormat(schema.FormatVersion) {
-		return nil, nil, "", importEvidenceFailure("schema_format_unsupported")
+		return nil, "", importEvidenceFailure("schema_format_unsupported")
 	}
-	p, ok := schema.Providers[source]
-	if !ok {
-		return nil, nil, "", importEvidenceFailure("schema_provider_missing")
+	entries := map[string]importManagedSchemaEntry{}
+	for source, types := range wanted {
+		p, ok := schema.Providers[source]
+		if !ok {
+			return nil, "", importEvidenceFailure("schema_provider_missing")
+		}
+		for _, managedType := range types {
+			resource, ok := p.Resources[managedType]
+			if !ok {
+				return nil, "", importEvidenceFailure("managed_schema_type_missing")
+			}
+			var managed struct {
+				Block map[string]json.RawMessage `json:"block"`
+			}
+			if json.Unmarshal(resource, &managed) != nil || managed.Block == nil {
+				return nil, "", importEvidenceFailure("managed_schema_invalid")
+			}
+			entries[source+"/"+managedType] = importManagedSchemaEntry{Managed: resource, Identity: p.Identities[managedType]}
+		}
 	}
-	resource, ok := p.Resources[managedType]
-	if !ok {
-		return nil, nil, "", importEvidenceFailure("managed_schema_type_missing")
-	}
-	var managed struct {
-		Block map[string]json.RawMessage `json:"block"`
-	}
-	if json.Unmarshal(resource, &managed) != nil || managed.Block == nil {
-		return nil, nil, "", importEvidenceFailure("managed_schema_invalid")
-	}
-	return resource, p.Identities[managedType], importEvidenceDigest(raw), nil
+	return entries, importEvidenceDigest(raw), nil
 }
 
 func importCompatibleFormat(version string) bool {
@@ -414,12 +440,6 @@ func importDiagnosticCode(err error) string {
 		return evidence.Code
 	}
 	return "backend_evidence_unavailable"
-}
-
-// ReadDiscovery supplies the bounded candidate response to get_query_summary.
-// The concrete type stays private to the import workflow.
-func ReadDiscovery(ctx context.Context, c *tfe.Client, queryID string) (any, error) {
-	return readImportDiscovery(ctx, c, queryID)
 }
 
 // DiagnosticCode preserves the Search tool's existing evidence error mapping.

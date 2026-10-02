@@ -25,6 +25,9 @@ type querySummary struct {
 	Resources           []queryResource       `json:"resources"`
 	ListCompletions     []queryListCompletion `json:"list_completions"`
 	Diagnostics         []queryDiagnostic     `json:"diagnostics"`
+
+	ResourcesTruncated          bool   `json:"resources_truncated,omitempty"`
+	ImportCandidatesUnavailable string `json:"import_candidates_unavailable,omitempty"`
 }
 
 type queryResource struct {
@@ -66,7 +69,11 @@ func GetQuerySummary(logger *log.Logger) server.ServerTool {
 				mcp.Required(),
 				mcp.Description("Query run ID previously passed to get_query_status."),
 			),
-			mcp.WithBoolean("include_import_candidates", mcp.Description("Return bounded, explicitly selectable import candidate IDs, recorded no-code provider selections, and observations/generated configuration/import_configuration drafts when available. Generated blocks may contain null or incomplete values; check them against the speculative import plan. Then call import_query_results phase=prepare with one candidate_id and proposed managed_type. Requires a finished no-code query and complete results.")),
+			mcp.WithString("resource_type", mcp.Description("Only return results of this resource type, for example aws_iam_role.")),
+			mcp.WithString("address", mcp.Description("Only return results from this list block address, for example list.aws_iam_role.roles.")),
+			mcp.WithString("name_contains", mcp.Description("Only return results whose display name contains this text (case-insensitive). Tag and attribute filtering are not supported.")),
+			mcp.WithNumber("limit", mcp.Description("Results per page. Default 50, maximum 100.")),
+			mcp.WithString("after", mcp.Description("Pass next_cursor from the previous page to read the next page of the same query run.")),
 		),
 		Handler: func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			return getQuerySummaryHandler(ctx, request, logger)
@@ -84,41 +91,65 @@ func getQuerySummaryHandler(ctx context.Context, request mcp.CallToolRequest, lo
 	if err != nil {
 		return toolErrorf(logger, "get_query_summary", "failed to get Terraform client: %v", err)
 	}
-	if raw, exists := request.GetArguments()["include_import_candidates"]; exists {
-		include, ok := raw.(bool)
-		if !ok {
-			return mcp.NewToolResultError("include_import_candidates must be a boolean"), nil
-		}
-		if include {
-			ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
-			defer cancel()
-			discovery, err := importworkflow.ReadDiscovery(ctx, tfeClient, strings.TrimSpace(queryRunID))
-			if err != nil {
-				return mcp.NewToolResultError(importworkflow.DiagnosticCode(err)), nil
-			}
-			encoded, err := json.Marshal(discovery)
-			if err != nil || len(encoded) > 64*1024 {
-				return mcp.NewToolResultError("import_candidate_response_limit"), nil
-			}
-			return mcp.NewToolResultStructured(discovery, string(encoded)), nil
-		}
+	id := strings.TrimSpace(queryRunID)
+	filter := importworkflow.DiscoveryFilter{
+		ResourceType: strings.TrimSpace(request.GetString("resource_type", "")),
+		Address:      strings.TrimSpace(request.GetString("address", "")),
+		NameContains: strings.TrimSpace(request.GetString("name_contains", "")),
+		Limit:        request.GetInt("limit", 0),
+		After:        strings.TrimSpace(request.GetString("after", "")),
+	}
+	if _, bad := request.GetArguments()["include_import_candidates"]; bad {
+		return toolErrorf(logger, "get_query_summary", "include_import_candidates was removed: results are returned as selectable pages by default; use limit, after and the filters")
 	}
 
-	summary, err := readQuerySummary(ctx, tfeClient, strings.TrimSpace(queryRunID))
+	pageCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+	page, err := importworkflow.ReadDiscoveryPage(pageCtx, tfeClient, id, filter)
+	if err == nil {
+		encoded, merr := json.Marshal(page)
+		if merr != nil {
+			return toolErrorf(logger, "get_query_summary", "failed to encode query summary: %v", merr)
+		}
+		return mcp.NewToolResultStructured(page, string(encoded)), nil
+	}
+	code := importworkflow.DiagnosticCode(err)
+	if filter.After != "" {
+		return mcp.NewToolResultError(code), nil
+	}
+
+	// Not a complete finished no-code query (for example an errored one):
+	// return the bounded diagnostic summary with the reason.
+	summary, err := readQuerySummaryData(ctx, tfeClient, id)
 	if err != nil {
 		return toolErrorf(logger, "get_query_summary", "failed to get query summary for %q: %v", queryRunID, err)
 	}
+	limit := filter.Limit
+	if limit <= 0 || limit > importworkflow.MaxDiscoveryPageSize {
+		limit = importworkflow.DefaultDiscoveryPageSize
+	}
+	if len(summary.Resources) > limit {
+		summary.Resources = summary.Resources[:limit]
+		summary.ResourcesTruncated = true
+	}
+	summary.ImportCandidatesUnavailable = code
+	response, err := json.Marshal(summary)
+	if err != nil {
+		return toolErrorf(logger, "get_query_summary", "marshaling query summary: %v", err)
+	}
+	return mcp.NewToolResultText(string(response)), nil
+}
 
-	return mcp.NewToolResultText(summary), nil
+func readQuerySummaryData(ctx context.Context, tfeClient *tfe.Client, queryRunID string) (*querySummary, error) {
+	logReader, err := tfeClient.QueryRuns.Logs(ctx, queryRunID)
+	if err != nil {
+		return nil, err
+	}
+	return parseQuerySummary(logReader)
 }
 
 func readQuerySummary(ctx context.Context, tfeClient *tfe.Client, queryRunID string) (string, error) {
-	logReader, err := tfeClient.QueryRuns.Logs(ctx, queryRunID)
-	if err != nil {
-		return "", err
-	}
-
-	summary, err := parseQuerySummary(logReader)
+	summary, err := readQuerySummaryData(ctx, tfeClient, queryRunID)
 	if err != nil {
 		return "", err
 	}
@@ -169,14 +200,17 @@ func parseQuerySummary(reader io.Reader) (*querySummary, error) {
 const getQuerySummaryDescription = `Retrieves and parses the NDJSON log for an HCP Terraform query run.
 
 Call get_query_status first and wait for it to return a terminal status, then pass the
-same query_run_id to this tool. The result contains resources_discovered and one
-resources entry per discovered resource with its display name and identity. It also
-contains one list_completions entry per list block with its address, resource_type,
-and total, plus any Terraform diagnostics that explain an errored query.
-Set include_import_candidates=true for an explicit-selection response containing candidate IDs
-and provider selections from that query's stored no-code inputs, plus resource_object,
-configuration and import_configuration when available. Generated blocks are optional evidence.
-This mode requires complete, unambiguous results and current workspace authorization.
-Call import_query_results phase=prepare with one selected candidate_id and your proposed
-managed_type to obtain the destination resource schema and authoring guidance. Preparation
-does not require source-provider schemas; Terraform plan validates the proposed import.`
+same query_run_id to this tool.
+
+For a finished, complete no-code query the result is one bounded page of selectable
+results: candidate_id, address, resource_type, display_name and identity per row, plus
+resources_discovered, by_type counts, total_matching, a log_digest and, when more rows
+match, next_cursor. Narrow with resource_type, address or name_contains; read the next
+page by passing next_cursor as after. A page is a view of a fully checked query. If the
+log changes between pages the call returns snapshot_changed_restart_paging. A query may
+contain more than 100 results; select up to 100 candidate_id values from any page, then
+call prepare_import. Tag and attribute filtering are not supported.
+
+If the query is not finished, errored or incomplete, the result is a bounded diagnostic
+summary (resources_discovered, resources, list_completions and Terraform diagnostics)
+with import_candidates_unavailable naming the reason; it has no selectable candidates.`

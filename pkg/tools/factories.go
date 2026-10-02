@@ -33,10 +33,12 @@ var toolFactories = map[string]toolFactory{
 	"execute_query":                searchTools.ExecuteQuery,
 	"get_query_status":             searchTools.GetQueryStatus,
 	"get_query_summary":            searchTools.GetQuerySummary,
-	// API-only preparation uses ordinary registration and no elicitation.
-	"import_query_results": func(logger *log.Logger) server.ServerTool {
-		return searchTools.ImportQueryResults(logger, nil)
-	},
+	// Focused Search-to-import tools: ordinary registration, no elicitation.
+	"prepare_import":                    searchTools.PrepareImport,
+	"get_import_configuration_download": searchTools.GetImportConfigurationDownload,
+	"create_import_cv":                  searchTools.CreateImportCV,
+	"create_import_run":                 searchTools.CreateImportRun,
+	"verify_import_plan":                searchTools.VerifyImportPlan,
 
 	// Public Registry tools
 	"search_providers":            registryTools.ResolveProviderDocID,

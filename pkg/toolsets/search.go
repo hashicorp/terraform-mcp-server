@@ -9,5 +9,9 @@ var searchTools = []ToolDef{
 	{Name: "execute_query", Toolset: Search, RequiresTFE: true},
 	{Name: "get_query_status", Toolset: Search, RequiresTFE: true},
 	{Name: "get_query_summary", Toolset: Search, RequiresTFE: true},
-	{Name: "import_query_results", Toolset: Search, RequiresTFE: true},
+	{Name: "prepare_import", Toolset: Search, RequiresTFE: true},
+	{Name: "get_import_configuration_download", Toolset: Search, RequiresTFE: true},
+	{Name: "create_import_cv", Toolset: Search, RequiresTFE: true},
+	{Name: "create_import_run", Toolset: Search, RequiresTFE: true},
+	{Name: "verify_import_plan", Toolset: Search, RequiresTFE: true},
 }

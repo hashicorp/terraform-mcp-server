@@ -1,0 +1,106 @@
+// Copyright IBM Corp. 2026
+// SPDX-License-Identifier: MPL-2.0
+
+package importworkflow
+
+import (
+	"context"
+
+	"github.com/hashicorp/go-tfe"
+	"github.com/hashicorp/terraform-mcp-server/pkg/client"
+	"github.com/mark3labs/mcp-go/mcp"
+	log "github.com/sirupsen/logrus"
+)
+
+type importDownload struct {
+	ContractVersion        string   `json:"contract_version"`
+	Status                 string   `json:"status"`
+	WorkspaceID            string   `json:"workspace_id,omitempty"`
+	ConfigurationVersionID string   `json:"configuration_version_id,omitempty"`
+	WorkingDirectory       string   `json:"working_directory,omitempty"`
+	DownloadURL            string   `json:"download_url,omitempty"`
+	Instructions           []string `json:"instructions,omitempty"`
+	Diagnostics            []string `json:"diagnostics"`
+	NextAction             string   `json:"next_action"`
+}
+
+func (d importDownload) isBlocked() bool { return d.Status == "blocked" }
+
+var importDownloadInstructions = []string{
+	"Download the archive with a plain HTTP GET that writes binary bytes to a file. Send no Authorization header: the URL is already authorized.",
+	"Treat download_url as a secret. Do not print it, log it, store it, or put it in a command line other tools can see. If the download fails or the URL has expired, call this tool again for a fresh one.",
+	"Extract into the directory the user chose. Keep the whole tree and .terraform.lock.hcl, exclude generated .terraform caches, and do not add secrets. Check archive paths and links before extracting.",
+	"This workflow supports a remote root configuration only. If working_directory is set, stop and tell the user.",
+}
+
+// downloadImportConfiguration returns the short-lived archive location of the
+// workspace's current configuration version. It never fetches archive bytes
+// and never reads the QueryRun log.
+func downloadImportConfiguration(ctx context.Context, c *tfe.Client, input importPrepareInput, requestedCV string, logger *log.Logger) importDownload {
+	out := importDownload{ContractVersion: importToolContractVersion, Status: "blocked", Diagnostics: []string{}}
+	ctxResult := importConfigurationContextFromAPIs(ctx, c, input, logger)
+	out.WorkspaceID = ctxResult.WorkspaceID
+	switch ctxResult.Status {
+	case "blank_workspace":
+		out.Status = "blank_workspace"
+		out.NextAction = "The workspace has no current configuration or state. Author the complete configuration and lock locally, review it with the user, then call create_import_cv."
+		return out
+	case "available":
+		if ctxResult.Context == nil || ctxResult.Context.ConfigurationVersionID != requestedCV {
+			out.Diagnostics = append(out.Diagnostics, "configuration_version_not_current")
+			out.NextAction = "The requested configuration version is not the workspace's current one. Call prepare_import again to get the current configuration version ID. No URL was returned."
+			return out
+		}
+		out.Status = "available"
+		out.ConfigurationVersionID = ctxResult.Context.ConfigurationVersionID
+		out.WorkingDirectory = ctxResult.Context.WorkingDirectory
+		out.DownloadURL = ctxResult.Context.DownloadURL
+		out.Instructions = importDownloadInstructions
+		out.NextAction = "Download and extract the archive into the directory the user chose, then author the resource and import blocks locally and review them with the user. The server downloaded nothing."
+		return out
+	}
+	out.Diagnostics = append(out.Diagnostics, ctxResult.Diagnostics...)
+	out.NextAction = "Resolve the reported diagnostic and call this tool again. No archive was downloaded by the server."
+	return out
+}
+
+// GetImportConfigurationDownloadDefinition describes the download tool.
+func GetImportConfigurationDownloadDefinition() mcp.Tool {
+	return mcp.NewTool("get_import_configuration_download",
+		mcp.WithDescription(`Return a short-lived download URL for the destination workspace's current configuration archive, so the calling agent does not need its own HCP Terraform API access.
+
+Call this only after prepare_import reports has_current_configuration and the user has chosen a local directory. Pass the current_configuration_version_id from prepare_import. The tool checks that it is the workspace's current configuration version. It returns the URL and download instructions: use a plain GET with no Authorization header, extract into the chosen directory, and treat the URL as a secret. Call again for a fresh URL if it expires. For a workspace with no configuration it returns blank_workspace. The server never downloads the archive.`),
+		mcp.WithTitleAnnotation("Get current configuration download URL"),
+		mcp.WithReadOnlyHintAnnotation(true), mcp.WithDestructiveHintAnnotation(false),
+		mcp.WithOpenWorldHintAnnotation(true), mcp.WithIdempotentHintAnnotation(true),
+		mcp.WithString("organization_name", mcp.Required(), mcp.Description("HCP Terraform organization.")),
+		mcp.WithString("workspace_name", mcp.Required(), mcp.Description("Destination workspace name.")),
+		mcp.WithString("configuration_version_id", mcp.Required(), mcp.Description("Current configuration version ID from prepare_import.")),
+		mcp.WithSchemaAdditionalProperties(false),
+		mcp.WithOutputSchema[importDownload]())
+}
+
+// HandleGetImportConfigurationDownload serves get_import_configuration_download.
+func HandleGetImportConfigurationDownload(ctx context.Context, request mcp.CallToolRequest, logger *log.Logger) (*mcp.CallToolResult, error) {
+	var args struct {
+		Organization string `json:"organization_name"`
+		Workspace    string `json:"workspace_name"`
+		CVID         string `json:"configuration_version_id"`
+	}
+	blocked := func(code, next string) (*mcp.CallToolResult, error) {
+		return importToolResult(importDownload{ContractVersion: importToolContractVersion, Status: "blocked", Diagnostics: []string{code}, NextAction: next})
+	}
+	if err := decodeImportToolArguments(request.GetArguments(), &args, 4*1024); err != nil || !importInputName(args.Organization) || !importInputName(args.Workspace) || !importInputName(args.CVID) {
+		return blocked("import_input_invalid", "Supply organization_name, workspace_name and configuration_version_id.")
+	}
+	if err := client.AuthorizeOrganization(ctx, args.Organization); err != nil {
+		return blocked("organization_not_allowed", "Use an organization allowed by this server.")
+	}
+	ctx, cancel := context.WithTimeout(ctx, importHandoffRequestTimeout)
+	defer cancel()
+	c, err := client.GetTfeClientFromContext(ctx, logger)
+	if err != nil {
+		return blocked("backend_client_unavailable", "Supply current backend credentials and retry.")
+	}
+	return importToolResult(downloadImportConfiguration(ctx, c, importPrepareInput{Organization: args.Organization, Workspace: args.Workspace}, args.CVID, logger))
+}

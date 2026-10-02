@@ -17,6 +17,7 @@ import (
 
 	"github.com/hashicorp/terraform-mcp-server/pkg/client"
 	"github.com/mark3labs/mcp-go/mcp"
+	"github.com/mark3labs/mcp-go/server"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -47,6 +48,17 @@ func TestSearchImportToolBoundary(t *testing.T) {
 		case "/api/v2/queries/qry-fixture":
 			_, _ = fmt.Fprintf(w, `{"data":{"type":"queries","id":"qry-fixture","attributes":{"status":"finished","generate-config-out":true,"log-read-url":%q},"relationships":{"workspace":{"data":{"type":"workspaces","id":"ws-fixture"}},"configuration-version":{"data":{"type":"configuration-versions","id":"cv-query"}},"no-code-query":{"data":{"type":"no-code-queries","id":"ncqry-fixture"}}}}}`, backendServer.URL+"/logs")
 			return
+		case "/api/v2/workspaces/ws-fixture/current-state-version":
+			_, _ = w.Write([]byte(`{"data":{"type":"state-versions","id":"sv-current","attributes":{"serial":42},"relationships":{"run":{"data":{"type":"runs","id":"run-schema"}}}}}`))
+			return
+		case "/api/v2/runs/run-schema/plan/json-schema":
+			http.Redirect(w, r, backendServer.URL+"/schema-download", http.StatusTemporaryRedirect)
+			return
+		case "/schema-download":
+			data, err := os.ReadFile(filepath.Join(fixture, "provider-schema.json"))
+			require.NoError(t, err)
+			_, _ = w.Write(data)
+			return
 		default:
 			if body, ok := responses[r.URL.Path]; ok {
 				_, _ = w.Write(body)
@@ -61,7 +73,7 @@ func TestSearchImportToolBoundary(t *testing.T) {
 	t.Setenv(client.TerraformToken, "fixture-token")
 
 	query := GetQuerySummary(silentLogger())
-	result, err := query.Handler(context.Background(), mcp.CallToolRequest{Params: mcp.CallToolParams{Arguments: map[string]any{"query_run_id": "qry-fixture", "include_import_candidates": true}}})
+	result, err := query.Handler(context.Background(), mcp.CallToolRequest{Params: mcp.CallToolParams{Arguments: map[string]any{"query_run_id": "qry-fixture"}}})
 	require.NoError(t, err)
 	require.False(t, result.IsError, result.Content)
 	raw, err := json.Marshal(result.StructuredContent)
@@ -75,13 +87,43 @@ func TestSearchImportToolBoundary(t *testing.T) {
 	require.Len(t, discovery.Candidates, 1)
 	assert.True(t, strings.HasPrefix(discovery.Candidates[0].CandidateID, "candidate-"))
 
-	tool := ImportQueryResults(silentLogger(), nil)
-	assert.Equal(t, "import_query_results", tool.Tool.Name)
-	assert.Contains(t, tool.Tool.InputSchema.Properties, "selections")
-	result, err = tool.Handler(context.Background(), mcp.CallToolRequest{Params: mcp.CallToolParams{Arguments: map[string]any{"phase": "verify", "organization_name": "fixture-org", "workspace_name": "import-root"}}})
+	selection := map[string]any{"candidate_id": discovery.Candidates[0].CandidateID, "managed_type": "aws_iam_role"}
+	prepare := PrepareImport(silentLogger())
+	assert.Equal(t, "prepare_import", prepare.Tool.Name)
+	result, err = prepare.Handler(context.Background(), mcp.CallToolRequest{Params: mcp.CallToolParams{Arguments: map[string]any{"organization_name": "fixture-org", "workspace_name": "import-root", "query_run_id": "qry-fixture", "selections": []any{selection}}}})
 	require.NoError(t, err)
-	require.True(t, result.IsError)
+	require.False(t, result.IsError, result.StructuredContent)
 	encoded, err := json.Marshal(result.StructuredContent)
 	require.NoError(t, err)
-	assert.Contains(t, string(encoded), "legacy_import_contract")
+	assert.Contains(t, string(encoded), `"selection_digest"`)
+	assert.Contains(t, string(encoded), `"identity_support":"supported"`)
+}
+
+func TestSearchImportToolDefinitions(t *testing.T) {
+	logger := silentLogger()
+	expected := map[string]struct {
+		readOnly bool
+		required []string
+	}{
+		"prepare_import":                    {true, []string{"organization_name", "workspace_name", "query_run_id", "selections"}},
+		"get_import_configuration_download": {true, []string{"organization_name", "workspace_name", "configuration_version_id"}},
+		"create_import_cv":                  {false, []string{"organization_name", "workspace_name", "confirm_speculative_run"}},
+		"create_import_run":                 {false, []string{"organization_name", "workspace_name", "configuration_version_id", "confirm_speculative_run"}},
+		"verify_import_plan":                {true, []string{"organization_name", "workspace_name", "run_id"}},
+	}
+	for _, tool := range []server.ServerTool{PrepareImport(logger), GetImportConfigurationDownload(logger), CreateImportCV(logger), CreateImportRun(logger), VerifyImportPlan(logger)} {
+		want, ok := expected[tool.Tool.Name]
+		require.True(t, ok, tool.Tool.Name)
+		require.NotNil(t, tool.Tool.Annotations.ReadOnlyHint, tool.Tool.Name)
+		assert.Equal(t, want.readOnly, *tool.Tool.Annotations.ReadOnlyHint, tool.Tool.Name)
+		for _, field := range want.required {
+			assert.Contains(t, tool.Tool.InputSchema.Required, field, tool.Tool.Name)
+		}
+		assert.NotNil(t, tool.Tool.OutputSchema, tool.Tool.Name)
+		assert.NotNil(t, tool.Handler)
+	}
+	assert.NotContains(t, GetQuerySummary(logger).Tool.InputSchema.Properties, "include_import_candidates")
+	for _, field := range []string{"resource_type", "address", "name_contains", "limit", "after"} {
+		assert.Contains(t, GetQuerySummary(logger).Tool.InputSchema.Properties, field)
+	}
 }

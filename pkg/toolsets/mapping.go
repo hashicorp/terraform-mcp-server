@@ -31,12 +31,16 @@ var ToolToToolset = map[string]string{
 	"get_policy_details":          Registry,
 
 	// Search tools (HCP Terraform no-code search)
-	"generate_query_configuration": Search,
-	"provider_list_schema_list":    Search,
-	"execute_query":                Search,
-	"get_query_status":             Search,
-	"get_query_summary":            Search,
-	"import_query_results":         Search,
+	"generate_query_configuration":      Search,
+	"provider_list_schema_list":         Search,
+	"execute_query":                     Search,
+	"get_query_status":                  Search,
+	"get_query_summary":                 Search,
+	"prepare_import":                    Search,
+	"get_import_configuration_download": Search,
+	"create_import_cv":                  Search,
+	"create_import_run":                 Search,
+	"verify_import_plan":                Search,
 
 	// Private Registry tools (TFE/TFC private registry)
 	"search_private_modules":       RegistryPrivate,

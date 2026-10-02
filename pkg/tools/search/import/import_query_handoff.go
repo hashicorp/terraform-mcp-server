@@ -76,7 +76,6 @@ func importConfigurationContextFromAPIs(ctx context.Context, c *tfe.Client, inpu
 		if err := checkImportBlankBaseline(ctx, c, w); err == nil {
 			result.Status, result.Stage = "blank_workspace", "configuration_handoff"
 			result.Baseline = &importAPIBaseline{WorkingDirectory: w.WorkingDirectory}
-			result.AgentInstructions = importBlankWorkspaceInstructions
 			result.NextAction = "There is no current configuration archive or state. Select a finished query candidate, author and locally validate the complete provider/resource/import configuration and lock, then use upload and plan with target_address for a speculative-only import inspection. A separate provider-only schema probe is optional, not required."
 			return result
 		} else if importDiagnosticCode(err) == "evidence_access_denied" || importDiagnosticCode(err) == "backend_evidence_unavailable" || importDiagnosticCode(err) == "evidence_read_interrupted" {
@@ -113,7 +112,6 @@ func importConfigurationContextFromAPIs(ctx context.Context, c *tfe.Client, inpu
 	result.Context = &importConfigurationHandoff{ConfigurationVersionID: cvID, DownloadURL: location, URLValidity: "temporary; use immediately and request a fresh context handoff if expired (nominally one minute)", WorkingDirectory: w.WorkingDirectory}
 	result.Status, result.Stage = "available", "configuration_handoff"
 	result.Notes = append(result.Notes, "current_state_not_observed_by_context; use prepare to verify current state ID and serial before upload or plan")
-	result.AgentInstructions = importExistingConfigurationInstructions
 	result.NextAction = "Choose an isolated temporary directory or a user-approved directory in the agent's workspace before client download; neither is an MCP filesystem path. This URL is short-lived: if the choice takes time or the URL expires, request a fresh context URL. Use a client-local binary-capable HTTP GET to a file; a browser is not required. Read archive bytes, not text/JSON, using a method supported by your client. Keep the signed URL out of printed output, logs and exposed command arguments; if no safe method exists, stop and ask instead of retrying a disconnected browser. Verify the archive before unpacking, preserve the full tree and provider lock, exclude client-generated .terraform caches and do not add secrets; review sensitive existing files rather than dropping them. Check working_directory (only remote root is supported) before uploading the complete reviewed archive. MCP downloaded no archive."
 	return result
 }

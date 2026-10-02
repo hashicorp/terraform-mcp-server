@@ -58,24 +58,33 @@ The Terraform MCP server provides tools for generating better Terraform code thr
 
 **Search-to-Import (when Search tools are enabled)**:
 1. Discover the relevant Search provider/list-resource schema, create a no-code
-   query, and wait for its completed results. Obtain import candidate IDs from
-   `get_query_summary` with `include_import_candidates=true`; explicitly select
-   candidates within the import tool's advertised limits.
-2. Call `import_query_results` with `phase=prepare` for selected query evidence,
-   destination managed schema when available, and phase-specific next steps.
+   query, and wait for its completed results. Browse results with
+   `get_query_summary` (filter by `resource_type`, `address` or `name_contains`
+   and page with `after`); a query can hold more than 100 results. Explicitly
+   select up to 100 `candidate_id` values from any page. Never take the first N.
+2. Call `prepare_import` once with the selection. It is the only tool that reads
+   the query log. It returns the destination managed schema for each distinct
+   type, per-type `identity_support`, the workspace baseline and a carry block.
    The Search provider version, observations, and generated HCL are source
-   evidence—not an instruction to upgrade the destination provider.
-3. For an existing supported workspace, use `phase=context` to obtain the
-   temporary current-configuration archive URL. The agent downloads it locally,
+   evidence—not an instruction to upgrade the destination provider. For a type
+   whose `identity_support` is `none` or `unknown`, look up the destination
+   provider version's documentation for the import ID; do not guess it.
+3. If the workspace has a current configuration, ask the user where to download
+   it, then call `get_import_configuration_download`. The agent downloads the
+   archive locally with a plain GET and no Authorization header, and
    preserves the complete tree and provider lock, authors and reviews HCL, and
    directly uploads the complete reviewed archive to the URL returned by
-   `phase=upload`. MCP does not download, edit, or upload archive bytes.
-4. Obtain explicit confirmation for each speculative configuration-version and
-   plan-only Run create. Follow the tool's phase-specific input rules; an
+   `create_import_cv`. MCP does not download, edit, or upload archive bytes.
+4. Obtain explicit confirmation for each speculative configuration-version
+   (`create_import_cv`) and plan-only Run (`create_import_run`) create. An
    uncertain create must be reconciled before retrying.
-5. Use `phase=plan` and `phase=status` to inspect the CV-bound speculative Run.
-   Review the full finished plan, including selected and unrelated imports,
-   resource/output actions, deferred actions, and refresh drift. A plan does not
+5. Call `verify_import_plan` with the run ID until the plan finishes, then once
+   more with the carry block unchanged and a binding of `candidate_id` to
+   `target_address` for every selection. It describes what the finished plan
+   showed (changes and identity, as counts plus items needing attention); it is
+   not an approval. Review the full finished plan, including selected and
+   unrelated imports, resource/output actions, deferred actions, and
+   refresh drift; use `get_plan_json_output` for detail. A plan does not
    persist an import; applying it requires separate review and approval.
 
 **Code Generation**:

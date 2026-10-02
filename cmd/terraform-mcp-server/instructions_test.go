@@ -33,9 +33,10 @@ func TestServerInstructionsPreserveExistingWorkflowsAndGuideSearchImport(t *test
 		"preserve its constraints and lock selections", "Do not substitute a public provider or module for a private source",
 		"Local validation does not replace the destination workspace's plan",
 		"**Search-to-Import (when Search tools are enabled)**:",
-		"include_import_candidates=true", "explicitly select", "import tool's advertised limits",
+		"`get_query_summary`", "Explicitly", "select up to 100", "`prepare_import` once", "`identity_support`",
 		"Search provider version, observations, and generated HCL are source",
 		"preserves the complete tree and provider lock", "MCP does not download, edit, or upload archive bytes",
+		"`get_import_configuration_download`", "`create_import_cv`", "`create_import_run`", "`verify_import_plan`",
 		"explicit confirmation for each speculative configuration-version", "uncertain create must be reconciled",
 		"full finished plan", "refresh drift", "A plan does not", "separate review and approval",
 	} {
