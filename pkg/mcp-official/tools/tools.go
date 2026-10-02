@@ -22,6 +22,29 @@ import (
 
 var officialFactories = map[string]func(svr *mcp.Server, logger *slog.Logger){
 	// Add entries here as each tool gets ported to the official go-sdk
+	// public registry tools
+	"search_providers": func(svr *mcp.Server, logger *slog.Logger) {
+		mcp.AddTool(svr, registryTools.SearchProvidersTool(), registryTools.SearchProvidersFunc(logger))
+	},
+	"get_provider_details": func(svr *mcp.Server, logger *slog.Logger) {
+		mcp.AddTool(svr, registryTools.GetProviderDetailsTool(), registryTools.GetProviderDetailsFunc(logger))
+	},
+	"get_latest_provider_version": func(svr *mcp.Server, logger *slog.Logger) {
+		mcp.AddTool(svr, registryTools.GetLatestProviderVersionTool(), registryTools.GetLatestProviderVersionFunc(logger))
+	},
+	"get_provider_capabilities": func(svr *mcp.Server, logger *slog.Logger) {
+		mcp.AddTool(svr, registryTools.GetProviderCapabilitiesTool(), registryTools.GetProviderCapabilitiesFunc(logger))
+	},
+	"search_modules": func(svr *mcp.Server, logger *slog.Logger) {
+		mcp.AddTool(svr, registryTools.SearchModulesTool(), registryTools.SearchModulesFunc(logger))
+	},
+	"get_latest_module_version": func(svr *mcp.Server, logger *slog.Logger) {
+		mcp.AddTool(svr, registryTools.GetLatestModuleVersionTool(), registryTools.GetLatestModuleVersionFunc(logger))
+	},
+	"get_module_details": func(svr *mcp.Server, logger *slog.Logger) {
+		mcp.AddTool(svr, registryTools.GetModuleDetailsTool(), registryTools.GetModuleDetailsFunc(logger))
+	},
+	// tfe tools
 	"list_workspaces": func(svr *mcp.Server, _ *slog.Logger) {
 		mcp.AddTool(svr, tfeTools.ListWorkspacesTool(), tfeTools.ListWorkspacesFunc)
 	},
@@ -48,18 +71,6 @@ var officialFactories = map[string]func(svr *mcp.Server, logger *slog.Logger){
 	},
 	"get_token_permissions": func(svr *mcp.Server, _ *slog.Logger) {
 		mcp.AddTool(svr, tfeTools.GetTokenPermissionsTool(), tfeTools.GetTokenPermissionsFunc)
-	},
-	"search_providers": func(svr *mcp.Server, logger *slog.Logger) {
-		mcp.AddTool(svr, registryTools.SearchProvidersTool(), registryTools.SearchProvidersFunc(logger))
-	},
-	"get_provider_details": func(svr *mcp.Server, logger *slog.Logger) {
-		mcp.AddTool(svr, registryTools.GetProviderDetailsTool(), registryTools.GetProviderDetailsFunc(logger))
-	},
-	"get_latest_provider_version": func(svr *mcp.Server, logger *slog.Logger) {
-		mcp.AddTool(svr, registryTools.GetLatestProviderVersionTool(), registryTools.GetLatestProviderVersionFunc(logger))
-	},
-	"get_provider_capabilities": func(svr *mcp.Server, logger *slog.Logger) {
-		mcp.AddTool(svr, registryTools.GetProviderCapabilitiesTool(), registryTools.GetProviderCapabilitiesFunc(logger))
 	},
 	"list_teams": func(svr *mcp.Server, _ *slog.Logger) {
 		mcp.AddTool(svr, tfeTools.ListTeamsTool(), tfeTools.ListTeamsFunc)
@@ -153,15 +164,6 @@ var officialFactories = map[string]func(svr *mcp.Server, logger *slog.Logger){
 	},
 	"create_workspace_tags": func(svr *mcp.Server, _ *slog.Logger) {
 		mcp.AddTool(svr, tfeTools.CreateWorkspaceTagsTool(), tfeTools.CreateWorkspaceTagsFunc)
-	},
-	"search_modules": func(svr *mcp.Server, logger *slog.Logger) {
-		mcp.AddTool(svr, registryTools.SearchModulesTool(), registryTools.SearchModulesFunc(logger))
-	},
-	"get_latest_module_version": func(svr *mcp.Server, logger *slog.Logger) {
-		mcp.AddTool(svr, registryTools.GetLatestModuleVersionTool(), registryTools.GetLatestModuleVersionFunc(logger))
-	},
-	"get_module_details": func(svr *mcp.Server, logger *slog.Logger) {
-		mcp.AddTool(svr, registryTools.GetModuleDetailsTool(), registryTools.GetModuleDetailsFunc(logger))
 	},
 }
 
