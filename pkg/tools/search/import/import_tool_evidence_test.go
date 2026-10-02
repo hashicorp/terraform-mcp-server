@@ -274,3 +274,14 @@ func TestImportToolsMCPExchange(t *testing.T) {
 		})
 	}
 }
+
+// ADR 0007: prepare_import downloads the plan schema artifact exactly once.
+func TestPrepareImportToolDownloadsSchemaArtifactOnce(t *testing.T) {
+	f := importBackendFixture(t)
+	out := prepareImportTool(context.Background(), f.client, importFixtureInput(t))
+	require.Equal(t, "prepared", out.Status, "%v", out.Diagnostics)
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	assert.Equal(t, 1, f.requests["GET /schema-download"], "one schema artifact download per call")
+	assert.Equal(t, 1, f.requests["GET /api/v2/runs/run-schema/plan/json-schema"], "one schema location lookup per call")
+}

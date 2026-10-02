@@ -154,6 +154,7 @@ func prepareImportTool(ctx context.Context, c *tfe.Client, input importPrepareIn
 		return fail(err)
 	}
 	first := firstImportSelection(input)
+	first.skipSchemaDownload = true
 	prepared := prepareImportWithDiscovery(ctx, c, first, discovery)
 	out.Stage, out.WorkspaceID, out.ExecutionMode, out.Baseline = prepared.Stage, prepared.WorkspaceID, prepared.ExecutionMode, prepared.Baseline
 	out.SchemaSource = prepared.SchemaSource

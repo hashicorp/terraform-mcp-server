@@ -35,6 +35,11 @@ type importPrepareInput struct {
 	QueryID                string            `json:"query_run_id"`
 	Selections             []importSelection `json:"selections"`
 	ConfigurationVersionID string            `json:"-"`
+
+	// skipSchemaDownload resolves the baseline and schema source only. The
+	// caller then downloads the schema artifact once for all selected types
+	// (ADR 0007).
+	skipSchemaDownload bool
 }
 
 type importPreparation struct {
@@ -176,25 +181,27 @@ func prepareImportWithDiscovery(ctx context.Context, c *tfe.Client, input import
 			}
 		}
 	}
-	result.Stage = "managed_schema"
-	managed, identity, digest, err := readImportManagedSchema(ctx, c, r.ID, result.SchemaSource.ProviderSource, result.ManagedType)
-	if err != nil {
-		if importDiagnosticCode(err) == "managed_schema_type_missing" {
-			result.ManagedTypeSupport = "unsupported"
-		}
-		return fail(err)
-	}
-	if err := decodeImportEvidenceJSONLimit(managed, &result.ManagedSchema, maxImportSchemaBytes); err != nil {
-		return fail(err)
-	}
-	if len(identity) > 0 {
-		if err := decodeImportEvidenceJSON(identity, &result.IdentitySchema); err != nil {
+	if !input.skipSchemaDownload {
+		result.Stage = "managed_schema"
+		managed, identity, digest, err := readImportManagedSchema(ctx, c, r.ID, result.SchemaSource.ProviderSource, result.ManagedType)
+		if err != nil {
+			if importDiagnosticCode(err) == "managed_schema_type_missing" {
+				result.ManagedTypeSupport = "unsupported"
+			}
 			return fail(err)
 		}
+		if err := decodeImportEvidenceJSONLimit(managed, &result.ManagedSchema, maxImportSchemaBytes); err != nil {
+			return fail(err)
+		}
+		if len(identity) > 0 {
+			if err := decodeImportEvidenceJSON(identity, &result.IdentitySchema); err != nil {
+				return fail(err)
+			}
+		}
+		result.SchemaSource.ArtifactDigest = digest
+		result.ManagedTypeSupport = "supported"
+		result.EvidenceStatus = "destination_schema_acquired; resource_type_checked; configuration_not_validated"
 	}
-	result.SchemaSource.ArtifactDigest = digest
-	result.ManagedTypeSupport = "supported"
-	result.EvidenceStatus = "destination_schema_acquired; resource_type_checked; configuration_not_validated"
 	result.Stage = "baseline_recheck"
 	current, err := c.Workspaces.Read(ctx, input.Organization, input.Workspace)
 	if err != nil {
