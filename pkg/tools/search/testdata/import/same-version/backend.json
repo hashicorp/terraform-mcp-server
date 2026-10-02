@@ -1,0 +1,65 @@
+{
+  "/api/v2/organizations/fixture-org/workspaces/import-root": {
+    "data": {
+      "type": "workspaces", "id": "ws-fixture",
+      "attributes": {"name": "import-root", "execution-mode": "remote", "working-directory": "", "terraform-version": "1.16.1"},
+      "relationships": {
+        "organization": {"data": {"type": "organizations", "id": "fixture-org"}},
+        "current-configuration-version": {"data": {"type": "configuration-versions", "id": "cv-current"}},
+        "current-run": {"data": {"type": "runs", "id": "run-schema"}},
+        "current-state-version": {"data": {"type": "state-versions", "id": "sv-baseline-marker-only"}}
+      }
+    }
+  },
+  "/api/v2/queries/qry-fixture": {
+    "data": {
+      "type": "queries", "id": "qry-fixture", "attributes": {"status": "finished", "generate-config-out": true},
+      "relationships": {
+        "workspace": {"data": {"type": "workspaces", "id": "ws-fixture"}},
+        "configuration-version": {"data": {"type": "configuration-versions", "id": "cv-query"}},
+        "no-code-query": {"data": {"type": "no-code-queries", "id": "ncqry-fixture"}}
+      }
+    }
+  },
+  "/api/v2/search/no-code-query/ncqry-fixture": {
+    "data": {
+      "type": "no-code-queries", "id": "ncqry-fixture",
+      "attributes": {
+        "no-code-query-providers": [{"namespace": "hashicorp", "name": "aws", "version": "6.62.0", "no-code-query-resources": [{"body": {"resource_type": "aws_iam_role", "limit": 1}}]}]
+      },
+      "relationships": {
+        "workspace": {"data": {"type": "workspaces", "id": "ws-fixture"}},
+        "latest-query-run": {"data": {"type": "queries", "id": "qry-fixture"}}
+      }
+    }
+  },
+  "/api/v2/configuration-versions/cv-current": {
+    "data": {"type": "configuration-versions", "id": "cv-current", "attributes": {"status": "uploaded", "source": "tfe-api", "speculative": false, "provisional": false}}
+  },
+  "/api/v2/runs/run-schema": {
+    "data": {
+      "type": "runs", "id": "run-schema", "attributes": {"status": "applied", "terraform-version": "1.16.1", "plan-only": false},
+      "relationships": {
+        "workspace": {"data": {"type": "workspaces", "id": "ws-fixture"}},
+        "configuration-version": {"data": {"type": "configuration-versions", "id": "cv-current"}},
+        "plan": {"data": {"type": "plans", "id": "plan-schema"}}
+      }
+    }
+  },
+  "/api/v2/plans/plan-schema": {
+    "data": {"type": "plans", "id": "plan-schema", "attributes": {"status": "finished", "resource-imports": 0}}
+  },
+  "/api/v2/runs/run-newer-unrelated": {
+    "data": {
+      "type": "runs", "id": "run-newer-unrelated", "attributes": {"status": "planned_and_finished", "terraform-version": "1.16.1", "plan-only": true},
+      "relationships": {
+        "workspace": {"data": {"type": "workspaces", "id": "ws-fixture"}},
+        "configuration-version": {"data": {"type": "configuration-versions", "id": "cv-newer-unrelated"}},
+        "plan": {"data": {"type": "plans", "id": "plan-newer-unrelated"}}
+      }
+    }
+  },
+  "/api/v2/configuration-versions/cv-speculative": {
+    "data": {"type": "configuration-versions", "id": "cv-speculative", "attributes": {"status": "uploaded", "source": "tfe-api", "speculative": true, "provisional": true, "auto-queue-runs": true}}
+  }
+}

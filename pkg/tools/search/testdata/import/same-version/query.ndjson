@@ -1,0 +1,2 @@
+{"type":"list_resource_found","list_resource_found":{"address":"list.aws_iam_role.roles","resource_type":"aws_iam_role","display_name":"search-import-fixture","identity_version":0,"identity":{"account_id":"123456789012","name":"search-import-fixture"},"resource_object":{"name":"search-import-fixture","arn":"arn:aws:iam::123456789012:role/search-import-fixture","max_session_duration":43200,"path":"/","unique_id":"AROAFIXTUREONLY"}}}
+{"type":"list_complete","list_complete":{"address":"list.aws_iam_role.roles","resource_type":"aws_iam_role","total":1}}

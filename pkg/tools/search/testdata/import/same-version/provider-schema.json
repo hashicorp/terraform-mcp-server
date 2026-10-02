@@ -1,0 +1,65 @@
+{
+  "format_version": "1.0",
+  "provider_schemas": {
+    "registry.terraform.io/hashicorp/aws": {
+      "resource_schemas": {
+        "aws_iam_role": {
+          "version": 0,
+          "block": {
+            "attributes": {
+              "arn": {"type": "string", "description_kind": "plain", "computed": true},
+              "assume_role_policy": {"type": "string", "description_kind": "plain", "required": true},
+              "create_date": {"type": "string", "description_kind": "plain", "computed": true},
+              "description": {"type": "string", "description_kind": "plain", "optional": true},
+              "force_detach_policies": {"type": "bool", "description_kind": "plain", "optional": true},
+              "id": {"type": "string", "description_kind": "plain", "optional": true, "computed": true},
+              "managed_policy_arns": {
+                "type": ["set", "string"],
+                "description_kind": "plain",
+                "deprecated": true,
+                "deprecation_message": "managed_policy_arns is deprecated. Use the aws_iam_role_policy_attachment resource instead. If Terraform should exclusively manage all managed policy attachments (the current behavior of this argument), use the aws_iam_role_policy_attachments_exclusive resource as well.",
+                "optional": true,
+                "computed": true
+              },
+              "max_session_duration": {"type": "number", "description_kind": "plain", "optional": true},
+              "name": {"type": "string", "description_kind": "plain", "optional": true, "computed": true},
+              "name_prefix": {"type": "string", "description_kind": "plain", "optional": true, "computed": true},
+              "path": {"type": "string", "description_kind": "plain", "optional": true},
+              "permissions_boundary": {"type": "string", "description_kind": "plain", "optional": true},
+              "tags": {"type": ["map", "string"], "description_kind": "plain", "optional": true},
+              "tags_all": {"type": ["map", "string"], "description_kind": "plain", "optional": true, "computed": true},
+              "unique_id": {"type": "string", "description_kind": "plain", "computed": true}
+            },
+            "block_types": {
+              "inline_policy": {
+                "nesting_mode": "set",
+                "block": {
+                  "attributes": {
+                    "name": {"type": "string", "description_kind": "plain", "optional": true},
+                    "policy": {"type": "string", "description_kind": "plain", "optional": true}
+                  },
+                  "description_kind": "plain",
+                  "deprecated": true,
+                  "deprecation_message": "inline_policy is deprecated. Use the aws_iam_role_policy resource instead. If Terraform should exclusively manage all inline policy associations (the current behavior of this argument), use the aws_iam_role_policies_exclusive resource as well."
+                }
+              }
+            },
+            "description_kind": "plain"
+          }
+        }
+      },
+      "resource_identity_schemas": {
+        "aws_iam_role": {
+          "version": 0,
+          "attributes": {
+            "account_id": {"type": "string", "optional_for_import": true},
+            "name": {"type": "string", "required_for_import": true}
+          }
+        }
+      },
+      "list_resource_schemas": {
+        "aws_iam_role": {"version": 0, "block": {"description_kind": "plain"}}
+      }
+    }
+  }
+}
