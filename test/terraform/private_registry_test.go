@@ -109,9 +109,8 @@ func TestPrivateRegistryModules(t *testing.T) {
 
 		directModule := modules.Items[0]
 		expectedModuleAddress := strings.Join([]string{directModule.Namespace, directModule.Name, directModule.Provider}, "/")
-		// TODO: The private registry tools currently return plain text, so verify
-		// expected values with assert.Contains(). Use structured field assertions if
-		// these tools return structured output after the MCP SDK migration.
+		// The legacy endpoint returns prose while the official endpoint returns JSON,
+		// so assert on text shared by both until the legacy endpoint is retired.
 		assert.Contains(t, resultText, expectedModuleAddress)
 	})
 
@@ -132,18 +131,14 @@ func TestPrivateRegistryModules(t *testing.T) {
 			if tc.includeVersion {
 				arguments["private_module_version"] = moduleVersion
 			}
-
 			result, resultText := callTool(t, s, "get_private_module_details", arguments)
-
-			t.Logf("Get private module details: %v", resultText)
-
 			require.False(t, result.IsError, "get_private_module_details should not return an error")
 			require.NotEmpty(t, resultText, "get_private_module_details response must not be empty")
 
 			// Verify against the TFE API directly.
 			expectedModuleAddress := strings.Join([]string{registryDetails.Namespace, registryDetails.Name, registryDetails.Provider}, "/")
 
-			// TODO: update this after MCP SKD migration
+			// Both endpoints intentionally return human-readable module details.
 			assert.Contains(t, resultText, expectedModuleAddress)
 			assert.Contains(t, resultText, fmt.Sprintf("version = %q", registryDetails.Version))
 			assert.Contains(t, resultText, "- Version: "+registryDetails.Version)
@@ -223,7 +218,8 @@ func TestPrivateRegistryProviders(t *testing.T) {
 		directProvider := providers.Items[0]
 		expectedProviderAddress := strings.Join([]string{directProvider.Namespace, directProvider.Name}, "/")
 
-		// TODO: update this after MCP SKD migration
+		// The legacy endpoint returns prose while the official endpoint returns JSON,
+		// so assert on text shared by both until the legacy endpoint is retired.
 		assert.Contains(t, resultText, expectedProviderAddress)
 		assert.Contains(t, resultText, directProvider.ID)
 	})
@@ -245,7 +241,7 @@ func TestPrivateRegistryProviders(t *testing.T) {
 
 		expectedProviderAddress := strings.Join([]string{directProvider.Namespace, directProvider.Name}, "/")
 
-		// TODO: update this after MCP SKD migration
+		// Both endpoints intentionally return human-readable provider details.
 		assert.Contains(t, resultText, expectedProviderAddress)
 		assert.Contains(t, resultText, directProvider.ID)
 	})
