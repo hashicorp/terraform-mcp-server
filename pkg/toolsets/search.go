@@ -9,4 +9,5 @@ var searchTools = []ToolDef{
 	{Name: "execute_query", Toolset: Search, RequiresTFE: true},
 	{Name: "get_query_status", Toolset: Search, RequiresTFE: true},
 	{Name: "get_query_summary", Toolset: Search, RequiresTFE: true},
+	{Name: "import_query_results", Toolset: Search, RequiresTFE: true},
 }
