@@ -121,23 +121,23 @@ func generateQueryConfigurationHandler(_ context.Context, request mcp.CallToolRe
 	// ── 1. Parse inputs ───────────────────────────────────────────────────────
 	rawSchema, err := request.RequireString("list_resource_schemas")
 	if err != nil || rawSchema == "" {
-		return toolErrorf(logger, "missing required input: list_resource_schemas")
+		return toolErrorf(logger, "generate_query_configuration", "missing required input: list_resource_schemas")
 	}
 
 	providerName, err := request.RequireString("provider_name")
 	if err != nil || providerName == "" {
-		return toolErrorf(logger, "missing required input: provider_name")
+		return toolErrorf(logger, "generate_query_configuration", "missing required input: provider_name")
 	}
 	providerName = strings.ToLower(providerName)
 
 	providerNamespace, err := request.RequireString("provider_namespace")
 	if err != nil || providerNamespace == "" {
-		return toolErrorf(logger, "missing required input: provider_namespace")
+		return toolErrorf(logger, "generate_query_configuration", "missing required input: provider_namespace")
 	}
 
 	providerVersion, err := request.RequireString("provider_version")
 	if err != nil || providerVersion == "" {
-		return toolErrorf(logger, "missing required input: provider_version")
+		return toolErrorf(logger, "generate_query_configuration", "missing required input: provider_version")
 	}
 
 	resourceTypesFlag := request.GetString("resource_types", "")
@@ -148,16 +148,16 @@ func generateQueryConfigurationHandler(_ context.Context, request mcp.CallToolRe
 	// wrapped file form {"list_resource_schemas": {"aws_instance": {...}, ...}}.
 	schemas, err := parseListResourceSchemas(rawSchema)
 	if err != nil {
-		return toolErrorf(logger, "failed to parse list_resource_schemas: %v", err)
+		return toolErrorf(logger, "generate_query_configuration", "failed to parse list_resource_schemas: %v", err)
 	}
 	if len(schemas) == 0 {
-		return toolErrorf(logger, "list_resource_schemas contains no resource types")
+		return toolErrorf(logger, "generate_query_configuration", "list_resource_schemas contains no resource types")
 	}
 
 	// ── 3. Filter to requested resource types ─────────────────────────────────
 	resourceTypes := filterResourceTypes(schemas, resourceTypesFlag)
 	if len(resourceTypes) == 0 {
-		return toolErrorf(logger, "none of the requested resource types were found in the schema")
+		return toolErrorf(logger, "generate_query_configuration", "none of the requested resource types were found in the schema")
 	}
 
 	// ── 4. Build the output ───────────────────────────────────────────────────
@@ -168,16 +168,6 @@ func generateQueryConfigurationHandler(_ context.Context, request mcp.CallToolRe
 	writeVariableNotes(&b)
 
 	return mcp.NewToolResultText(b.String()), nil
-}
-
-// ── helpers ───────────────────────────────────────────────────────────────────
-
-func toolErrorf(logger *log.Logger, format string, args ...any) (*mcp.CallToolResult, error) {
-	msg := fmt.Sprintf(format, args...)
-	if logger != nil {
-		logger.Errorf("generate_query_configuration error: %s", msg)
-	}
-	return mcp.NewToolResultError(msg), nil
 }
 
 // parseListResourceSchemas accepts either the wrapped file format or the bare

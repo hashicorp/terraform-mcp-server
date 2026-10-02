@@ -4,13 +4,15 @@
 package search
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
+	"net/url"
 	"strings"
 
+	"github.com/hashicorp/go-tfe"
 	"github.com/hashicorp/terraform-mcp-server/pkg/client"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
@@ -38,7 +40,7 @@ func ProviderListSchemaList(logger *log.Logger) server.ServerTool {
 		Tool: mcp.NewTool("provider_list_schema_list",
 			mcp.WithDescription(providerListSchemaListDescription),
 			mcp.WithTitleAnnotation("Fetch list_resource_schemas for a search-compatible provider"),
-			mcp.WithOpenWorldHintAnnotation(false),
+			mcp.WithOpenWorldHintAnnotation(true),
 			mcp.WithReadOnlyHintAnnotation(true),
 			mcp.WithDestructiveHintAnnotation(false),
 			mcp.WithString("provider_namespace",
@@ -81,47 +83,32 @@ func providerListSchemaListHandler(ctx context.Context, request mcp.CallToolRequ
 	orgName := strings.TrimSpace(request.GetString("organization_name", ""))
 	workspaceName := strings.TrimSpace(request.GetString("workspace_name", ""))
 	if orgName == "" || workspaceName == "" {
-		return searchToolErrorf(logger, "organization_name and workspace_name are required; ask the user to provide both before fetching provider schemas")
+		return toolErrorf(logger, "provider_list_schema_list", "organization_name and workspace_name are required; ask the user to provide both before fetching provider schemas")
 	}
 
-	// Resolve bearer token from context (or env).
-	token := client.GetTokenFromContext(ctx)
-	if token == "" {
-		return searchToolErrorf(logger, "no Terraform token available — ensure TFE_TOKEN is configured")
-	}
-
-	// Get the TFE client to derive the base URL.
 	tfeClient, err := client.GetTfeClientFromContext(ctx, logger)
 	if err != nil {
-		return searchToolErrorf(logger, "failed to get Terraform client — ensure TFE_TOKEN and TFE_ADDRESS are configured: %v", err)
+		return toolErrorf(logger, "provider_list_schema_list", "failed to get Terraform client — ensure TFE_TOKEN and TFE_ADDRESS are configured: %v", err)
 	}
-
-	// go-tfe sets BaseURL to <address>/api/v2; strip the suffix to build our own paths.
-	// BaseURL() returns url.URL by value so we take its address to call String().
-	baseURLRaw := tfeClient.BaseURL()
-	baseURL := strings.TrimSuffix(strings.TrimRight(baseURLRaw.String(), "/"), "/api/v2")
-
-	// Reuse the session HTTP client when available; fall back to stdlib default.
-	httpClient, err := client.GetHttpClientFromContext(ctx, logger)
-	if err != nil || httpClient == nil {
-		httpClient = http.DefaultClient
+	if _, err := tfeClient.Workspaces.Read(ctx, orgName, workspaceName); err != nil {
+		return toolErrorf(logger, "provider_list_schema_list", "failed to read workspace %q in organization %q: %v", workspaceName, orgName, err)
 	}
 
 	// ── Branch: list all providers ────────────────────────────────────────────
 	if providerNamespace == "" || providerName == "" {
-		return listSupportedProviders(ctx, baseURL, orgName, token, httpClient, logger)
+		return listSupportedProviders(ctx, tfeClient, orgName, logger)
 	}
 
 	// ── Branch: fetch schema for a specific provider ──────────────────────────
 
 	// The catalog is authoritative for the version. Do not accept a caller- or
 	// model-supplied version because it may not have list-resource schemas.
-	providerVersion, err := discoverProviderVersion(ctx, baseURL, orgName, providerNamespace, providerName, token, httpClient, logger)
+	providerVersion, err := discoverProviderVersion(ctx, tfeClient, orgName, providerNamespace, providerName)
 	if err != nil {
-		return searchToolErrorf(logger, "%v", err)
+		return toolErrorf(logger, "provider_list_schema_list", "%v", err)
 	}
 
-	return fetchProviderSchema(ctx, baseURL, orgName, providerNamespace, providerName, providerVersion, token, httpClient, logger)
+	return fetchProviderSchema(ctx, tfeClient, orgName, providerNamespace, providerName, providerVersion, logger)
 }
 
 // ── list all supported providers ─────────────────────────────────────────────
@@ -155,24 +142,14 @@ type noCodeProviderSchemaResponse struct {
 	} `json:"data"`
 }
 
-func listSupportedProviders(ctx context.Context, baseURL, orgName, token string, httpClient *http.Client, logger *log.Logger) (*mcp.CallToolResult, error) {
-	url := fmt.Sprintf("%s/api/v2/search/provider-versions", baseURL)
-	if orgName != "" {
-		url += fmt.Sprintf("?filter[organization][name]=%s", orgName)
-	}
-
-	body, err := doAuthenticatedGet(ctx, url, token, httpClient, logger)
+func listSupportedProviders(ctx context.Context, tfeClient *tfe.Client, orgName string, logger *log.Logger) (*mcp.CallToolResult, error) {
+	resp, err := readProviderVersions(ctx, tfeClient, orgName)
 	if err != nil {
-		return searchToolErrorf(logger, "failed to fetch supported providers: %v", err)
-	}
-
-	var resp noCodeProviderVersionsResponse
-	if err := json.Unmarshal(body, &resp); err != nil {
-		return searchToolErrorf(logger, "failed to parse provider list response: %v", err)
+		return toolErrorf(logger, "provider_list_schema_list", "failed to fetch supported providers: %v", err)
 	}
 
 	if len(resp.Data) == 0 {
-		return searchToolErrorf(logger, "no search-compatible providers are available for this organization")
+		return toolErrorf(logger, "provider_list_schema_list", "no search-compatible providers are available for this organization")
 	}
 
 	type providerSummary struct {
@@ -195,7 +172,7 @@ func listSupportedProviders(ctx context.Context, baseURL, orgName, token string,
 		"note":                "Call provider_list_schema_list again with the same organization_name and workspace_name, plus provider_namespace and provider_name (and optionally provider_version), to fetch the full list_resource_schemas for a specific provider.",
 	}, "", "  ")
 	if err != nil {
-		return searchToolErrorf(logger, "failed to marshal provider list: %v", err)
+		return toolErrorf(logger, "provider_list_schema_list", "failed to marshal provider list: %v", err)
 	}
 
 	return mcp.NewToolResultText(string(out)), nil
@@ -203,20 +180,10 @@ func listSupportedProviders(ctx context.Context, baseURL, orgName, token string,
 
 // ── discover version from index ───────────────────────────────────────────────
 
-func discoverProviderVersion(ctx context.Context, baseURL, orgName, namespace, name, token string, httpClient *http.Client, logger *log.Logger) (string, error) {
-	url := fmt.Sprintf("%s/api/v2/search/provider-versions", baseURL)
-	if orgName != "" {
-		url += fmt.Sprintf("?filter[organization][name]=%s", orgName)
-	}
-
-	body, err := doAuthenticatedGet(ctx, url, token, httpClient, logger)
+func discoverProviderVersion(ctx context.Context, tfeClient *tfe.Client, orgName, namespace, name string) (string, error) {
+	resp, err := readProviderVersions(ctx, tfeClient, orgName)
 	if err != nil {
 		return "", fmt.Errorf("failed to fetch provider list to discover version: %w", err)
-	}
-
-	var resp noCodeProviderVersionsResponse
-	if err := json.Unmarshal(body, &resp); err != nil {
-		return "", fmt.Errorf("failed to parse provider list: %w", err)
 	}
 
 	for _, d := range resp.Data {
@@ -235,30 +202,31 @@ func discoverProviderVersion(ctx context.Context, baseURL, orgName, namespace, n
 
 // ── fetch schema for a specific provider ──────────────────────────────────────
 
-func fetchProviderSchema(ctx context.Context, baseURL, orgName, namespace, name, version, token string, httpClient *http.Client, logger *log.Logger) (*mcp.CallToolResult, error) {
-	url := fmt.Sprintf("%s/api/v2/search/provider-versions/%s/%s/%s",
-		baseURL,
-		namespace,
-		name,
-		version,
+func fetchProviderSchema(ctx context.Context, tfeClient *tfe.Client, orgName, namespace, name, version string, logger *log.Logger) (*mcp.CallToolResult, error) {
+	requestPath := fmt.Sprintf("search/provider-versions/%s/%s/%s",
+		url.PathEscape(namespace),
+		url.PathEscape(name),
+		url.PathEscape(version),
 	)
 	if orgName != "" {
-		url += fmt.Sprintf("?filter[organization][name]=%s", orgName)
+		query := url.Values{}
+		query.Set("filter[organization][name]", orgName)
+		requestPath += "?" + query.Encode()
 	}
 
-	body, err := doAuthenticatedGet(ctx, url, token, httpClient, logger)
+	request, err := tfeClient.NewRequest(http.MethodGet, requestPath, nil)
 	if err != nil {
-		return searchToolErrorf(logger, "failed to fetch schema for %s/%s@%s: %v", namespace, name, version, err)
+		return toolErrorf(logger, "provider_list_schema_list", "failed to build schema request for %s/%s@%s: %v", namespace, name, version, err)
 	}
 
 	var resp noCodeProviderSchemaResponse
-	if err := json.Unmarshal(body, &resp); err != nil {
-		return searchToolErrorf(logger, "failed to parse schema response for %s/%s@%s: %v", namespace, name, version, err)
+	if err := doProviderRequest(ctx, request, &resp); err != nil {
+		return toolErrorf(logger, "provider_list_schema_list", "failed to fetch schema for %s/%s@%s: %v", namespace, name, version, err)
 	}
 
 	lrs := resp.Data.Attributes.ListResourceSchemas
 	if lrs == nil || string(lrs) == "null" {
-		return searchToolErrorf(logger,
+		return toolErrorf(logger, "provider_list_schema_list",
 			"provider %s/%s@%s exists in the catalog but has no list_resource_schemas — "+
 				"schema generation may not have run for this version yet",
 			namespace, name, version,
@@ -281,59 +249,38 @@ func fetchProviderSchema(ctx context.Context, baseURL, orgName, namespace, name,
 		),
 	}, "", "  ")
 	if err != nil {
-		return searchToolErrorf(logger, "failed to marshal schema response: %v", err)
+		return toolErrorf(logger, "provider_list_schema_list", "failed to marshal schema response: %v", err)
 	}
 
 	return mcp.NewToolResultText(string(out)), nil
 }
 
-// ── HTTP helpers ──────────────────────────────────────────────────────────────
+func readProviderVersions(ctx context.Context, tfeClient *tfe.Client, orgName string) (*noCodeProviderVersionsResponse, error) {
+	requestPath := "search/provider-versions"
+	if orgName != "" {
+		query := url.Values{}
+		query.Set("filter[organization][name]", orgName)
+		requestPath += "?" + query.Encode()
+	}
 
-// doAuthenticatedGet performs a GET with the TFE bearer token attached and
-// returns the response body bytes.
-func doAuthenticatedGet(ctx context.Context, rawURL, token string, httpClient *http.Client, logger *log.Logger) ([]byte, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
+	request, err := tfeClient.NewRequest(http.MethodGet, requestPath, nil)
 	if err != nil {
-		return nil, fmt.Errorf("building request: %w", err)
+		return nil, fmt.Errorf("building provider list request: %w", err)
 	}
 
-	req.Header.Set("Authorization", "Bearer "+token)
-	req.Header.Set("Accept", "application/vnd.api+json")
-
-	logger.Debugf("GET %s", rawURL)
-
-	resp, err := httpClient.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("executing request: %w", err)
+	var resp noCodeProviderVersionsResponse
+	if err := doProviderRequest(ctx, request, &resp); err != nil {
+		return nil, err
 	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("reading response body: %w", err)
-	}
-
-	if resp.StatusCode == http.StatusNotFound {
-		return nil, fmt.Errorf("404 Not Found — the provider or endpoint is unavailable")
-	}
-	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
-		return nil, fmt.Errorf("HTTP %d — check that TFE_TOKEN has access to the no-code search endpoints", resp.StatusCode)
-	}
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("unexpected HTTP %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
-	}
-
-	logger.Debugf("Response %d from %s", resp.StatusCode, rawURL)
-	return body, nil
+	return &resp, nil
 }
 
-// searchToolErrorf returns a tool error result and logs the message.
-func searchToolErrorf(logger *log.Logger, format string, args ...any) (*mcp.CallToolResult, error) {
-	msg := fmt.Sprintf(format, args...)
-	if logger != nil {
-		logger.Errorf("provider_list_schema_list: %s", msg)
+func doProviderRequest(ctx context.Context, request *tfe.ClientRequest, response any) error {
+	var body bytes.Buffer
+	if err := request.Do(ctx, &body); err != nil {
+		return err
 	}
-	return mcp.NewToolResultError(msg), nil
+	return json.Unmarshal(body.Bytes(), response)
 }
 
 const providerListSchemaListDescription = `Fetches list_resource_schemas for a search-compatible Terraform provider from the
