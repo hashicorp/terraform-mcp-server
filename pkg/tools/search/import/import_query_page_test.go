@@ -5,6 +5,7 @@ package importworkflow
 
 import (
 	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -31,9 +32,11 @@ func TestDiscoveryPagingIsStableAndNonOverlapping(t *testing.T) {
 		assert.Equal(t, 1000, page.TotalMatching)
 		assert.Equal(t, 1000, page.ResourcesDiscovered)
 		assert.Equal(t, 1000, page.ByType["aws_iam_role"])
-		for _, row := range page.Candidates {
-			assert.False(t, seen[row.CandidateID], "row repeated across pages")
-			seen[row.CandidateID] = true
+		for _, g := range page.Lists {
+			for _, row := range g.Candidates {
+				assert.False(t, seen[row.CandidateID], "row repeated across pages")
+				seen[row.CandidateID] = true
+			}
 		}
 		pages++
 		if page.NextCursor == "" {
@@ -49,10 +52,12 @@ func TestDiscoveryPageDefaultsAndMaximum(t *testing.T) {
 	d := pagedFixture(t, 300)
 	page, err := pageImportDiscovery(d, DiscoveryFilter{})
 	require.NoError(t, err)
-	assert.Len(t, page.Candidates, DefaultDiscoveryPageSize)
+	assert.Equal(t, 100, DefaultDiscoveryPageSize)
+	assert.Equal(t, 200, MaxDiscoveryPageSize)
+	assert.Equal(t, DefaultDiscoveryPageSize, page.Returned)
 	page, err = pageImportDiscovery(d, DiscoveryFilter{Limit: 5000})
 	require.NoError(t, err)
-	assert.Len(t, page.Candidates, MaxDiscoveryPageSize)
+	assert.Equal(t, MaxDiscoveryPageSize, page.Returned)
 }
 
 func TestDiscoveryFilters(t *testing.T) {
@@ -64,7 +69,7 @@ func TestDiscoveryFilters(t *testing.T) {
 	page, err = pageImportDiscovery(d, DiscoveryFilter{ResourceType: "aws_s3_bucket"})
 	require.NoError(t, err)
 	assert.Zero(t, page.TotalMatching)
-	assert.Empty(t, page.Candidates)
+	assert.Empty(t, page.Lists)
 	page, err = pageImportDiscovery(d, DiscoveryFilter{Address: "list.aws_iam_role.roles", Limit: 1})
 	require.NoError(t, err)
 	assert.Equal(t, 250, page.TotalMatching)
@@ -92,14 +97,65 @@ func TestDiscoveryCursorIsBoundToSnapshotAndQuery(t *testing.T) {
 	}
 }
 
+func TestDiscoveryPagesAreGroupedWithSharedIdentity(t *testing.T) {
+	d := pagedFixture(t, 5)
+	page, err := pageImportDiscovery(d, DiscoveryFilter{})
+	require.NoError(t, err)
+	require.Len(t, page.Lists, 1)
+	g := page.Lists[0]
+	assert.Equal(t, "list.aws_iam_role.roles", g.Address)
+	assert.Equal(t, "aws_iam_role", g.ResourceType)
+	assert.Equal(t, map[string]any{"account_id": "123456789012"}, g.SharedIdentity)
+	require.Len(t, g.Candidates, 5)
+	for i, row := range g.Candidates {
+		assert.Equal(t, map[string]any{"name": fmt.Sprintf("role-%d", i)}, row.Identity, "only differing keys remain")
+		assert.NotEmpty(t, row.CandidateID)
+	}
+
+	// A single-row group keeps its full identity: nothing is shared.
+	one, err := pageImportDiscovery(d, DiscoveryFilter{NameContains: "role-3"})
+	require.NoError(t, err)
+	require.Len(t, one.Lists[0].Candidates, 1)
+	assert.Empty(t, one.Lists[0].SharedIdentity)
+	assert.Equal(t, "123456789012", one.Lists[0].Candidates[0].Identity["account_id"])
+}
+
+func TestDiscoveryGroupingKeepsListsSeparate(t *testing.T) {
+	mk := func(addr, name string) importDiscoveryCandidate {
+		return importDiscoveryCandidate{CandidateID: "candidate-" + name, Address: addr, ResourceType: "aws_iam_role", Identity: map[string]any{"account_id": "1", "name": name}}
+	}
+	groups := groupDiscoveryRows([]importDiscoveryCandidate{mk("list.a", "x"), mk("list.b", "y"), mk("list.a", "z")}, func(c importDiscoveryCandidate) discoveryRow {
+		return discoveryRow{CandidateID: c.CandidateID}
+	})
+	require.Len(t, groups, 2)
+	assert.Equal(t, "list.a", groups[0].Address)
+	assert.Len(t, groups[0].Candidates, 2)
+	assert.Equal(t, map[string]any{"account_id": "1"}, groups[0].SharedIdentity)
+	assert.Len(t, groups[1].Candidates, 1)
+	assert.Empty(t, groups[1].SharedIdentity)
+}
+
+func TestDiscoveryPageByteCapStopsWideRows(t *testing.T) {
+	d := pagedFixture(t, 300)
+	for i := range d.Candidates {
+		d.Candidates[i].DisplayName = strings.Repeat("w", 1024)
+	}
+	page, err := pageImportDiscovery(d, DiscoveryFilter{Limit: MaxDiscoveryPageSize})
+	require.NoError(t, err)
+	assert.Less(t, page.Returned, MaxDiscoveryPageSize)
+	assert.NotEmpty(t, page.NextCursor, "stopped by bytes, not truncated silently")
+	encoded, _ := json.Marshal(page)
+	assert.Less(t, len(encoded), maxDiscoveryPageBytes+4*1024)
+}
+
 func TestDiscoveryPageResponseSizes(t *testing.T) {
 	for _, n := range []int{10, 100, 1000} {
 		d := pagedFixture(t, n)
-		page, err := pageImportDiscovery(d, DiscoveryFilter{Limit: 100})
+		page, err := pageImportDiscovery(d, DiscoveryFilter{Limit: MaxDiscoveryPageSize})
 		require.NoError(t, err)
 		encoded, _ := json.Marshal(page)
 		t.Logf("get_query_summary page, %d results, %d rows: %d bytes", n, page.Returned, len(encoded))
-		assert.Less(t, len(encoded), 64*1024)
+		assert.Less(t, len(encoded), maxDiscoveryPageBytes)
 		assert.False(t, strings.Contains(string(encoded), "resource_object"))
 	}
 }

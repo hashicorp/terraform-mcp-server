@@ -13,9 +13,10 @@ import (
 )
 
 const (
-	DefaultDiscoveryPageSize = 50
-	MaxDiscoveryPageSize     = 100
-	maxDiscoveryPageBytes    = 48 * 1024
+	// Agent-context limits, tuned from measured queries (ADR 0006).
+	DefaultDiscoveryPageSize = 100
+	MaxDiscoveryPageSize     = 200
+	maxDiscoveryPageBytes    = 64 * 1024
 )
 
 // DiscoveryFilter narrows a page of discovered resources. Tag and attribute
@@ -28,24 +29,86 @@ type DiscoveryFilter struct {
 	After        string
 }
 
+// discoveryRow is one selectable result. Identity holds only the keys that
+// differ from the group's shared_identity; merge the two to get the identity.
 type discoveryRow struct {
-	CandidateID  string         `json:"candidate_id"`
-	Address      string         `json:"address"`
-	ResourceType string         `json:"resource_type"`
-	DisplayName  string         `json:"display_name,omitempty"`
-	Identity     map[string]any `json:"identity"`
+	CandidateID string         `json:"candidate_id"`
+	DisplayName string         `json:"display_name,omitempty"`
+	Identity    map[string]any `json:"identity,omitempty"`
+}
+
+// discoveryGroup states the list block address and type once for its rows.
+type discoveryGroup struct {
+	Address        string         `json:"address"`
+	ResourceType   string         `json:"resource_type"`
+	SharedIdentity map[string]any `json:"shared_identity,omitempty"`
+	Candidates     []discoveryRow `json:"candidates"`
 }
 
 type discoveryPage struct {
-	QueryRunID          string         `json:"query_run_id"`
-	LogDigest           string         `json:"log_digest"`
-	ResourcesDiscovered int            `json:"resources_discovered"`
-	ByType              map[string]int `json:"by_type"`
-	TotalMatching       int            `json:"total_matching"`
-	Returned            int            `json:"returned"`
-	Candidates          []discoveryRow `json:"candidates"`
-	NextCursor          string         `json:"next_cursor,omitempty"`
-	NextAction          string         `json:"next_action"`
+	QueryRunID          string           `json:"query_run_id"`
+	LogDigest           string           `json:"log_digest"`
+	ResourcesDiscovered int              `json:"resources_discovered"`
+	ByType              map[string]int   `json:"by_type"`
+	TotalMatching       int              `json:"total_matching"`
+	Returned            int              `json:"returned"`
+	Lists               []discoveryGroup `json:"lists"`
+	NextCursor          string           `json:"next_cursor,omitempty"`
+	NextAction          string           `json:"next_action"`
+}
+
+// groupDiscoveryRows groups rows by list address in first-seen order and hoists
+// identity keys that have the same value in every row of a multi-row group.
+func groupDiscoveryRows(rows []importDiscoveryCandidate, display func(importDiscoveryCandidate) discoveryRow) []discoveryGroup {
+	groups := []discoveryGroup{}
+	index := map[string]int{}
+	members := map[string][]importDiscoveryCandidate{}
+	for _, c := range rows {
+		if _, ok := index[c.Address]; !ok {
+			index[c.Address] = len(groups)
+			groups = append(groups, discoveryGroup{Address: c.Address, ResourceType: c.ResourceType})
+		}
+		members[c.Address] = append(members[c.Address], c)
+	}
+	for i := range groups {
+		list := members[groups[i].Address]
+		shared := map[string]any{}
+		if len(list) > 1 {
+			for k, v := range list[0].Identity {
+				encoded, _ := json.Marshal(v)
+				same := true
+				for _, other := range list[1:] {
+					ov, ok := other.Identity[k]
+					oe, _ := json.Marshal(ov)
+					if !ok || string(oe) != string(encoded) {
+						same = false
+						break
+					}
+				}
+				if same {
+					shared[k] = v
+				}
+			}
+		}
+		if len(shared) > 0 {
+			groups[i].SharedIdentity = shared
+		}
+		groups[i].Candidates = make([]discoveryRow, 0, len(list))
+		for _, c := range list {
+			row := display(c)
+			row.Identity = map[string]any{}
+			for k, v := range c.Identity {
+				if _, ok := shared[k]; !ok {
+					row.Identity[k] = v
+				}
+			}
+			if len(row.Identity) == 0 {
+				row.Identity = nil
+			}
+			groups[i].Candidates = append(groups[i].Candidates, row)
+		}
+	}
+	return groups
 }
 
 type discoveryCursor struct {
@@ -108,7 +171,7 @@ func pageImportDiscovery(d *importDiscovery, f DiscoveryFilter) (*discoveryPage,
 		LogDigest:           d.LogDigest,
 		ResourcesDiscovered: len(d.Candidates),
 		ByType:              map[string]int{},
-		Candidates:          []discoveryRow{},
+		Lists:               []discoveryGroup{},
 	}
 	name := strings.ToLower(f.NameContains)
 	matches := func(c importDiscoveryCandidate) bool {
@@ -118,6 +181,7 @@ func pageImportDiscovery(d *importDiscovery, f DiscoveryFilter) (*discoveryPage,
 	}
 
 	size, lastReturned, more := 0, "", false
+	var selected []importDiscoveryCandidate
 	for i, c := range d.Candidates {
 		page.ByType[c.ResourceType]++
 		if !matches(c) {
@@ -127,17 +191,20 @@ func pageImportDiscovery(d *importDiscovery, f DiscoveryFilter) (*discoveryPage,
 		if i < start || more {
 			continue
 		}
-		row := discoveryRow{CandidateID: c.CandidateID, Address: c.Address, ResourceType: c.ResourceType, DisplayName: c.DisplayName, Identity: c.Identity}
-		encoded, _ := json.Marshal(row)
-		if len(page.Candidates) >= limit || (len(page.Candidates) > 0 && size+len(encoded) > maxDiscoveryPageBytes) {
+		// Size is measured on the flat row, which overstates the grouped size.
+		encoded, _ := json.Marshal(discoveryRow{CandidateID: c.CandidateID, DisplayName: c.DisplayName, Identity: c.Identity})
+		if len(selected) >= limit || (len(selected) > 0 && size+len(encoded) > maxDiscoveryPageBytes) {
 			more = true
 			continue
 		}
 		size += len(encoded)
-		page.Candidates = append(page.Candidates, row)
+		selected = append(selected, c)
 		lastReturned = c.CandidateID
 	}
-	page.Returned = len(page.Candidates)
+	page.Returned = len(selected)
+	page.Lists = groupDiscoveryRows(selected, func(c importDiscoveryCandidate) discoveryRow {
+		return discoveryRow{CandidateID: c.CandidateID, DisplayName: c.DisplayName}
+	})
 	if more {
 		page.NextCursor = encodeDiscoveryCursor(discoveryCursor{QueryRunID: d.QueryRunID, LogDigest: d.LogDigest, LastID: lastReturned})
 		page.NextAction = "Pass next_cursor as after to read the next page. Select candidate_id values from any page, then call prepare_import."

@@ -79,15 +79,19 @@ func TestSearchImportToolBoundary(t *testing.T) {
 	raw, err := json.Marshal(result.StructuredContent)
 	require.NoError(t, err)
 	var discovery struct {
-		Candidates []struct {
-			CandidateID string `json:"candidate_id"`
-		} `json:"candidates"`
+		Lists []struct {
+			Candidates []struct {
+				CandidateID string `json:"candidate_id"`
+			} `json:"candidates"`
+		} `json:"lists"`
 	}
 	require.NoError(t, json.Unmarshal(raw, &discovery))
-	require.Len(t, discovery.Candidates, 1)
-	assert.True(t, strings.HasPrefix(discovery.Candidates[0].CandidateID, "candidate-"))
+	require.Len(t, discovery.Lists, 1)
+	require.Len(t, discovery.Lists[0].Candidates, 1)
+	candidateID := discovery.Lists[0].Candidates[0].CandidateID
+	assert.True(t, strings.HasPrefix(candidateID, "candidate-"))
 
-	selection := map[string]any{"candidate_id": discovery.Candidates[0].CandidateID, "managed_type": "aws_iam_role"}
+	selection := map[string]any{"candidate_id": candidateID, "managed_type": "aws_iam_role"}
 	prepare := PrepareImport(silentLogger())
 	assert.Equal(t, "prepare_import", prepare.Tool.Name)
 	result, err = prepare.Handler(context.Background(), mcp.CallToolRequest{Params: mcp.CallToolParams{Arguments: map[string]any{"organization_name": "fixture-org", "workspace_name": "import-root", "query_run_id": "qry-fixture", "selections": []any{selection}}}})

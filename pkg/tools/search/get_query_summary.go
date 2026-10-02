@@ -72,7 +72,7 @@ func GetQuerySummary(logger *log.Logger) server.ServerTool {
 			mcp.WithString("resource_type", mcp.Description("Only return results of this resource type, for example aws_iam_role.")),
 			mcp.WithString("address", mcp.Description("Only return results from this list block address, for example list.aws_iam_role.roles.")),
 			mcp.WithString("name_contains", mcp.Description("Only return results whose display name contains this text (case-insensitive). Tag and attribute filtering are not supported.")),
-			mcp.WithNumber("limit", mcp.Description("Results per page. Default 50, maximum 100.")),
+			mcp.WithNumber("limit", mcp.Description("Results per page. Default 100, maximum 200.")),
 			mcp.WithString("after", mcp.Description("Pass next_cursor from the previous page to read the next page of the same query run.")),
 		),
 		Handler: func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -203,9 +203,11 @@ Call get_query_status first and wait for it to return a terminal status, then pa
 same query_run_id to this tool.
 
 For a finished, complete no-code query the result is one bounded page of selectable
-results: candidate_id, address, resource_type, display_name and identity per row, plus
-resources_discovered, by_type counts, total_matching, a log_digest and, when more rows
-match, next_cursor. Narrow with resource_type, address or name_contains; read the next
+results grouped by list block (lists[]): each group states address and resource_type once and
+shared_identity (identity keys equal in every row of the group); each row has candidate_id,
+display_name and only the identity keys that differ, so merge shared_identity with the row's
+identity. The result also has resources_discovered, by_type counts, total_matching, a log_digest
+and, when more rows match, next_cursor. Default 100 rows per page, maximum 200. Narrow with resource_type, address or name_contains; read the next
 page by passing next_cursor as after. A page is a view of a fully checked query. If the
 log changes between pages the call returns snapshot_changed_restart_paging. A query may
 contain more than 100 results; select up to 100 candidate_id values from any page, then
