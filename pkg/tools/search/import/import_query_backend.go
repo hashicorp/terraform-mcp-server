@@ -121,9 +121,27 @@ type importDiscovery struct {
 	Candidates    []importDiscoveryCandidate `json:"candidates"`
 }
 
+// importQueryProvenance is the QueryRun's verified metadata, read without
+// touching the log. It lets callers check the destination before paying for the
+// log read.
+type importQueryProvenance struct {
+	QueryRunID    string
+	WorkspaceID   string
+	NoCodeQueryID string
+	Providers     map[string]workspaceProvider
+}
+
 // Query inputs are read from the selected query's backend relationship, never
 // from the caller's query_configuration or today's provider catalog.
 func readImportDiscovery(ctx context.Context, c *tfe.Client, queryID string) (*importDiscovery, error) {
+	prov, err := readImportQueryProvenance(ctx, c, queryID)
+	if err != nil {
+		return nil, err
+	}
+	return readImportDiscoveryLog(ctx, c, prov)
+}
+
+func readImportQueryProvenance(ctx context.Context, c *tfe.Client, queryID string) (*importQueryProvenance, error) {
 	q, err := c.QueryRuns.Read(ctx, queryID)
 	if err != nil {
 		return nil, importReadError(err, 0)
@@ -212,6 +230,13 @@ func readImportDiscovery(ctx context.Context, c *tfe.Client, queryID string) (*i
 			providers[resourceType] = provider
 		}
 	}
+	return &importQueryProvenance{QueryRunID: queryID, WorkspaceID: w.ID, NoCodeQueryID: nc.ID, Providers: providers}, nil
+}
+
+// readImportDiscoveryLog reads and parses the QueryRun log. It is the expensive
+// step: ranged archivist reads of the whole log.
+func readImportDiscoveryLog(ctx context.Context, c *tfe.Client, prov *importQueryProvenance) (*importDiscovery, error) {
+	queryID, providers := prov.QueryRunID, prov.Providers
 	logs, err := c.QueryRuns.Logs(ctx, queryID)
 	if err != nil {
 		return nil, importReadError(err, 0)
@@ -227,7 +252,7 @@ func readImportDiscovery(ctx context.Context, c *tfe.Client, queryID string) (*i
 	if err != nil {
 		return nil, err
 	}
-	return &importDiscovery{QueryRunID: queryID, WorkspaceID: w.ID, NoCodeQueryID: nc.ID, Provenance: "query_bound_no_code_selections", LogDigest: importEvidenceDigest(data), Candidates: candidates}, nil
+	return &importDiscovery{QueryRunID: queryID, WorkspaceID: prov.WorkspaceID, NoCodeQueryID: prov.NoCodeQueryID, Provenance: "query_bound_no_code_selections", LogDigest: importEvidenceDigest(data), Candidates: candidates}, nil
 }
 
 // importCandidateID derives a stable ID from Search-side facts only. It can be

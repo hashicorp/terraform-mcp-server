@@ -55,6 +55,9 @@ func TestPrepareImportToolFailsClosed(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			f := importBackendFixture(t)
+			// prepare_import reads the workspace and state once to check the
+			// destination and once to prepare, so a change must land on the third.
+			f.changeReads = 2
 			input := importFixtureInput(t)
 			tc.change(f, &input)
 			out := prepareImportTool(context.Background(), f.client, input)
@@ -114,7 +117,7 @@ func TestPrepareImportToolWithoutReleaseMetadata(t *testing.T) {
 }
 
 func TestPrepareImportToolIndependentOfCreateEligibility(t *testing.T) {
-	for _, mode := range []string{"remote", "agent", "local"} {
+	for _, mode := range []string{"remote", "agent"} {
 		t.Run(mode, func(t *testing.T) {
 			f := importBackendFixture(t)
 			path := "/api/v2/organizations/fixture-org/workspaces/import-root"
@@ -284,4 +287,81 @@ func TestPrepareImportToolDownloadsSchemaArtifactOnce(t *testing.T) {
 	defer f.mu.Unlock()
 	assert.Equal(t, 1, f.requests["GET /schema-download"], "one schema artifact download per call")
 	assert.Equal(t, 1, f.requests["GET /api/v2/runs/run-schema/plan/json-schema"], "one schema location lookup per call")
+}
+
+func setWorkspaceAttribute(t *testing.T, f *importBackendTest, key string, value any) {
+	t.Helper()
+	path := "/api/v2/organizations/fixture-org/workspaces/import-root"
+	var wire map[string]any
+	require.NoError(t, json.Unmarshal(f.responses[path], &wire))
+	wire["data"].(map[string]any)["attributes"].(map[string]any)[key] = value
+	var err error
+	f.responses[path], err = json.Marshal(wire)
+	require.NoError(t, err)
+}
+
+func logRequests(f *importBackendTest) int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.requests["GET /logs"]
+}
+
+// Local execution mode has no HCP runs, plans or schema artifacts. The tool must
+// stop before reading the QueryRun log and must not suggest local commands.
+func TestPrepareImportToolBlocksLocalExecutionBeforeLogRead(t *testing.T) {
+	f := importBackendFixture(t)
+	setWorkspaceAttribute(t, f, "execution-mode", "local")
+	out := prepareImportTool(context.Background(), f.client, importFixtureInput(t))
+	assert.Equal(t, "blocked", out.Status)
+	assert.Contains(t, out.Diagnostics, "workspace_execution_mode_local")
+	assert.Equal(t, 0, logRequests(f), "a blocked destination must not read the log")
+	assert.Equal(t, "local", out.ExecutionMode)
+	assert.True(t, out.HasCurrentConfiguration, "the observed baseline is still reported")
+	assert.Nil(t, out.Carry)
+	assert.NotContains(t, strings.ToLower(out.NextAction), "terraform providers schema")
+	assert.Contains(t, out.NextAction, "No CV or Run was created")
+}
+
+func TestPrepareImportToolStateWithoutRunBlocksBeforeLogRead(t *testing.T) {
+	f := importBackendFixture(t)
+	f.responses["/api/v2/workspaces/ws-fixture/current-state-version"] = json.RawMessage(`{"data":{"id":"sv-manual","type":"state-versions"}}`)
+	out := prepareImportTool(context.Background(), f.client, importFixtureInput(t))
+	assert.Equal(t, "blocked", out.Status)
+	assert.Contains(t, out.Diagnostics, "state_producing_run_missing")
+	assert.Equal(t, 0, logRequests(f))
+	assert.True(t, out.HasCurrentConfiguration, "baseline fields survive a blocked response")
+	assert.NotEmpty(t, out.CurrentConfigurationVersionID)
+	assert.Contains(t, out.NextAction, "deleted", "names both possible causes")
+}
+
+func TestPrepareImportToolTerraformVersionGates(t *testing.T) {
+	for _, tc := range []struct {
+		version, code, note string
+	}{
+		{"1.4.7", "terraform_version_unsupported", ""},
+		{"0.11.15", "terraform_version_unsupported", ""},
+		{"1.5.7", "", "terraform_version_below_1_12_identity_unavailable"},
+		{"1.11.4", "", "terraform_version_below_1_12_identity_unavailable"},
+		{"1.12.0", "", ""},
+		{"~> 1.4", "", ""},
+		{"latest", "", ""},
+	} {
+		t.Run(tc.version, func(t *testing.T) {
+			f := importBackendFixture(t)
+			setWorkspaceAttribute(t, f, "terraform-version", tc.version)
+			out := prepareImportTool(context.Background(), f.client, importFixtureInput(t))
+			if tc.code != "" {
+				assert.Equal(t, "blocked", out.Status)
+				assert.Contains(t, out.Diagnostics, tc.code)
+				assert.Equal(t, 0, logRequests(f))
+				return
+			}
+			require.Equal(t, "prepared", out.Status, out.Diagnostics)
+			if tc.note != "" {
+				assert.Contains(t, out.Notes, tc.note)
+			} else {
+				assert.NotContains(t, out.Notes, "terraform_version_below_1_12_identity_unavailable")
+			}
+		})
+	}
 }

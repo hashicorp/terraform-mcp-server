@@ -52,7 +52,17 @@ type importBackendTest struct {
 	deniedDownloads  int
 	queryLog         []byte
 	baselineChanged  bool
-	mutationHandler  func(http.ResponseWriter, *http.Request) bool
+	// changeReads is how many reads of the workspace or state see the original
+	// before baselineChanged/stateChanged take effect. Zero means one.
+	changeReads     int
+	mutationHandler func(http.ResponseWriter, *http.Request) bool
+}
+
+func (f *importBackendTest) changeAfter() int {
+	if f.changeReads > 0 {
+		return f.changeReads
+	}
+	return 1
 }
 
 func importBackendFixture(t *testing.T) *importBackendTest {
@@ -132,10 +142,10 @@ func importBackendFixture(t *testing.T) *importBackendTest {
 		if r.URL.Path == "/api/v2/queries/qry-fixture" {
 			body = []byte(strings.Replace(string(body), `"generate-config-out": true`, fmt.Sprintf(`"generate-config-out": true, "log-read-url": %q`, f.url+"/logs"), 1))
 		}
-		if f.baselineChanged && key == "GET /api/v2/organizations/fixture-org/workspaces/import-root" && f.requests[key] > 1 {
+		if f.baselineChanged && key == "GET /api/v2/organizations/fixture-org/workspaces/import-root" && f.requests[key] > f.changeAfter() {
 			body = []byte(strings.ReplaceAll(string(body), "cv-current", "cv-changed"))
 		}
-		if f.stateChanged && strings.HasSuffix(r.URL.Path, "/current-state-version") && f.requests[key] > 1 {
+		if f.stateChanged && strings.HasSuffix(r.URL.Path, "/current-state-version") && f.requests[key] > f.changeAfter() {
 			body = []byte(strings.ReplaceAll(string(body), "sv-current", "sv-changed"))
 		}
 		_, _ = w.Write(body)

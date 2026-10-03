@@ -141,14 +141,95 @@ func importToolBlocked(base importPrepared, code, next string) importPrepared {
 	return base
 }
 
+// Terraform versions: import blocks need 1.5; identity needs 1.12 (ADR 0005).
+const (
+	importMinTerraformMajor, importMinTerraformMinor           = 1, 5
+	importIdentityTerraformMajor, importIdentityTerraformMinor = 1, 12
+)
+
+// checkImportDestination blocks destinations the workflow does not support, using
+// only workspace and state metadata. It does not read the QueryRun log or download
+// any artifact. It fills the baseline fields of out so a blocked response still
+// reports what was observed.
+func checkImportDestination(ctx context.Context, c *tfe.Client, input importPrepareInput, queryWorkspaceID string, out *importPrepared) error {
+	w, err := c.Workspaces.Read(ctx, input.Organization, input.Workspace)
+	if err != nil {
+		return importReadError(err, 0)
+	}
+	out.WorkspaceID = w.ID
+	if w.Organization == nil || !strings.EqualFold(w.Organization.Name, input.Organization) {
+		return importEvidenceFailure("workspace_ownership_unverified")
+	}
+	if err := client.AuthorizeOrganization(ctx, w.Organization.Name); err != nil {
+		return importEvidenceFailure("organization_not_allowed")
+	}
+	out.ExecutionMode = w.ExecutionMode
+	out.Baseline = &importAPIBaseline{ConfigurationVersionID: importCurrentConfigurationID(w), WorkingDirectory: w.WorkingDirectory}
+	if out.Baseline.ConfigurationVersionID != "" {
+		out.HasCurrentConfiguration = true
+		out.CurrentConfigurationVersionID = out.Baseline.ConfigurationVersionID
+	}
+	if w.ID != queryWorkspaceID {
+		return importEvidenceFailure("query_workspace_mismatch")
+	}
+	if w.ExecutionMode == "local" {
+		return importEvidenceFailure("workspace_execution_mode_local")
+	}
+	if atLeast, known := terraformVersionAtLeast(w.TerraformVersion, importMinTerraformMajor, importMinTerraformMinor); known && !atLeast {
+		return importEvidenceFailure("terraform_version_unsupported")
+	}
+	if atLeast, known := terraformVersionAtLeast(w.TerraformVersion, importIdentityTerraformMajor, importIdentityTerraformMinor); known && !atLeast {
+		out.Notes = append(out.Notes, "terraform_version_below_1_12_identity_unavailable")
+	}
+	sv, err := readImportCurrentState(ctx, c, w.ID)
+	if err != nil {
+		if importDiagnosticCode(err) == "current_state_unavailable_or_inaccessible" && out.Baseline.ConfigurationVersionID == "" {
+			return nil // brand-new workspace: the blank-workspace path handles it
+		}
+		return err
+	}
+	_, err = readImportSchemaRun(ctx, c, w.ID, sv)
+	return err
+}
+
+// importBlockedNextAction gives the agent a specific next step per blocking code.
+// None suggests local CLI commands: local execution is unsupported.
+func importBlockedNextAction(code string) string {
+	const none = " No CV or Run was created."
+	switch code {
+	case "workspace_execution_mode_local":
+		return "This workspace uses local execution mode, which stores state only and has no HCP Terraform runs, plans or provider-schema artifacts. The import workflow supports HCP-executed (remote or agent) workspaces only. Tell the user; do not run local Terraform commands or change the workspace setting." + none
+	case "terraform_version_unsupported":
+		return "The workspace's Terraform version is below 1.5, which does not support import blocks. Ask the user to choose a workspace on Terraform 1.5 or later; do not change the workspace version yourself." + none
+	case "state_producing_run_missing":
+		return "The current state was not produced by an HCP Terraform run that this server can read. Either the state was written outside a run (local execution, state push or API upload) or the producing run was deleted; the two cannot be told apart here. There is no plan to read the destination schema from, so this workflow cannot proceed for this workspace." + none
+	case "schema_source_plan_unavailable":
+		return "The run that produced the current state has no plan, so no destination provider schema is available. This workflow cannot proceed for this workspace." + none
+	default:
+		return "Resolve the reported evidence diagnostic and call prepare_import again." + none
+	}
+}
+
 // prepareImportTool is the single reader of the QueryRun log for the focused
 // import workflow. It composes the existing preparation internals.
 func prepareImportTool(ctx context.Context, c *tfe.Client, input importPrepareInput) importPrepared {
 	out := importPrepared{ContractVersion: importToolContractVersion, Status: "blocked", Stage: "input_validation", Organization: input.Organization, QueryRunID: input.QueryID, Diagnostics: []string{}}
 	fail := func(err error) importPrepared {
-		return importToolBlocked(out, importDiagnosticCode(err), "Resolve the reported evidence diagnostic and call prepare_import again. No CV or Run was created.")
+		code := importDiagnosticCode(err)
+		return importToolBlocked(out, code, importBlockedNextAction(code))
 	}
-	discovery, err := readImportDiscovery(ctx, c, input.QueryID)
+	// Check the destination before the expensive QueryRun log read: a blocked
+	// call must not pay for the log.
+	prov, err := readImportQueryProvenance(ctx, c, input.QueryID)
+	if err != nil {
+		out.Stage = "query_selection"
+		return fail(err)
+	}
+	out.Stage = "destination"
+	if err := checkImportDestination(ctx, c, input, prov.WorkspaceID, &out); err != nil {
+		return fail(err)
+	}
+	discovery, err := readImportDiscoveryLog(ctx, c, prov)
 	if err != nil {
 		out.Stage = "query_selection"
 		return fail(err)
@@ -158,10 +239,14 @@ func prepareImportTool(ctx context.Context, c *tfe.Client, input importPrepareIn
 	prepared := prepareImportWithDiscovery(ctx, c, first, discovery)
 	out.Stage, out.WorkspaceID, out.ExecutionMode, out.Baseline = prepared.Stage, prepared.WorkspaceID, prepared.ExecutionMode, prepared.Baseline
 	out.SchemaSource = prepared.SchemaSource
-	out.Notes = prepared.Notes
+	out.Notes = append(out.Notes, prepared.Notes...)
 	if prepared.Status != "prepared" && prepared.Status != "ready_for_authoring" {
 		out.Diagnostics = append(out.Diagnostics, prepared.Diagnostics...)
-		out.NextAction = "Resolve the reported evidence diagnostic and call prepare_import again. No CV or Run was created."
+		code := ""
+		if len(prepared.Diagnostics) > 0 {
+			code = prepared.Diagnostics[len(prepared.Diagnostics)-1]
+		}
+		out.NextAction = importBlockedNextAction(code)
 		return out
 	}
 	candidates, err := selectImportCandidates(discovery, input.Selections, prepared.WorkspaceID)
@@ -249,6 +334,8 @@ func PrepareImportDefinition() mcp.Tool {
 		mcp.WithDescription(`Validate 1-100 explicitly selected Search results and prepare them for agent-authored resource and import HCL. This is the only focused-import tool that reads the QueryRun log, so call it once per selection.
 
 Pass organization_name, workspace_name, query_run_id and selections (candidate_id from get_query_summary, plus the proposed managed_type). The result contains the destination managed schema for each distinct type, per-type identity_support (supported, none or unknown; none/unknown means the import ID must come from the destination provider version's documentation), the selected candidates' observations, the workspace baseline, and a carry block. Keep the carry block unchanged and send it with the final verify_import_plan call.
+
+Before reading the QueryRun log it blocks destinations the workflow does not support: local execution mode, a Terraform version below 1.5, and a current state with no readable producing run or plan. A Terraform version below 1.12 proceeds with a note that identity is unavailable. Each block says no CV or Run was created.
 
 The current configuration is not downloaded here. If has_current_configuration is true, ask the user which directory to use, then call get_import_configuration_download. It never creates a CV or Run and does not authorize one.`),
 		mcp.WithTitleAnnotation("Prepare Search import selection"),
