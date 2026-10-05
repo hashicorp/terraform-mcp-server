@@ -40,6 +40,9 @@ type importPrepareInput struct {
 	// caller then downloads the schema artifact once for all selected types
 	// (ADR 0007).
 	skipSchemaDownload bool
+	// agentSchema marks a target whose schema artifact is missing; the agent
+	// obtains the schema and no schema source is read.
+	agentSchema bool
 }
 
 type importPreparation struct {
@@ -165,6 +168,22 @@ func prepareImportWithDiscovery(ctx context.Context, c *tfe.Client, input import
 	}
 	result.Baseline.StateVersionID = sv.ID
 	result.Baseline.StateSerial = &sv.Serial
+	if input.agentSchema {
+		// The agent obtains the schema (ADR 0008); only re-check the baseline.
+		current, err := c.Workspaces.Read(ctx, input.Organization, input.Workspace)
+		if err != nil {
+			return fail(importReadError(err, 0))
+		}
+		currentState, err := readImportCurrentState(ctx, c, w.ID)
+		if err != nil {
+			return fail(err)
+		}
+		if current.ID != w.ID || importCurrentConfigurationID(current) != result.Baseline.ConfigurationVersionID || current.WorkingDirectory != w.WorkingDirectory || currentState.ID != sv.ID || currentState.Serial != sv.Serial {
+			return fail(importEvidenceFailure("baseline_changed"))
+		}
+		result.Status, result.Stage = "ready_for_authoring", "agent_schema"
+		return result
+	}
 	result.Stage = "schema_source"
 	r, err := readImportSchemaRun(ctx, c, w.ID, sv)
 	if err != nil {

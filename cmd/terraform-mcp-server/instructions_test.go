@@ -37,11 +37,12 @@ func TestServerInstructionsPreserveExistingWorkflowsAndGuideSearchImport(t *test
 		"Search provider version, observations, and generated HCL are source",
 		"preserves the complete tree and provider lock", "MCP does not download, edit, or upload archive bytes",
 		"`get_import_configuration_download`", "`create_import_cv`", "`create_import_run`", "`verify_import_plan`",
-		"explicit confirmation for each speculative configuration-version", "uncertain create must be reconciled",
+		"after the single user review described", "uncertain create must be reconciled",
 		"full finished plan", "refresh drift", "A plan does not", "separate review and approval",
 	} {
 		assert.Contains(t, instructions, guidance)
 	}
+	assert.NotContains(t, instructions, "explicit confirmation for each speculative")
 	assert.NotContains(t, instructions, "Query registries for latest provider/module versions")
 	assert.NotContains(t, instructions, "public as fallback")
 }

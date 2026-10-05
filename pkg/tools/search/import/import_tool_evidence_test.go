@@ -56,7 +56,7 @@ func TestPrepareImportToolFailsClosed(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			f := importBackendFixture(t)
 			// prepare_import reads the workspace and state once to check the
-			// destination and once to prepare, so a change must land on the third.
+			// target and once to prepare, so a change must land on the third.
 			f.changeReads = 2
 			input := importFixtureInput(t)
 			tc.change(f, &input)
@@ -314,11 +314,14 @@ func TestPrepareImportToolBlocksLocalExecutionBeforeLogRead(t *testing.T) {
 	out := prepareImportTool(context.Background(), f.client, importFixtureInput(t))
 	assert.Equal(t, "blocked", out.Status)
 	assert.Contains(t, out.Diagnostics, "workspace_execution_mode_local")
-	assert.Equal(t, 0, logRequests(f), "a blocked destination must not read the log")
+	assert.Equal(t, 0, logRequests(f), "a blocked target must not read the log")
 	assert.Equal(t, "local", out.ExecutionMode)
 	assert.True(t, out.HasCurrentConfiguration, "the observed baseline is still reported")
 	assert.Nil(t, out.Carry)
-	assert.NotContains(t, strings.ToLower(out.NextAction), "terraform providers schema")
+	assert.Contains(t, out.NextAction, "cannot assess or verify")
+	assert.Contains(t, out.NextAction, "Each command needs the user's approval")
+	assert.Contains(t, out.NextAction, "never present a local plan as an HCP Terraform Plan")
+	assert.NotContains(t, strings.ToLower(out.NextAction), "apply the")
 	assert.Contains(t, out.NextAction, "No CV or Run was created")
 }
 

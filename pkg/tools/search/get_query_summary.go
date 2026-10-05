@@ -205,13 +205,13 @@ same query_run_id to this tool.
 For a finished, complete no-code query the result is one bounded page of selectable
 results grouped by list block (lists[]): each group states address and resource_type once and
 shared_identity (identity keys equal in every row of the group); each row has candidate_id,
-display_name and only the identity keys that differ, so merge shared_identity with the row's
-identity. The result also has resources_discovered, by_type counts, total_matching, a log_digest
+display_name, tags when the result has any (from the query's generated configuration; the query must have run with generate_config_out true) and only the identity keys that differ, so merge shared_identity with the row's
+identity. Use the tags to choose resources; filter on them yourself, there is no tag filter. The result also has resources_discovered, by_type counts, total_matching, a log_digest
 and, when more rows match, next_cursor. Default 100 rows per page, maximum 200. Narrow with resource_type, address or name_contains; read the next
 page by passing next_cursor as after. A page is a view of a fully checked query. If the
 log changes between pages the call returns snapshot_changed_restart_paging. A query may
 contain more than 100 results; select up to 100 candidate_id values from any page, then
-call prepare_import. Tag and attribute filtering are not supported.
+call prepare_import only for the candidates to import. Tag and attribute filtering are not supported.
 
 If the query is not finished, errored or incomplete, the result is a bounded diagnostic
 summary (resources_discovered, resources, list_completions and Terraform diagnostics)

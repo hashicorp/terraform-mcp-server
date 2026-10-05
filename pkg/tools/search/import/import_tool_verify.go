@@ -522,7 +522,7 @@ func verifyNextAction(v importVerified) string {
 		}
 		s := fmt.Sprintf("Identity could not be checked for %d items (see identity_unsupported). Confirm each import ID against the destination provider version's documentation.", u)
 		if undetermined > 0 {
-			s += fmt.Sprintf(" Identity support could not be determined for %d of them.", undetermined)
+			s += fmt.Sprintf(" Identity support could not be determined for %d of them; it was not read from HCP (blank workspace, or a schema the agent obtained locally).", undetermined)
 		}
 		parts = append(parts, s)
 	}

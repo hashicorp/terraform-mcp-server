@@ -71,6 +71,9 @@ func checkImportCreateBaseline(ctx context.Context, c *tfe.Client, a importCreat
 	if w.ExecutionMode != "remote" || w.WorkingDirectory != "" || w.VCSRepo != nil {
 		return nil, importEvidenceFailure("execution_source_not_supported")
 	}
+	if atLeast, known := terraformVersionAtLeast(w.TerraformVersion, importMinTerraformMajor, importMinTerraformMinor); known && !atLeast {
+		return nil, importEvidenceFailure("terraform_version_unsupported")
+	}
 	if a.BaselineCVID == "" {
 		if err := checkImportBlankBaseline(ctx, c, w); err != nil {
 			return nil, err
@@ -92,7 +95,7 @@ func checkImportCreateBaseline(ctx context.Context, c *tfe.Client, a importCreat
 
 func createImportCV(ctx context.Context, c *tfe.Client, a importCreateArgs, logger *log.Logger) importCreated {
 	if !a.Confirm {
-		return importCreateBlocked("confirm_speculative_run_required", "After the user reviews the exact archive, set confirm_speculative_run=true to authorize only a speculative CV create.")
+		return importCreateBlocked("confirm_speculative_run_required", "Review the authored archive with the user and ask once to confirm the speculative path (this CV, the upload, a plan-only run that cannot apply, and verification). Then set confirm_speculative_run=true to authorize only a speculative CV create.")
 	}
 	if !importInputName(a.Organization) || !importInputName(a.Workspace) || !validImportCreateBaseline(a) || a.CVID != "" {
 		return importCreateBlocked("import_input_invalid", "Supply organization_name and workspace_name, and either all of baseline_cv_id, baseline_state_id and baseline_state_serial from prepare_import, or none for a blank workspace.")
@@ -124,13 +127,13 @@ func createImportCV(ctx context.Context, c *tfe.Client, a importCreateArgs, logg
 	out.Status, out.CreateOutcome = "awaiting_agent_upload", "created"
 	out.UploadURL = cv.UploadURL
 	out.UploadInstructions = "Keep upload_url secret and use it once. PUT the complete reviewed .tar.gz (Content-Type: application/octet-stream) directly to it. If the URL is lost, the server cannot return it again: reconcile the pending CV before considering a new reviewed create. Never upload individual .tf files."
-	out.NextAction = "PUT the complete archive to upload_url, confirm the upload succeeded, get a separate confirmation from the user, then call create_import_run with this configuration_version_id. The server has not read the archive."
+	out.NextAction = "PUT the complete archive to upload_url and confirm the upload succeeded. If the user already confirmed the speculative path for this exact archive, call create_import_run with this configuration_version_id now. Ask again only if the archive or baseline has changed since the user confirmed. The server has not read the archive."
 	return out
 }
 
 func createImportRun(ctx context.Context, c *tfe.Client, a importCreateArgs, logger *log.Logger) importCreated {
 	if !a.Confirm {
-		return importCreateBlocked("confirm_speculative_run_required", "Get explicit user confirmation, then set confirm_speculative_run=true to authorize only a CV-bound plan-only Run.")
+		return importCreateBlocked("confirm_speculative_run_required", "Confirm with the user that they accepted the speculative path for the reviewed archive (one confirmation covers create_import_cv and create_import_run), then set confirm_speculative_run=true to authorize only a CV-bound plan-only Run.")
 	}
 	if !importInputName(a.Organization) || !importInputName(a.Workspace) || !importInputName(a.CVID) || !validImportCreateBaseline(a) {
 		return importCreateBlocked("import_input_invalid", "Supply organization_name, workspace_name, configuration_version_id from create_import_cv, and the same baseline fields (or none for a blank workspace).")
@@ -183,7 +186,7 @@ func importCreateDefinition(name, title, description string, run bool) mcp.Tool 
 		mcp.WithString("baseline_cv_id", mcp.Description("Current configuration version ID from prepare_import. Omit all baseline fields only for a verified blank workspace.")),
 		mcp.WithString("baseline_state_id", mcp.Description("Current state version ID from prepare_import.")),
 		mcp.WithNumber("baseline_state_serial", mcp.Description("Current state serial from prepare_import.")),
-		mcp.WithBoolean("confirm_speculative_run", mcp.Required(), mcp.Description("Set true only after explicit user confirmation of this one speculative, non-applying create.")),
+		mcp.WithBoolean("confirm_speculative_run", mcp.Required(), mcp.Description("Set true only if the user confirmed this speculative, non-applying plan for the reviewed archive. One confirmation covers both create_import_cv and create_import_run.")),
 	}
 	if run {
 		opts = append(opts, mcp.WithString("configuration_version_id", mcp.Required(), mcp.Description("Uploaded configuration version ID returned by create_import_cv.")))
@@ -194,14 +197,14 @@ func importCreateDefinition(name, title, description string, run bool) mcp.Tool 
 
 // CreateImportCVDefinition describes create_import_cv.
 func CreateImportCVDefinition() mcp.Tool {
-	return importCreateDefinition("create_import_cv", "Create speculative import configuration version", `Create a speculative, non-provisional configuration version (auto-queue off) in the destination workspace and return its one-use upload URL. This is a mutation and needs explicit user confirmation of the exact reviewed archive: set confirm_speculative_run=true.
+	return importCreateDefinition("create_import_cv", "Create speculative import configuration version", `Create a speculative, non-provisional configuration version (auto-queue off) in the destination workspace and return its one-use upload URL. This is a mutation. The server always creates a speculative, non-applying configuration version and a plan-only run; no input changes that. Ask the user once, before this call, to confirm the exact reviewed archive and the speculative path it starts: this call, the upload, and a plan-only run that cannot apply or change state. After that single confirmation set confirm_speculative_run=true here and on create_import_run. If a Terraform CLI is available locally, running terraform fmt and terraform validate before the upload is worthwhile to catch small mistakes; it is optional, and the speculative plan validates remotely. Do not run them after the upload.
 
 Pass the baseline fields from prepare_import (or none for a verified blank workspace). The server re-checks that the workspace is still a remote, API-upload root at that baseline; it does not re-read the QueryRun and does not read the archive. PUT the complete reviewed .tar.gz directly to upload_url, then call create_import_run. If the outcome is unknown, reconcile in HCP Terraform; never retry blindly.`, false)
 }
 
 // CreateImportRunDefinition describes create_import_run.
 func CreateImportRunDefinition() mcp.Tool {
-	return importCreateDefinition("create_import_run", "Create CV-bound plan-only import run", `Create a plan-only Run bound to the uploaded speculative configuration version (AutoApply=false, config generation off). This is a mutation and needs a separate explicit user confirmation: set confirm_speculative_run=true.
+	return importCreateDefinition("create_import_run", "Create CV-bound plan-only import run", `Create a plan-only Run bound to the uploaded speculative configuration version (AutoApply=false, config generation off). This is a mutation. The server always creates a plan-only run and no input changes that. Set confirm_speculative_run=true only if the user confirmed the speculative path (see create_import_cv); one confirmation covers both calls. If the archive or baseline changed after that confirmation, ask again.
 
 Pass the configuration_version_id from create_import_cv and the same baseline fields. The server re-checks that the CV belongs to the workspace, is speculative and uploaded, and that the workspace baseline is unchanged. It does not re-read the QueryRun. Then call verify_import_plan with the returned run_id. A plan-only Run never imports into state. If the outcome is unknown, reconcile; never retry blindly. This is separate from create_run, which is unchanged.`, true)
 }

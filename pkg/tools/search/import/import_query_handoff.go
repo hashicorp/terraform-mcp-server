@@ -58,6 +58,14 @@ func validImportArtifactLocation(ctx context.Context, location string) bool {
 }
 
 func importConfigurationContextFromAPIs(ctx context.Context, c *tfe.Client, input importPrepareInput, logger *log.Logger) importPreparation {
+	return importConfigurationContextForVersion(ctx, c, input, "", logger)
+}
+
+// importConfigurationContextForVersion is the handoff for the workspace's
+// current configuration version, or, when requestedCV names another version,
+// for the configuration version of the run that produced the current state
+// (agent-supplied schema path, ADR 0008). Any other version fails closed.
+func importConfigurationContextForVersion(ctx context.Context, c *tfe.Client, input importPrepareInput, requestedCV string, logger *log.Logger) importPreparation {
 	result := importPreparation{ContractVersion: importPreparationContractVersion, Status: "blocked", Stage: "configuration_handoff", Organization: input.Organization, Diagnostics: []string{}}
 	fail := func(err error) importPreparation {
 		result.Diagnostics = append(result.Diagnostics, importDiagnosticCode(err))
@@ -84,7 +92,14 @@ func importConfigurationContextFromAPIs(ctx context.Context, c *tfe.Client, inpu
 		return fail(importEvidenceFailure("configuration_source_unavailable"))
 	}
 	cvID := w.CurrentConfigurationVersion.ID
-	result.Baseline = &importAPIBaseline{ConfigurationVersionID: cvID, WorkingDirectory: w.WorkingDirectory}
+	stateRunCV := requestedCV != "" && requestedCV != cvID
+	if stateRunCV {
+		if err := verifyImportStateRunConfiguration(ctx, c, w.ID, requestedCV); err != nil {
+			return fail(err)
+		}
+		cvID = requestedCV
+	}
+	result.Baseline = &importAPIBaseline{ConfigurationVersionID: importCurrentConfigurationID(w), WorkingDirectory: w.WorkingDirectory}
 	cv, err := c.ConfigurationVersions.Read(ctx, cvID)
 	if err != nil {
 		return fail(importReadError(err, 0))
@@ -106,7 +121,7 @@ func importConfigurationContextFromAPIs(ctx context.Context, c *tfe.Client, inpu
 	if err != nil {
 		return fail(importReadError(err, 0))
 	}
-	if current.ID != w.ID || importCurrentConfigurationID(current) != cvID || current.WorkingDirectory != w.WorkingDirectory {
+	if current.ID != w.ID || importCurrentConfigurationID(current) != importCurrentConfigurationID(w) || current.WorkingDirectory != w.WorkingDirectory {
 		return fail(importEvidenceFailure("baseline_changed"))
 	}
 	result.Context = &importConfigurationHandoff{ConfigurationVersionID: cvID, DownloadURL: location, URLValidity: "temporary; use immediately and request a fresh context handoff if expired (nominally one minute)", WorkingDirectory: w.WorkingDirectory}
@@ -117,3 +132,24 @@ func importConfigurationContextFromAPIs(ctx context.Context, c *tfe.Client, inpu
 }
 
 const importHandoffRequestTimeout = 30 * time.Second
+
+// verifyImportStateRunConfiguration checks that cvID is the configuration
+// version of the run that produced the workspace's current state, and that the
+// run has no plan (this path only applies when the schema artifact is missing).
+func verifyImportStateRunConfiguration(ctx context.Context, c *tfe.Client, workspaceID, cvID string) error {
+	sv, err := readImportCurrentState(ctx, c, workspaceID)
+	if err != nil {
+		return err
+	}
+	r, err := readImportSchemaRun(ctx, c, workspaceID, sv)
+	if err != nil && importDiagnosticCode(err) != "schema_source_plan_unavailable" {
+		return err
+	}
+	if r == nil || r.ConfigurationVersion == nil || r.ConfigurationVersion.ID != cvID {
+		return importEvidenceFailure("configuration_version_not_current")
+	}
+	if err == nil {
+		return importEvidenceFailure("configuration_version_not_current")
+	}
+	return nil
+}

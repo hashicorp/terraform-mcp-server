@@ -35,6 +35,8 @@ type discoveryRow struct {
 	CandidateID string         `json:"candidate_id"`
 	DisplayName string         `json:"display_name,omitempty"`
 	Identity    map[string]any `json:"identity,omitempty"`
+	// Tags come from the generated resource object; absent when the result has none.
+	Tags map[string]any `json:"tags,omitempty"`
 }
 
 // discoveryGroup states the list block address and type once for its rows.
@@ -53,6 +55,7 @@ type discoveryPage struct {
 	TotalMatching       int              `json:"total_matching"`
 	Returned            int              `json:"returned"`
 	Lists               []discoveryGroup `json:"lists"`
+	Notes               []string         `json:"notes,omitempty"`
 	NextCursor          string           `json:"next_cursor,omitempty"`
 	NextAction          string           `json:"next_action"`
 }
@@ -192,7 +195,7 @@ func pageImportDiscovery(d *importDiscovery, f DiscoveryFilter) (*discoveryPage,
 			continue
 		}
 		// Size is measured on the flat row, which overstates the grouped size.
-		encoded, _ := json.Marshal(discoveryRow{CandidateID: c.CandidateID, DisplayName: c.DisplayName, Identity: c.Identity})
+		encoded, _ := json.Marshal(discoveryRow{CandidateID: c.CandidateID, DisplayName: c.DisplayName, Identity: c.Identity, Tags: discoveryTags(c)})
 		if len(selected) >= limit || (len(selected) > 0 && size+len(encoded) > maxDiscoveryPageBytes) {
 			more = true
 			continue
@@ -203,13 +206,16 @@ func pageImportDiscovery(d *importDiscovery, f DiscoveryFilter) (*discoveryPage,
 	}
 	page.Returned = len(selected)
 	page.Lists = groupDiscoveryRows(selected, func(c importDiscoveryCandidate) discoveryRow {
-		return discoveryRow{CandidateID: c.CandidateID, DisplayName: c.DisplayName}
+		return discoveryRow{CandidateID: c.CandidateID, DisplayName: c.DisplayName, Tags: discoveryTags(c)}
 	})
+	if d.GenerateConfigOut != nil && !*d.GenerateConfigOut {
+		page.Notes = append(page.Notes, "query_run_without_generated_config")
+	}
 	if more {
 		page.NextCursor = encodeDiscoveryCursor(discoveryCursor{QueryRunID: d.QueryRunID, LogDigest: d.LogDigest, LastID: lastReturned})
-		page.NextAction = "Pass next_cursor as after to read the next page. Select candidate_id values from any page, then call prepare_import."
+		page.NextAction = "Pass next_cursor as after to read the next page. Select candidate_id values from any page, then call prepare_import." + discoveryRerunHint(d)
 	} else {
-		page.NextAction = "All matching results are listed. Select up to 100 candidate_id values, then call prepare_import."
+		page.NextAction = "All matching results are listed. Select up to 100 candidate_id values, then call prepare_import." + discoveryRerunHint(d)
 	}
 	return page, nil
 }
@@ -221,4 +227,33 @@ func ReadDiscoveryPage(ctx context.Context, c *tfe.Client, queryID string, f Dis
 		return nil, err
 	}
 	return pageImportDiscovery(d, f)
+}
+
+// discoveryTags returns the result's tags, or nil when it has none. Only simple
+// scalar values are returned so an unusual shape cannot bloat a row.
+func discoveryTags(c importDiscoveryCandidate) map[string]any {
+	raw, ok := c.ResourceObject["tags"].(map[string]any)
+	if !ok || len(raw) == 0 {
+		return nil
+	}
+	tags := make(map[string]any, len(raw))
+	for k, v := range raw {
+		switch v.(type) {
+		case string, bool, float64:
+			tags[k] = v
+		}
+	}
+	if len(tags) == 0 {
+		return nil
+	}
+	return tags
+}
+
+// discoveryRerunHint tells the agent how to get tags and attributes when the
+// query ran without generated configuration. Discovery guidance lives here.
+func discoveryRerunHint(d *importDiscovery) string {
+	if d.GenerateConfigOut == nil || *d.GenerateConfigOut {
+		return ""
+	}
+	return " This query ran without generate_config_out, so rows carry identity only, with no tags or attributes. If the identities are not enough to choose the resources to import, ask the user whether to re-run the query with generate_config_out true; a re-run creates a new query run and new candidate IDs."
 }

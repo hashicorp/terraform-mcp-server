@@ -129,3 +129,16 @@ func TestCreateImportToolDefinitionsAreStrictMutations(t *testing.T) {
 	assert.Contains(t, CreateImportRunDefinition().InputSchema.Required, "configuration_version_id")
 	assert.NotContains(t, CreateImportCVDefinition().InputSchema.Properties, "configuration_version_id")
 }
+
+func TestCreateImportCVRejectsKnownTerraformVersionBelow1_5(t *testing.T) {
+	f, uploaded, _ := importExecutionFixture(t)
+	setWorkspaceAttribute(t, f, "terraform-version", "1.4.7")
+	out := callCreate(t, false, createArgs(nil))
+	assert.Equal(t, "blocked", out.Status)
+	assert.Contains(t, out.Diagnostics, "terraform_version_unsupported")
+	assert.False(t, *uploaded)
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	assert.Zero(t, f.requests["POST /api/v2/runs"])
+	assert.Zero(t, f.requests["POST /api/v2/workspaces/ws-fixture/configuration-versions"])
+}

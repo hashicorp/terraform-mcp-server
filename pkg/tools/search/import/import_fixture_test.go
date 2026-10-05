@@ -116,7 +116,7 @@ func importBackendFixture(t *testing.T) *importBackendTest {
 			}
 			return
 		}
-		if r.URL.Path == "/api/v2/configuration-versions/cv-current/download" {
+		if strings.HasPrefix(r.URL.Path, "/api/v2/configuration-versions/") && strings.HasSuffix(r.URL.Path, "/download") {
 			if f.cvDownloadStatus == http.StatusFound {
 				http.Redirect(w, r, f.url+"/cv-archive?signed=fixture", http.StatusFound)
 			} else {
@@ -140,7 +140,9 @@ func importBackendFixture(t *testing.T) *importBackendTest {
 			return
 		}
 		if r.URL.Path == "/api/v2/queries/qry-fixture" {
-			body = []byte(strings.Replace(string(body), `"generate-config-out": true`, fmt.Sprintf(`"generate-config-out": true, "log-read-url": %q`, f.url+"/logs"), 1))
+			for _, v := range []string{"true", "false"} {
+				body = []byte(strings.Replace(string(body), `"generate-config-out": `+v, fmt.Sprintf(`"generate-config-out": %s, "log-read-url": %q`, v, f.url+"/logs"), 1))
+			}
 		}
 		if f.baselineChanged && key == "GET /api/v2/organizations/fixture-org/workspaces/import-root" && f.requests[key] > f.changeAfter() {
 			body = []byte(strings.ReplaceAll(string(body), "cv-current", "cv-changed"))
@@ -258,4 +260,21 @@ func blankImportFixture(t *testing.T) (*importBackendTest, *bool, *bool) {
 // prepareFromAPIs runs the shared preparation internals, reading the QueryRun itself.
 func prepareFromAPIs(ctx context.Context, c *tfe.Client, input importPrepareInput) importPreparation {
 	return prepareImportWithDiscovery(ctx, c, input, nil)
+}
+
+// schemaFallbackFixture makes the state's run a run with no plan whose configuration
+// version (cv-run) differs from the workspace's current one (cv-current).
+func schemaFallbackFixture(t *testing.T, cvStatus string) *importBackendTest {
+	t.Helper()
+	f := importBackendFixture(t)
+	var run map[string]any
+	require.NoError(t, json.Unmarshal(f.responses["/api/v2/runs/run-schema"], &run))
+	rel := run["data"].(map[string]any)["relationships"].(map[string]any)
+	delete(rel, "plan")
+	rel["configuration-version"] = map[string]any{"data": map[string]any{"type": "configuration-versions", "id": "cv-run"}}
+	var err error
+	f.responses["/api/v2/runs/run-schema"], err = json.Marshal(run)
+	require.NoError(t, err)
+	f.responses["/api/v2/configuration-versions/cv-run"] = json.RawMessage(`{"data":{"type":"configuration-versions","id":"cv-run","attributes":{"status":"` + cvStatus + `","source":"tfe-api","speculative":false,"provisional":false}}}`)
+	return f
 }

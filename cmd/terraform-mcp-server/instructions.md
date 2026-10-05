@@ -62,6 +62,8 @@ The Terraform MCP server provides tools for generating better Terraform code thr
    `get_query_summary` (filter by `resource_type`, `address` or `name_contains`
    and page with `after`); a query can hold more than 100 results. Explicitly
    select up to 100 `candidate_id` values from any page. Never take the first N.
+   Rows include `tags` when the query ran with `generate_config_out` true; use
+   them to choose resources, and use `prepare_import` only for the chosen ones.
 2. Call `prepare_import` once with the selection. It is the only tool that reads
    the query log. It returns the destination managed schema for each distinct
    type, per-type `identity_support`, the workspace baseline and a carry block.
@@ -75,9 +77,10 @@ The Terraform MCP server provides tools for generating better Terraform code thr
    preserves the complete tree and provider lock, authors and reviews HCL, and
    directly uploads the complete reviewed archive to the URL returned by
    `create_import_cv`. MCP does not download, edit, or upload archive bytes.
-4. Obtain explicit confirmation for each speculative configuration-version
-   (`create_import_cv`) and plan-only Run (`create_import_run`) create. An
-   uncertain create must be reconciled before retrying.
+4. Create the speculative configuration version (`create_import_cv`) and the
+   plan-only Run (`create_import_run`) after the single user review described
+   in the `prepare_import` response. An uncertain create must be reconciled
+   before retrying.
 5. Call `verify_import_plan` with the run ID until the plan finishes, then once
    more with the carry block unchanged and a binding of `candidate_id` to
    `target_address` for every selection. It describes what the finished plan

@@ -30,15 +30,16 @@ var importDownloadInstructions = []string{
 	"Download the archive with a plain HTTP GET that writes binary bytes to a file. Send no Authorization header: the URL is already authorized.",
 	"Treat download_url as a secret. Do not print it, log it, store it, or put it in a command line other tools can see. If the download fails or the URL has expired, call this tool again for a fresh one.",
 	"Extract into the directory the user chose. Keep the whole tree and .terraform.lock.hcl, exclude generated .terraform caches, and do not add secrets. Check archive paths and links before extracting.",
+	"Do not echo, print or cat .env, .envrc, terraform.tfvars or credential files from the directory into the output. If one needs checking, confirm only that it exists.",
 	"This workflow supports a remote root configuration only. If working_directory is set, stop and tell the user.",
 }
 
 // downloadImportConfiguration returns the short-lived archive location of the
-// workspace's current configuration version. It never fetches archive bytes
+// workspace's current configuration version, or, when prepare_import returns agent_schema_required, the state run's configuration version. It never fetches archive bytes
 // and never reads the QueryRun log.
 func downloadImportConfiguration(ctx context.Context, c *tfe.Client, input importPrepareInput, requestedCV string, logger *log.Logger) importDownload {
 	out := importDownload{ContractVersion: importToolContractVersion, Status: "blocked", Diagnostics: []string{}}
-	ctxResult := importConfigurationContextFromAPIs(ctx, c, input, logger)
+	ctxResult := importConfigurationContextForVersion(ctx, c, input, requestedCV, logger)
 	out.WorkspaceID = ctxResult.WorkspaceID
 	switch ctxResult.Status {
 	case "blank_workspace":
@@ -60,7 +61,12 @@ func downloadImportConfiguration(ctx context.Context, c *tfe.Client, input impor
 		return out
 	}
 	out.Diagnostics = append(out.Diagnostics, ctxResult.Diagnostics...)
-	out.NextAction = "Resolve the reported diagnostic and call this tool again. No archive was downloaded by the server."
+	if len(ctxResult.Diagnostics) > 0 && ctxResult.Diagnostics[len(ctxResult.Diagnostics)-1] == "configuration_version_not_current" {
+		out.NextAction = "The requested configuration version is neither the workspace's current one nor the one used by the run that produced its current state (when that run has no plan). Call prepare_import again for the IDs. No URL was returned."
+	}
+	if out.NextAction == "" {
+		out.NextAction = "Resolve the reported diagnostic and call this tool again. No archive was downloaded by the server."
+	}
 	return out
 }
 
@@ -69,7 +75,7 @@ func GetImportConfigurationDownloadDefinition() mcp.Tool {
 	return mcp.NewTool("get_import_configuration_download",
 		mcp.WithDescription(`Return a short-lived download URL for the destination workspace's current configuration archive, so the calling agent does not need its own HCP Terraform API access.
 
-Call this only after prepare_import reports has_current_configuration and the user has chosen a local directory. Pass the current_configuration_version_id from prepare_import. The tool checks that it is the workspace's current configuration version. It returns the URL and download instructions: use a plain GET with no Authorization header, extract into the chosen directory, and treat the URL as a secret. Call again for a fresh URL if it expires. For a workspace with no configuration it returns blank_workspace. The server never downloads the archive.`),
+Call this only after prepare_import reports has_current_configuration and the user has chosen a local directory. Pass the current_configuration_version_id, or when status is agent_schema_required the state_run_configuration_version_id, from prepare_import. The tool checks that it is the workspace's current configuration version, or, when prepare_import returns agent_schema_required, the state run's configuration version. It returns the URL and download instructions: use a plain GET with no Authorization header, extract into the chosen directory, and treat the URL as a secret. Call again for a fresh URL if it expires. For a workspace with no configuration it returns blank_workspace. The server never downloads the archive.`),
 		mcp.WithTitleAnnotation("Get current configuration download URL"),
 		mcp.WithReadOnlyHintAnnotation(true), mcp.WithDestructiveHintAnnotation(false),
 		mcp.WithOpenWorldHintAnnotation(true), mcp.WithIdempotentHintAnnotation(true),

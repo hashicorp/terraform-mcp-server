@@ -119,6 +119,8 @@ type importDiscovery struct {
 	Provenance    string                     `json:"provenance"`
 	LogDigest     string                     `json:"log_digest"`
 	Candidates    []importDiscoveryCandidate `json:"candidates"`
+	// GenerateConfigOut is nil when the query attribute is not reported.
+	GenerateConfigOut *bool `json:"-"`
 }
 
 // importQueryProvenance is the QueryRun's verified metadata, read without
@@ -129,6 +131,8 @@ type importQueryProvenance struct {
 	WorkspaceID   string
 	NoCodeQueryID string
 	Providers     map[string]workspaceProvider
+	// GenerateConfigOut is nil when the query attribute is not reported.
+	GenerateConfigOut *bool
 }
 
 // Query inputs are read from the selected query's backend relationship, never
@@ -165,7 +169,10 @@ func readImportQueryProvenance(ctx context.Context, c *tfe.Client, queryID strin
 	}
 	var wire struct {
 		Data struct {
-			ID            string `json:"id"`
+			ID         string `json:"id"`
+			Attributes struct {
+				GenerateConfigOut *bool `json:"generate-config-out"`
+			} `json:"attributes"`
 			Relationships struct {
 				NoCode    importRelated `json:"no-code-query"`
 				Workspace importRelated `json:"workspace"`
@@ -230,7 +237,7 @@ func readImportQueryProvenance(ctx context.Context, c *tfe.Client, queryID strin
 			providers[resourceType] = provider
 		}
 	}
-	return &importQueryProvenance{QueryRunID: queryID, WorkspaceID: w.ID, NoCodeQueryID: nc.ID, Providers: providers}, nil
+	return &importQueryProvenance{QueryRunID: queryID, WorkspaceID: w.ID, NoCodeQueryID: nc.ID, Providers: providers, GenerateConfigOut: wire.Data.Attributes.GenerateConfigOut}, nil
 }
 
 // readImportDiscoveryLog reads and parses the QueryRun log. It is the expensive
@@ -252,7 +259,7 @@ func readImportDiscoveryLog(ctx context.Context, c *tfe.Client, prov *importQuer
 	if err != nil {
 		return nil, err
 	}
-	return &importDiscovery{QueryRunID: queryID, WorkspaceID: prov.WorkspaceID, NoCodeQueryID: prov.NoCodeQueryID, Provenance: "query_bound_no_code_selections", LogDigest: importEvidenceDigest(data), Candidates: candidates}, nil
+	return &importDiscovery{QueryRunID: queryID, WorkspaceID: prov.WorkspaceID, NoCodeQueryID: prov.NoCodeQueryID, Provenance: "query_bound_no_code_selections", LogDigest: importEvidenceDigest(data), Candidates: candidates, GenerateConfigOut: prov.GenerateConfigOut}, nil
 }
 
 // importCandidateID derives a stable ID from Search-side facts only. It can be
@@ -379,7 +386,7 @@ func readImportSchemaRun(ctx context.Context, c *tfe.Client, workspaceID string,
 		return nil, importEvidenceFailure("schema_source_workspace_mismatch")
 	}
 	if r.Plan == nil || r.Plan.ID == "" {
-		return nil, importEvidenceFailure("schema_source_plan_unavailable")
+		return r, importEvidenceFailure("schema_source_plan_unavailable")
 	}
 	return r, nil
 }
