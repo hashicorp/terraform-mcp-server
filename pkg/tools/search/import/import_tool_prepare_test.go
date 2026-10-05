@@ -49,8 +49,8 @@ func TestPrepareImportToolSingleLogReadAndCarryBlock(t *testing.T) {
 	assert.NotEmpty(t, out.Types[0].ManagedSchema)
 	assert.True(t, out.HasCurrentConfiguration)
 	assert.Equal(t, "cv-current", out.CurrentConfigurationVersionID)
-	assert.Equal(t, importIdentitySupported, out.Carry.Destination.IdentitySupport["aws_iam_role"])
-	assert.Equal(t, "1.16.1", out.Carry.Destination.TerraformVersion)
+	assert.Equal(t, importIdentitySupported, out.Carry.Target.IdentitySupport["aws_iam_role"])
+	assert.Equal(t, "1.16.1", out.Carry.Target.TerraformVersion)
 	assert.Equal(t, importCarryDigest(*out.Carry), out.Carry.SelectionDigest)
 	assert.Contains(t, out.NextAction, "Ask the user")
 	assert.NotContains(t, out.NextAction, "download_url")
@@ -106,8 +106,8 @@ func TestPrepareImportToolIdentitySupportByDestinationVersion(t *testing.T) {
 			out := prepareImportTool(context.Background(), f.client, importFixtureInput(t))
 			require.Equal(t, "prepared", out.Status, out.Diagnostics)
 			assert.Equal(t, tt.want, out.Types[0].IdentitySupport)
-			assert.Equal(t, tt.want, out.Carry.Destination.IdentitySupport["aws_iam_role"])
-			assert.Equal(t, tt.version, out.Carry.Destination.TerraformVersion)
+			assert.Equal(t, tt.want, out.Carry.Target.IdentitySupport["aws_iam_role"])
+			assert.Equal(t, tt.version, out.Carry.Target.TerraformVersion)
 		})
 	}
 }

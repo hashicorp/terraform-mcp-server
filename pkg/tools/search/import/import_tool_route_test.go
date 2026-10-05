@@ -25,10 +25,10 @@ func TestPrepareImportToolAgentSchemaRequiredWhenStateRunHasNoPlan(t *testing.T)
 	assert.Contains(t, out.Diagnostics, "schema_source_plan_unavailable")
 	require.NotNil(t, out.Carry, "candidates and carry are still returned")
 	assert.Greater(t, logRequests(f), 0)
-	assert.Equal(t, importIdentityUnknown, out.Carry.Destination.IdentitySupport["aws_iam_role"])
+	assert.Equal(t, importIdentityUnknown, out.Carry.Target.IdentitySupport["aws_iam_role"])
 	assert.Equal(t, "unknown", out.Types[0].ManagedTypeSupport)
 	assert.Empty(t, out.Types[0].ManagedSchema)
-	assert.NotEmpty(t, out.Carry.Destination.TerraformVersion)
+	assert.NotEmpty(t, out.Carry.Target.TerraformVersion)
 	assert.Contains(t, out.Notes, "target_schema_not_read_from_hcp; the agent must obtain it")
 	assert.NotContains(t, out.NextAction, "Route")
 	i := strings.Index(out.NextAction, ".terraform.lock.hcl")
@@ -232,4 +232,34 @@ func TestDiscoveryPageOwnsGenerateConfigOutGuidance(t *testing.T) {
 		assert.Equal(t, tc.hint, len(page.Notes) == 1 && page.Notes[0] == "query_run_without_generated_config")
 		assert.NotContains(t, strings.ToLower(page.NextAction), "aws cli")
 	}
+}
+
+func TestPrepareImportReturnsTargetTerraformVersions(t *testing.T) {
+	f := importBackendFixture(t)
+	setWorkspaceAttribute(t, f, "terraform-version", "~> 1.12")
+	out := prepareImportTool(context.Background(), f.client, importFixtureInput(t))
+	require.Equal(t, "prepared", out.Status, out.Diagnostics)
+	require.NotNil(t, out.Target)
+	assert.Equal(t, "~> 1.12", out.Target.TerraformVersionSetting)
+	assert.Equal(t, "1.16.1", out.Target.TerraformVersionLastRun)
+	assert.Equal(t, "1.16.1", out.Carry.Target.TerraformVersion)
+	for _, n := range out.Notes {
+		assert.NotContains(t, n, "provider_version_not_recorded")
+	}
+	joined := strings.Join(importToolInstructions, " ")
+	assert.Contains(t, joined, ".terraform.lock.hcl")
+	assert.Contains(t, joined, "provider_version")
+	assert.Contains(t, joined, "no lock file")
+	assert.Contains(t, joined, "blank workspace")
+	assert.Contains(t, joined, "mismatch")
+	assert.Contains(t, importAgentSchemaNextAction, "mismatch")
+}
+
+func TestPrepareImportOmitsUnknownTargetVersions(t *testing.T) {
+	f := importBackendFixture(t)
+	setWorkspaceAttribute(t, f, "terraform-version", "")
+	f.responses["/api/v2/runs/run-schema"] = []byte(strings.ReplaceAll(string(f.responses["/api/v2/runs/run-schema"]), `"terraform-version": "1.16.1"`, `"terraform-version": ""`))
+	out := prepareImportTool(context.Background(), f.client, importFixtureInput(t))
+	require.Equal(t, "prepared", out.Status, out.Diagnostics)
+	assert.Nil(t, out.Target)
 }

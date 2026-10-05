@@ -32,9 +32,9 @@ type verifyFixture struct {
 func newVerifyFixture(t *testing.T, n int, support, destVersion string) verifyFixture {
 	t.Helper()
 	carry := &importCarryBlock{
-		QueryRunID:  "qry-verify",
-		Providers:   map[string]importCarryProvider{"aws_iam_role": {Source: verifyProvider, Version: "6.62.0"}},
-		Destination: importCarryDestination{TerraformVersion: destVersion, IdentitySupport: map[string]string{"aws_iam_role": support}},
+		QueryRunID: "qry-verify",
+		Providers:  map[string]importCarryProvider{"aws_iam_role": {Source: verifyProvider, Version: "6.62.0"}},
+		Target:     importCarryTarget{TerraformVersion: destVersion, IdentitySupport: map[string]string{"aws_iam_role": support}},
 	}
 	f := verifyFixture{carry: carry, byCand: map[string]string{}}
 	for i := 0; i < n; i++ {
@@ -271,7 +271,7 @@ func TestValidateImportCarry(t *testing.T) {
 	})
 	t.Run("changed destination breaks digest", func(t *testing.T) {
 		c := clone()
-		c.Destination.IdentitySupport["aws_iam_role"] = importIdentityNone
+		c.Target.IdentitySupport["aws_iam_role"] = importIdentityNone
 		_, err := validateImportCarry(c, f.bindings)
 		assert.ErrorContains(t, err, "carry_digest_mismatch")
 	})

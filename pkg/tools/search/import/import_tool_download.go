@@ -29,9 +29,11 @@ func (d importDownload) isBlocked() bool { return d.Status == "blocked" }
 var importDownloadInstructions = []string{
 	"Download the archive with a plain HTTP GET that writes binary bytes to a file. Send no Authorization header: the URL is already authorized.",
 	"Treat download_url as a secret. Do not print it, log it, store it, or put it in a command line other tools can see. If the download fails or the URL has expired, call this tool again for a fresh one.",
-	"Extract into the directory the user chose. Keep the whole tree and .terraform.lock.hcl, exclude generated .terraform caches, and do not add secrets. Check archive paths and links before extracting.",
+	"Extract into the authoring directory, which must be empty or new. Check archive paths and links before extracting. Keep .terraform.lock.hcl and do not add secrets.",
+	importArchiveRootRule,
+	importSensitiveFileRule,
 	"Do not echo, print or cat .env, .envrc, terraform.tfvars or credential files from the directory into the output. If one needs checking, confirm only that it exists.",
-	"This workflow supports a remote root configuration only. If working_directory is set, stop and tell the user.",
+	"This workflow supports a remote root configuration only. If the target workspace's configuration root setting (working_directory) is set, stop and tell the user.",
 }
 
 // downloadImportConfiguration returns the short-lived archive location of the
@@ -44,7 +46,7 @@ func downloadImportConfiguration(ctx context.Context, c *tfe.Client, input impor
 	switch ctxResult.Status {
 	case "blank_workspace":
 		out.Status = "blank_workspace"
-		out.NextAction = "The workspace has no current configuration or state. Author the complete configuration and lock locally, review it with the user, then call create_import_cv."
+		out.NextAction = "The target workspace has no current configuration or state. " + importBlankAuthoringDirectoryRule + " Author the complete configuration and lock there, then call create_import_cv. " + importConfirmationRule
 		return out
 	case "available":
 		if ctxResult.Context == nil || ctxResult.Context.ConfigurationVersionID != requestedCV {
@@ -57,7 +59,7 @@ func downloadImportConfiguration(ctx context.Context, c *tfe.Client, input impor
 		out.WorkingDirectory = ctxResult.Context.WorkingDirectory
 		out.DownloadURL = ctxResult.Context.DownloadURL
 		out.Instructions = importDownloadInstructions
-		out.NextAction = "Download and extract the archive into the directory the user chose, then author the resource and import blocks locally and review them with the user. The server downloaded nothing."
+		out.NextAction = "Download and extract the archive into the authoring directory (empty or new), then author the resource and import blocks there and review them with the user. The server downloaded nothing."
 		return out
 	}
 	out.Diagnostics = append(out.Diagnostics, ctxResult.Diagnostics...)
@@ -73,14 +75,14 @@ func downloadImportConfiguration(ctx context.Context, c *tfe.Client, input impor
 // GetImportConfigurationDownloadDefinition describes the download tool.
 func GetImportConfigurationDownloadDefinition() mcp.Tool {
 	return mcp.NewTool("get_import_configuration_download",
-		mcp.WithDescription(`Return a short-lived download URL for the destination workspace's current configuration archive, so the calling agent does not need its own HCP Terraform API access.
+		mcp.WithDescription(`Return a short-lived download URL for the target workspace's current configuration archive, so the calling agent does not need its own HCP Terraform API access.
 
-Call this only after prepare_import reports has_current_configuration and the user has chosen a local directory. Pass the current_configuration_version_id, or when status is agent_schema_required the state_run_configuration_version_id, from prepare_import. The tool checks that it is the workspace's current configuration version, or, when prepare_import returns agent_schema_required, the state run's configuration version. It returns the URL and download instructions: use a plain GET with no Authorization header, extract into the chosen directory, and treat the URL as a secret. Call again for a fresh URL if it expires. For a workspace with no configuration it returns blank_workspace. The server never downloads the archive.`),
+Call this only after prepare_import reports has_current_configuration and the user has chosen the authoring directory. Pass the current_configuration_version_id, or when status is agent_schema_required the state_run_configuration_version_id, from prepare_import. The tool checks that it is the workspace's current configuration version, or, when prepare_import returns agent_schema_required, the state run's configuration version. It returns the URL and download instructions: use a plain GET with no Authorization header, extract into the authoring directory, and treat the URL as a secret. Call again for a fresh URL if it expires. For a workspace with no configuration it returns blank_workspace. The server never downloads the archive.`),
 		mcp.WithTitleAnnotation("Get current configuration download URL"),
 		mcp.WithReadOnlyHintAnnotation(true), mcp.WithDestructiveHintAnnotation(false),
 		mcp.WithOpenWorldHintAnnotation(true), mcp.WithIdempotentHintAnnotation(true),
 		mcp.WithString("organization_name", mcp.Required(), mcp.Description("HCP Terraform organization.")),
-		mcp.WithString("workspace_name", mcp.Required(), mcp.Description("Destination workspace name.")),
+		mcp.WithString("workspace_name", mcp.Required(), mcp.Description("Target workspace name.")),
 		mcp.WithString("configuration_version_id", mcp.Required(), mcp.Description("Current configuration version ID from prepare_import.")),
 		mcp.WithSchemaAdditionalProperties(false),
 		mcp.WithOutputSchema[importDownload]())

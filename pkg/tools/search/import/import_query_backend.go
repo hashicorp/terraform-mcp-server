@@ -124,7 +124,7 @@ type importDiscovery struct {
 }
 
 // importQueryProvenance is the QueryRun's verified metadata, read without
-// touching the log. It lets callers check the destination before paying for the
+// touching the log. It lets callers check the target before paying for the
 // log read.
 type importQueryProvenance struct {
 	QueryRunID    string

@@ -182,7 +182,7 @@ func importCreateDefinition(name, title, description string, run bool) mcp.Tool 
 		mcp.WithReadOnlyHintAnnotation(false), mcp.WithDestructiveHintAnnotation(false),
 		mcp.WithOpenWorldHintAnnotation(true), mcp.WithIdempotentHintAnnotation(false),
 		mcp.WithString("organization_name", mcp.Required(), mcp.Description("HCP Terraform organization.")),
-		mcp.WithString("workspace_name", mcp.Required(), mcp.Description("Destination workspace name.")),
+		mcp.WithString("workspace_name", mcp.Required(), mcp.Description("Target workspace name.")),
 		mcp.WithString("baseline_cv_id", mcp.Description("Current configuration version ID from prepare_import. Omit all baseline fields only for a verified blank workspace.")),
 		mcp.WithString("baseline_state_id", mcp.Description("Current state version ID from prepare_import.")),
 		mcp.WithNumber("baseline_state_serial", mcp.Description("Current state serial from prepare_import.")),
@@ -197,7 +197,7 @@ func importCreateDefinition(name, title, description string, run bool) mcp.Tool 
 
 // CreateImportCVDefinition describes create_import_cv.
 func CreateImportCVDefinition() mcp.Tool {
-	return importCreateDefinition("create_import_cv", "Create speculative import configuration version", `Create a speculative, non-provisional configuration version (auto-queue off) in the destination workspace and return its one-use upload URL. This is a mutation. The server always creates a speculative, non-applying configuration version and a plan-only run; no input changes that. Ask the user once, before this call, to confirm the exact reviewed archive and the speculative path it starts: this call, the upload, and a plan-only run that cannot apply or change state. After that single confirmation set confirm_speculative_run=true here and on create_import_run. If a Terraform CLI is available locally, running terraform fmt and terraform validate before the upload is worthwhile to catch small mistakes; it is optional, and the speculative plan validates remotely. Do not run them after the upload.
+	return importCreateDefinition("create_import_cv", "Create speculative import configuration version", `Create a speculative, non-provisional configuration version (auto-queue off) in the target workspace and return its one-use upload URL. This is a mutation. The server always creates a speculative, non-applying configuration version and a plan-only run; no input changes that. After that single confirmation set confirm_speculative_run=true here and on create_import_run. `+" "+importConfirmationRule+" "+importValidationRule+" "+importArchiveRootRule+`
 
 Pass the baseline fields from prepare_import (or none for a verified blank workspace). The server re-checks that the workspace is still a remote, API-upload root at that baseline; it does not re-read the QueryRun and does not read the archive. PUT the complete reviewed .tar.gz directly to upload_url, then call create_import_run. If the outcome is unknown, reconcile in HCP Terraform; never retry blindly.`, false)
 }

@@ -155,7 +155,7 @@ func verifyBlocked(runID, code, next string) importVerified {
 // carried selection. This catches transcription errors; it is not QueryRun
 // attestation and not authorization.
 func validateImportCarry(carry *importCarryBlock, bindings []importVerifyBinding) (map[string]string, error) {
-	if carry == nil || carry.QueryRunID == "" || len(carry.Candidates) < 1 || len(carry.Candidates) > maxImportSelections || carry.Destination.IdentitySupport == nil {
+	if carry == nil || carry.QueryRunID == "" || len(carry.Candidates) < 1 || len(carry.Candidates) > maxImportSelections || carry.Target.IdentitySupport == nil {
 		return nil, importEvidenceFailure("carry_invalid")
 	}
 	if importCarryDigest(*carry) != carry.SelectionDigest {
@@ -320,7 +320,7 @@ func changedPaths(before, after, unknown json.RawMessage) []string {
 
 // classifyIdentity compares the provider-returned identity with the carried
 // Search identity. Support comes from the plan's own Terraform version and
-// per-resource after_identity; the carried destination only names the reason.
+// per-resource after_identity; the carried target only names the reason.
 func classifyIdentity(planVersion string, carried importCarryCandidate, support string, afterIdentity json.RawMessage) (string, string) {
 	hasAfter := len(afterIdentity) > 0 && !bytes.Equal(bytes.TrimSpace(afterIdentity), []byte("null"))
 	if hasAfter {
@@ -412,7 +412,7 @@ func verifyImportPlanFacts(raw []byte, carry *importCarryBlock, byCandidate map[
 				if item.Change != changeNone {
 					item.ChangedPaths = changedPaths(rc.Change.Before, rc.Change.After, rc.Change.AfterUnknown)
 				}
-				item.ObjectIdentity, item.IdentityReason = classifyIdentity(plan.TerraformVersion, cand, carry.Destination.IdentitySupport[cand.ManagedType], afterIdentity)
+				item.ObjectIdentity, item.IdentityReason = classifyIdentity(plan.TerraformVersion, cand, carry.Target.IdentitySupport[cand.ManagedType], afterIdentity)
 			}
 			if detailWanted[addr] && len(out.Detail) < maxVerifyDetail {
 				out.Detail = append(out.Detail, importVerifyDetail{TargetAddress: addr, Actions: rc.Change.Actions, ImportIDPresent: idPresent, IdentityPresent: len(afterIdentity) > 0 && !bytes.Equal(bytes.TrimSpace(afterIdentity), []byte("null")), ChangedPaths: changedPaths(rc.Change.Before, rc.Change.After, rc.Change.AfterUnknown), ReplacePaths: len(rc.Change.ReplacePaths)})
@@ -511,7 +511,7 @@ func verifyNextAction(v importVerified) string {
 		parts = append(parts, fmt.Sprintf("The plan shows %d selected items with updates or replacements, %d with unverified identity, and %d other actions outside the selection (extra imports %d, other changes %d, drift %d, output changes %d). Review attention and unselected, adjust the configuration, then create a new configuration version and run.",
 			v.Changes[changeUpdate]+v.Changes[changeReplace], v.ObjectIdentity[identityUnverified], v.Unselected.ExtraImports+v.Unselected.OtherManagedAction+v.Unselected.Drift+v.Plan.OutputChanges, v.Unselected.ExtraImports, v.Unselected.OtherManagedAction, v.Unselected.Drift, v.Plan.OutputChanges))
 	default:
-		parts = append(parts, fmt.Sprintf("The plan shows %d selected imports with no changes and no other actions. %d identities matched the carried selection. Review the plan.", n, v.ObjectIdentity[identityMatched]))
+		parts = append(parts, fmt.Sprintf("The plan shows %d selected imports with no changes and no other actions. %d identities matched the carried selection. Review the plan. "+importClosingRule, n, v.ObjectIdentity[identityMatched]))
 	}
 	if u := v.ObjectIdentity[identityUnsupported]; u > 0 {
 		undetermined := 0
@@ -520,7 +520,7 @@ func verifyNextAction(v importVerified) string {
 				undetermined += g.Count
 			}
 		}
-		s := fmt.Sprintf("Identity could not be checked for %d items (see identity_unsupported). Confirm each import ID against the destination provider version's documentation.", u)
+		s := fmt.Sprintf("Identity could not be checked for %d items (see identity_unsupported). Confirm each import ID against the documentation of the target workspace's locked provider version.", u)
 		if undetermined > 0 {
 			s += fmt.Sprintf(" Identity support could not be determined for %d of them; it was not read from HCP (blank workspace, or a schema the agent obtained locally).", undetermined)
 		}
@@ -584,12 +584,12 @@ func VerifyImportPlanDefinition() mcp.Tool {
 
 Poll with organization_name, workspace_name and run_id from create_import_run; while the plan runs the result is a short status, so call again with the same run_id. When the plan has finished, call once more with the carry block from prepare_import (unchanged) and bindings: one candidate_id and target_address for every selected candidate.
 
-The result gives, for each selected item, a change (none, update, replace_or_destroy, create, import_missing, not_in_plan, type_mismatch) and an object_identity (matched, mismatched, unsupported, unverified), as counts plus an attention list of items that need a look. unsupported means the identity could not be compared (Terraform below 1.12 or a type with no identity); confirm those import IDs against the destination provider version's documentation. unselected lists extra imports, other actions and drift. No attribute or import ID values are returned; use get_plan_json_output for detail. The summary describes the plan; it is not an approval and a plan-only Run never imports into state.`),
+The result gives, for each selected item, a change (none, update, replace_or_destroy, create, import_missing, not_in_plan, type_mismatch) and an object_identity (matched, mismatched, unsupported, unverified), as counts plus an attention list of items that need a look. unsupported means the identity could not be compared (Terraform below 1.12 or a type with no identity); confirm those import IDs against the documentation of the target workspace's locked provider version. unselected lists extra imports, other actions and drift. No attribute or import ID values are returned; use get_plan_json_output for detail. The summary describes the plan; it is not an approval and a plan-only Run never imports into state.`),
 		mcp.WithTitleAnnotation("Verify import plan"),
 		mcp.WithReadOnlyHintAnnotation(true), mcp.WithDestructiveHintAnnotation(false),
 		mcp.WithOpenWorldHintAnnotation(true), mcp.WithIdempotentHintAnnotation(true),
 		mcp.WithString("organization_name", mcp.Required(), mcp.Description("HCP Terraform organization.")),
-		mcp.WithString("workspace_name", mcp.Required(), mcp.Description("Destination workspace name.")),
+		mcp.WithString("workspace_name", mcp.Required(), mcp.Description("Target workspace name.")),
 		mcp.WithString("run_id", mcp.Required(), mcp.Description("Run ID returned by create_import_run.")),
 		mcp.WithObject("carry", mcp.Description("The carry block from prepare_import, unchanged. Required once the plan has finished.")),
 		mcp.WithArray("bindings", mcp.Description("One entry per selected candidate. Required once the plan has finished."), mcp.MaxItems(maxImportSelections), mcp.Items(map[string]any{

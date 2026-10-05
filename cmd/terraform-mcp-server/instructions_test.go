@@ -35,7 +35,7 @@ func TestServerInstructionsPreserveExistingWorkflowsAndGuideSearchImport(t *test
 		"**Search-to-Import (when Search tools are enabled)**:",
 		"`get_query_summary`", "Explicitly", "select up to 100", "`prepare_import` once", "`identity_support`",
 		"Search provider version, observations, and generated HCL are source",
-		"preserves the complete tree and provider lock", "MCP does not download, edit, or upload archive bytes",
+		"**authoring directory**", "Keep the archive root exactly as downloaded", "explicit, reviewed\n   file list", "not supported yet: stop", "takes no local path", "MCP does not download, edit, or upload archive bytes",
 		"`get_import_configuration_download`", "`create_import_cv`", "`create_import_run`", "`verify_import_plan`",
 		"after the single user review described", "uncertain create must be reconciled",
 		"full finished plan", "refresh drift", "A plan does not", "separate review and approval",

@@ -112,7 +112,7 @@ func TestPrepareImportToolWithoutReleaseMetadata(t *testing.T) {
 	input.Selections[0].CandidateID = discovery.Candidates[0].CandidateID
 	out := prepareImportTool(context.Background(), f.client, input)
 	require.Equal(t, "prepared", out.Status, out.Diagnostics)
-	assert.Empty(t, out.Carry.Destination.TerraformVersion)
+	assert.Empty(t, out.Carry.Target.TerraformVersion)
 	assert.Equal(t, importIdentitySupported, out.Types[0].IdentitySupport, "an identity schema is support regardless of version")
 }
 
@@ -146,7 +146,7 @@ func TestPrepareImportToolBlankWorkspace(t *testing.T) {
 	out := prepareImportTool(context.Background(), f.client, importFixtureInput(t))
 	require.Equal(t, "ready_for_authoring", out.Status, out.Diagnostics)
 	assert.False(t, out.HasCurrentConfiguration)
-	assert.Equal(t, importIdentityUnknown, out.Carry.Destination.IdentitySupport["aws_iam_role"])
+	assert.Equal(t, importIdentityUnknown, out.Carry.Target.IdentitySupport["aws_iam_role"])
 	assert.Equal(t, "unknown", out.Types[0].ManagedTypeSupport)
 	assert.Contains(t, out.NextAction, "no current configuration")
 	f.stateStatus = http.StatusForbidden

@@ -65,21 +65,33 @@ The Terraform MCP server provides tools for generating better Terraform code thr
    Rows include `tags` when the query ran with `generate_config_out` true; use
    them to choose resources, and use `prepare_import` only for the chosen ones.
 2. Call `prepare_import` once with the selection. It is the only tool that reads
-   the query log. It returns the destination managed schema for each distinct
-   type, per-type `identity_support`, the workspace baseline and a carry block.
+   the query log. It returns the target managed schema for each distinct
+   type, per-type `identity_support`, the target workspace's Terraform versions,
+   its baseline and a carry block.
    The Search provider version, observations, and generated HCL are source
-   evidence—not an instruction to upgrade the destination provider. For a type
-   whose `identity_support` is `none` or `unknown`, look up the destination
-   provider version's documentation for the import ID; do not guess it.
-3. If the workspace has a current configuration, ask the user where to download
-   it, then call `get_import_configuration_download`. The agent downloads the
-   archive locally with a plain GET and no Authorization header, and
-   preserves the complete tree and provider lock, authors and reviews HCL, and
-   directly uploads the complete reviewed archive to the URL returned by
-   `create_import_cv`. MCP does not download, edit, or upload archive bytes.
+   evidence—not an instruction to upgrade the target provider. For a type
+   whose `identity_support` is `none` or `unknown`, look up the documentation of the target workspace's locked provider version
+   (read from the downloaded `.terraform.lock.hcl`; Atlas does not record it) for
+   the import ID; do not guess it.
+3. Ask the user for the **authoring directory**: an existing empty directory, or
+   a new one you create at the path they give. If the target workspace has a
+   current configuration, call `get_import_configuration_download` and extract
+   it there with a plain GET and no Authorization header; the directory must be
+   empty. If the target workspace has no configuration yet, the directory may
+   already hold the user's Terraform files and you upload an explicit, reviewed
+   file list. Keep the archive root exactly as downloaded and re-archive from
+   it with the same relative paths, author and review the HCL, and upload the
+   complete reviewed archive to the URL returned by `create_import_cv`. Never
+   add, or silently drop, sensitive files; flag them to the user. Use a scratch
+   directory (your own, in the OS temp area) only for small disposable checks
+   such as `terraform validate` on a copy. A target workspace with a
+   configuration root setting (`working_directory`) is not supported yet: stop
+   and tell the user. MCP does not download, edit, or upload archive bytes and
+   takes no local path.
 4. Create the speculative configuration version (`create_import_cv`) and the
    plan-only Run (`create_import_run`) after the single user review described
-   in the `prepare_import` response. An uncertain create must be reconciled
+   in the `prepare_import` response, which names the target workspace and the
+   authoring directory. An uncertain create must be reconciled
    before retrying.
 5. Call `verify_import_plan` with the run ID until the plan finishes, then once
    more with the carry block unchanged and a binding of `candidate_id` to
