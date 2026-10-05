@@ -16,6 +16,7 @@ import (
 	"testing"
 
 	"github.com/hashicorp/terraform-mcp-server/pkg/client"
+	"github.com/hashicorp/terraform-mcp-server/pkg/tools/search/importworkflow"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 	"github.com/stretchr/testify/assert"
@@ -130,4 +131,13 @@ func TestSearchImportToolDefinitions(t *testing.T) {
 	for _, field := range []string{"resource_type", "address", "name_contains", "limit", "after"} {
 		assert.Contains(t, GetQuerySummary(logger).Tool.InputSchema.Properties, field)
 	}
+}
+
+func TestQuerySummaryTextUsesSharedImportVocabulary(t *testing.T) {
+	lower := strings.ToLower(GetQuerySummary(silentLogger()).Tool.Description)
+	for _, phrase := range importworkflow.RetiredImportPhrases() {
+		assert.NotContains(t, lower, phrase)
+	}
+	assert.NotContains(t, lower, "route 1")
+	assert.NotContains(t, lower, "route 2")
 }

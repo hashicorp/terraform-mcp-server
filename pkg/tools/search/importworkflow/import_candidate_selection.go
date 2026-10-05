@@ -37,9 +37,3 @@ func selectImportCandidates(discovery *importDiscovery, selections []importSelec
 	}
 	return selected, nil
 }
-
-func firstImportSelection(input importPrepareInput) importPrepareInput {
-	first := input
-	first.Selections = []importSelection{{CandidateID: input.Selections[0].CandidateID, ManagedType: input.Selections[0].ManagedType}}
-	return first
-}

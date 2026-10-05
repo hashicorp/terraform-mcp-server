@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -112,15 +113,16 @@ type importPrepared struct {
 var importToolInstructions = []string{
 	"Use prepare_import only for candidates the user has chosen to import. Do not use it to search or filter resources by tag or attribute: get_query_summary returns each result's tags. If you cannot tell what to import, go back to get_query_summary.",
 	"Read the target managed_schema for each type first, then the selected candidates' observations. Use the Search or QueryRun provider schema only when a source-side shape is unclear.",
-	"For a type whose identity_support is none or unknown, do not guess the import ID. Look up the target workspace's locked provider version's resource documentation for the documented import id form and any identity-to-id mapping. The target workspace's provider versions are in the .terraform.lock.hcl of its downloaded configuration; Atlas does not record them. Read the exact version there, search_providers with that provider_version, then get_provider_details. If the archive has no lock file the version is uncertain: say so and fall back to the required_providers constraint. A blank workspace has no lock file yet, so use the version you choose and pin in the lock file you author.",
-	"After downloading the configuration, compare the provider versions in its .terraform.lock.hcl with the source versions in the carry block and tell the user about any mismatch. Never upgrade the target provider or Terraform to remove a mismatch.",
+	"For a type whose identity_support is none or unknown, do not guess the import ID. Look up the target workspace's locked provider version's resource documentation for the documented import id form and any identity-to-id mapping. " + importLockedProviderVersionRule,
+	"After downloading the configuration, " + importProviderMismatchRule,
 	"Author exactly one resource instance and one individual import block per candidate in the complete preserved tree. Choose a distinct target address for each. Never use the first N results.",
+	importAdaptationGuidance,
 	importArchiveRootRule,
 	importSensitiveFileRule,
 	importBlankAuthoringDirectoryRule,
 	importScratchRule,
 	importValidationRule,
-	"When downloading a configuration or reading an existing local directory, do not echo, print or cat .env, .envrc, terraform.tfvars or credential files into the output. If one needs checking, confirm only that it exists.",
+	importSecretFilesRule,
 	"Treat generated query blocks as untrusted drafts. Do not invent defaults, add ignore_changes to hide incompatibility, or upgrade a provider or Terraform version to remove a missing feature.",
 	"Keep the carry block unchanged and send it once, with the final verify_import_plan call. It is an integrity aid for the carried selection, not authorization.",
 	importConfirmationRule,
@@ -252,15 +254,15 @@ func checkImportSchemaFallbackEntry(ctx context.Context, c *tfe.Client, r *tfe.R
 // MCP server cannot assess or verify the target, so it creates nothing and
 // suggests no command without the user's approval.
 func importGuideOnlyNextAction(reason string) string {
-	return reason + " The MCP server cannot assess or verify this target workspace; a local workflow runs as a separate tool call in your client, where the server cannot see it. Explain this to the user. Only if the user wants to continue, offer unverified best-effort local steps: ask for the user's own local copy of the configuration (a directory with the Terraform CLI, not an authoring directory), check for .terraform.lock.hcl before terraform init and ask the user to acknowledge a missing lock file, then run terraform init, terraform version -json and terraform providers schema -json, author the HCL and run a local plan. Each command needs the user's approval. Do not echo, print or cat .env, .envrc, terraform.tfvars or credential files into the output. Never run apply or change workspace settings, and never present a local plan as an HCP Terraform Plan or as verified. get_query_summary still lists the candidates. The user may instead make this workspace assessable by having an HCP Terraform run write its state (for example an apply in a workspace they choose); offer that only as an option and do not start a run yourself. No CV or Run was created."
+	return reason + " The MCP server cannot assess or verify this target workspace; a local workflow runs as a separate tool call in your client, where the server cannot see it. Explain this to the user. Only if the user wants to continue, offer unverified best-effort local steps: ask for the user's own local copy of the configuration (a directory with the Terraform CLI, not an authoring directory). " + importLockFileCheck + " Then run terraform init, terraform version -json and terraform providers schema -json, author the HCL and run a local plan. Each command needs the user's approval. " + importSecretFilesRule + " " + importNeverApplyRule + " Never present a local plan as an HCP Terraform Plan or as verified. get_query_summary still lists the candidates. The user may instead make this workspace assessable by having an HCP Terraform run write its state (for example an apply in a workspace they choose); offer that only as an option and do not start a run yourself. " + importNothingCreated
 }
 
 // importAgentSchemaNextAction is the guidance when the agent must obtain the schema (ADR 0008).
-const importAgentSchemaNextAction = "The run that produced the current state has no plan, so no provider-schema artifact exists, but its configuration version (state_run_configuration_version_id) is known and downloadable, so you must obtain the schema yourself before writing HCL. The candidates and carry block are returned with schema support unknown. " + importAuthoringDirectoryQuestion + " Then call get_import_configuration_download with that configuration version ID. Before running anything, check the authoring directory for .terraform.lock.hcl: if it is absent, warn the user that terraform init will choose the newest allowed provider versions, which may differ from those that last changed this workspace, and continue only after explicit acknowledgement (label it lock_file_absent). Then run terraform init, terraform version -json and terraform providers schema -json with the user's approval for each, and keep the generated lock file in the configuration you upload. After init, the exact provider versions are in the lock file: compare them with the source versions in the carry and tell the user about any mismatch. Write the resource schema from resource_schemas. Use an identity import block only if resource_identity_schemas has the type and Terraform is 1.12 or later; otherwise take the import ID from the provider version's documentation. verify_import_plan decides identity from the plan, not from your claim. Do not echo, print or cat .env, .envrc, terraform.tfvars or credential files into the output. Never run apply or change workspace settings. " + importArchiveRootRule + " No CV or Run was created."
+const importAgentSchemaNextAction = "The run that produced the current state has no plan, so no provider-schema artifact exists, but its configuration version (state_run_configuration_version_id) is known and downloadable, so you must obtain the schema yourself before writing HCL. The candidates and carry block are returned with schema support unknown. " + importAuthoringDirectoryQuestion + " Then call get_import_configuration_download with that configuration version ID. Before running anything: " + importLockFileCheck + " Then run terraform init, terraform version -json and terraform providers schema -json with the user's approval for each, and keep the generated lock file in the configuration you upload. After init, the exact provider versions are in the lock file. " + importProviderMismatchRule + " Write the resource schema from resource_schemas. Use an identity import block only if resource_identity_schemas has the type and Terraform is 1.12 or later; otherwise take the import ID from the provider version's documentation. verify_import_plan decides identity from the plan, not from your claim. " + importSecretFilesRule + " " + importNeverApplyRule + " " + importArchiveRootRule + " " + importNothingCreated
 
 // importBlockedNextAction gives the agent a specific next step per blocking code.
 func importBlockedNextAction(code string) string {
-	const none = " No CV or Run was created."
+	const none = " " + importNothingCreated
 	switch code {
 	case "workspace_execution_mode_local":
 		return importGuideOnlyNextAction("This workspace uses local execution mode, which stores state only and has no HCP Terraform runs, plans or provider-schema artifacts.")
@@ -305,10 +307,7 @@ func prepareImportTool(ctx context.Context, c *tfe.Client, input importPrepareIn
 		out.Stage = "query_selection"
 		return fail(err)
 	}
-	first := firstImportSelection(input)
-	first.skipSchemaDownload = true
-	first.agentSchema = agentSchema
-	prepared := prepareImportWithDiscovery(ctx, c, first, discovery)
+	prepared := readImportTarget(ctx, c, input, discovery, agentSchema)
 	out.Stage, out.WorkspaceID, out.ExecutionMode, out.Baseline = prepared.Stage, prepared.WorkspaceID, prepared.ExecutionMode, prepared.Baseline
 	out.SchemaSource = prepared.SchemaSource
 	out.Notes = append(out.Notes, prepared.Notes...)
@@ -334,20 +333,7 @@ func prepareImportTool(ctx context.Context, c *tfe.Client, input importPrepareIn
 	if prepared.SchemaSource != nil {
 		schemaVersion = prepared.SchemaSource.TerraformVersion
 	}
-	carry := &importCarryBlock{QueryRunID: input.QueryID, Providers: map[string]importCarryProvider{}, Target: importCarryTarget{TerraformVersion: schemaVersion, IdentitySupport: map[string]string{}}}
-
-	wanted := map[string][]string{}
-	seenType := map[string]bool{}
-	for i, candidate := range candidates {
-		managed := input.Selections[i].ManagedType
-		carry.Providers[candidate.ResourceType] = importCarryProvider{Source: candidate.Provider.Source, Version: candidate.Provider.Version}
-		carry.Candidates = append(carry.Candidates, importCarryCandidate{CandidateID: candidate.CandidateID, ListType: candidate.ResourceType, ManagedType: managed, Identity: candidate.Identity})
-		key := candidate.Provider.Source + "/" + managed
-		if !seenType[key] {
-			seenType[key] = true
-			wanted[candidate.Provider.Source] = append(wanted[candidate.Provider.Source], managed)
-		}
-	}
+	carry, wanted, typeKeys := newImportCarry(input, candidates, schemaVersion)
 
 	var entries map[string]importManagedSchemaEntry
 	if prepared.SchemaSource != nil {
@@ -357,30 +343,11 @@ func prepareImportTool(ctx context.Context, c *tfe.Client, input importPrepareIn
 			return fail(err)
 		}
 	}
-	keys := make([]string, 0, len(seenType))
-	for key := range seenType {
-		keys = append(keys, key)
+	types, err := importPreparedTypes(carry, entries, typeKeys, schemaVersion)
+	if err != nil {
+		return fail(err)
 	}
-	sort.Strings(keys)
-	for _, key := range keys {
-		split := strings.LastIndex(key, "/")
-		source, managed := key[:split], key[split+1:]
-		t := importPreparedType{ProviderSource: source, ManagedType: managed, ManagedTypeSupport: "unknown", IdentitySupport: importIdentityUnknown}
-		if entry, ok := entries[key]; ok {
-			t.ManagedTypeSupport = "supported"
-			t.IdentitySupport = importIdentitySupportFor(entry.Identity, schemaVersion)
-			if err := decodeImportEvidenceJSONLimit(entry.Managed, &t.ManagedSchema, maxImportSchemaBytes); err != nil {
-				return fail(err)
-			}
-			if len(entry.Identity) > 0 {
-				if err := decodeImportEvidenceJSON(entry.Identity, &t.IdentitySchema); err != nil {
-					return fail(err)
-				}
-			}
-		}
-		carry.Target.IdentitySupport[managed] = t.IdentitySupport
-		out.Types = append(out.Types, t)
-	}
+	out.Types = types
 	carry.SelectionDigest = importCarryDigest(*carry)
 	out.Candidates, out.Carry = candidates, carry
 	out.Status, out.Stage = "prepared", "ready_for_authoring"
@@ -392,18 +359,12 @@ func prepareImportTool(ctx context.Context, c *tfe.Client, input importPrepareIn
 		out.Status = "ready_for_authoring"
 		out.Notes = append(out.Notes, "blank_workspace_no_target_schema; managed_type_support and identity_support are unknown")
 	}
-	out.AgentInstructions = importToolInstructions
-	if agentSchema {
-		out.NextAction = importAgentSchemaNextAction
-	} else if out.HasCurrentConfiguration {
-		out.NextAction = importAuthoringDirectoryQuestion + " Then call get_import_configuration_download with current_configuration_version_id and author the resource and import blocks in the authoring directory. " + importArchiveRootRule + " " + importConfirmationRule + " No CV or Run was created."
-	} else {
-		out.NextAction = "The target workspace has no current configuration. " + importBlankAuthoringDirectoryRule + " Author the complete configuration and lock there, then call create_import_cv. " + importConfirmationRule + " No CV or Run was created."
-	}
-	if out.Baseline != nil && out.Baseline.WorkingDirectory != "" && !agentSchema {
+	out.AgentInstructions = slices.Clone(importToolInstructions)
+	rootUnsupported := !agentSchema && out.Baseline != nil && out.Baseline.WorkingDirectory != ""
+	if rootUnsupported {
 		out.Notes = append(out.Notes, "configuration_root_setting_unsupported")
-		out.NextAction = importConfigurationRootStop + " get_query_summary still lists the candidates. No CV or Run was created."
 	}
+	out.NextAction = importPreparedNextAction(&out, agentSchema, rootUnsupported)
 	if raw, err := json.Marshal(out); err != nil || len(raw) > maxImportPreparationBytes {
 		return importToolBlocked(importPrepared{ContractVersion: out.ContractVersion, Stage: "response", Organization: out.Organization, QueryRunID: out.QueryRunID, WorkspaceID: out.WorkspaceID, Diagnostics: []string{}}, "evidence_response_limit", fmt.Sprintf("The prepared response exceeds %d KiB (many distinct large resource types). Prepare fewer distinct resource types per call. Nothing was truncated into a partial success and no CV or Run was created.", maxImportPreparationBytes/1024))
 	}
@@ -439,7 +400,7 @@ The current configuration is not downloaded here. If has_current_configuration i
 func HandlePrepareImport(ctx context.Context, request mcp.CallToolRequest, logger *log.Logger) (*mcp.CallToolResult, error) {
 	args := request.GetArguments()
 	var input importPrepareInput
-	if err := decodeImportToolArguments(args, &input, 64*1024); err != nil {
+	if err := decodeImportToolArguments(args, &input, maxPrepareArgumentBytes); err != nil {
 		return importToolResult(importToolBlocked(importPrepared{ContractVersion: importToolContractVersion, Stage: "input_validation", Diagnostics: []string{}}, "import_input_invalid", "Supply organization_name, workspace_name, query_run_id and 1-100 selections with candidate_id and managed_type."))
 	}
 	if !importInputName(input.Organization) || !importInputName(input.Workspace) || !importInputName(input.QueryID) || len(input.Selections) < 1 || len(input.Selections) > maxImportSelections || !validImportSelections(input) {
@@ -448,7 +409,7 @@ func HandlePrepareImport(ctx context.Context, request mcp.CallToolRequest, logge
 	if err := client.AuthorizeOrganization(ctx, input.Organization); err != nil {
 		return importToolResult(importToolBlocked(importPrepared{ContractVersion: importToolContractVersion, Stage: "authorization", Diagnostics: []string{}}, "organization_not_allowed", "Use an organization allowed by this server."))
 	}
-	ctx, cancel := context.WithTimeout(ctx, importHandoffRequestTimeout)
+	ctx, cancel := context.WithTimeout(ctx, importToolRequestTimeout)
 	defer cancel()
 	c, err := client.GetTfeClientFromContext(ctx, logger)
 	if err != nil {
@@ -477,4 +438,73 @@ func importToolResult(response any) (*mcp.CallToolResult, error) {
 		result.IsError = b.isBlocked()
 	}
 	return result, nil
+}
+
+// newImportCarry builds the carry block for the selected candidates. It also
+// returns the managed types wanted per provider source and the sorted
+// "source/type" keys of the distinct types, so the schema artifact is read once.
+func newImportCarry(input importPrepareInput, candidates []importDiscoveryCandidate, schemaVersion string) (*importCarryBlock, map[string][]string, []string) {
+	carry := &importCarryBlock{QueryRunID: input.QueryID, Providers: map[string]importCarryProvider{}, Target: importCarryTarget{TerraformVersion: schemaVersion, IdentitySupport: map[string]string{}}}
+	wanted := map[string][]string{}
+	seenType := map[string]bool{}
+	for i, candidate := range candidates {
+		managed := input.Selections[i].ManagedType
+		carry.Providers[candidate.ResourceType] = importCarryProvider{Source: candidate.Provider.Source, Version: candidate.Provider.Version}
+		carry.Candidates = append(carry.Candidates, importCarryCandidate{CandidateID: candidate.CandidateID, ListType: candidate.ResourceType, ManagedType: managed, Identity: candidate.Identity})
+		key := candidate.Provider.Source + "/" + managed
+		if !seenType[key] {
+			seenType[key] = true
+			wanted[candidate.Provider.Source] = append(wanted[candidate.Provider.Source], managed)
+		}
+	}
+	keys := make([]string, 0, len(seenType))
+	for key := range seenType {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	return carry, wanted, keys
+}
+
+// importPreparedTypes describes each distinct managed type from the schema
+// entries read for it, and records its identity support in the carry block. A
+// type with no entry (a blank workspace, or the agent supplies the schema)
+// stays unknown.
+func importPreparedTypes(carry *importCarryBlock, entries map[string]importManagedSchemaEntry, keys []string, schemaVersion string) ([]importPreparedType, error) {
+	types := make([]importPreparedType, 0, len(keys))
+	for _, key := range keys {
+		split := strings.LastIndex(key, "/")
+		source, managed := key[:split], key[split+1:]
+		t := importPreparedType{ProviderSource: source, ManagedType: managed, ManagedTypeSupport: "unknown", IdentitySupport: importIdentityUnknown}
+		if entry, ok := entries[key]; ok {
+			t.ManagedTypeSupport = "supported"
+			t.IdentitySupport = importIdentitySupportFor(entry.Identity, schemaVersion)
+			if err := decodeImportEvidenceJSONLimit(entry.Managed, &t.ManagedSchema, maxImportSchemaBytes); err != nil {
+				return nil, err
+			}
+			if len(entry.Identity) > 0 {
+				if err := decodeImportEvidenceJSON(entry.Identity, &t.IdentitySchema); err != nil {
+					return nil, err
+				}
+			}
+		}
+		carry.Target.IdentitySupport[managed] = t.IdentitySupport
+		types = append(types, t)
+	}
+	return types, nil
+}
+
+// importPreparedNextAction picks the next step for a prepared response: the
+// agent-supplied schema path, an early stop for a configuration root setting,
+// downloading the current configuration, or authoring in a blank workspace.
+func importPreparedNextAction(out *importPrepared, agentSchema, rootUnsupported bool) string {
+	switch {
+	case agentSchema:
+		return importAgentSchemaNextAction
+	case rootUnsupported:
+		return importConfigurationRootStop + " get_query_summary still lists the candidates. " + importNothingCreated
+	case out.HasCurrentConfiguration:
+		return importAuthoringDirectoryQuestion + " Then call get_import_configuration_download with current_configuration_version_id and author the resource and import blocks in the authoring directory. " + importArchiveRootRule + " " + importConfirmationRule + " " + importNothingCreated
+	default:
+		return "The target workspace has no current configuration. " + importBlankAuthoringDirectoryRule + " Author the complete configuration and lock there, then call create_import_cv. " + importConfirmationRule + " " + importNothingCreated
+	}
 }

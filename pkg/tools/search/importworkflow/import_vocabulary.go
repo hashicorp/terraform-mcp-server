@@ -51,8 +51,54 @@ const (
 	importValidationRule = "When a Terraform CLI is available, run terraform fmt and terraform validate in a scratch copy of the authoring directory before the upload, using terraform init -backend=false and the provider versions in .terraform.lock.hcl. It catches real problems before the speculative plan, so do it; if no CLI or provider is available, say so in the review. Do not run them after the upload."
 
 	// importConfirmationRule is the single user review.
-	importConfirmationRule = "After authoring, review the result with the user and ask once. Name the target workspace (organization/name) and the authoring directory path, and list the changed files, each target address and import ID. State that one yes creates a speculative configuration version, uploads the reviewed archive and starts a plan-only run that cannot apply or change state, and covers create_import_cv, the upload, create_import_run and polling verify_import_plan. Ask again only if the archive or baseline changes."
+	importConfirmationRule = "After authoring, review the result with the user and ask once. Name the target workspace (organization/name) and the authoring directory path, and list the changed files, each adaptation you made to the suggested blocks and why, each target address and import ID. State that one yes creates a speculative configuration version, uploads the reviewed archive and starts a plan-only run that cannot apply or change state, and covers create_import_cv, the upload, create_import_run and polling verify_import_plan. Ask again only if the archive or baseline changes."
+
+	// importAdaptationGuidance points the agent at evidence for adapting the
+	// suggested blocks; it deliberately states no blanket rule, because accepted
+	// argument placement (for example provider on an import block) differs
+	// between Terraform versions.
+	importAdaptationGuidance = "Adapt the suggested resource and import blocks to the target using evidence, not fixed rules. Use (1) the target provider schema JSON (managed_schema from prepare_import, or the schema you obtained) for which attributes exist, which are computed-only and which the target's provider version supports; (2) the documentation of the target workspace's locked provider version (search_providers with that provider_version, then get_provider_details); (3) the Terraform language documentation for the target's Terraform version, whose URL is versioned (for example developer.hashicorp.com/terraform/language/v1.16.x/block/import for the import block, using target.terraform_version_setting or target.terraform_version_last_run); and (4) the output of terraform validate with the target's Terraform version. Generated blocks are drafts written for the source provider version, so they may include attributes the target does not know, computed-only values, null placeholders, or arguments such as provider whose accepted placement differs between Terraform versions. When the schema, the documentation or a validate diagnostic rejects something, follow it, make the smallest change and do not guess. Never upgrade the target provider or Terraform to avoid an adaptation."
+
+	// importArchiveURLRule keeps the signed download URL out of command lines.
+	importArchiveURLRule = "Keep the signed download URL out of command arguments, logs and printed output. For example, send curl its configuration on stdin: curl --config - with the lines url = \"<download_url>\" and output = \"<archive file in the authoring directory>\" on stdin, so the URL stays out of the process list and shell history. This reduces exposure but does not remove it: the command text still passes through your tool harness and may be logged. If no safe method exists, stop and ask the user."
+
+	// importSecretFilesRule keeps credentials in local files out of the output.
+	importSecretFilesRule = "Do not echo, print or cat .env, .envrc, terraform.tfvars or credential files into the output. If one needs checking, confirm only that it exists."
+
+	// importNothingCreated ends every response that did not create a
+	// configuration version or run.
+	importNothingCreated = "No CV or Run was created."
+
+	// importNeverApplyRule bounds the guide-only and agent-schema local steps.
+	importNeverApplyRule = "Never run apply or change workspace settings."
+
+	// importLockFileCheck comes before any terraform init in a local directory,
+	// because init would create a lock file and hide a missing one.
+	importLockFileCheck = "Check the directory for .terraform.lock.hcl before terraform init: if it is absent, warn the user that terraform init will choose the newest allowed provider versions, which may differ from those that last changed this workspace, and continue only after explicit acknowledgement (label it lock_file_absent)."
+
+	// importLockedProviderVersionRule says where the target's provider versions
+	// come from and what to do when no lock file exists.
+	importLockedProviderVersionRule = "The target workspace's provider versions are in the .terraform.lock.hcl of its downloaded configuration; Atlas does not record them. Read the exact version there, search_providers with that provider_version, then get_provider_details. If the archive has no lock file the version is uncertain: say so and fall back to the required_providers constraint. A blank workspace has no lock file yet, so use the version you choose and pin in the lock file you author."
+
+	// importProviderMismatchRule compares the target's locked versions with the
+	// Search source versions.
+	importProviderMismatchRule = "Compare the provider versions in the .terraform.lock.hcl with the source versions in the carry block and tell the user about any mismatch. Never upgrade the target provider or Terraform to remove a mismatch."
 
 	// importClosingRule is what the agent tells the user once the plan is verified.
 	importClosingRule = "Tell the user the authoring directory path and that it holds the complete configuration, which may include sensitive files, so it should not be committed as is. The speculative run changed nothing: to make the import real, the user adds the blocks to the target workspace's normal source and workflow with their own review. The uploaded copy exists in HCP only as a speculative configuration version that these tools cannot download."
 )
+
+// retiredImportPhrases are wordings the shared vocabulary replaced (ADR 0009).
+// They let one concept be named two ways, which confused agents and users.
+var retiredImportPhrases = []string{
+	"agent's workspace", "existing directory they approve", "approved empty directory",
+	"which directory to use", "directory the user chose", "chosen directory", "chosen local directory",
+	"destination workspace", "destination managed", "destination provider", "destination schema",
+	"a local directory with the terraform cli", "optional and worthwhile",
+}
+
+// RetiredImportPhrases returns a copy of the retired wordings, lower-cased, so
+// other packages can check their own tool text against the shared vocabulary.
+func RetiredImportPhrases() []string {
+	return append([]string(nil), retiredImportPhrases...)
+}

@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"strings"
 
 	"github.com/hashicorp/go-tfe"
@@ -48,16 +49,17 @@ type discoveryGroup struct {
 }
 
 type discoveryPage struct {
-	QueryRunID          string           `json:"query_run_id"`
-	LogDigest           string           `json:"log_digest"`
-	ResourcesDiscovered int              `json:"resources_discovered"`
-	ByType              map[string]int   `json:"by_type"`
-	TotalMatching       int              `json:"total_matching"`
-	Returned            int              `json:"returned"`
-	Lists               []discoveryGroup `json:"lists"`
-	Notes               []string         `json:"notes,omitempty"`
-	NextCursor          string           `json:"next_cursor,omitempty"`
-	NextAction          string           `json:"next_action"`
+	QueryRunID            string           `json:"query_run_id"`
+	LogDigest             string           `json:"log_digest"`
+	ResourcesDiscovered   int              `json:"resources_discovered"`
+	ByType                map[string]int   `json:"by_type"`
+	TotalMatching         int              `json:"total_matching"`
+	RowsWithoutAttributes int              `json:"rows_without_attributes,omitempty"`
+	Returned              int              `json:"returned"`
+	Lists                 []discoveryGroup `json:"lists"`
+	Notes                 []string         `json:"notes,omitempty"`
+	NextCursor            string           `json:"next_cursor,omitempty"`
+	NextAction            string           `json:"next_action"`
 }
 
 // groupDiscoveryRows groups rows by list address in first-seen order and hoists
@@ -184,6 +186,10 @@ func pageImportDiscovery(d *importDiscovery, f DiscoveryFilter) (*discoveryPage,
 	}
 
 	size, lastReturned, more := 0, "", false
+	perList := map[string]int{}
+	for _, c := range d.Candidates {
+		perList[c.Address]++
+	}
 	var selected []importDiscoveryCandidate
 	for i, c := range d.Candidates {
 		page.ByType[c.ResourceType]++
@@ -191,6 +197,9 @@ func pageImportDiscovery(d *importDiscovery, f DiscoveryFilter) (*discoveryPage,
 			continue
 		}
 		page.TotalMatching++
+		if len(c.ResourceObject) == 0 {
+			page.RowsWithoutAttributes++
+		}
 		if i < start || more {
 			continue
 		}
@@ -208,14 +217,26 @@ func pageImportDiscovery(d *importDiscovery, f DiscoveryFilter) (*discoveryPage,
 	page.Lists = groupDiscoveryRows(selected, func(c importDiscoveryCandidate) discoveryRow {
 		return discoveryRow{CandidateID: c.CandidateID, DisplayName: c.DisplayName, Tags: discoveryTags(c)}
 	})
-	if d.GenerateConfigOut != nil && !*d.GenerateConfigOut {
-		page.Notes = append(page.Notes, "query_run_without_generated_config")
+	switch {
+	case page.TotalMatching > 0 && page.RowsWithoutAttributes == page.TotalMatching:
+		page.Notes = append(page.Notes, "resource_attributes_not_captured")
+	case page.RowsWithoutAttributes > 0:
+		page.Notes = append(page.Notes, "resource_attributes_partly_captured")
+	}
+	atLimit := false
+	for _, n := range perList {
+		if n == defaultListLimit {
+			atLimit = true
+		}
+	}
+	if atLimit {
+		page.Notes = append(page.Notes, "list_total_equals_default_limit")
 	}
 	if more {
 		page.NextCursor = encodeDiscoveryCursor(discoveryCursor{QueryRunID: d.QueryRunID, LogDigest: d.LogDigest, LastID: lastReturned})
-		page.NextAction = "Pass next_cursor as after to read the next page. Select candidate_id values from any page, then call prepare_import." + discoveryRerunHint(d)
+		page.NextAction = "Pass next_cursor as after to read the next page. Select candidate_id values from any page, then call prepare_import." + discoveryAttributesHint(page) + discoveryLimitHint(atLimit)
 	} else {
-		page.NextAction = "All matching results are listed. Select up to 100 candidate_id values, then call prepare_import." + discoveryRerunHint(d)
+		page.NextAction = "These are all the results this query returned. " + discoveryCompletenessCaveat + " Select up to 100 candidate_id values, then call prepare_import." + discoveryAttributesHint(page) + discoveryLimitHint(atLimit)
 	}
 	return page, nil
 }
@@ -249,11 +270,33 @@ func discoveryTags(c importDiscoveryCandidate) map[string]any {
 	return tags
 }
 
-// discoveryRerunHint tells the agent how to get tags and attributes when the
-// query ran without generated configuration. Discovery guidance lives here.
-func discoveryRerunHint(d *importDiscovery) string {
-	if d.GenerateConfigOut == nil || *d.GenerateConfigOut {
+// defaultListLimit is Terraform's default for a list block's limit argument. The
+// QueryRun log reports only each list's total, not the configured limit, so a
+// total equal to the default is the only signal the server has.
+const defaultListLimit = 100
+
+// discoveryCompletenessCaveat applies to every query: a query only sees what its
+// list arguments cover, so the result is never proof that nothing else exists.
+const discoveryCompletenessCaveat = "A query only sees what its filters and list arguments cover (for example one region or a filtered attribute), so more matching resources may exist beyond these."
+
+// discoveryAttributesHint tells the agent whether rows carry resource attributes
+// such as tags, and how to get them. Discovery guidance lives here, not in
+// prepare_import. A row without tags means the resource has none only when its
+// attributes were captured.
+func discoveryAttributesHint(p *discoveryPage) string {
+	switch {
+	case p.TotalMatching > 0 && p.RowsWithoutAttributes == p.TotalMatching:
+		return " No row carries resource attributes, so an absent tags field means tags were not captured, not that the resource has none. If the identities are not enough to choose the resources to import, ask the user whether to re-run the query with generate_config_out true; a re-run creates a new query run and new candidate IDs."
+	case p.RowsWithoutAttributes > 0:
+		return fmt.Sprintf(" %d matching rows carry no resource attributes, so an absent tags field on those rows means not captured; on other rows it means the resource has no tags. Re-running the query with generate_config_out true captures attributes for every row and creates a new query run and new candidate IDs.", p.RowsWithoutAttributes)
+	}
+	return ""
+}
+
+// discoveryLimitHint warns when a list returned exactly Terraform's default limit.
+func discoveryLimitHint(atLimit bool) string {
+	if !atLimit {
 		return ""
 	}
-	return " This query ran without generate_config_out, so rows carry identity only, with no tags or attributes. If the identities are not enough to choose the resources to import, ask the user whether to re-run the query with generate_config_out true; a re-run creates a new query run and new candidate IDs."
+	return fmt.Sprintf(" A list returned exactly %d results, Terraform's default list limit, so it may have been cut off. Compare with the limit you set; if more could exist, ask the user whether to re-run with a higher limit or a narrower query.", defaultListLimit)
 }

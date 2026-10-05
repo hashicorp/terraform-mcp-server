@@ -5,6 +5,7 @@ package importworkflow
 
 import (
 	"context"
+	"slices"
 
 	"github.com/hashicorp/go-tfe"
 	"github.com/hashicorp/terraform-mcp-server/pkg/client"
@@ -28,11 +29,12 @@ func (d importDownload) isBlocked() bool { return d.Status == "blocked" }
 
 var importDownloadInstructions = []string{
 	"Download the archive with a plain HTTP GET that writes binary bytes to a file. Send no Authorization header: the URL is already authorized.",
-	"Treat download_url as a secret. Do not print it, log it, store it, or put it in a command line other tools can see. If the download fails or the URL has expired, call this tool again for a fresh one.",
+	"Treat download_url as a secret. Do not print it, log it, or store it. If the download fails or the URL has expired, call this tool again for a fresh one.",
+	importArchiveURLRule,
 	"Extract into the authoring directory, which must be empty or new. Check archive paths and links before extracting. Keep .terraform.lock.hcl and do not add secrets.",
 	importArchiveRootRule,
 	importSensitiveFileRule,
-	"Do not echo, print or cat .env, .envrc, terraform.tfvars or credential files from the directory into the output. If one needs checking, confirm only that it exists.",
+	importSecretFilesRule,
 	"This workflow supports a remote root configuration only. If the target workspace's configuration root setting (working_directory) is set, stop and tell the user.",
 }
 
@@ -41,7 +43,7 @@ var importDownloadInstructions = []string{
 // and never reads the QueryRun log.
 func downloadImportConfiguration(ctx context.Context, c *tfe.Client, input importPrepareInput, requestedCV string, logger *log.Logger) importDownload {
 	out := importDownload{ContractVersion: importToolContractVersion, Status: "blocked", Diagnostics: []string{}}
-	ctxResult := importConfigurationContextForVersion(ctx, c, input, requestedCV, logger)
+	ctxResult := lookupImportConfiguration(ctx, c, input, requestedCV, logger)
 	out.WorkspaceID = ctxResult.WorkspaceID
 	switch ctxResult.Status {
 	case "blank_workspace":
@@ -58,7 +60,7 @@ func downloadImportConfiguration(ctx context.Context, c *tfe.Client, input impor
 		out.ConfigurationVersionID = ctxResult.Context.ConfigurationVersionID
 		out.WorkingDirectory = ctxResult.Context.WorkingDirectory
 		out.DownloadURL = ctxResult.Context.DownloadURL
-		out.Instructions = importDownloadInstructions
+		out.Instructions = slices.Clone(importDownloadInstructions)
 		out.NextAction = "Download and extract the archive into the authoring directory (empty or new), then author the resource and import blocks there and review them with the user. The server downloaded nothing."
 		return out
 	}
@@ -98,13 +100,13 @@ func HandleGetImportConfigurationDownload(ctx context.Context, request mcp.CallT
 	blocked := func(code, next string) (*mcp.CallToolResult, error) {
 		return importToolResult(importDownload{ContractVersion: importToolContractVersion, Status: "blocked", Diagnostics: []string{code}, NextAction: next})
 	}
-	if err := decodeImportToolArguments(request.GetArguments(), &args, 4*1024); err != nil || !importInputName(args.Organization) || !importInputName(args.Workspace) || !importInputName(args.CVID) {
+	if err := decodeImportToolArguments(request.GetArguments(), &args, maxDownloadArgumentBytes); err != nil || !importInputName(args.Organization) || !importInputName(args.Workspace) || !importInputName(args.CVID) {
 		return blocked("import_input_invalid", "Supply organization_name, workspace_name and configuration_version_id.")
 	}
 	if err := client.AuthorizeOrganization(ctx, args.Organization); err != nil {
 		return blocked("organization_not_allowed", "Use an organization allowed by this server.")
 	}
-	ctx, cancel := context.WithTimeout(ctx, importHandoffRequestTimeout)
+	ctx, cancel := context.WithTimeout(ctx, importToolRequestTimeout)
 	defer cancel()
 	c, err := client.GetTfeClientFromContext(ctx, logger)
 	if err != nil {

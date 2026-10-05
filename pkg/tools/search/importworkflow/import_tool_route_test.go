@@ -6,6 +6,7 @@ package importworkflow
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strings"
 	"testing"
@@ -219,47 +220,93 @@ func TestDiscoveryPageReturnsTagsAndOmitsWhenAbsent(t *testing.T) {
 	assert.NotContains(t, page.NextAction, "re-run", "no hint when the query reports nothing")
 }
 
-func TestDiscoveryPageOwnsGenerateConfigOutGuidance(t *testing.T) {
-	no, yes := false, true
+func discoveryWith(addresses []string, withAttrs func(i int) bool) *importDiscovery {
+	d := &importDiscovery{QueryRunID: "q", LogDigest: "d"}
+	for i, a := range addresses {
+		c := importDiscoveryCandidate{CandidateID: fmt.Sprintf("c%d", i), Address: a, ResourceType: "a", DisplayName: fmt.Sprintf("n%d", i)}
+		if withAttrs(i) {
+			c.ResourceObject = map[string]any{"name": "x"}
+		}
+		d.Candidates = append(d.Candidates, c)
+	}
+	return d
+}
+
+func TestDiscoveryPageSaysWhetherAttributesWereCaptured(t *testing.T) {
+	addrs := []string{"list.a.b", "list.a.b", "list.a.b", "list.a.b"}
 	for _, tc := range []struct {
-		flag *bool
-		hint bool
-	}{{&no, true}, {&yes, false}, {nil, false}} {
-		d := &importDiscovery{QueryRunID: "q", LogDigest: "d", GenerateConfigOut: tc.flag, Candidates: []importDiscoveryCandidate{{CandidateID: "c1", Address: "list.a.b", ResourceType: "a"}}}
-		page, err := pageImportDiscovery(d, DiscoveryFilter{})
-		require.NoError(t, err)
-		assert.Equal(t, tc.hint, strings.Contains(page.NextAction, "re-run the query with generate_config_out true"))
-		assert.Equal(t, tc.hint, len(page.Notes) == 1 && page.Notes[0] == "query_run_without_generated_config")
-		assert.NotContains(t, strings.ToLower(page.NextAction), "aws cli")
+		name      string
+		withAttrs func(int) bool
+		without   int
+		note      string
+		hint      string
+	}{
+		{"all captured", func(int) bool { return true }, 0, "", ""},
+		{"none captured", func(int) bool { return false }, 4, "resource_attributes_not_captured", "means tags were not captured, not that the resource has none"},
+		{"partly captured", func(i int) bool { return i < 3 }, 1, "resource_attributes_partly_captured", "1 matching rows carry no resource attributes"},
+	} {
+		page, err := pageImportDiscovery(discoveryWith(addrs, tc.withAttrs), DiscoveryFilter{})
+		require.NoError(t, err, tc.name)
+		assert.Equal(t, tc.without, page.RowsWithoutAttributes, tc.name)
+		if tc.note == "" {
+			assert.Empty(t, page.Notes, tc.name)
+			assert.NotContains(t, page.NextAction, "generate_config_out", tc.name)
+			continue
+		}
+		assert.Contains(t, page.Notes, tc.note, tc.name)
+		assert.Contains(t, page.NextAction, tc.hint, tc.name)
+		assert.Contains(t, page.NextAction, "generate_config_out true", tc.name)
+		assert.NotContains(t, strings.ToLower(page.NextAction), "aws cli", tc.name)
 	}
 }
 
-func TestPrepareImportReturnsTargetTerraformVersions(t *testing.T) {
-	f := importBackendFixture(t)
-	setWorkspaceAttribute(t, f, "terraform-version", "~> 1.12")
-	out := prepareImportTool(context.Background(), f.client, importFixtureInput(t))
-	require.Equal(t, "prepared", out.Status, out.Diagnostics)
-	require.NotNil(t, out.Target)
-	assert.Equal(t, "~> 1.12", out.Target.TerraformVersionSetting)
-	assert.Equal(t, "1.16.1", out.Target.TerraformVersionLastRun)
-	assert.Equal(t, "1.16.1", out.Carry.Target.TerraformVersion)
-	for _, n := range out.Notes {
-		assert.NotContains(t, n, "provider_version_not_recorded")
+func TestDiscoveryPageStatesPossibleMissingResults(t *testing.T) {
+	few, err := pageImportDiscovery(discoveryWith([]string{"list.a.b", "list.a.b"}, func(int) bool { return true }), DiscoveryFilter{})
+	require.NoError(t, err)
+	assert.Contains(t, few.NextAction, "more matching resources may exist")
+	assert.Contains(t, few.NextAction, "These are all the results this query returned")
+	assert.NotContains(t, few.Notes, "list_total_equals_default_limit")
+	assert.NotContains(t, few.NextAction, "default list limit")
+
+	addrs := make([]string, defaultListLimit)
+	for i := range addrs {
+		addrs[i] = "list.a.b"
 	}
-	joined := strings.Join(importToolInstructions, " ")
-	assert.Contains(t, joined, ".terraform.lock.hcl")
-	assert.Contains(t, joined, "provider_version")
-	assert.Contains(t, joined, "no lock file")
-	assert.Contains(t, joined, "blank workspace")
-	assert.Contains(t, joined, "mismatch")
-	assert.Contains(t, importAgentSchemaNextAction, "mismatch")
+	full, err := pageImportDiscovery(discoveryWith(addrs, func(int) bool { return true }), DiscoveryFilter{})
+	require.NoError(t, err)
+	assert.Contains(t, full.Notes, "list_total_equals_default_limit")
+	assert.Contains(t, full.NextAction, "exactly 100 results, Terraform's default list limit, so it may have been cut off")
+	assert.Contains(t, full.NextAction, "more matching resources may exist")
+	assert.NotContains(t, full.NextAction, "All matching results are listed")
 }
 
-func TestPrepareImportOmitsUnknownTargetVersions(t *testing.T) {
-	f := importBackendFixture(t)
-	setWorkspaceAttribute(t, f, "terraform-version", "")
-	f.responses["/api/v2/runs/run-schema"] = []byte(strings.ReplaceAll(string(f.responses["/api/v2/runs/run-schema"]), `"terraform-version": "1.16.1"`, `"terraform-version": ""`))
-	out := prepareImportTool(context.Background(), f.client, importFixtureInput(t))
-	require.Equal(t, "prepared", out.Status, out.Diagnostics)
-	assert.Nil(t, out.Target)
+func TestPrepareImportGuidesAdaptationWithoutBlanketRules(t *testing.T) {
+	g := importAdaptationGuidance
+	for _, want := range []string{"target provider schema JSON", "managed_schema", "provider_version", "get_provider_details", "versioned", "terraform validate", "differs between Terraform versions", "follow it", "list each adaptation"} {
+		if want == "list each adaptation" {
+			assert.Contains(t, importConfirmationRule, "each adaptation you made")
+			continue
+		}
+		assert.Contains(t, g, want)
+	}
+	lower := strings.ToLower(importToolTextsJoined())
+	for _, banned := range []string{"always remove provider", "always drop", "remove provider from", "drop provider", "provider is rejected"} {
+		assert.NotContains(t, lower, banned)
+	}
+	assert.Contains(t, strings.Join(importToolInstructions, " "), g)
+}
+
+func importToolTextsJoined() string {
+	parts := append([]string{}, importToolInstructions...)
+	parts = append(parts, importAdaptationGuidance, importConfirmationRule, PrepareImportDefinition().Description)
+	return strings.Join(parts, "\n")
+}
+
+func TestDownloadInstructionsKeepSignedURLOffCommandLines(t *testing.T) {
+	joined := strings.Join(importDownloadInstructions, " ")
+	assert.Contains(t, joined, importArchiveURLRule)
+	assert.Contains(t, importArchiveURLRule, "curl --config -")
+	assert.Contains(t, importArchiveURLRule, "reduces exposure but does not remove it")
+	assert.Contains(t, importArchiveURLRule, "stop and ask")
+	assert.NotContains(t, strings.ToLower(joined), "print the url")
 }

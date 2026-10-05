@@ -320,7 +320,7 @@ func TestPrepareImportToolBlocksLocalExecutionBeforeLogRead(t *testing.T) {
 	assert.Nil(t, out.Carry)
 	assert.Contains(t, out.NextAction, "cannot assess or verify")
 	assert.Contains(t, out.NextAction, "Each command needs the user's approval")
-	assert.Contains(t, out.NextAction, "never present a local plan as an HCP Terraform Plan")
+	assert.Contains(t, out.NextAction, "Never present a local plan as an HCP Terraform Plan")
 	assert.NotContains(t, strings.ToLower(out.NextAction), "apply the")
 	assert.Contains(t, out.NextAction, "No CV or Run was created")
 }

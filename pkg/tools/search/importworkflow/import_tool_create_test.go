@@ -97,7 +97,7 @@ func TestCreateImportToolsRefuseBeforePOST(t *testing.T) {
 			out := callCreate(t, tc.run, createArgs(tc.extra))
 			assert.Equal(t, "blocked", out.Status)
 			assert.Contains(t, out.Diagnostics, tc.code)
-			assert.Contains(t, out.NextAction, "No CV or Run was created by this request.")
+			assert.Contains(t, out.NextAction, "No CV or Run was created.")
 			f.mu.Lock()
 			defer f.mu.Unlock()
 			assert.Zero(t, f.requests["POST /api/v2/workspaces/ws-fixture/configuration-versions"])

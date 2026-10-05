@@ -69,10 +69,11 @@ func TestImportGeneratedBlocksFromQueryLogWireNames(t *testing.T) {
 			assert.Equal(t, "import draft", candidate.ImportConfig)
 			// Both the candidate-list and prepare path use the same bounded
 			// decoder, preserving the stable outward field names.
-			result := prepareFromAPIs(context.Background(), f.client, importFixtureInput(t))
+			result := prepareImportTool(context.Background(), f.client, importFixtureInput(t))
 			require.Equal(t, "prepared", result.Status, result.Diagnostics)
-			assert.Equal(t, candidate.Configuration, result.Selection.Configuration)
-			assert.Equal(t, candidate.ImportConfig, result.Selection.ImportConfig)
+			require.Len(t, result.Candidates, 1)
+			assert.Equal(t, candidate.Configuration, result.Candidates[0].Configuration)
+			assert.Equal(t, candidate.ImportConfig, result.Candidates[0].ImportConfig)
 			encoded, err := json.Marshal(candidate)
 			require.NoError(t, err)
 			assert.Contains(t, string(encoded), `"import_configuration"`)
@@ -114,7 +115,7 @@ func TestImportSchemaPresignedDownloadRecovery(t *testing.T) {
 		t.Run(strconv.Itoa(failures), func(t *testing.T) {
 			f := importBackendFixture(t)
 			f.deniedDownloads = failures
-			result := prepareFromAPIs(context.Background(), f.client, importFixtureInput(t))
+			result := prepareImportTool(context.Background(), f.client, importFixtureInput(t))
 			if failures == 1 {
 				assert.Equal(t, "prepared", result.Status, result.Diagnostics)
 			} else {

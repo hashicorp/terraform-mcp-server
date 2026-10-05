@@ -7,10 +7,12 @@ import (
 	"context"
 	"io"
 	"log/slog"
+	"strings"
 	"testing"
 	"time"
 
 	mcpofficial "github.com/hashicorp/terraform-mcp-server/pkg/mcp-official"
+	"github.com/hashicorp/terraform-mcp-server/pkg/tools/search/importworkflow"
 	"github.com/hashicorp/terraform-mcp-server/pkg/toolsets"
 	mcpclient "github.com/mark3labs/mcp-go/client"
 	"github.com/mark3labs/mcp-go/mcp"
@@ -31,11 +33,11 @@ func TestServerInstructionsPreserveExistingWorkflowsAndGuideSearchImport(t *test
 	}
 	for _, guidance := range []string{
 		"preserve its constraints and lock selections", "Do not substitute a public provider or module for a private source",
-		"Local validation does not replace the destination workspace's plan",
+		"Local validation does not replace the target workspace's plan",
 		"**Search-to-Import (when Search tools are enabled)**:",
 		"`get_query_summary`", "Explicitly", "select up to 100", "`prepare_import` once", "`identity_support`",
 		"Search provider version, observations, and generated HCL are source",
-		"**authoring directory**", "Keep the archive root exactly as downloaded", "explicit, reviewed\n   file list", "not supported yet: stop", "takes no local path", "MCP does not download, edit, or upload archive bytes",
+		"**authoring directory**", "Keep the archive root exactly as downloaded", "explicit, reviewed\n   file list", "not supported yet: stop", "takes no local path", "not fixed rules", "list\n   each adaptation", "exactly 100 results", "MCP does not download, edit, or upload archive bytes",
 		"`get_import_configuration_download`", "`create_import_cv`", "`create_import_run`", "`verify_import_plan`",
 		"after the single user review described", "uncertain create must be reconciled",
 		"full finished plan", "refresh drift", "A plan does not", "separate review and approval",
@@ -87,4 +89,13 @@ func TestOfficialServerInitializationUsesSameInstructions(t *testing.T) {
 	defer clientSession.Close()
 	require.NotNil(t, clientSession.InitializeResult())
 	assert.Equal(t, instructions, clientSession.InitializeResult().Instructions)
+}
+
+func TestServerInstructionsUseSharedImportVocabulary(t *testing.T) {
+	lower := strings.ToLower(instructions)
+	for _, phrase := range importworkflow.RetiredImportPhrases() {
+		assert.NotContains(t, lower, phrase, "instructions use retired wording")
+	}
+	assert.NotContains(t, lower, "route 1")
+	assert.NotContains(t, lower, "route 2")
 }

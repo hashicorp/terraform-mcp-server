@@ -17,10 +17,9 @@ import (
 
 // A URL is a bearer capability even if it contains no Atlas API token. Do not
 // log it, store it, or expose it beyond the authorized caller's tool response.
-type importConfigurationHandoff struct {
+type importArchiveLocation struct {
 	ConfigurationVersionID string `json:"configuration_version_id"`
 	DownloadURL            string `json:"download_url"`
-	URLValidity            string `json:"url_validity"`
 	WorkingDirectory       string `json:"working_directory"`
 }
 
@@ -57,19 +56,25 @@ func validImportArtifactLocation(ctx context.Context, location string) bool {
 	return err == nil && u.Host != "" && u.User == nil && u.Fragment == "" && (u.Scheme == "https" || (u.Scheme == "http" && strings.HasPrefix(client.TFEAddressFromContext(ctx), "http://")))
 }
 
-func importConfigurationContextFromAPIs(ctx context.Context, c *tfe.Client, input importPrepareInput, logger *log.Logger) importPreparation {
-	return importConfigurationContextForVersion(ctx, c, input, "", logger)
+// importConfigurationLookup is the result of looking up the archive location of
+// a target workspace's configuration version. Status is blocked,
+// blank_workspace or available.
+type importConfigurationLookup struct {
+	Status      string
+	WorkspaceID string
+	Context     *importArchiveLocation
+	Diagnostics []string
 }
 
-// importConfigurationContextForVersion is the handoff for the workspace's
+// lookupImportConfiguration finds the archive location of the workspace's
 // current configuration version, or, when requestedCV names another version,
-// for the configuration version of the run that produced the current state
-// (agent-supplied schema path, ADR 0008). Any other version fails closed.
-func importConfigurationContextForVersion(ctx context.Context, c *tfe.Client, input importPrepareInput, requestedCV string, logger *log.Logger) importPreparation {
-	result := importPreparation{ContractVersion: importPreparationContractVersion, Status: "blocked", Stage: "configuration_handoff", Organization: input.Organization, Diagnostics: []string{}}
-	fail := func(err error) importPreparation {
+// of the configuration version of the run that produced the current state
+// (agent-supplied schema path, ADR 0008). Any other version fails closed. The
+// server never fetches archive bytes.
+func lookupImportConfiguration(ctx context.Context, c *tfe.Client, input importPrepareInput, requestedCV string, logger *log.Logger) importConfigurationLookup {
+	result := importConfigurationLookup{Status: "blocked", Diagnostics: []string{}}
+	fail := func(err error) importConfigurationLookup {
 		result.Diagnostics = append(result.Diagnostics, importDiagnosticCode(err))
-		result.NextAction = "Resolve the configuration handoff diagnostic and retry. No archive was downloaded by the server."
 		return result
 	}
 	w, err := c.Workspaces.Read(ctx, input.Organization, input.Workspace)
@@ -82,9 +87,7 @@ func importConfigurationContextForVersion(ctx context.Context, c *tfe.Client, in
 	result.WorkspaceID = w.ID
 	if w.CurrentConfigurationVersion == nil || w.CurrentConfigurationVersion.ID == "" {
 		if err := checkImportBlankBaseline(ctx, c, w); err == nil {
-			result.Status, result.Stage = "blank_workspace", "configuration_handoff"
-			result.Baseline = &importAPIBaseline{WorkingDirectory: w.WorkingDirectory}
-			result.NextAction = "There is no current configuration archive or state. Select a finished query candidate, author and locally validate the complete provider/resource/import configuration and lock, then use upload and plan with target_address for a speculative-only import inspection. A separate provider-only schema probe is optional, not required."
+			result.Status = "blank_workspace"
 			return result
 		} else if importDiagnosticCode(err) == "evidence_access_denied" || importDiagnosticCode(err) == "backend_evidence_unavailable" || importDiagnosticCode(err) == "evidence_read_interrupted" {
 			return fail(err)
@@ -99,7 +102,6 @@ func importConfigurationContextForVersion(ctx context.Context, c *tfe.Client, in
 		}
 		cvID = requestedCV
 	}
-	result.Baseline = &importAPIBaseline{ConfigurationVersionID: importCurrentConfigurationID(w), WorkingDirectory: w.WorkingDirectory}
 	cv, err := c.ConfigurationVersions.Read(ctx, cvID)
 	if err != nil {
 		return fail(importReadError(err, 0))
@@ -124,14 +126,12 @@ func importConfigurationContextForVersion(ctx context.Context, c *tfe.Client, in
 	if current.ID != w.ID || importCurrentConfigurationID(current) != importCurrentConfigurationID(w) || current.WorkingDirectory != w.WorkingDirectory {
 		return fail(importEvidenceFailure("baseline_changed"))
 	}
-	result.Context = &importConfigurationHandoff{ConfigurationVersionID: cvID, DownloadURL: location, URLValidity: "temporary; use immediately and request a fresh context handoff if expired (nominally one minute)", WorkingDirectory: w.WorkingDirectory}
-	result.Status, result.Stage = "available", "configuration_handoff"
-	result.Notes = append(result.Notes, "current_state_not_observed_by_context; use prepare to verify current state ID and serial before upload or plan")
-	result.NextAction = "Choose an isolated temporary directory or a user-approved directory in the agent's workspace before client download; neither is an MCP filesystem path. This URL is short-lived: if the choice takes time or the URL expires, request a fresh context URL. Use a client-local binary-capable HTTP GET to a file; a browser is not required. Read archive bytes, not text/JSON, using a method supported by your client. Keep the signed URL out of printed output, logs and exposed command arguments; if no safe method exists, stop and ask instead of retrying a disconnected browser. Verify the archive before unpacking, preserve the full tree and provider lock, exclude client-generated .terraform caches and do not add secrets; review sensitive existing files rather than dropping them. Check working_directory (only remote root is supported) before uploading the complete reviewed archive. MCP downloaded no archive."
+	result.Context = &importArchiveLocation{ConfigurationVersionID: cvID, DownloadURL: location, WorkingDirectory: w.WorkingDirectory}
+	result.Status = "available"
 	return result
 }
 
-const importHandoffRequestTimeout = 30 * time.Second
+const importToolRequestTimeout = 30 * time.Second
 
 // verifyImportStateRunConfiguration checks that cvID is the configuration
 // version of the run that produced the workspace's current state, and that the

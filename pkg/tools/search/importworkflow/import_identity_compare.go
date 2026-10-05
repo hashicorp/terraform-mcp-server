@@ -15,14 +15,14 @@ func importCompareProviderIdentity(source map[string]any, after json.RawMessage)
 	if len(source) == 0 || len(after) == 0 || bytes.Equal(after, []byte("null")) {
 		return "unverified", "provider_returned_identity_unavailable"
 	}
-	var destination map[string]any
-	if err := decodeImportEvidenceJSONLimit(after, &destination, maxImportSchemaBytes); err != nil || len(destination) != len(source) {
+	var providerIdentity map[string]any
+	if err := decodeImportEvidenceJSONLimit(after, &providerIdentity, maxImportSchemaBytes); err != nil || len(providerIdentity) != len(source) {
 		return "unverified", "identity_shape_not_comparable"
 	}
 	// Check the whole shape before declaring any differing value a mismatch;
 	// provider versions can define superficially similar but incompatible keys.
 	for key, value := range source {
-		actual, ok := destination[key]
+		actual, ok := providerIdentity[key]
 		if !ok || value == nil || actual == nil {
 			return "unverified", "identity_shape_not_comparable"
 		}
@@ -41,7 +41,7 @@ func importCompareProviderIdentity(source map[string]any, after json.RawMessage)
 		}
 	}
 	for key, value := range source {
-		if value != destination[key] {
+		if value != providerIdentity[key] {
 			return "mismatched", "provider_returned_identity_differs"
 		}
 	}

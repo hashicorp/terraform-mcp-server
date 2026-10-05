@@ -4,7 +4,6 @@
 package importworkflow
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -255,11 +254,6 @@ func blankImportFixture(t *testing.T) (*importBackendTest, *bool, *bool) {
 		return original(w, r)
 	}
 	return f, uploaded, finished
-}
-
-// prepareFromAPIs runs the shared preparation internals, reading the QueryRun itself.
-func prepareFromAPIs(ctx context.Context, c *tfe.Client, input importPrepareInput) importPreparation {
-	return prepareImportWithDiscovery(ctx, c, input, nil)
 }
 
 // schemaFallbackFixture makes the state's run a run with no plan whose configuration

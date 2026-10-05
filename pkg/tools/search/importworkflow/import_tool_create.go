@@ -41,7 +41,7 @@ type importCreateArgs struct {
 }
 
 func importCreateBlocked(code, next string, extra ...string) importCreated {
-	return importCreated{ContractVersion: importToolContractVersion, Status: "blocked", Diagnostics: append([]string{code}, extra...), NextAction: next + " No CV or Run was created by this request."}
+	return importCreated{ContractVersion: importToolContractVersion, Status: "blocked", Diagnostics: append([]string{code}, extra...), NextAction: next + " " + importNothingCreated}
 }
 
 // validImportCreateBaseline accepts either all three existing-workspace
@@ -211,13 +211,13 @@ Pass the configuration_version_id from create_import_cv and the same baseline fi
 
 func handleImportCreate(ctx context.Context, request mcp.CallToolRequest, logger *log.Logger, run bool) (*mcp.CallToolResult, error) {
 	var a importCreateArgs
-	if err := decodeImportToolArguments(request.GetArguments(), &a, 8*1024); err != nil {
+	if err := decodeImportToolArguments(request.GetArguments(), &a, maxCreateArgumentBytes); err != nil {
 		return importToolResult(importCreateBlocked("import_input_invalid", "Check the input fields against the tool schema."))
 	}
 	if err := client.AuthorizeOrganization(ctx, a.Organization); err != nil {
 		return importToolResult(importCreateBlocked("organization_not_allowed", "Use an organization allowed by this server."))
 	}
-	ctx, cancel := context.WithTimeout(ctx, importHandoffRequestTimeout)
+	ctx, cancel := context.WithTimeout(ctx, importToolRequestTimeout)
 	defer cancel()
 	c, err := client.GetTfeClientFromContext(ctx, logger)
 	if err != nil {

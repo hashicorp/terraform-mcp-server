@@ -13,15 +13,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// retiredPhrases are wordings the shared vocabulary (ADR 0009) replaced. They
-// let one concept be named two ways, which confused agents and users.
-var retiredPhrases = []string{
-	"agent's workspace", "existing directory they approve", "approved empty directory",
-	"which directory to use", "directory the user chose", "chosen directory", "chosen local directory",
-	"destination workspace", "destination managed", "destination provider", "destination schema",
-	"a local directory with the terraform cli", "optional and worthwhile",
-}
-
 func importToolTexts(t *testing.T) map[string]string {
 	t.Helper()
 	texts := map[string]string{
@@ -38,6 +29,8 @@ func importToolTexts(t *testing.T) map[string]string {
 		"importScratchRule":           importScratchRule,
 		"importValidationRule":        importValidationRule,
 		"importSensitiveFileRule":     importSensitiveFileRule,
+		"importAdaptationGuidance":    importAdaptationGuidance,
+		"importArchiveURLRule":        importArchiveURLRule,
 	}
 	for _, tool := range []struct{ name, text string }{
 		{"prepare_import", PrepareImportDefinition().Description},
@@ -54,7 +47,7 @@ func importToolTexts(t *testing.T) map[string]string {
 func TestImportToolTextUsesSharedVocabulary(t *testing.T) {
 	for name, text := range importToolTexts(t) {
 		lower := strings.ToLower(text)
-		for _, phrase := range retiredPhrases {
+		for _, phrase := range RetiredImportPhrases() {
 			assert.NotContains(t, lower, phrase, "%s uses retired wording", name)
 		}
 		assert.NotContains(t, lower, "route 1", name)
@@ -130,4 +123,41 @@ func TestCarryBlockUsesTargetNotDestination(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, string(raw), `"target":`)
 	assert.NotContains(t, string(raw), "destination")
+}
+
+// A shared sentence must stay on every surface that needs it, so a later edit
+// cannot silently drop a rule from one tool.
+func TestSharedSentencesStayOnTheirSurfaces(t *testing.T) {
+	instructions := strings.Join(importToolInstructions, "\n")
+	download := strings.Join(importDownloadInstructions, "\n")
+	guide := importGuideOnlyNextAction("reason")
+	create := CreateImportCVDefinition().Description
+	verifyDone := verifyNextAction(importVerified{Selected: 1, Overall: "no_unintended_changes"})
+	for _, tc := range []struct {
+		name, sentence string
+		surfaces       map[string]string
+	}{
+		{"secret files", importSecretFilesRule, map[string]string{"prepare instructions": instructions, "download instructions": download, "guide-only": guide, "agent schema": importAgentSchemaNextAction}},
+		{"nothing created", importNothingCreated, map[string]string{"guide-only": guide, "agent schema": importAgentSchemaNextAction}},
+		{"lock file check", importLockFileCheck, map[string]string{"guide-only": guide, "agent schema": importAgentSchemaNextAction}},
+		{"never apply", importNeverApplyRule, map[string]string{"guide-only": guide, "agent schema": importAgentSchemaNextAction}},
+		{"locked provider version", importLockedProviderVersionRule, map[string]string{"prepare instructions": instructions}},
+		{"provider mismatch", importProviderMismatchRule, map[string]string{"prepare instructions": instructions, "agent schema": importAgentSchemaNextAction}},
+		{"adaptation guidance", importAdaptationGuidance, map[string]string{"prepare instructions": instructions}},
+		{"archive root", importArchiveRootRule, map[string]string{"prepare instructions": instructions, "download instructions": download, "create_import_cv": create, "agent schema": importAgentSchemaNextAction}},
+		{"confirmation", importConfirmationRule, map[string]string{"prepare instructions": instructions, "create_import_cv": create}},
+		{"signed URL", importArchiveURLRule, map[string]string{"download instructions": download}},
+		{"closing", importClosingRule, map[string]string{"prepare instructions": instructions, "verify next action": verifyDone}},
+		{"authoring directory", importAuthoringDirectoryQuestion, map[string]string{"agent schema": importAgentSchemaNextAction}},
+	} {
+		for surface, text := range tc.surfaces {
+			assert.Contains(t, text, tc.sentence, "%s is missing from %s", tc.name, surface)
+		}
+	}
+}
+
+func TestEveryBlockedNextActionSaysNothingWasCreated(t *testing.T) {
+	for _, code := range []string{"workspace_execution_mode_local", "terraform_version_unsupported", "state_producing_run_missing", "target_config_not_downloadable", "schema_source_plan_unavailable", "workspace_ownership_unverified", ""} {
+		assert.Contains(t, importBlockedNextAction(code), importNothingCreated, code)
+	}
 }

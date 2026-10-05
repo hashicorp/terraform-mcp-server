@@ -266,7 +266,7 @@ func readImportDiscoveryLog(ctx context.Context, c *tfe.Client, prov *importQuer
 // recomputed from a carried selection, but it cannot be reversed.
 func importCandidateID(queryID string, provider workspaceProvider, listType string, identity map[string]any) string {
 	encoded, _ := json.Marshal(map[string]any{"query_run_id": queryID, "provider_source": provider.Source, "provider_version": provider.Version, "list_type": listType, "identity": identity})
-	return "candidate-" + strings.TrimPrefix(importEvidenceDigest(encoded), "sha256:")
+	return importCandidateIDPrefix + strings.TrimPrefix(importEvidenceDigest(encoded), "sha256:")
 }
 
 func parseImportDiscovery(data []byte, queryID string, providers map[string]workspaceProvider) ([]importDiscoveryCandidate, error) {
@@ -394,15 +394,6 @@ func readImportSchemaRun(ctx context.Context, c *tfe.Client, workspaceID string,
 type importManagedSchemaEntry struct {
 	Managed  json.RawMessage
 	Identity json.RawMessage
-}
-
-func readImportManagedSchema(ctx context.Context, c *tfe.Client, runID, source, managedType string) (json.RawMessage, json.RawMessage, string, error) {
-	entries, digest, err := readImportManagedSchemaSet(ctx, c, runID, map[string][]string{source: {managedType}})
-	if err != nil {
-		return nil, nil, "", err
-	}
-	entry := entries[source+"/"+managedType]
-	return entry.Managed, entry.Identity, digest, nil
 }
 
 // readImportManagedSchemaSet downloads the plan schema artifact once and

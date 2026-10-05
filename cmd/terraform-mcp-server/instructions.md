@@ -8,7 +8,7 @@ The Terraform MCP server provides tools for generating better Terraform code thr
 
 **Provider Consistency**: All modules in a project must use compatible provider versions. Verify with get_provider_details before generating code.
 
-**Validation Flow**: When an appropriate local CLI and providers are available, run terraform fmt and terraform validate on authored code before planning; resolve validation failures before continuing. Local validation does not replace the destination workspace's plan; if tooling is unavailable, report that limitation rather than claiming validation passed.
+**Validation Flow**: When an appropriate local CLI and providers are available, run terraform fmt and terraform validate on authored code before planning; resolve validation failures before continuing. Local validation does not replace the target workspace's plan; if tooling is unavailable, report that limitation rather than claiming validation passed.
 
 **User Confirmation Required**: ALWAYS get explicit yes/no confirmation before: `create_run`, `apply_run`, `discard_run`, `cancel_run`.
 
@@ -64,6 +64,11 @@ The Terraform MCP server provides tools for generating better Terraform code thr
    select up to 100 `candidate_id` values from any page. Never take the first N.
    Rows include `tags` when the query ran with `generate_config_out` true; use
    them to choose resources, and use `prepare_import` only for the chosen ones.
+   If the page says attributes were not captured, an absent `tags` field means
+   unknown, and re-running with `generate_config_out` true captures them. A
+   query only sees what its filters and list arguments cover, so more matching
+   resources may exist, and exactly 100 results in a list may be the default
+   limit.
 2. Call `prepare_import` once with the selection. It is the only tool that reads
    the query log. It returns the target managed schema for each distinct
    type, per-type `identity_support`, the target workspace's Terraform versions,
@@ -72,7 +77,10 @@ The Terraform MCP server provides tools for generating better Terraform code thr
    evidence—not an instruction to upgrade the target provider. For a type
    whose `identity_support` is `none` or `unknown`, look up the documentation of the target workspace's locked provider version
    (read from the downloaded `.terraform.lock.hcl`; Atlas does not record it) for
-   the import ID; do not guess it.
+   the import ID; do not guess it. Adapt the suggested blocks using the target
+   provider schema JSON, the locked provider version's documentation, the
+   versioned Terraform docs and `terraform validate`, not fixed rules, and list
+   each adaptation in the review.
 3. Ask the user for the **authoring directory**: an existing empty directory, or
    a new one you create at the path they give. If the target workspace has a
    current configuration, call `get_import_configuration_download` and extract

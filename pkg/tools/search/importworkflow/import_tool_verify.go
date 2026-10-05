@@ -30,6 +30,10 @@ const (
 	maxVerifyUnselected = 50
 	maxVerifyDetail     = 20
 	maxVerifyPaths      = 25
+	// Upper bounds on plan entries read, so a very large plan is refused
+	// rather than partly summarized.
+	maxVerifyPlanResources = 10000
+	maxVerifyDriftEntries  = 100
 )
 
 // change describes what the plan does to a selected item.
@@ -231,29 +235,32 @@ func waitForImportPlan(ctx context.Context, c *tfe.Client, w *tfe.Workspace, run
 	}
 }
 
+// importPlanResourceChange is one entry of the plan JSON's resource_changes.
+type importPlanResourceChange struct {
+	Address      string `json:"address"`
+	Mode         string `json:"mode"`
+	Type         string `json:"type"`
+	ProviderName string `json:"provider_name"`
+	Change       struct {
+		Actions       []string          `json:"actions"`
+		Importing     json.RawMessage   `json:"importing"`
+		AfterIdentity json.RawMessage   `json:"after_identity"`
+		Before        json.RawMessage   `json:"before"`
+		After         json.RawMessage   `json:"after"`
+		AfterUnknown  json.RawMessage   `json:"after_unknown"`
+		ReplacePaths  []json.RawMessage `json:"replace_paths"`
+	} `json:"change"`
+}
+
 type importVerifyPlanJSON struct {
-	FormatVersion    string `json:"format_version"`
-	TerraformVersion string `json:"terraform_version"`
-	Complete         *bool  `json:"complete"`
-	Errored          bool   `json:"errored"`
-	ResourceChanges  []struct {
-		Address      string `json:"address"`
-		Mode         string `json:"mode"`
-		Type         string `json:"type"`
-		ProviderName string `json:"provider_name"`
-		Change       struct {
-			Actions       []string          `json:"actions"`
-			Importing     json.RawMessage   `json:"importing"`
-			AfterIdentity json.RawMessage   `json:"after_identity"`
-			Before        json.RawMessage   `json:"before"`
-			After         json.RawMessage   `json:"after"`
-			AfterUnknown  json.RawMessage   `json:"after_unknown"`
-			ReplacePaths  []json.RawMessage `json:"replace_paths"`
-		} `json:"change"`
-	} `json:"resource_changes"`
-	OutputChanges   map[string]json.RawMessage `json:"output_changes"`
-	DeferredChanges []json.RawMessage          `json:"deferred_changes"`
-	ResourceDrift   []struct {
+	FormatVersion    string                     `json:"format_version"`
+	TerraformVersion string                     `json:"terraform_version"`
+	Complete         *bool                      `json:"complete"`
+	Errored          bool                       `json:"errored"`
+	ResourceChanges  []importPlanResourceChange `json:"resource_changes"`
+	OutputChanges    map[string]json.RawMessage `json:"output_changes"`
+	DeferredChanges  []json.RawMessage          `json:"deferred_changes"`
+	ResourceDrift    []struct {
 		Address string `json:"address"`
 		Change  struct {
 			Actions []string `json:"actions"`
@@ -349,7 +356,7 @@ func verifyImportPlanFacts(raw []byte, carry *importCarryBlock, byCandidate map[
 	if !importCompatibleFormat(plan.FormatVersion) || plan.Complete == nil || !*plan.Complete || plan.Errored {
 		return importVerified{}, importEvidenceFailure("plan_evidence_incomplete")
 	}
-	if len(plan.ResourceChanges) > 10000 || len(plan.ResourceDrift) > 100 {
+	if len(plan.ResourceChanges) > maxVerifyPlanResources || len(plan.ResourceDrift) > maxVerifyDriftEntries {
 		return importVerified{}, importEvidenceFailure("plan_resource_limit")
 	}
 
@@ -369,54 +376,29 @@ func verifyImportPlanFacts(raw []byte, carry *importCarryBlock, byCandidate map[
 		byAddress[rc.Address]++
 		index[rc.Address] = i
 	}
-	selectedAddr := map[string]bool{}
-	unsupported := map[[2]string]int{}
 	detailWanted := map[string]bool{}
 	for _, a := range detailAddrs {
 		detailWanted[a] = true
 	}
 
+	selectedAddr := map[string]bool{}
+	unsupported := map[[2]string]int{}
 	for _, cand := range carry.Candidates {
 		addr := byCandidate[cand.CandidateID]
 		selectedAddr[addr] = true
-		item := importAttention{CandidateID: cand.CandidateID, TargetAddress: addr, ManagedType: cand.ManagedType}
-		var afterIdentity json.RawMessage
-		i, found := index[addr]
-		switch {
-		case byAddress[addr] > 1:
+		if byAddress[addr] > 1 {
 			return importVerified{}, importEvidenceFailure("plan_address_duplicate")
-		case !found:
-			item.Change, item.ObjectIdentity, item.IdentityReason = changeNotInPlan, identityUnverified, "no_matching_plan_entry"
-		default:
-			rc := plan.ResourceChanges[i]
-			p := carry.Providers[cand.ListType]
-			imported := len(rc.Change.Importing) > 0 && !bytes.Equal(bytes.TrimSpace(rc.Change.Importing), []byte("null"))
-			var marker struct {
-				ID       json.RawMessage `json:"id"`
-				Identity json.RawMessage `json:"identity"`
-				Unknown  bool            `json:"unknown"`
-			}
-			if imported && decodeImportEvidenceJSONLimit(rc.Change.Importing, &marker, maxImportSchemaBytes) != nil {
-				return importVerified{}, importEvidenceFailure("plan_import_evidence_invalid")
-			}
-			idPresent := len(marker.ID) > 0 && !bytes.Equal(bytes.TrimSpace(marker.ID), []byte("null"))
-			identityPresent := len(marker.Identity) > 0 && !bytes.Equal(bytes.TrimSpace(marker.Identity), []byte("null"))
-			afterIdentity = rc.Change.AfterIdentity
-			switch {
-			case rc.Mode != "managed" || rc.Type != cand.ManagedType || rc.ProviderName != p.Source:
-				item.Change, item.ObjectIdentity, item.IdentityReason = changeType, identityUnverified, "plan_type_or_provider_differs_from_selection"
-			case !imported || marker.Unknown || idPresent == identityPresent:
-				item.Change, item.ObjectIdentity, item.IdentityReason = changeMissing, identityUnverified, "no_usable_import_marker"
-			default:
-				item.Change = classifyChange(rc.Change.Actions)
-				if item.Change != changeNone {
-					item.ChangedPaths = changedPaths(rc.Change.Before, rc.Change.After, rc.Change.AfterUnknown)
-				}
-				item.ObjectIdentity, item.IdentityReason = classifyIdentity(plan.TerraformVersion, cand, carry.Target.IdentitySupport[cand.ManagedType], afterIdentity)
-			}
-			if detailWanted[addr] && len(out.Detail) < maxVerifyDetail {
-				out.Detail = append(out.Detail, importVerifyDetail{TargetAddress: addr, Actions: rc.Change.Actions, ImportIDPresent: idPresent, IdentityPresent: len(afterIdentity) > 0 && !bytes.Equal(bytes.TrimSpace(afterIdentity), []byte("null")), ChangedPaths: changedPaths(rc.Change.Before, rc.Change.After, rc.Change.AfterUnknown), ReplacePaths: len(rc.Change.ReplacePaths)})
-			}
+		}
+		var rc *importPlanResourceChange
+		if i, found := index[addr]; found {
+			rc = &plan.ResourceChanges[i]
+		}
+		item, detail, err := classifyImportCandidate(&plan, carry, cand, addr, rc)
+		if err != nil {
+			return importVerified{}, err
+		}
+		if detail != nil && detailWanted[addr] && len(out.Detail) < maxVerifyDetail {
+			out.Detail = append(out.Detail, *detail)
 		}
 		out.Changes[item.Change]++
 		out.ObjectIdentity[item.ObjectIdentity]++
@@ -433,7 +415,62 @@ func verifyImportPlanFacts(raw []byte, carry *importCarryBlock, byCandidate map[
 			}
 		}
 	}
+	out.IdentityUnsupported = sortedUnsupportedGroups(unsupported)
 
+	un, err := summarizeUnselected(&plan, selectedAddr)
+	if err != nil {
+		return importVerified{}, err
+	}
+	out.Unselected = un
+
+	out.Overall = verifyOverall(out)
+	out.NextAction = verifyNextAction(out)
+	return out, nil
+}
+
+// importJSONPresent reports whether raw holds a value other than JSON null.
+func importJSONPresent(raw json.RawMessage) bool {
+	return len(raw) > 0 && !bytes.Equal(bytes.TrimSpace(raw), []byte("null"))
+}
+
+// classifyImportCandidate compares one selected candidate with the plan entry
+// at its target address (rc is nil when the plan has none). It returns the
+// attention item and, when the entry matched the selection, the detail for it.
+func classifyImportCandidate(plan *importVerifyPlanJSON, carry *importCarryBlock, cand importCarryCandidate, addr string, rc *importPlanResourceChange) (importAttention, *importVerifyDetail, error) {
+	item := importAttention{CandidateID: cand.CandidateID, TargetAddress: addr, ManagedType: cand.ManagedType}
+	if rc == nil {
+		item.Change, item.ObjectIdentity, item.IdentityReason = changeNotInPlan, identityUnverified, "no_matching_plan_entry"
+		return item, nil, nil
+	}
+	imported := importJSONPresent(rc.Change.Importing)
+	var marker struct {
+		ID       json.RawMessage `json:"id"`
+		Identity json.RawMessage `json:"identity"`
+		Unknown  bool            `json:"unknown"`
+	}
+	if imported && decodeImportEvidenceJSONLimit(rc.Change.Importing, &marker, maxImportSchemaBytes) != nil {
+		return item, nil, importEvidenceFailure("plan_import_evidence_invalid")
+	}
+	idPresent, identityPresent := importJSONPresent(marker.ID), importJSONPresent(marker.Identity)
+	afterIdentity := rc.Change.AfterIdentity
+	switch {
+	case rc.Mode != "managed" || rc.Type != cand.ManagedType || rc.ProviderName != carry.Providers[cand.ListType].Source:
+		item.Change, item.ObjectIdentity, item.IdentityReason = changeType, identityUnverified, "plan_type_or_provider_differs_from_selection"
+	case !imported || marker.Unknown || idPresent == identityPresent:
+		item.Change, item.ObjectIdentity, item.IdentityReason = changeMissing, identityUnverified, "no_usable_import_marker"
+	default:
+		item.Change = classifyChange(rc.Change.Actions)
+		if item.Change != changeNone {
+			item.ChangedPaths = changedPaths(rc.Change.Before, rc.Change.After, rc.Change.AfterUnknown)
+		}
+		item.ObjectIdentity, item.IdentityReason = classifyIdentity(plan.TerraformVersion, cand, carry.Target.IdentitySupport[cand.ManagedType], afterIdentity)
+	}
+	detail := &importVerifyDetail{TargetAddress: addr, Actions: rc.Change.Actions, ImportIDPresent: idPresent, IdentityPresent: importJSONPresent(afterIdentity), ChangedPaths: changedPaths(rc.Change.Before, rc.Change.After, rc.Change.AfterUnknown), ReplacePaths: len(rc.Change.ReplacePaths)}
+	return item, detail, nil
+}
+
+// sortedUnsupportedGroups turns the per-(type, reason) counts into a stable list.
+func sortedUnsupportedGroups(unsupported map[[2]string]int) []importUnsupportedGroup {
 	groups := make([]importUnsupportedGroup, 0, len(unsupported))
 	for k, n := range unsupported {
 		groups = append(groups, importUnsupportedGroup{ManagedType: k[0], Reason: k[1], Count: n})
@@ -444,8 +481,12 @@ func verifyImportPlanFacts(raw []byte, carry *importCarryBlock, byCandidate map[
 		}
 		return groups[i].Reason < groups[j].Reason
 	})
-	out.IdentityUnsupported = groups
+	return groups
+}
 
+// summarizeUnselected counts what the plan does outside the selection: extra
+// imports, other managed actions and refresh drift.
+func summarizeUnselected(plan *importVerifyPlanJSON, selectedAddr map[string]bool) (*importUnselected, error) {
 	un := &importUnselected{Addresses: []importUnselectedEntry{}}
 	add := func(address, kind string) {
 		if len(un.Addresses) < maxVerifyUnselected {
@@ -458,7 +499,7 @@ func verifyImportPlanFacts(raw []byte, carry *importCarryBlock, byCandidate map[
 		if selectedAddr[rc.Address] {
 			continue
 		}
-		if len(rc.Change.Importing) > 0 && !bytes.Equal(bytes.TrimSpace(rc.Change.Importing), []byte("null")) {
+		if importJSONPresent(rc.Change.Importing) {
 			un.ExtraImports++
 			add(rc.Address, "extra_import")
 		}
@@ -469,16 +510,12 @@ func verifyImportPlanFacts(raw []byte, carry *importCarryBlock, byCandidate map[
 	}
 	for _, d := range plan.ResourceDrift {
 		if d.Address == "" || len(d.Change.Actions) == 0 {
-			return importVerified{}, importEvidenceFailure("plan_drift_evidence_invalid")
+			return nil, importEvidenceFailure("plan_drift_evidence_invalid")
 		}
 		un.Drift++
 		add(d.Address, "drift")
 	}
-	out.Unselected = un
-
-	out.Overall = verifyOverall(out)
-	out.NextAction = verifyNextAction(out)
-	return out, nil
+	return un, nil
 }
 
 func verifyOverall(v importVerified) string {
@@ -605,7 +642,7 @@ The result gives, for each selected item, a change (none, update, replace_or_des
 // HandleVerifyImportPlan serves verify_import_plan.
 func HandleVerifyImportPlan(ctx context.Context, request mcp.CallToolRequest, logger *log.Logger) (*mcp.CallToolResult, error) {
 	var a importVerifyArgs
-	if err := decodeImportToolArguments(request.GetArguments(), &a, 512*1024); err != nil || !importInputName(a.Organization) || !importInputName(a.Workspace) || !importInputName(a.RunID) || len(a.Bindings) > maxImportSelections || len(a.Detail) > maxVerifyDetail {
+	if err := decodeImportToolArguments(request.GetArguments(), &a, maxVerifyArgumentBytes); err != nil || !importInputName(a.Organization) || !importInputName(a.Workspace) || !importInputName(a.RunID) || len(a.Bindings) > maxImportSelections || len(a.Detail) > maxVerifyDetail {
 		return importToolResult(verifyBlocked("", "import_input_invalid", "Supply organization_name, workspace_name and run_id; once the plan has finished also the carry block and bindings."))
 	}
 	if err := client.AuthorizeOrganization(ctx, a.Organization); err != nil {
