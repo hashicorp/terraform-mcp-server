@@ -39,8 +39,9 @@ test-e2e:
 	@trap '$(MAKE) cleanup-test-containers' EXIT; $(GO) test -v --tags e2e ./e2e
 
 # Run hcpt tests
+# Usage: make test-hcpt RUN=TestWorkspace
 test-hcpt:
-	$(GO) test -v ./test/terraform/...
+	$(GO) test -v ./test/terraform/... -run "$(RUN)"
 
 # Clean build artifacts
 clean:
@@ -109,6 +110,7 @@ help:
 	@echo "  crt-build               - Build using crt-build script"
 	@echo "  test                    - Run all tests"
 	@echo "  test-e2e                - Run end-to-end tests"
+	@echo "  test-hcpt               - Run hcpt tests (optional: RUN=<pattern> to filter tests)"
 	@echo "  test-security           - Run security-related tests"
 	@echo "  test-http               - Test StreamableHTTP health endpoint"
 	@echo "  clean                   - Remove build artifacts"

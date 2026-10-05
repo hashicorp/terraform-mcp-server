@@ -1,0 +1,241 @@
+// Copyright IBM Corp. 2025
+// SPDX-License-Identifier: MPL-2.0
+
+package cli
+
+import (
+	"os"
+	"testing"
+	"time"
+
+	"github.com/hashicorp/terraform-mcp-server/pkg/client"
+	"github.com/spf13/cobra"
+	"github.com/stretchr/testify/assert"
+)
+
+func TestGetHTTPHost(t *testing.T) {
+	// Save original env var to restore later
+	origHost := os.Getenv("TRANSPORT_HOST")
+	defer func() {
+		os.Setenv("TRANSPORT_HOST", origHost)
+	}()
+
+	// Test case: When TRANSPORT_HOST is not set, default value should be used
+	os.Unsetenv("TRANSPORT_HOST")
+	host := getHTTPHost()
+	assert.Equal(t, "127.0.0.1", host, "Default host should be 127.0.0.1 when TRANSPORT_HOST is not set")
+
+	// Test case: When TRANSPORT_HOST is set, its value should be used
+	os.Setenv("TRANSPORT_HOST", "0.0.0.0")
+	host = getHTTPHost()
+	assert.Equal(t, "0.0.0.0", host, "Host should be the value of TRANSPORT_HOST when it is set")
+
+	// Test case: Custom host value
+	os.Setenv("TRANSPORT_HOST", "192.168.1.100")
+	host = getHTTPHost()
+	assert.Equal(t, "192.168.1.100", host, "Host should be the custom value set in TRANSPORT_HOST")
+}
+
+func TestGetEndpointPath(t *testing.T) {
+	// Save original env var to restore later
+	origPath := os.Getenv("MCP_ENDPOINT")
+	defer func() {
+		os.Setenv("MCP_ENDPOINT", origPath)
+	}()
+
+	// Test case: When MCP_ENDPOINT is not set, default value should be used
+	os.Unsetenv("MCP_ENDPOINT")
+	path := getEndpointPath(nil)
+	assert.Equal(t, "/mcp", path, "Default endpoint path should be /mcp when MCP_ENDPOINT is not set")
+
+	// Test case: When MCP_ENDPOINT is set, its value should be used
+	os.Setenv("MCP_ENDPOINT", "/terraform")
+	path = getEndpointPath(nil)
+	assert.Equal(t, "/terraform", path, "Endpoint path should be the value of MCP_ENDPOINT when it is set")
+
+	// Test case: Custom endpoint path value
+	os.Setenv("MCP_ENDPOINT", "/api/v1/terraform-mcp")
+	path = getEndpointPath(nil)
+	assert.Equal(t, "/api/v1/terraform-mcp", path, "Endpoint path should be the custom value set in MCP_ENDPOINT")
+}
+
+func TestGetHTTPPort(t *testing.T) {
+	// Save original env var to restore later
+	origPort := os.Getenv("TRANSPORT_PORT")
+	defer func() {
+		os.Setenv("TRANSPORT_PORT", origPort)
+	}()
+
+	// Test case: When TRANSPORT_PORT is not set, default value should be used
+	os.Unsetenv("TRANSPORT_PORT")
+	port := getHTTPPort()
+	assert.Equal(t, "8080", port, "Default port should be 8080 when TRANSPORT_PORT is not set")
+
+	// Test case: When TRANSPORT_PORT is set, its value should be used
+	os.Setenv("TRANSPORT_PORT", "9090")
+	port = getHTTPPort()
+	assert.Equal(t, "9090", port, "Port should be the value of TRANSPORT_PORT when it is set")
+}
+
+func TestShouldUseStreamableHTTPMode(t *testing.T) {
+	// Save original env vars to restore later
+	origMode := os.Getenv("TRANSPORT_MODE")
+	origPort := os.Getenv("TRANSPORT_PORT")
+	origHost := os.Getenv("TRANSPORT_HOST")
+	origEndpointPath := os.Getenv("MCP_ENDPOINT")
+	defer func() {
+		os.Setenv("TRANSPORT_MODE", origMode)
+		os.Setenv("TRANSPORT_PORT", origPort)
+		os.Setenv("TRANSPORT_HOST", origHost)
+		os.Setenv("MCP_ENDPOINT", origEndpointPath)
+	}()
+
+	// Test case: When no relevant env vars are set, HTTP mode should not be used
+	os.Unsetenv("TRANSPORT_MODE")
+	os.Unsetenv("TRANSPORT_PORT")
+	os.Unsetenv("TRANSPORT_HOST")
+	os.Unsetenv("MCP_ENDPOINT")
+	assert.False(t, shouldUseStreamableHTTPMode(), "HTTP mode should not be used when no relevant env vars are set")
+
+	// Test case: When TRANSPORT_MODE is set to "http", HTTP mode should be used (backward compatibility)
+	os.Setenv("TRANSPORT_MODE", "http")
+	assert.True(t, shouldUseStreamableHTTPMode(), "HTTP mode should be used when TRANSPORT_MODE is set to 'http'")
+	os.Unsetenv("TRANSPORT_MODE")
+
+	// Test case: When TRANSPORT_MODE is set to "streamable-http", HTTP mode should be used
+	os.Setenv("TRANSPORT_MODE", "streamable-http")
+	assert.True(t, shouldUseStreamableHTTPMode(), "HTTP mode should be used when TRANSPORT_MODE is set to 'streamable-http'")
+	os.Unsetenv("TRANSPORT_MODE")
+
+	// Test case: When TRANSPORT_PORT is set, HTTP mode should be used
+	os.Setenv("TRANSPORT_PORT", "9090")
+	assert.True(t, shouldUseStreamableHTTPMode(), "HTTP mode should be used when TRANSPORT_PORT is set")
+	os.Unsetenv("TRANSPORT_PORT")
+
+	// Test case: When TRANSPORT_HOST is set, HTTP mode should be used
+	os.Setenv("TRANSPORT_HOST", "0.0.0.0")
+	assert.True(t, shouldUseStreamableHTTPMode(), "HTTP mode should be used when TRANSPORT_HOST is set")
+	os.Unsetenv("TRANSPORT_HOST")
+
+	// Test case: When MCP_ENDPOINT is set, HTTP mode should be used
+	os.Setenv("MCP_ENDPOINT", "/mcp")
+	assert.True(t, shouldUseStreamableHTTPMode(), "HTTP mode should be used when MCP_ENDPOINT is set")
+}
+
+func TestGetHeartbeatInterval(t *testing.T) {
+	// Save original env var to restore later
+	origHeartbeat := os.Getenv("MCP_HEARTBEAT_INTERVAL")
+	defer func() {
+		os.Setenv("MCP_HEARTBEAT_INTERVAL", origHeartbeat)
+	}()
+
+	// Test case: When MCP_HEARTBEAT_INTERVAL is not set, default value should be 0
+	os.Unsetenv("MCP_HEARTBEAT_INTERVAL")
+	heartbeat := getHeartbeatInterval()
+	assert.Equal(t, time.Duration(0), heartbeat, "Default heartbeat interval should be 0 when MCP_HEARTBEAT_INTERVAL is not set")
+
+	// Test case: When MCP_HEARTBEAT_INTERVAL is set to a valid duration
+	os.Setenv("MCP_HEARTBEAT_INTERVAL", "30s")
+	heartbeat = getHeartbeatInterval()
+	assert.Equal(t, 30*time.Second, heartbeat, "Heartbeat interval should be 30s when MCP_HEARTBEAT_INTERVAL is set to '30s'")
+
+	// Test case: When MCP_HEARTBEAT_INTERVAL is set to minutes
+	os.Setenv("MCP_HEARTBEAT_INTERVAL", "1m")
+	heartbeat = getHeartbeatInterval()
+	assert.Equal(t, 1*time.Minute, heartbeat, "Heartbeat interval should be 1m when MCP_HEARTBEAT_INTERVAL is set to '1m'")
+
+	// Test case: Invalid value should return 0
+	os.Setenv("MCP_HEARTBEAT_INTERVAL", "invalid")
+	heartbeat = getHeartbeatInterval()
+	assert.Equal(t, time.Duration(0), heartbeat, "Heartbeat interval should be 0 when MCP_HEARTBEAT_INTERVAL is set to an invalid value")
+}
+
+func TestGetOrganizationAllowlist(t *testing.T) {
+	origAllowlist, hadOrigAllowlist := os.LookupEnv("MCP_ORGANIZATION_ALLOWLIST")
+	defer func() {
+		if hadOrigAllowlist {
+			os.Setenv("MCP_ORGANIZATION_ALLOWLIST", origAllowlist)
+		} else {
+			os.Unsetenv("MCP_ORGANIZATION_ALLOWLIST")
+		}
+	}()
+
+	tests := []struct {
+		name        string
+		envSet      bool
+		envValue    string
+		flagSet     bool
+		flagValue   string
+		expected    []string
+		expectedErr error
+	}{
+		{
+			name:      "env var takes precedence over flag",
+			envSet:    true,
+			envValue:  "env-alpha, env-beta",
+			flagSet:   true,
+			flagValue: "flag-alpha",
+			expected:  []string{"env-alpha", "env-beta"},
+		},
+		{
+			name:      "flag used when env not set",
+			flagSet:   true,
+			flagValue: "flag-alpha, flag-beta",
+			expected:  []string{"flag-alpha", "flag-beta"},
+		},
+		{
+			name:     "empty when neither set",
+			expected: nil,
+		},
+		{
+			name:        "blank CSV flag is malformed",
+			flagSet:     true,
+			flagValue:   " , ,, ",
+			expectedErr: client.ErrMalformedOrganizationAllowlist,
+		},
+		{
+			name:        "empty CSV flag is malformed",
+			flagSet:     true,
+			flagValue:   "",
+			expectedErr: client.ErrMalformedOrganizationAllowlist,
+		},
+		{
+			name:        "blank CSV env var is malformed",
+			envSet:      true,
+			envValue:    " , ,, ",
+			flagSet:     true,
+			flagValue:   "flag-alpha",
+			expectedErr: client.ErrMalformedOrganizationAllowlist,
+		},
+		{
+			name:        "empty CSV env var is malformed",
+			envSet:      true,
+			envValue:    "",
+			expectedErr: client.ErrMalformedOrganizationAllowlist,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.envSet {
+				os.Setenv("MCP_ORGANIZATION_ALLOWLIST", tt.envValue)
+			} else {
+				os.Unsetenv("MCP_ORGANIZATION_ALLOWLIST")
+			}
+
+			cmd := &cobra.Command{}
+			cmd.Flags().String("organization-allowlist", "", "test flag")
+			if tt.flagSet {
+				assert.NoError(t, cmd.Flags().Set("organization-allowlist", tt.flagValue))
+			}
+
+			result, err := getOrganizationAllowlist(cmd)
+			assert.Equal(t, tt.expected, result)
+			if tt.expectedErr != nil {
+				assert.ErrorIs(t, err, tt.expectedErr)
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}

@@ -85,7 +85,7 @@ func listRunsHandler(ctx context.Context, request mcp.CallToolRequest, logger *l
 
 	workspaceName := request.GetString("workspace_name", "")
 	vcsUsername := request.GetString("vcs_username", "")
-	status := request.GetString("status", "")
+	status := strings.Join(request.GetStringSlice("status", nil), ",")
 
 	pagination, err := utils.OptionalPaginationParams(request)
 	if err != nil {
@@ -103,6 +103,7 @@ func listRunsHandler(ctx context.Context, request mcp.CallToolRequest, logger *l
 				PageNumber: pagination.Page,
 				PageSize:   pagination.PageSize,
 			},
+			Include: []tfe.RunIncludeOpt{tfe.RunWorkspace},
 		}
 
 		if status != "" {
@@ -155,6 +156,7 @@ func listRunsHandler(ctx context.Context, request mcp.CallToolRequest, logger *l
 				PageNumber: pagination.Page,
 				PageSize:   pagination.PageSize,
 			},
+			Include: []tfe.RunIncludeOpt{tfe.RunWorkspace},
 		}
 
 		if status != "" {

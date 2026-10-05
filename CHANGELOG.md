@@ -1,3 +1,16 @@
+# 1.3.1
+
+IMPROVEMENTS
+
+* `get_private_module_details` now reports every submodule published with a private module, each with its own inputs, outputs, dependencies, provider dependencies, resources, and README, matching the detail already provided for the root module. The root module section is now labelled and its README is reported alongside its own inputs and outputs.
+* `get_private_module_details` now reports the module version its details were read from, and the generated usage snippet pins that version instead of the first entry in the module's version statuses, which may be a version whose ingress is still pending or has failed.
+* `get_private_module_details` now requests the registry's latest-version route directly when `private_module_version` is omitted, instead of sending a request with an empty version segment.
+
+FIXES
+
+* `list_runs` now applies the `status` filter. The tool accepts `status` as an array but read it as a string, so the filter was always dropped and runs of every status were returned.
+* `list_runs` now reports the `workspace_name` of each run. The runs were listed without including their workspace, so the name was always empty.
+
 # 1.3.0
 
 FEATURES
@@ -15,9 +28,18 @@ FEATURES
 * [New Tool] `get_state_resource` Fetches complete, redacted attributes for a single resource in a workspace's current Terraform state by its address (e.g. `aws_s3_bucket.assets`). Requires `terraform_org_name`, `workspace_name`, and `address`. [437](https://github.com/hashicorp/terraform-mcp-server/pull/484)
 * [New Tool] `search_state_attributes` Searches for a substring across resource attribute values in a workspace's current Terraform state and returns only the matching resources and fields. Requires `terraform_org_name`, `workspace_name`, and `query`; optional `resource_type`. [437](https://github.com/hashicorp/terraform-mcp-server/pull/484)
 
+IMPROVEMENTS
+
+* Add a Helm chart for deploying the server on Kubernetes, under `helm/terraform-mcp-server`
+
 FIXES
 
-* `get_apply_logs` now checks the apply status before attempting to stream logs. If the apply is not yet in a terminal state (`finished`, `errored`, `canceled`), the tool returns an informative message instead of timing out.
+* `get_apply_logs` now checks the apply status before attempting to stream logs. If the apply is not yet in a terminal state (`finished`, `errored`, `canceled`), the tool returns an informative message instead of timing out. [468](https://github.com/hashicorp/terraform-mcp-server/pull/468)
+* Fix `create_no_code_workspace` elicitation to require only module inputs marked as required, allowing optional inputs to be omitted so Terraform module defaults are applied. [482](https://github.com/hashicorp/terraform-mcp-server/pull/482)
+
+IMPROVEMENTS
+
+* Migrate registry tests to use the official mcp go-sdk
 
 # 1.2.0
 

@@ -4,11 +4,15 @@
 package tools
 
 import (
+	"encoding/json"
 	"testing"
 
+	"github.com/hashicorp/go-tfe"
+	"github.com/hashicorp/terraform-mcp-server/pkg/client"
 	"github.com/mark3labs/mcp-go/server"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestCreateNoCodeWorkspace(t *testing.T) {
@@ -28,16 +32,15 @@ func TestCreateNoCodeWorkspace(t *testing.T) {
 		// Check required parameters
 		assert.Contains(t, tool.Tool.InputSchema.Required, "no_code_module_id")
 		assert.Contains(t, tool.Tool.InputSchema.Required, "workspace_name")
+		assert.Contains(t, tool.Tool.InputSchema.Required, "project_id")
 
-		// Check that it accepts open world parameters (for dynamic variables)
-		// The tool should be configured to accept additional parameters beyond those defined
+		// Check the declared tool inputs.
 		assert.NotNil(t, tool.Tool.InputSchema.Properties)
 		assert.Contains(t, tool.Tool.InputSchema.Properties, "no_code_module_id")
 		assert.Contains(t, tool.Tool.InputSchema.Properties, "workspace_name")
 		assert.Contains(t, tool.Tool.InputSchema.Properties, "auto_apply")
 
-		// Verify the tool has elicitation capabilities through its configuration
-		// The WithOpenWorldHintAnnotation(true) allows for dynamic parameter acceptance
+		// The tool interacts with an external HCP Terraform organization.
 		annotations := tool.Tool.Annotations
 		assert.NotNil(t, annotations)
 		assert.NotNil(t, annotations.OpenWorldHint)
@@ -46,4 +49,46 @@ func TestCreateNoCodeWorkspace(t *testing.T) {
 		// Handler should not be nil
 		assert.NotNil(t, tool.Handler)
 	})
+}
+
+func TestBuildElicitationSchema(t *testing.T) {
+	moduleMetadata := testNoCodeModuleMetadata(t)
+
+	schema := buildElicitationSchema(moduleMetadata, &tfe.RegistryNoCodeModule{})
+
+	assert.Equal(t, []string{"name"}, schema.requiredNames)
+	require.Len(t, schema.properties, 2)
+	assert.Contains(t, schema.properties, "name")
+	assert.Contains(t, schema.properties, "description")
+}
+
+func TestExtractVariablesFromResponse(t *testing.T) {
+	moduleMetadata := testNoCodeModuleMetadata(t)
+	schema := buildElicitationSchema(moduleMetadata, &tfe.RegistryNoCodeModule{})
+
+	variables, err := extractVariablesFromResponse(map[string]any{"name": "example"}, schema)
+
+	require.NoError(t, err)
+	require.Len(t, variables, 1)
+	assert.Equal(t, "name", variables[0].Key)
+	assert.Equal(t, "example", variables[0].Value)
+}
+
+func testNoCodeModuleMetadata(t *testing.T) *client.ModuleMetadata {
+	t.Helper()
+
+	metadataJSON := []byte(`{
+		"data": {
+			"attributes": {
+				"input-variables": [
+					{"name": "name", "type": "string", "required": true},
+					{"name": "description", "type": "string", "required": false}
+				]
+			}
+		}
+	}`)
+
+	var moduleMetadata client.ModuleMetadata
+	require.NoError(t, json.Unmarshal(metadataJSON, &moduleMetadata))
+	return &moduleMetadata
 }

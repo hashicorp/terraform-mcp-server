@@ -24,13 +24,13 @@ func TestCleanToolsets(t *testing.T) {
 		{
 			name:            "invalid toolsets",
 			input:           []string{"invalid", "fake"},
-			expectedValid:   []string{"invalid", "fake"},
+			expectedValid:   []string{},
 			expectedInvalid: []string{"invalid", "fake"},
 		},
 		{
 			name:            "mixed valid and invalid",
 			input:           []string{"registry", "invalid", "terraform"},
-			expectedValid:   []string{"registry", "invalid", "terraform"},
+			expectedValid:   []string{"registry", "terraform"},
 			expectedInvalid: []string{"invalid"},
 		},
 		{
@@ -156,23 +156,23 @@ func TestContainsToolset(t *testing.T) {
 	}
 }
 
-func TestGetValidToolsetNames(t *testing.T) {
-	validNames := GetValidToolsetNames()
+func TestValidToolsetNames(t *testing.T) {
+	validNames := ValidToolsetNames()
 
 	// Check that all expected toolsets are present
 	expected := []string{"registry", "registry-private", "terraform", "all", "default"}
 	for _, name := range expected {
 		if !validNames[name] {
-			t.Errorf("GetValidToolsetNames() missing expected toolset: %s", name)
+			t.Errorf("ValidToolsetNames() missing expected toolset: %s", name)
 		}
 	}
 
 	if len(validNames) != len(expected) {
-		t.Errorf("GetValidToolsetNames() returned %d toolsets, want %d", len(validNames), len(expected))
+		t.Errorf("ValidToolsetNames() returned %d toolsets, want %d", len(validNames), len(expected))
 	}
 }
 
-func TestIsToolEnabled(t *testing.T) {
+func TestToolFilter_ToolsetsMode(t *testing.T) {
 	tests := []struct {
 		name            string
 		toolName        string
@@ -219,10 +219,10 @@ func TestIsToolEnabled(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := IsToolEnabled(tt.toolName, tt.enabledToolsets)
+			result := NewToolsetFilter(tt.enabledToolsets).IsToolEnabled(tt.toolName)
 
 			if result != tt.expected {
-				t.Errorf("IsToolEnabled(%s, %v) = %v, want %v", tt.toolName, tt.enabledToolsets, result, tt.expected)
+				t.Errorf("NewToolsetFilter(%v).IsToolEnabled(%s) = %v, want %v", tt.enabledToolsets, tt.toolName, result, tt.expected)
 			}
 		})
 	}
@@ -288,58 +288,52 @@ func TestParseIndividualTools(t *testing.T) {
 	}
 }
 
-func TestIsToolEnabledIndividualMode(t *testing.T) {
+func TestToolFilter_IndividualMode(t *testing.T) {
 	tests := []struct {
-		name            string
-		toolName        string
-		enabledToolsets []string
-		expected        bool
+		name      string
+		toolName  string
+		toolNames []string
+		expected  bool
 	}{
 		{
-			name:            "tool enabled in individual mode",
-			toolName:        "search_providers",
-			enabledToolsets: EnableIndividualTools([]string{"search_providers", "list_workspaces"}),
-			expected:        true,
+			name:      "tool enabled in individual mode",
+			toolName:  "search_providers",
+			toolNames: []string{"search_providers", "list_workspaces"},
+			expected:  true,
 		},
 		{
-			name:            "tool disabled in individual mode",
-			toolName:        "get_provider_details",
-			enabledToolsets: EnableIndividualTools([]string{"search_providers", "list_workspaces"}),
-			expected:        false,
+			name:      "tool disabled in individual mode",
+			toolName:  "get_provider_details",
+			toolNames: []string{"search_providers", "list_workspaces"},
+			expected:  false,
 		},
 		{
-			name:            "all toolset overrides individual mode",
-			toolName:        "get_provider_details",
-			enabledToolsets: append([]string{"all"}, EnableIndividualTools([]string{"search_providers"})...),
-			expected:        true,
+			name:      "terraform tool in individual mode",
+			toolName:  "list_workspaces",
+			toolNames: []string{"list_workspaces"},
+			expected:  true,
 		},
 		{
-			name:            "terraform tool in individual mode",
-			toolName:        "list_workspaces",
-			enabledToolsets: EnableIndividualTools([]string{"list_workspaces"}),
-			expected:        true,
-		},
-		{
-			name:            "private registry tool in individual mode",
-			toolName:        "search_private_modules",
-			enabledToolsets: EnableIndividualTools([]string{"search_private_modules"}),
-			expected:        true,
+			name:      "private registry tool in individual mode",
+			toolName:  "search_private_modules",
+			toolNames: []string{"search_private_modules"},
+			expected:  true,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := IsToolEnabled(tt.toolName, tt.enabledToolsets)
+			result := NewIndividualToolFilter(tt.toolNames).IsToolEnabled(tt.toolName)
 
 			if result != tt.expected {
-				t.Errorf("IsToolEnabled(%s, %v) = %v, want %v", tt.toolName, tt.enabledToolsets, result, tt.expected)
+				t.Errorf("NewIndividualToolFilter(%v).IsToolEnabled(%s) = %v, want %v", tt.toolNames, tt.toolName, result, tt.expected)
 			}
 		})
 	}
 }
 
-func TestGetAllValidToolNames(t *testing.T) {
-	validTools := GetAllValidToolNames()
+func TestKnownToolNames(t *testing.T) {
+	validTools := KnownToolNames()
 
 	// Verify we have a reasonable number of tools (at least the ones we know about)
 	expectedTools := []string{
@@ -357,12 +351,27 @@ func TestGetAllValidToolNames(t *testing.T) {
 
 	for _, tool := range expectedTools {
 		if !validTools[tool] {
-			t.Errorf("GetAllValidToolNames() missing expected tool: %s", tool)
+			t.Errorf("KnownToolNames() missing expected tool: %s", tool)
 		}
 	}
 
-	// Verify count matches ToolToToolset map
-	if len(validTools) != len(ToolToToolset) {
-		t.Errorf("GetAllValidToolNames() returned %d tools, want %d", len(validTools), len(ToolToToolset))
+	// Verify count matches AllTools (the single source of truth in registry.go)
+	if len(validTools) != len(AllTools) {
+		t.Errorf("KnownToolNames() returned %d tools, want %d", len(validTools), len(AllTools))
+	}
+}
+
+func TestToolFilter_IndividualModeIgnoresToolsets(t *testing.T) {
+	f := ToolFilter{
+		Mode:     ModeIndividualTools,
+		Toolsets: []string{Terraform}, // should be irrelevant
+		Tools:    []string{"list_workspaces"},
+	}
+
+	if f.IsToolEnabled("whoami") {
+		t.Error("whoami should be disabled: not in Tools list, and Toolsets should be ignored in individual mode")
+	}
+	if !f.IsToolEnabled("list_workspaces") {
+		t.Error("list_workspaces should be enabled: it is explicitly listed in Tools")
 	}
 }

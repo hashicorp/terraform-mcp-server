@@ -102,6 +102,45 @@ func buildTFEConfig(terraformAddress string, terraformSkipTLSVerify bool, terraf
 	return config
 }
 
+// HumanReadableTokenPermissions returns the display names of the permissions enabled for an organization.
+func HumanReadableTokenPermissions(permissions *tfe.OrganizationPermissions) []string {
+	if permissions == nil {
+		return nil
+	}
+
+	permissionsByName := []struct {
+		name    string
+		enabled bool
+	}{
+		{"Create Teams", permissions.CanCreateTeam},
+		{"Create Workspaces", permissions.CanCreateWorkspace},
+		{"Create Workspace Migrations", permissions.CanCreateWorkspaceMigration},
+		{"Deploy NoCode Modules", permissions.CanDeployNoCodeModules},
+		{"Destroy", permissions.CanDestroy},
+		{"Manage Auditing", permissions.CanManageAuditing},
+		{"Manage NoCodeModules", permissions.CanManageNoCodeModules},
+		{"Manage Run Tasks", permissions.CanManageRunTasks},
+		{"Traverse", permissions.CanTraverse},
+		{"Update", permissions.CanUpdate},
+		{"Update API Tokens", permissions.CanUpdateAPIToken},
+		{"Update OAuth", permissions.CanUpdateOAuth},
+		{"Update Sentinel", permissions.CanUpdateSentinel},
+		{"Update HYOK Configuration", permissions.CanUpdateHYOKConfiguration},
+		{"View HYOK Feature Information", permissions.CanViewHYOKFeatureInfo},
+		{"Enable Stacks", permissions.CanEnableStacks},
+		{"Create Projects", permissions.CanCreateProject},
+	}
+
+	permissionNames := make([]string, 0, len(permissionsByName))
+	for _, permission := range permissionsByName {
+		if permission.enabled {
+			permissionNames = append(permissionNames, permission.name)
+		}
+	}
+
+	return permissionNames
+}
+
 // GetTfeClient retrieves the TFE client for the given session
 func GetTfeClient(sessionId string) *tfe.Client {
 	if value, ok := activeTfeClients.Load(sessionId); ok {
@@ -119,18 +158,25 @@ func DeleteTfeClient(sessionId string) {
 func GetTfeClientFromContext(ctx context.Context, logger *log.Logger) (*tfe.Client, error) {
 	session := server.ClientSessionFromContext(ctx)
 	if session == nil {
-		return nil, fmt.Errorf("no active session")
+		return nil, fmt.Errorf("No active session found")
 	}
+	return GetTfeClientForSession(ctx, session.SessionID(), logger)
+}
 
-	// Try to get token from the current request
+// GetTfeClientForSession allows both transports (mark3labs' server.ClientSession and the official
+// go-sdk's *mcp.ServerSession) supply their own session ID. The actual
+// address/token/skip-TLS-verify lookups still happen against ctx, using
+// this package's contextKey type - the same type TerraformContextMiddleware
+// writes into ctx, so both transports have the same per-request values
+func GetTfeClientForSession(ctx context.Context, sessionID string, logger *log.Logger) (*tfe.Client, error) {
 	currentToken, _ := ctx.Value(contextKey(TerraformToken)).(string)
 	if currentToken == "" {
 		currentToken = utils.GetEnv(TerraformToken, "")
 	}
 
-	// In a stateless mode the server does not assign any session ID to requests. We need to create new TF clients for every request in that case.
-	if session.SessionID() == "" {
-		logger.Info("Session ID is empty. Creating a new TF client.")
+	// In a stateless mode the server does not assign any session ID to requests. We need to create new TF clients for every request in that case
+	if sessionID == "" {
+		logger.Info("Session ID is empty. Creating a new TF client")
 		currentAddress, _ := ctx.Value(contextKey(TerraformAddress)).(string)
 		if currentAddress == "" {
 			currentAddress = utils.GetEnv(TerraformAddress, DefaultTerraformAddress)
@@ -140,21 +186,20 @@ func GetTfeClientFromContext(ctx context.Context, logger *log.Logger) (*tfe.Clie
 	}
 
 	// Check if the cached session ID's token+address match the current token+address
-	if value, ok := activeTfeClients.Load(session.SessionID()); ok {
+	if value, ok := activeTfeClients.Load(sessionID); ok {
 		cachedClient := value.(cachedTfeClient)
-		currentTokenHash := sha256.Sum256([]byte(currentToken))
-		if cachedClient.token == currentTokenHash {
+		if cachedClient.token == sha256.Sum256([]byte(currentToken)) {
 			return cachedClient.client, nil
 		}
 		// Current request token and address not found in cache. Delete the session ID from the sync map.
-		activeTfeClients.Delete(session.SessionID())
+		activeTfeClients.Delete(sessionID)
 	}
 	logger.Warnf("TFE client not found, creating a new one")
-	return CreateTfeClientForSession(ctx, session, logger)
+	return CreateTfeClientForSession(ctx, sessionID, logger)
 }
 
 // CreateTfeClientForSession creates only a TFE client for the session
-func CreateTfeClientForSession(ctx context.Context, session server.ClientSession, logger *log.Logger) (*tfe.Client, error) {
+func CreateTfeClientForSession(ctx context.Context, sessionID string, logger *log.Logger) (*tfe.Client, error) {
 	var err error
 	terraformAddress, ok := ctx.Value(contextKey(TerraformAddress)).(string)
 	if !ok || terraformAddress == "" {
@@ -175,6 +220,6 @@ func CreateTfeClientForSession(ctx context.Context, session server.ClientSession
 
 	// Get client IP from context for X-Forwarded-For header
 	clientIP, _ := ctx.Value(contextKey(ClientIPKey)).(string)
-	client, err := NewTfeClient(session.SessionID(), terraformAddress, parseTerraformSkipTLSVerify(ctx), terraformToken, clientIP, logger)
+	client, err := NewTfeClient(sessionID, terraformAddress, parseTerraformSkipTLSVerify(ctx), terraformToken, clientIP, logger)
 	return client, err
 }

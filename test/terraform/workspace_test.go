@@ -1,13 +1,103 @@
 package terraform
 
 import (
+	"context"
+	"fmt"
 	"testing"
+	"time"
 
+	"github.com/hashicorp/go-tfe"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tidwall/gjson"
 )
+
+func TestCreateNoCodeWorkspace(t *testing.T) {
+	requireTfOperations(t)
+
+	s := newTestingSession(t)
+	defer s.Close()
+
+	client := tfeClient(t)
+
+	project, err := client.Projects.Create(t.Context(), tfeOrgName, tfe.ProjectCreateOptions{
+		Name: randomName("nocode-project-"),
+	})
+	require.NoError(t, err, "failed to create test project")
+	defer client.Projects.Delete(t.Context(), project.ID)
+
+	module, err := client.RegistryModules.Create(t.Context(), tfeOrgName, tfe.RegistryModuleCreateOptions{
+		Name:         tfe.String(randomName("nocode-module-")),
+		Provider:     tfe.String("testprovider"),
+		RegistryName: tfe.PrivateRegistry,
+	})
+	require.NoError(t, err, "failed to create test private module")
+
+	moduleID := tfe.RegistryModuleID{
+		Organization: tfeOrgName,
+		Namespace:    module.Namespace,
+		Name:         module.Name,
+		Provider:     module.Provider,
+		RegistryName: tfe.PrivateRegistry,
+	}
+	defer client.RegistryModules.DeleteProvider(t.Context(), moduleID)
+
+	const moduleVersion = "1.0.0"
+	version, err := client.RegistryModules.CreateVersion(t.Context(), moduleID, tfe.RegistryModuleCreateVersionOptions{
+		Version: tfe.String(moduleVersion),
+	})
+	require.NoError(t, err, "failed to create test private module version")
+	require.NoError(t, client.RegistryModules.Upload(t.Context(), *version, "testdata/no_code_workspace_module"), "failed to upload test private module")
+
+	waitFor(t, 2*time.Minute, fmt.Sprintf("private module %q version %s to finish processing", module.Name, moduleVersion), func(ctx context.Context) (*tfe.TerraformRegistryModule, error) {
+		registryModule, err := client.RegistryModules.ReadTerraformRegistryModule(ctx, moduleID, moduleVersion)
+		if err != nil {
+			return nil, err
+		}
+		if registryModule == nil || len(registryModule.Root.Inputs) != 2 || len(registryModule.Root.Outputs) != 2 {
+			return nil, nil
+		}
+		return registryModule, nil
+	})
+
+	noCodeModule, err := client.RegistryNoCodeModules.Create(t.Context(), tfeOrgName, tfe.RegistryNoCodeModuleCreateOptions{
+		RegistryModule: module,
+		Enabled:        tfe.Bool(true),
+		VersionPin:     moduleVersion,
+	})
+	require.NoError(t, err, "failed to enable the test module for no-code provisioning")
+	defer client.RegistryNoCodeModules.Delete(t.Context(), noCodeModule.ID)
+
+	workspaceName := randomName("nocode_workspace_")
+	// No-code workspace creation starts a run. Force-delete this test-owned
+	// workspace so a pending manual-apply run cannot block cleanup.
+	defer client.Workspaces.Delete(t.Context(), tfeOrgName, workspaceName)
+
+	result, resultText := callTool(t, s, "create_no_code_workspace", map[string]any{
+		"no_code_module_id": noCodeModule.ID,
+		"workspace_name":    workspaceName,
+		"project_id":        project.ID,
+		"auto_apply":        false,
+	})
+	require.False(t, result.IsError, "create_no_code_workspace should not return an error: %s", resultText)
+	require.NotEmpty(t, resultText, "create_no_code_workspace result should not be empty")
+
+	workspaceID := gjson.Get(resultText, "data.attributes.workspace_id").String()
+	require.NotEmpty(t, workspaceID, "create_no_code_workspace should return a workspace_id")
+
+	workspace, err := client.Workspaces.ReadByID(t.Context(), workspaceID)
+	require.NoError(t, err, "created no-code workspace could not be read through the TFE API")
+	assert.Equal(t, workspaceName, workspace.Name)
+	assert.False(t, workspace.AutoApply)
+	assert.Equal(t, project.ID, workspace.Project.ID)
+
+	variables, err := client.Variables.List(t.Context(), workspaceID, nil)
+	require.NoError(t, err, "failed to list variables for the created no-code workspace")
+	require.Len(t, variables.Items, 1, "only the required module input should be set on the workspace")
+	assert.Equal(t, "name", variables.Items[0].Key)
+	assert.Equal(t, "integration-test", variables.Items[0].Value)
+}
 
 func TestWorkspaceHappyPath(t *testing.T) {
 	requireTfOperations(t)
@@ -34,6 +124,29 @@ func TestWorkspaceHappyPath(t *testing.T) {
 	// Ensure the workspace is deleted at the end of the test using the TFE client
 	// directly — independent of the tools under test.
 	defer client.Workspaces.SafeDeleteByID(t.Context(), wsID)
+
+	t.Run("list workspaces in org", func(t *testing.T) {
+		result, resultText := callTool(t, s, "list_workspaces", map[string]any{
+			"terraform_org_name": tfeOrgName,
+		})
+		require.False(t, result.IsError, "list_workspaces should not return an error")
+		require.NotEmpty(t, resultText, "list_workspaces should return a non-empty response")
+
+		assert.Greater(t, int(gjson.Get(resultText, "items.#").Int()), 0, "list_workspaces should return at least one workspace")
+		assert.NotEmpty(t, gjson.Get(resultText, "items.0.id").String(), "workspace items should contain an id")
+		assert.NotEmpty(t, gjson.Get(resultText, "items.0.workspace_name").String(), "workspace items should contain a workspace_name")
+
+		// Confirm the workspace created for this test appears in the list.
+		found := false
+		gjson.Get(resultText, "items").ForEach(func(_, item gjson.Result) bool {
+			if item.Get("id").String() == wsID {
+				found = true
+				return false
+			}
+			return true
+		})
+		assert.True(t, found, "list_workspaces should include the workspace created for this test (id: %s)", wsID)
+	})
 
 	t.Run("Get workspace details", func(t *testing.T) {
 		getResult, getResultText := callTool(t, s, "get_workspace_details", map[string]any{
@@ -86,6 +199,36 @@ func TestWorkspaceHappyPath(t *testing.T) {
 		})
 		assert.True(t, getResult.IsError, "get_workspace_details should return an error after deletion")
 	})
+}
+
+func TestForceUnlockWorkspace(t *testing.T) {
+	requireTfOperations(t)
+
+	s := newTestingSession(t)
+	defer s.Close()
+
+	client := tfeClient(t)
+	workspaceName := randomName("unlock-test-")
+	workspace, err := client.Workspaces.Create(t.Context(), tfeOrgName, tfe.WorkspaceCreateOptions{Name: &workspaceName})
+	require.NoError(t, err, "failed to create test workspace")
+	defer client.Workspaces.DeleteByID(t.Context(), workspace.ID)
+
+	lockReason := "Test force_unlock_workspace integration"
+	workspace, err = client.Workspaces.Lock(t.Context(), workspace.ID, tfe.WorkspaceLockOptions{Reason: &lockReason})
+	require.NoError(t, err, "failed to lock test workspace")
+	// Ensure the workspace is unlocked at the end of the test in case the force unlock tool fails, so that the workspace can be deleted.
+	defer client.Workspaces.ForceUnlock(t.Context(), workspace.ID)
+	require.True(t, workspace.Locked, "setup should leave the workspace locked")
+
+	result, resultText := callTool(t, s, "force_unlock_workspace", map[string]any{
+		"workspace_id": workspace.ID,
+	})
+	require.False(t, result.IsError, "force_unlock_workspace should not return an error")
+	assert.Contains(t, resultText, workspace.ID, "response should reference the unlocked workspace")
+
+	workspace, err = client.Workspaces.ReadByID(t.Context(), workspace.ID)
+	require.NoError(t, err, "failed to read workspace after force unlock")
+	assert.False(t, workspace.Locked, "workspace should be unlocked in the TFE API")
 }
 
 func runVariablesTest(t *testing.T, s *mcp.ClientSession, wsName string) {
@@ -160,9 +303,6 @@ func runWorkspaceTagsTest(t *testing.T, s *mcp.ClientSession, wsName string) {
 	})
 }
 
-// TestWorkspaceErrorPaths exercises error branches that fires when a caller
-// provides a non-existent org/workspace name or a stale workspace ID.
-
 func TestWorkspaceErrorPaths(t *testing.T) {
 	requireTfOperations(t)
 	client := tfeClient(t)
@@ -197,10 +337,11 @@ func TestWorkspaceErrorPaths(t *testing.T) {
 	})
 
 	t.Run("list_workspaces non-existent org", func(t *testing.T) {
-		result, _ := callTool(t, s, "list_workspaces", map[string]any{
+		result, resultText := callTool(t, s, "list_workspaces", map[string]any{
 			"terraform_org_name": nonExistentOrg,
 		})
 		assert.True(t, result.IsError, "list_workspaces with a non-existent org should return an error")
+		assert.Contains(t, resultText, nonExistentOrg, "error should reference the org that was not found")
 	})
 
 	t.Run("get_workspace_details non-existent workspace", func(t *testing.T) {

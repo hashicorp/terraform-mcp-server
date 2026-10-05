@@ -44,18 +44,28 @@ func GetHttpClientFromContext(ctx context.Context, logger *log.Logger) (*http.Cl
 	if session == nil {
 		return nil, fmt.Errorf("no active session")
 	}
+	return GetHttpClientForSession(ctx, session.SessionID(), logger), nil
+}
+
+// GetHttpClientForSession adds the same stateless (empty sessionID) check and builds without caching a fresh client, instead of every
+// stateless request sharing one cached entry
+func GetHttpClientForSession(ctx context.Context, sessionID string, logger *log.Logger) *http.Client {
+	skipTLSVerify := parseTerraformSkipTLSVerify(ctx)
+
+	if sessionID == "" {
+		return CreateHTTPClient(skipTLSVerify, logger)
+	}
 
 	// Try to get existing client
-	client := GetHttpClient(session.SessionID())
-	if client != nil {
-		return client, nil
+	if client := GetHttpClient(sessionID); client != nil {
+		return client
 	}
 
 	logger.Warnf("HTTP client not found, creating a new one")
-	return CreateHttpClientForSession(ctx, session, logger), nil
+	return NewHttpClient(sessionID, skipTLSVerify, logger)
 }
 
 // CreateHttpClientForSession creates only an HTTP client for the session
-func CreateHttpClientForSession(ctx context.Context, session server.ClientSession, logger *log.Logger) *http.Client {
-	return NewHttpClient(session.SessionID(), parseTerraformSkipTLSVerify(ctx), logger)
+func CreateHttpClientForSession(ctx context.Context, sessionID string, logger *log.Logger) *http.Client {
+	return NewHttpClient(sessionID, parseTerraformSkipTLSVerify(ctx), logger)
 }

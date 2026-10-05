@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
+	"log"
 	"math/rand"
 	"net/http"
 	"os"
@@ -18,9 +19,12 @@ import (
 )
 
 const (
-	toolCallTimeout  = 30 * time.Second
+	toolCallTimeout  = 90 * time.Second
 	alphaNum         = "abcdefghijklmnopqrstuvwxyz0123456789"
 	randomNameLength = 8
+
+	defaultTfeOrgName  = "terraform-ai-ecosystem-testing"
+	defaultMCPEndpoint = "http://localhost:8080/mcp"
 )
 
 var (
@@ -48,41 +52,38 @@ func (t *authTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 
 func init() {
 	mcpEndpoint = os.Getenv("TF_MCP_ENDPOINT")
+	tfeOrgName = os.Getenv("TFE_ORG_NAME")
 	tfeToken = os.Getenv("TFE_TOKEN")
 	tfeAddress = os.Getenv("TFE_ADDRESS")
-	tfeOrgName = os.Getenv("TFE_ORG_NAME")
 	tfeUsername = os.Getenv("TFE_USERNAME")
 	tfeUserEmail = os.Getenv("TFE_USER_EMAIL")
 	enableTfOperations = os.Getenv("ENABLE_TF_OPERATIONS")
 
+	if mcpEndpoint == "" {
+		mcpEndpoint = defaultMCPEndpoint
+		log.Printf("TF_MCP_ENDPOINT was not specified, using: %q", mcpEndpoint)
+	}
+	if tfeOrgName == "" {
+		tfeOrgName = defaultTfeOrgName
+		log.Printf("TFE_ORG_NAME was not specified, using: %q", tfeOrgName)
+	}
+
+	// ElicitationHandler is used to provide default values for required parameters during no_code workspace creation.
 	testingClient = mcp.NewClient(&mcp.Implementation{
 		Name:    "terraform-mcp-server-test-harness",
 		Version: "v0.0.0",
-	}, nil)
+	}, &mcp.ClientOptions{
+		ElicitationHandler: func(context.Context, *mcp.ElicitRequest) (*mcp.ElicitResult, error) {
+			return &mcp.ElicitResult{
+				Action:  "accept",
+				Content: map[string]any{"name": "integration-test"},
+			}, nil
+		},
+	})
 }
 
 func newTestingSession(t *testing.T) *mcp.ClientSession {
-	if mcpEndpoint == "" {
-		mcpEndpoint = "http://localhost:8080/mcp"
-		t.Logf("TF_MCP_ENDPOINT was not specified, using: %q", mcpEndpoint)
-	}
-
-	if tfeToken == "" {
-		t.Skip("You need to supply TFE_TOKEN to run these tests")
-	}
-
-	if tfeOrgName == "" {
-		tfeOrgName = "terraform-ai-ecosystem-testing"
-		t.Logf("TFE_ORG_NAME was not specified, using: %q", tfeOrgName)
-	}
-
-	if tfeUsername == "" {
-		t.Skip("You need to supply TFE_USERNAME to run these tests")
-	}
-
-	if tfeUserEmail == "" {
-		t.Skip("You need to supply TFE_USER_EMAIL to run these tests")
-	}
+	requireTestConfig(t)
 
 	httpClient := &http.Client{
 		Timeout: toolCallTimeout,
@@ -110,9 +111,7 @@ func newTestingSession(t *testing.T) *mcp.ClientSession {
 // directly with the TFE API. It can verify create, update, and delete tool calls
 // against the actual API.
 func tfeClient(t *testing.T) *tfe.Client {
-	if tfeToken == "" {
-		t.Skip("You need to supply TFE_TOKEN to run these tests")
-	}
+	requireTestConfig(t)
 
 	address := tfeAddress
 	if address == "" {
@@ -127,6 +126,19 @@ func tfeClient(t *testing.T) *tfe.Client {
 		t.Fatalf("Failed to create direct TFE client: %v", err)
 	}
 	return client
+}
+
+func requireTestConfig(t *testing.T) {
+	t.Helper()
+	if tfeToken == "" {
+		t.Skip("You need to supply TFE_TOKEN to run these tests")
+	}
+	if tfeUsername == "" {
+		t.Skip("You need to supply TFE_USERNAME to run these tests")
+	}
+	if tfeUserEmail == "" {
+		t.Skip("You need to supply TFE_USER_EMAIL to run these tests")
+	}
 }
 
 func requireTfOperations(t *testing.T) {
@@ -145,12 +157,30 @@ func requireTeamsEntitlement(t *testing.T, client *tfe.Client) {
 	}
 }
 
+func requirePolicySetsEntitlement(t *testing.T, client *tfe.Client) {
+	t.Helper()
+	entitlements, err := client.Organizations.ReadEntitlements(t.Context(), tfeOrgName)
+	require.NoError(t, err, "Failed to read entitlements for organization %q", tfeOrgName)
+	if !entitlements.Sentinel {
+		t.Skipf("Organization %q does not have the Sentinel/policy-sets entitlement", tfeOrgName)
+	}
+}
+
 func requireStacksEntitlement(t *testing.T, client *tfe.Client) {
 	t.Helper()
 	org, err := client.Organizations.Read(t.Context(), tfeOrgName)
 	require.NoError(t, err, "Failed to read organization %q", tfeOrgName)
 	if !org.Permissions.CanEnableStacks {
 		t.Skipf("Organization %q does not have the Stacks entitlement", tfeOrgName)
+	}
+}
+
+func requireSentinelEntitlement(t *testing.T, client *tfe.Client) {
+	t.Helper()
+	entitlements, err := client.Organizations.ReadEntitlements(t.Context(), tfeOrgName)
+	require.NoError(t, err, "Failed to read entitlements for organization %q", tfeOrgName)
+	if !entitlements.Sentinel {
+		t.Skipf("Organization %q does not have the Sentinel entitlement", tfeOrgName)
 	}
 }
 
@@ -252,4 +282,12 @@ func uploadConfiguration(t *testing.T, client *tfe.Client, workspaceID string, c
 	})
 	require.NoError(t, err, "failed to create a configuration version")
 	require.NoError(t, client.ConfigurationVersions.UploadTarGzip(t.Context(), configurationVersion.UploadURL, &archive), "failed to upload the test configuration")
+
+	waitFor(t, toolCallTimeout, "configuration version to finish processing", func(ctx context.Context) (*tfe.ConfigurationVersion, error) {
+		configurationVersion, err := client.ConfigurationVersions.Read(ctx, configurationVersion.ID)
+		if err != nil || configurationVersion.Status != tfe.ConfigurationUploaded {
+			return nil, err
+		}
+		return configurationVersion, nil
+	})
 }

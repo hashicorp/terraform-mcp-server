@@ -124,28 +124,33 @@ func (m *RateLimitMiddleware) getSessionLimiter(sessionID string) *rate.Limiter 
 	return limiter
 }
 
+// Allow checks the global and, if sessionID is non-empty, the per-session
+// rate limit for a tool call. It has no dependency on any specific MCP SDK.
+func (m *RateLimitMiddleware) Allow(sessionID, toolName string) error {
+	if !m.globalLimiter.Allow() {
+		m.logger.Warnf("Global rate limit exceeded for tool: %s", toolName)
+		return errors.New("rate limit exceeded: too many requests globally")
+	}
+
+	if sessionID != "" {
+		sessionLimiter := m.getSessionLimiter(sessionID)
+		if !sessionLimiter.Allow() {
+			m.logger.Warnf("Session rate limit exceeded for session: %s, tool: %s", sessionID, toolName)
+			return errors.New("rate limit exceeded: too many requests from this session")
+		}
+	}
+
+	m.logger.Debugf("Rate limit check passed for tool: %s", toolName)
+	return nil
+}
+
 // Middleware returns the tool handler middleware function
 func (m *RateLimitMiddleware) Middleware() server.ToolHandlerMiddleware {
 	return func(next server.ToolHandlerFunc) server.ToolHandlerFunc {
 		return func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-			toolName := request.Params.Name
-
-			// Check global rate limit
-			if !m.globalLimiter.Allow() {
-				m.logger.Warnf("Global rate limit exceeded for tool: %s", toolName)
-				return nil, errors.New("rate limit exceeded: too many requests globally")
+			if err := m.Allow(getSessionIDFromContext(ctx), request.Params.Name); err != nil {
+				return nil, err
 			}
-
-			// Check per-session rate limit if we can get session ID from context
-			if sessionID := getSessionIDFromContext(ctx); sessionID != "" {
-				sessionLimiter := m.getSessionLimiter(sessionID)
-				if !sessionLimiter.Allow() {
-					m.logger.Warnf("Session rate limit exceeded for session: %s, tool: %s", sessionID, toolName)
-					return nil, errors.New("rate limit exceeded: too many requests from this session")
-				}
-			}
-
-			m.logger.Debugf("Rate limit check passed for tool: %s", toolName)
 			return next(ctx, request)
 		}
 	}

@@ -3,11 +3,13 @@ package terraform
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/hashicorp/go-tfe"
+	mcpclient "github.com/hashicorp/terraform-mcp-server/pkg/client"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -48,18 +50,42 @@ func TestPrivateRegistryModules(t *testing.T) {
 	require.NoError(t, err, "failed to create test private module version")
 	require.NoError(t, client.RegistryModules.Upload(t.Context(), *version, "testdata/private_registry_module"), "failed to upload test private module")
 
-	// Module source is processed asynchronously after upload. Wait until its
-	// inputs, outputs, and README are available through the registry API.
-	registryDetails := waitFor(t, 2*time.Minute, fmt.Sprintf("private module %q version %s to finish processing", moduleLocator.Name, moduleVersion), func(ctx context.Context) (*tfe.TerraformRegistryModule, error) {
-		module, err := client.RegistryModules.ReadTerraformRegistryModule(ctx, moduleLocator, moduleVersion)
+	// Module source is processed asynchronously after upload. Wait until the root
+	// module and submodule details are available through the registry API.
+	registryDetails := waitFor(t, 2*time.Minute, fmt.Sprintf("private module %q version %s to finish processing", moduleLocator.Name, moduleVersion), func(ctx context.Context) (*mcpclient.TerraformModuleVersionDetails, error) {
+		u := fmt.Sprintf("/api/registry/v1/modules/%s/%s/%s/%s",
+			url.PathEscape(moduleLocator.Namespace),
+			url.PathEscape(moduleLocator.Name),
+			url.PathEscape(moduleLocator.Provider),
+			url.PathEscape(moduleVersion),
+		)
+		req, err := client.NewRequest("GET", u, nil)
 		if err != nil {
 			return nil, err
 		}
-
-		ready := module != nil && len(module.Root.Inputs) > 0 && len(module.Root.Outputs) > 0 && module.Root.Readme != ""
-		if !ready {
-			return nil, nil
+		module := &mcpclient.TerraformModuleVersionDetails{}
+		if err := req.DoJSON(ctx, module); err != nil {
+			return nil, err
 		}
+
+		// Report what is still missing so that a timeout says which part of the
+		// module never finished processing instead of only that we timed out.
+		if len(module.Root.Inputs) == 0 || len(module.Root.Outputs) == 0 || module.Root.Readme == "" {
+			return nil, fmt.Errorf("root module not processed yet: inputs=%d outputs=%d readme=%t",
+				len(module.Root.Inputs), len(module.Root.Outputs), module.Root.Readme != "")
+		}
+		if len(module.Submodules) == 0 {
+			return nil, fmt.Errorf("no submodules reported yet for %q", moduleLocator.Name)
+		}
+
+		submodule := module.Submodules[0]
+		if len(submodule.Inputs) == 0 || len(submodule.Outputs) == 0 ||
+			len(submodule.ProviderDependencies) == 0 || len(submodule.Resources) == 0 || submodule.Readme == "" {
+			return nil, fmt.Errorf("submodule %q not processed yet: inputs=%d outputs=%d provider_dependencies=%d resources=%d readme=%t",
+				submodule.Name, len(submodule.Inputs), len(submodule.Outputs),
+				len(submodule.ProviderDependencies), len(submodule.Resources), submodule.Readme != "")
+		}
+
 		return module, nil
 	})
 
@@ -89,26 +115,65 @@ func TestPrivateRegistryModules(t *testing.T) {
 		assert.Contains(t, resultText, expectedModuleAddress)
 	})
 
-	t.Run("Get private module details", func(t *testing.T) {
-		result, resultText := callTool(t, s, "get_private_module_details", map[string]any{
-			"terraform_org_name":     tfeOrgName,
-			"private_module_id":      privateModuleAddress,
-			"private_module_version": moduleVersion,
+	getModuleDetailsTestCases := []struct {
+		name           string
+		includeVersion bool
+	}{
+		{name: "with explicit version", includeVersion: true},
+		{name: "with latest version", includeVersion: false},
+	}
+
+	for _, tc := range getModuleDetailsTestCases {
+		t.Run("Get private module details "+tc.name, func(t *testing.T) {
+			arguments := map[string]any{
+				"terraform_org_name": tfeOrgName,
+				"private_module_id":  privateModuleAddress,
+			}
+			if tc.includeVersion {
+				arguments["private_module_version"] = moduleVersion
+			}
+
+			result, resultText := callTool(t, s, "get_private_module_details", arguments)
+
+			t.Logf("Get private module details: %v", resultText)
+
+			require.False(t, result.IsError, "get_private_module_details should not return an error")
+			require.NotEmpty(t, resultText, "get_private_module_details response must not be empty")
+
+			// Verify against the TFE API directly.
+			expectedModuleAddress := strings.Join([]string{registryDetails.Namespace, registryDetails.Name, registryDetails.Provider}, "/")
+
+			// TODO: update this after MCP SKD migration
+			assert.Contains(t, resultText, expectedModuleAddress)
+			assert.Contains(t, resultText, fmt.Sprintf("version = %q", registryDetails.Version))
+			assert.Contains(t, resultText, "- Version: "+registryDetails.Version)
+
+			require.NotEmpty(t, registryDetails.Root.Inputs, "the root module should report inputs")
+			require.NotEmpty(t, registryDetails.Root.Outputs, "the root module should report outputs")
+			assert.Contains(t, resultText, "Root Module:")
+			assert.Contains(t, resultText, registryDetails.Root.Inputs[0].Name)
+			assert.Contains(t, resultText, registryDetails.Root.Inputs[0].Description)
+			assert.Contains(t, resultText, registryDetails.Root.Outputs[0].Name)
+			assert.Contains(t, resultText, registryDetails.Root.Outputs[0].Description)
+			assert.Contains(t, resultText, strings.TrimSpace(registryDetails.Root.Readme))
+
+			// Submodules must be reported the same way as the root module.
+			require.NotEmpty(t, registryDetails.Submodules, "the module should report submodules")
+			submodule := registryDetails.Submodules[0]
+			require.NotEmpty(t, submodule.Inputs, "the submodule should report inputs")
+			require.NotEmpty(t, submodule.Outputs, "the submodule should report outputs")
+			require.NotEmpty(t, submodule.ProviderDependencies, "the submodule should report provider dependencies")
+			require.NotEmpty(t, submodule.Resources, "the submodule should report resources")
+
+			assert.Contains(t, resultText, "Submodule: "+submodule.Name)
+			assert.Contains(t, resultText, submodule.Path)
+			assert.Contains(t, resultText, submodule.Inputs[0].Name)
+			assert.Contains(t, resultText, submodule.Outputs[0].Name)
+			assert.Contains(t, resultText, submodule.ProviderDependencies[0].Source)
+			assert.Contains(t, resultText, submodule.Resources[0].Type)
+			assert.Contains(t, resultText, strings.TrimSpace(submodule.Readme))
 		})
-		require.False(t, result.IsError, "get_private_module_details should not return an error")
-		require.NotEmpty(t, resultText, "get_private_module_details response must not be empty")
-
-		// Verify against the TFE API directly.
-		expectedModuleAddress := strings.Join([]string{registryDetails.Namespace, registryDetails.Name, registryDetails.Provider}, "/")
-
-		// TODO: update this after MCP SKD migration
-		assert.Contains(t, resultText, expectedModuleAddress)
-		assert.Contains(t, resultText, registryDetails.Root.Inputs[0].Name)
-		assert.Contains(t, resultText, registryDetails.Root.Inputs[0].Description)
-		assert.Contains(t, resultText, registryDetails.Root.Outputs[0].Name)
-		assert.Contains(t, resultText, registryDetails.Root.Outputs[0].Description)
-		assert.Contains(t, resultText, strings.TrimSpace(registryDetails.Root.Readme))
-	})
+	}
 }
 
 func TestPrivateRegistryProviders(t *testing.T) {

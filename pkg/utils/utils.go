@@ -115,6 +115,7 @@ func GetEnv(key, fallback string) string {
 	return fallback
 }
 
+// TODO: could be deprecated if raw bytes return for a future endpoint is no longer needed
 // This function is used for custom GET requests using the TFE client.
 func MakeCustomGetRequestRaw(ctx context.Context, client *tfe.Client, path string, additionalQueryParams map[string][]string) ([]byte, error) {
 	req, err := client.NewRequestWithAdditionalQueryParams("GET", path, nil, additionalQueryParams)

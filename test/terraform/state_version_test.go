@@ -4,6 +4,7 @@
 package terraform
 
 import (
+	"context"
 	_ "embed"
 	"testing"
 
@@ -57,6 +58,13 @@ func TestListStateVersionsHappyPath(t *testing.T) {
 	// A state version is only created after a successful apply.
 	waitForRun(t, client, run.ID, "finish applying", func(r *tfe.Run) bool {
 		return r.Status == tfe.RunApplied
+	})
+	waitFor(t, toolCallTimeout, "state version resources to finish processing", func(ctx context.Context) (*tfe.StateVersion, error) {
+		stateVersion, err := client.StateVersions.ReadCurrent(ctx, workspace.ID)
+		if err != nil || !stateVersion.ResourcesProcessed {
+			return nil, err
+		}
+		return stateVersion, nil
 	})
 
 	t.Run("list_state_versions returns at least one state version", func(t *testing.T) {
