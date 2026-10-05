@@ -5,6 +5,7 @@ package tools
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"slices"
 	"strings"
@@ -66,11 +67,13 @@ func CreateWorkspaceVariableTool() *mcp.Tool {
 				},
 				"hcl": {
 					Type:        "boolean",
-					Description: "Whether the value is HCL syntax (for example a list or map) rather than a plain string. Defaults to false",
+					Description: "Whether the value is HCL syntax (for example a list or map) rather than a plain string",
+					Default:     json.RawMessage("false"),
 				},
 				"sensitive": {
 					Type:        "boolean",
-					Description: "Whether the value is sensitive. Sensitive values are write-only and not returned by the API. Defaults to false",
+					Description: "Whether the value is sensitive. Sensitive values are write-only and not returned by the API",
+					Default:     json.RawMessage("false"),
 				},
 			},
 			PropertyOrder:        []string{"terraform_org_name", "workspace_name", "variable_key", "variable_value", "category", "description", "hcl", "sensitive"},
