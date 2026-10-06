@@ -595,7 +595,7 @@ func verifyImportPlan(ctx context.Context, c *tfe.Client, a importVerifyArgs) im
 	}
 	if a.Carry == nil || len(a.Bindings) == 0 {
 		out.Status = "carry_required"
-		out.NextAction = "The plan finished. Call verify_import_plan again with the carry block from prepare_import and bindings (candidate_id and target_address for every selection)."
+		out.NextAction = "The plan finished. Call verify_import_plan again with the carry block you already received from prepare_import (unchanged) and bindings (candidate_id and target_address for every selection). Do not call prepare_import again for this."
 		return out
 	}
 	byCandidate, err := validateImportCarry(a.Carry, a.Bindings)
@@ -619,7 +619,7 @@ func VerifyImportPlanDefinition() mcp.Tool {
 	return mcp.NewTool("verify_import_plan",
 		mcp.WithDescription(`Wait up to about 40 seconds for a plan-only import Run, then describe what the finished plan showed. Read-only.
 
-Poll with organization_name, workspace_name and run_id from create_import_run; while the plan runs the result is a short status, so call again with the same run_id. When the plan has finished, call once more with the carry block from prepare_import (unchanged) and bindings: one candidate_id and target_address for every selected candidate.
+Poll with organization_name, workspace_name and run_id from create_import_run; while the plan runs the result is a short status, so call again with the same run_id. When the plan has finished, call once more with the carry block from prepare_import (unchanged) and bindings: one candidate_id and target_address for every selected candidate. Keep the carry block from your single prepare_import call; do not call prepare_import again to rebuild it.
 
 The result gives, for each selected item, a change (none, update, replace_or_destroy, create, import_missing, not_in_plan, type_mismatch) and an object_identity (matched, mismatched, unsupported, unverified), as counts plus an attention list of items that need a look. unsupported means the identity could not be compared (Terraform below 1.12 or a type with no identity); confirm those import IDs against the documentation of the target workspace's locked provider version. unselected lists extra imports, other actions and drift. No attribute or import ID values are returned; use get_plan_json_output for detail. The summary describes the plan; it is not an approval and a plan-only Run never imports into state.`),
 		mcp.WithTitleAnnotation("Verify import plan"),

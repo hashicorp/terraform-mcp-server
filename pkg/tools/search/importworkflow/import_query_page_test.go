@@ -159,3 +159,85 @@ func TestDiscoveryPageResponseSizes(t *testing.T) {
 		assert.False(t, strings.Contains(string(encoded), "resource_object"))
 	}
 }
+
+func TestDiscoveryPagePartialMarkers(t *testing.T) {
+	d := pagedFixture(t, 250)
+	first, err := pageImportDiscovery(d, DiscoveryFilter{Limit: 100})
+	require.NoError(t, err)
+	assert.True(t, first.HasMore)
+	assert.Equal(t, 150, first.Remaining)
+	assert.Contains(t, first.NextAction, "partial page")
+	assert.Contains(t, first.NextAction, "do not restart without after")
+	assert.Contains(t, first.NextAction, "keep the IDs")
+
+	second, err := pageImportDiscovery(d, DiscoveryFilter{Limit: 100, After: first.NextCursor})
+	require.NoError(t, err)
+	assert.True(t, second.HasMore)
+	assert.Equal(t, 50, second.Remaining)
+
+	last, err := pageImportDiscovery(d, DiscoveryFilter{Limit: 100, After: second.NextCursor})
+	require.NoError(t, err)
+	assert.False(t, last.HasMore)
+	assert.Equal(t, 0, last.Remaining)
+	assert.Contains(t, last.NextAction, "keep the IDs")
+}
+
+func jsonKeyOrder(t *testing.T, raw []byte) []string {
+	t.Helper()
+	dec := json.NewDecoder(strings.NewReader(string(raw)))
+	_, err := dec.Token()
+	require.NoError(t, err)
+	var keys []string
+	for dec.More() {
+		tok, err := dec.Token()
+		require.NoError(t, err)
+		keys = append(keys, tok.(string))
+		var skip json.RawMessage
+		require.NoError(t, dec.Decode(&skip))
+	}
+	return keys
+}
+
+func indexOf(keys []string, k string) int {
+	for i, v := range keys {
+		if v == k {
+			return i
+		}
+	}
+	return -1
+}
+
+// Guidance must precede the large arrays so a client that truncates a long
+// response still sees it.
+func TestDiscoveryPageGuidancePrecedesLists(t *testing.T) {
+	page, err := pageImportDiscovery(pagedFixture(t, 250), DiscoveryFilter{Limit: 100})
+	require.NoError(t, err)
+	raw, err := json.Marshal(page)
+	require.NoError(t, err)
+	keys := jsonKeyOrder(t, raw)
+	lists := indexOf(keys, "lists")
+	require.NotEqual(t, -1, lists)
+	for _, k := range []string{"has_more", "remaining", "next_cursor", "next_action"} {
+		i := indexOf(keys, k)
+		require.NotEqual(t, -1, i, k)
+		assert.Less(t, i, lists, k)
+	}
+}
+
+func TestPreparedGuidancePrecedesLargeArrays(t *testing.T) {
+	raw, err := json.Marshal(importPrepared{
+		Carry:      &importCarryBlock{},
+		Candidates: []importDiscoveryCandidate{{}},
+		Types:      []importPreparedType{{}},
+		NextAction: "x",
+	})
+	require.NoError(t, err)
+	keys := jsonKeyOrder(t, raw)
+	for _, big := range []string{"types", "candidates"} {
+		b := indexOf(keys, big)
+		require.NotEqual(t, -1, b, big)
+		for _, k := range []string{"carry", "diagnostics", "next_action"} {
+			assert.Less(t, indexOf(keys, k), b, k+" before "+big)
+		}
+	}
+}

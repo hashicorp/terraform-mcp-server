@@ -329,7 +329,7 @@ func writeInstructions(b *strings.Builder, namespace, name, version string) {
 	b.WriteString("   - Required attributes MUST be included.\n")
 	b.WriteString("   - Scalar attributes: value is a string, bool, or number.\n")
 	b.WriteString("   - Block-type attributes: value is a JSON object (see section below).\n")
-	b.WriteString("6. **`limit`** — optional positive integer; caps results returned. Omitting it is valid; the HCP Terraform UI defaults to **100**. Explicitly pass `100` to match UI behaviour.\n")
+	b.WriteString("6. **`limit`** — optional positive integer; caps results returned. Omitting it is valid; the HCP Terraform UI defaults to **100**. A result of exactly 100 may be cut off, so when more resources may exist, set `limit` above the expected count (for example `1000`) in the first query rather than re-running it.\n")
 	b.WriteString("7. **Variable injection** — if a value should come from a Terraform workspace variable, use `${var.<name>}` as the exact value string (no prefix or suffix text).\n")
 	b.WriteString("   The backend automatically emits a `variable { <name> {} }` declaration in `main.tfquery.json`.\n\n")
 

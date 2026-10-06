@@ -100,18 +100,20 @@ type importPrepared struct {
 	Target                         *importTarget      `json:"target,omitempty"`
 	StateRunConfigurationVersionID string             `json:"state_run_configuration_version_id,omitempty"`
 	agentSchemaTerraformVersion    string
-	SchemaSource                   *importAPISchemaSource     `json:"schema_source,omitempty"`
-	Types                          []importPreparedType       `json:"types,omitempty"`
-	Candidates                     []importDiscoveryCandidate `json:"candidates,omitempty"`
-	Carry                          *importCarryBlock          `json:"carry,omitempty"`
-	Notes                          []string                   `json:"notes,omitempty"`
-	AgentInstructions              []string                   `json:"agent_instructions,omitempty"`
-	Diagnostics                    []string                   `json:"diagnostics"`
-	NextAction                     string                     `json:"next_action"`
+	// Carry and guidance come before the large schema and candidate arrays so a
+	// client that truncates the response still sees the carry block.
+	Carry             *importCarryBlock          `json:"carry,omitempty"`
+	Notes             []string                   `json:"notes,omitempty"`
+	AgentInstructions []string                   `json:"agent_instructions,omitempty"`
+	Diagnostics       []string                   `json:"diagnostics"`
+	NextAction        string                     `json:"next_action"`
+	SchemaSource      *importAPISchemaSource     `json:"schema_source,omitempty"`
+	Types             []importPreparedType       `json:"types,omitempty"`
+	Candidates        []importDiscoveryCandidate `json:"candidates,omitempty"`
 }
 
 var importToolInstructions = []string{
-	"Use prepare_import only for candidates the user has chosen to import. Do not use it to search or filter resources by tag or attribute: get_query_summary returns each result's tags. If you cannot tell what to import, go back to get_query_summary.",
+	"Use prepare_import only for candidates the user has chosen to import. Do not use it to search or filter resources by tag or attribute: get_query_summary returns each result's tags. If you cannot tell what to import, go back to get_query_summary. Pass the candidate_id values you already recorded from get_query_summary when presenting the selection to the user; do not re-read the query pages to rebuild them.",
 	"Read the target managed_schema for each type first, then the selected candidates' observations. Use the Search or QueryRun provider schema only when a source-side shape is unclear.",
 	"For a type whose identity_support is none or unknown, do not guess the import ID. Look up the target workspace's locked provider version's resource documentation for the documented import id form and any identity-to-id mapping. " + importLockedProviderVersionRule,
 	"After downloading the configuration, " + importProviderMismatchRule,
@@ -374,7 +376,7 @@ func prepareImportTool(ctx context.Context, c *tfe.Client, input importPrepareIn
 // PrepareImportDefinition describes the prepare_import tool.
 func PrepareImportDefinition() mcp.Tool {
 	return mcp.NewTool("prepare_import",
-		mcp.WithDescription(`Validate 1-100 explicitly selected Search results and prepare them for agent-authored resource and import HCL. Use it only for candidates chosen for import, not to search or filter by tag (get_query_summary returns tags). This is the only focused-import tool that reads the QueryRun log, so call it once per selection.
+		mcp.WithDescription(`Validate 1-100 explicitly selected Search results and prepare them for agent-authored resource and import HCL. Use it only for candidates chosen for import, not to search or filter by tag (get_query_summary returns tags). This is the only focused-import tool that reads the QueryRun log, so call it once per selection. Use the candidate_id values you kept from get_query_summary; do not page the query again after the user confirms. Keep the carry block from the response for verify_import_plan.
 
 Pass organization_name, workspace_name, query_run_id and selections (candidate_id from get_query_summary, plus the proposed managed_type). The result contains the target managed schema for each distinct type, per-type identity_support (supported, none or unknown; none/unknown means the import ID must come from the documentation of the target workspace's locked provider version, read from the downloaded .terraform.lock.hcl), the target Terraform versions (target.terraform_version_setting, the workspace setting that new runs use and may be a constraint, and target.terraform_version_last_run, exact, from the run that produced the state), the selected candidates' observations, the workspace baseline, and a carry block. Keep the carry block unchanged and send it with the final verify_import_plan call.
 

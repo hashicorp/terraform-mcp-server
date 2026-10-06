@@ -48,6 +48,8 @@ type discoveryGroup struct {
 	Candidates     []discoveryRow `json:"candidates"`
 }
 
+// discoveryPage lists guidance fields (notes, next_cursor, next_action) before
+// lists so a client that truncates a large page still sees them.
 type discoveryPage struct {
 	QueryRunID            string           `json:"query_run_id"`
 	LogDigest             string           `json:"log_digest"`
@@ -56,10 +58,12 @@ type discoveryPage struct {
 	TotalMatching         int              `json:"total_matching"`
 	RowsWithoutAttributes int              `json:"rows_without_attributes,omitempty"`
 	Returned              int              `json:"returned"`
-	Lists                 []discoveryGroup `json:"lists"`
+	HasMore               bool             `json:"has_more"`
+	Remaining             int              `json:"remaining"`
 	Notes                 []string         `json:"notes,omitempty"`
 	NextCursor            string           `json:"next_cursor,omitempty"`
 	NextAction            string           `json:"next_action"`
+	Lists                 []discoveryGroup `json:"lists"`
 }
 
 // groupDiscoveryRows groups rows by list address in first-seen order and hoists
@@ -185,7 +189,7 @@ func pageImportDiscovery(d *importDiscovery, f DiscoveryFilter) (*discoveryPage,
 			(name == "" || strings.Contains(strings.ToLower(c.DisplayName), name))
 	}
 
-	size, lastReturned, more := 0, "", false
+	size, lastReturned, more, consumed := 0, "", false, 0
 	perList := map[string]int{}
 	for _, c := range d.Candidates {
 		perList[c.Address]++
@@ -200,7 +204,11 @@ func pageImportDiscovery(d *importDiscovery, f DiscoveryFilter) (*discoveryPage,
 		if len(c.ResourceObject) == 0 {
 			page.RowsWithoutAttributes++
 		}
-		if i < start || more {
+		if i < start {
+			consumed++
+			continue
+		}
+		if more {
 			continue
 		}
 		// Size is measured on the flat row, which overstates the grouped size.
@@ -210,10 +218,13 @@ func pageImportDiscovery(d *importDiscovery, f DiscoveryFilter) (*discoveryPage,
 			continue
 		}
 		size += len(encoded)
+		consumed++
 		selected = append(selected, c)
 		lastReturned = c.CandidateID
 	}
 	page.Returned = len(selected)
+	page.HasMore = more
+	page.Remaining = page.TotalMatching - consumed
 	page.Lists = groupDiscoveryRows(selected, func(c importDiscoveryCandidate) discoveryRow {
 		return discoveryRow{CandidateID: c.CandidateID, DisplayName: c.DisplayName, Tags: discoveryTags(c)}
 	})
@@ -234,9 +245,9 @@ func pageImportDiscovery(d *importDiscovery, f DiscoveryFilter) (*discoveryPage,
 	}
 	if more {
 		page.NextCursor = encodeDiscoveryCursor(discoveryCursor{QueryRunID: d.QueryRunID, LogDigest: d.LogDigest, LastID: lastReturned})
-		page.NextAction = "Pass next_cursor as after to read the next page. Select candidate_id values from any page, then call prepare_import." + discoveryAttributesHint(page) + discoveryLimitHint(atLimit)
+		page.NextAction = fmt.Sprintf("This is a partial page: %d of %d matching rows returned and %d remain. Continue from next_cursor by passing it as after; do not restart without after. %s", page.Returned, page.TotalMatching, page.Remaining, discoveryCandidateIDHint) + discoveryAttributesHint(page) + discoveryLimitHint(atLimit)
 	} else {
-		page.NextAction = "These are all the results this query returned. " + discoveryCompletenessCaveat + " Select up to 100 candidate_id values, then call prepare_import." + discoveryAttributesHint(page) + discoveryLimitHint(atLimit)
+		page.NextAction = "These are all the results this query returned. " + discoveryCompletenessCaveat + " Select up to 100 candidate_id values. " + discoveryCandidateIDHint + discoveryAttributesHint(page) + discoveryLimitHint(atLimit)
 	}
 	return page, nil
 }
@@ -278,6 +289,10 @@ const defaultListLimit = 100
 // discoveryCompletenessCaveat applies to every query: a query only sees what its
 // list arguments cover, so the result is never proof that nothing else exists.
 const discoveryCompletenessCaveat = "A query only sees what its filters and list arguments cover (for example one region or a filtered attribute), so more matching resources may exist beyond these."
+
+// discoveryCandidateIDHint tells the agent that prepare_import needs the IDs,
+// so it keeps them instead of re-reading pages after the user confirms.
+const discoveryCandidateIDHint = "prepare_import needs the candidate_id values: keep the IDs of every resource you present to the user and pass them after confirmation instead of paging the query again."
 
 // discoveryAttributesHint tells the agent whether rows carry resource attributes
 // such as tags, and how to get them. Discovery guidance lives here, not in
