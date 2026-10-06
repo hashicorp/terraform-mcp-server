@@ -54,7 +54,5 @@ func GetApplyDetailsFunc(ctx context.Context, request *mcp.CallToolRequest, inpu
 		return nil, nil, fmt.Errorf("failed to marshal apply details: %w", err)
 	}
 
-	return &mcp.CallToolResult{
-		Content: []mcp.Content{&mcp.TextContent{Text: buf.String()}},
-	}, nil, nil
+	return textResult(buf.String()), nil, nil
 }

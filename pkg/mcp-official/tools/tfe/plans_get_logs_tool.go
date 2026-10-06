@@ -52,7 +52,5 @@ func GetPlanLogsFunc(ctx context.Context, request *mcp.CallToolRequest, input Ge
 		return nil, nil, fmt.Errorf("failed to read plan logs: %w", err)
 	}
 
-	return &mcp.CallToolResult{
-		Content: []mcp.Content{&mcp.TextContent{Text: string(logBytes)}},
-	}, nil, nil
+	return textResult(string(logBytes)), nil, nil
 }

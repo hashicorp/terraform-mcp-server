@@ -46,7 +46,5 @@ func GetPlanJSONOutputFunc(ctx context.Context, request *mcp.CallToolRequest, in
 		return nil, nil, fmt.Errorf("failed to retrieve plan JSON output: %s", planID)
 	}
 
-	return &mcp.CallToolResult{
-		Content: []mcp.Content{&mcp.TextContent{Text: string(jsonBytes)}},
-	}, nil, nil
+	return textResult(string(jsonBytes)), nil, nil
 }

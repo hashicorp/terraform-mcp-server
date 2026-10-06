@@ -106,9 +106,7 @@ func getSentinelMock(ctx context.Context, request *mcp.CallToolRequest, input Ge
 				return nil, nil, fmt.Errorf("failed to marshal Sentinel mock result: %w", err)
 			}
 
-			return &mcp.CallToolResult{
-				Content: []mcp.Content{&mcp.TextContent{Text: string(result)}},
-			}, nil, nil
+			return textResult(string(result)), nil, nil
 
 		case tfe.PlanExportErrored:
 			return nil, nil, fmt.Errorf("plan export failed with error status for plan %s", planID)

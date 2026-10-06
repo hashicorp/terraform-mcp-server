@@ -75,7 +75,5 @@ func GetApplyLogsFunc(ctx context.Context, request *mcp.CallToolRequest, input G
 		return nil, nil, fmt.Errorf("failed to read apply logs: %s: %w", applyID, err)
 	}
 
-	return &mcp.CallToolResult{
-		Content: []mcp.Content{&mcp.TextContent{Text: string(logBytes)}},
-	}, nil, nil
+	return textResult(string(logBytes)), nil, nil
 }
