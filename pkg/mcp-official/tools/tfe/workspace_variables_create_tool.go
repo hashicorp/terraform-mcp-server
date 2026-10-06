@@ -16,12 +16,6 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-// the var categories accepted by create_workspace_variable.
-const (
-	variableCategoryTerraform = "terraform"
-	variableCategoryEnv       = "env"
-)
-
 type CreateWorkspaceVariableArguments struct {
 	TerraformOrgName string `json:"terraform_org_name"`
 	WorkspaceName    string `json:"workspace_name"`
