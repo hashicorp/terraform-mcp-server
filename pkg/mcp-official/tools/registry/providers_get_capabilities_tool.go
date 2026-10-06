@@ -110,7 +110,7 @@ func getProviderCapabilities(ctx context.Context, request *mcp.CallToolRequest, 
 	}
 
 	output := analyzeAndFormatCapabilities(providerDocs, namespace, name, version)
-	return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: output}}}, nil, nil
+	return textResult(output), nil, nil
 }
 
 func analyzeAndFormatCapabilities(docs registryapi.ProviderDocs, namespace, name, version string) string {

@@ -76,7 +76,5 @@ func getProviderDetails(ctx context.Context, request *mcp.CallToolRequest, input
 		return nil, nil, fmt.Errorf("failed to parse provider docs for %s", providerDocID)
 	}
 
-	return &mcp.CallToolResult{
-		Content: []mcp.Content{&mcp.TextContent{Text: details.Data.Attributes.Content}},
-	}, nil, nil
+	return textResult(details.Data.Attributes.Content), nil, nil
 }

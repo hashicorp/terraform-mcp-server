@@ -73,9 +73,5 @@ func getLatestProviderVersion(ctx context.Context, request *mcp.CallToolRequest,
 		return nil, nil, fmt.Errorf("provider not found: %s/%s - verify the namespace and provider name are correct", namespace, name)
 	}
 
-	return &mcp.CallToolResult{
-		Content: []mcp.Content{
-			&mcp.TextContent{Text: version},
-		},
-	}, nil, nil
+	return textResult(version), nil, nil
 }
