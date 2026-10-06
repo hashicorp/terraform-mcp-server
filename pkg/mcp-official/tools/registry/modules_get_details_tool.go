@@ -80,9 +80,7 @@ func getModuleDetailsHandler(ctx context.Context, request *mcp.CallToolRequest, 
 		return nil, nil, fmt.Errorf("no module data returned for %s - try a different module_id", moduleID)
 	}
 
-	return &mcp.CallToolResult{
-		Content: []mcp.Content{&mcp.TextContent{Text: moduleData}},
-	}, nil, nil
+	return textResult(moduleData), nil, nil
 }
 
 func getModuleDetails(ctx context.Context, httpClient *http.Client, moduleID string, currentOffset int, logger *log.Logger) ([]byte, error) {
