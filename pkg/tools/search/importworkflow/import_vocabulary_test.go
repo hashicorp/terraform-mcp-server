@@ -60,7 +60,7 @@ func TestImportToolTextUsesSharedVocabulary(t *testing.T) {
 
 func TestImportToolTextStatesVocabularyRules(t *testing.T) {
 	q := importAuthoringDirectoryQuestion
-	for _, want := range []string{"existing empty directory", "new directory", "never overwrite", "git", "do not choose one yourself", "including a temporary one for testing", "run the local Terraform checks", "git work tree", "may include sensitive files"} {
+	for _, want := range []string{"existing empty directory", "new directory", "never overwrite", "git", "do not choose one yourself", "including a temporary one for testing", "run the local Terraform checks", "git repository", "unwanted credential leak", "flag anything you find", "may contain secrets"} {
 		assert.Contains(t, q, want)
 	}
 	for _, want := range []string{"no path stripping", "no wrapper folder", "same relative paths", "authoring directory root"} {
@@ -192,7 +192,7 @@ func TestNewWorkspaceQuestionOmitsTheGitWarningAndAllowsExistingFiles(t *testing
 	for _, unwanted := range []string{"git work tree", "must be an existing empty directory", "Never extract into a directory"} {
 		assert.NotContains(t, importNewWorkspaceDirectoryQuestion, unwanted)
 	}
-	for _, want := range []string{"git work tree", "must be an existing empty directory", "Never extract into a directory"} {
+	for _, want := range []string{"git repository", "must be an existing empty directory", "Never extract into a directory"} {
 		assert.Contains(t, importAuthoringDirectoryQuestion, want)
 	}
 	// Each variant carries its own guidance for the end of the workflow; the
@@ -231,4 +231,13 @@ func TestCreateImportCVReturnsTheUploadRuleOnlyForANewWorkspace(t *testing.T) {
 	blank := callCreate(t, false, createArgs(map[string]any{"baseline_cv_id": nil, "baseline_state_id": nil, "baseline_state_serial": nil}))
 	require.Equal(t, "awaiting_agent_upload", blank.Status, blank.Diagnostics)
 	assert.Contains(t, blank.UploadInstructions, importNewWorkspaceUploadRule)
+}
+
+func TestSensitiveInformationIsFlaggedNotAvoidedByPath(t *testing.T) {
+	q := importAuthoringDirectoryQuestion
+	assert.Contains(t, q, "Any path is fine, including one inside a git repository")
+	assert.NotContains(t, q, "git work tree")
+	for _, want := range []string{"inline secrets", "Check without printing secret values", "flag it to the user"} {
+		assert.Contains(t, importSensitiveFileRule, want)
+	}
 }
