@@ -1,5 +1,9 @@
 # 1.3.1
 
+BREAKING CHANGES
+
+* `search_providers` is renamed to `search_provider_docs`. The tool searches documentation within a provider rather than for providers, and the old name was misleading. Update any toolset configuration or client that references the old name.
+
 IMPROVEMENTS
 
 * `get_private_module_details` now reports every submodule published with a private module, each with its own inputs, outputs, dependencies, provider dependencies, resources, and README, matching the detail already provided for the root module. The root module section is now labelled and its README is reported alongside its own inputs and outputs.

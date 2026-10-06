@@ -181,19 +181,19 @@ func TestToolFilter_ToolsetsMode(t *testing.T) {
 	}{
 		{
 			name:            "tool enabled - registry",
-			toolName:        "search_providers",
+			toolName:        "search_provider_docs",
 			enabledToolsets: []string{"registry"},
 			expected:        true,
 		},
 		{
 			name:            "tool disabled",
-			toolName:        "search_providers",
+			toolName:        "search_provider_docs",
 			enabledToolsets: []string{"terraform"},
 			expected:        false,
 		},
 		{
 			name:            "all toolset enables everything",
-			toolName:        "search_providers",
+			toolName:        "search_provider_docs",
 			enabledToolsets: []string{"all"},
 			expected:        true,
 		},
@@ -237,8 +237,8 @@ func TestParseIndividualTools(t *testing.T) {
 	}{
 		{
 			name:            "valid tools",
-			input:           []string{"search_providers", "get_provider_details"},
-			expectedValid:   []string{"search_providers", "get_provider_details"},
+			input:           []string{"search_provider_docs", "get_provider_details"},
+			expectedValid:   []string{"search_provider_docs", "get_provider_details"},
 			expectedInvalid: []string{},
 		},
 		{
@@ -249,26 +249,26 @@ func TestParseIndividualTools(t *testing.T) {
 		},
 		{
 			name:            "mixed valid and invalid",
-			input:           []string{"search_providers", "invalid_tool", "list_workspaces"},
-			expectedValid:   []string{"search_providers", "list_workspaces"},
+			input:           []string{"search_provider_docs", "invalid_tool", "list_workspaces"},
+			expectedValid:   []string{"search_provider_docs", "list_workspaces"},
 			expectedInvalid: []string{"invalid_tool"},
 		},
 		{
 			name:            "empty strings",
-			input:           []string{"search_providers", "", "list_workspaces", "  "},
-			expectedValid:   []string{"search_providers", "list_workspaces"},
+			input:           []string{"search_provider_docs", "", "list_workspaces", "  "},
+			expectedValid:   []string{"search_provider_docs", "list_workspaces"},
 			expectedInvalid: []string{},
 		},
 		{
 			name:            "duplicates",
-			input:           []string{"search_providers", "search_providers", "list_workspaces"},
-			expectedValid:   []string{"search_providers", "list_workspaces"},
+			input:           []string{"search_provider_docs", "search_provider_docs", "list_workspaces"},
+			expectedValid:   []string{"search_provider_docs", "list_workspaces"},
 			expectedInvalid: []string{},
 		},
 		{
 			name:            "whitespace trimming",
-			input:           []string{" search_providers ", "  list_workspaces  "},
-			expectedValid:   []string{"search_providers", "list_workspaces"},
+			input:           []string{" search_provider_docs ", "  list_workspaces  "},
+			expectedValid:   []string{"search_provider_docs", "list_workspaces"},
 			expectedInvalid: []string{},
 		},
 	}
@@ -297,14 +297,14 @@ func TestToolFilter_IndividualMode(t *testing.T) {
 	}{
 		{
 			name:      "tool enabled in individual mode",
-			toolName:  "search_providers",
-			toolNames: []string{"search_providers", "list_workspaces"},
+			toolName:  "search_provider_docs",
+			toolNames: []string{"search_provider_docs", "list_workspaces"},
 			expected:  true,
 		},
 		{
 			name:      "tool disabled in individual mode",
 			toolName:  "get_provider_details",
-			toolNames: []string{"search_providers", "list_workspaces"},
+			toolNames: []string{"search_provider_docs", "list_workspaces"},
 			expected:  false,
 		},
 		{
@@ -337,7 +337,7 @@ func TestKnownToolNames(t *testing.T) {
 
 	// Verify we have a reasonable number of tools (at least the ones we know about)
 	expectedTools := []string{
-		"search_providers",
+		"search_provider_docs",
 		"get_provider_details",
 		"search_modules",
 		"get_module_details",

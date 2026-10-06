@@ -15,7 +15,7 @@ var providerDocIDPattern = regexp.MustCompile(`(?m)^- providerDocID: ([0-9]+)$`)
 // search for a provider document first, then fetch its full content by ID.
 func TestGetProviderDetailsFromSearchResult(t *testing.T) {
 	runForEachTransport(t, func(t *testing.T, session *mcp.ClientSession) {
-		searchResult, searchText := callTool(t, session, "search_providers", map[string]any{
+		searchResult, searchText := callTool(t, session, "search_provider_docs", map[string]any{
 			"provider_name":          "dns",
 			"provider_namespace":     "hashicorp",
 			"provider_document_type": "resources",
@@ -70,7 +70,7 @@ func TestGetProviderDetailsRejectsNonnumericID(t *testing.T) {
 
 		require.True(t, result.IsError, "provider details should reject a nonnumeric document ID")
 		assert.Contains(t, text, "must be a valid number")
-		assert.Contains(t, text, "search_providers", "error should explain how to find a valid document ID")
+		assert.Contains(t, text, "search_provider_docs", "error should explain how to find a valid document ID")
 	})
 }
 

@@ -581,7 +581,7 @@ docker run -p 8080:8080 --rm -e TRANSPORT_MODE=streamable-http -e TRANSPORT_HOST
 
 # Filter tools (optional)
 docker run -i --rm terraform-mcp-server:dev --toolsets=registry,terraform
-docker run -i --rm terraform-mcp-server:dev --tools=search_providers,get_provider_details
+docker run -i --rm terraform-mcp-server:dev --tools=search_provider_docs,get_provider_details
 ```
 
 > **Note:** When running in Docker, you should set `TRANSPORT_HOST=0.0.0.0` to allow connections from outside the container.
@@ -644,7 +644,7 @@ Control which tools are available using `--toolsets` (groups) or `--tools` (indi
 terraform-mcp-server --toolsets=registry,terraform
 
 # Enable specific tools only
-terraform-mcp-server --tools=search_providers,get_provider_details,list_workspaces
+terraform-mcp-server --tools=search_provider_docs,get_provider_details,list_workspaces
 ```
 
 Available toolsets: `registry`, `registry-private`, `terraform`, `all`, `default`. See `pkg/toolsets/mapping.go` for individual tool names. Cannot use both flags together.
