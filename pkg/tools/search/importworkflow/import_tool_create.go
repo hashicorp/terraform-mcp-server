@@ -126,7 +126,11 @@ func createImportCV(ctx context.Context, c *tfe.Client, a importCreateArgs, logg
 	}
 	out.Status, out.CreateOutcome = "awaiting_agent_upload", "created"
 	out.UploadURL = cv.UploadURL
+	newWorkspace := a.BaselineCVID == "" && a.BaselineStateID == "" && a.BaselineSerial == nil
 	out.UploadInstructions = "Keep upload_url secret and use it once. PUT the complete reviewed .tar.gz (Content-Type: application/octet-stream) directly to it. If the URL is lost, the server cannot return it again: reconcile the pending CV before considering a new reviewed create. Never upload individual .tf files."
+	if newWorkspace {
+		out.UploadInstructions += " " + importNewWorkspaceUploadRule
+	}
 	out.NextAction = "PUT the complete archive to upload_url and confirm the upload succeeded. If the user already confirmed the speculative path for this exact archive, call create_import_run with this configuration_version_id now. Ask again only if the archive or baseline has changed since the user confirmed. The server has not read the archive."
 	return out
 }
@@ -197,9 +201,9 @@ func importCreateDefinition(name, title, description string, run bool) mcp.Tool 
 
 // CreateImportCVDefinition describes create_import_cv.
 func CreateImportCVDefinition() mcp.Tool {
-	return importCreateDefinition("create_import_cv", "Create speculative import configuration version", `Create a speculative, non-provisional configuration version (auto-queue off) in the target workspace and return its one-use upload URL. This is a mutation. The server always creates a speculative, non-applying configuration version and a plan-only run; no input changes that. After that single confirmation set confirm_speculative_run=true here and on create_import_run. `+" "+importConfirmationRule+" "+importValidationRule+" "+importArchiveRootRule+`
+	return importCreateDefinition("create_import_cv", "Create speculative import configuration version", `Create a speculative, non-provisional configuration version (auto-queue off) in the target workspace and return its one-use upload URL. This is a mutation. The server always creates a speculative, non-applying configuration version and a plan-only run; no input changes that. After that single confirmation set confirm_speculative_run=true here and on create_import_run. `+" "+importConfirmationRule+" "+importValidationRule+" "+importArchiveRootRule+" "+importDeleteDirectoryRule+`
 
-Pass the baseline fields from prepare_import (or none for a verified blank workspace). The server re-checks that the workspace is still a remote, API-upload root at that baseline; it does not re-read the QueryRun and does not read the archive. PUT the complete reviewed .tar.gz directly to upload_url, then call create_import_run. If the outcome is unknown, reconcile in HCP Terraform; never retry blindly.`, false)
+Pass the baseline fields from prepare_import (or none for a verified blank workspace). `+importNewWorkspaceUploadRule+` The server re-checks that the workspace is still a remote, API-upload root at that baseline; it does not re-read the QueryRun and does not read the archive. PUT the complete reviewed .tar.gz directly to upload_url, then call create_import_run. If the outcome is unknown, reconcile in HCP Terraform; never retry blindly.`, false)
 }
 
 // CreateImportRunDefinition describes create_import_run.

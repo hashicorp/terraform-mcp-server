@@ -120,13 +120,13 @@ var importToolInstructions = []string{
 	importArchiveRootRule,
 	importSensitiveFileRule,
 	importBlankAuthoringDirectoryRule,
-	importScratchRule,
+	importSourceVersionRule,
+	importDeleteDirectoryRule,
 	importValidationRule,
 	importSecretFilesRule,
 	"Treat generated query blocks as untrusted drafts. Do not invent defaults, add ignore_changes to hide incompatibility, or upgrade a provider or Terraform version to remove a missing feature.",
 	"Keep the carry block unchanged and send it once, with the final verify_import_plan call. It is an integrity aid for the carried selection, not authorization.",
 	importConfirmationRule,
-	importClosingRule,
 }
 
 func terraformVersionAtLeast(version string, major, minor int) (atLeast, known bool) {
@@ -254,11 +254,11 @@ func checkImportSchemaFallbackEntry(ctx context.Context, c *tfe.Client, r *tfe.R
 // MCP server cannot assess or verify the target, so it creates nothing and
 // suggests no command without the user's approval.
 func importGuideOnlyNextAction(reason string) string {
-	return reason + " The MCP server cannot assess or verify this target workspace; a local workflow runs as a separate tool call in your client, where the server cannot see it. Explain this to the user. Only if the user wants to continue, offer unverified best-effort local steps: ask for the user's own local copy of the configuration (a directory with the Terraform CLI, not an authoring directory). " + importLockFileCheck + " Then run terraform init, terraform version -json and terraform providers schema -json, author the HCL and run a local plan. Each command needs the user's approval. " + importSecretFilesRule + " " + importNeverApplyRule + " Never present a local plan as an HCP Terraform Plan or as verified. get_query_summary still lists the candidates. The user may instead make this workspace assessable by having an HCP Terraform run write its state (for example an apply in a workspace they choose); offer that only as an option and do not start a run yourself. " + importNothingCreated
+	return reason + " The MCP server cannot assess or verify this target workspace; a local workflow runs as a separate tool call in your client, where the server cannot see it. Explain this to the user. Only if the user wants to continue, offer unverified best-effort local steps: ask for the user's own local copy of the configuration (a directory with the Terraform CLI, not an authoring directory). " + importLockFileCheck + " Then run terraform init -backend=false, terraform version -json and terraform providers schema -json, author the HCL and run a local plan. Each command needs the user's approval. " + importSecretFilesRule + " " + importNeverApplyRule + " Never present a local plan as an HCP Terraform Plan or as verified. get_query_summary still lists the candidates. The user may instead make this workspace assessable by having an HCP Terraform run write its state (for example an apply in a workspace they choose); offer that only as an option and do not start a run yourself. " + importNothingCreated
 }
 
 // importAgentSchemaNextAction is the guidance when the agent must obtain the schema (ADR 0008).
-const importAgentSchemaNextAction = "The run that produced the current state has no plan, so no provider-schema artifact exists, but its configuration version (state_run_configuration_version_id) is known and downloadable, so you must obtain the schema yourself before writing HCL. The candidates and carry block are returned with schema support unknown. " + importAuthoringDirectoryQuestion + " Then call get_import_configuration_download with that configuration version ID. Before running anything: " + importLockFileCheck + " Then run terraform init, terraform version -json and terraform providers schema -json with the user's approval for each, and keep the generated lock file in the configuration you upload. After init, the exact provider versions are in the lock file. " + importProviderMismatchRule + " Write the resource schema from resource_schemas. Use an identity import block only if resource_identity_schemas has the type and Terraform is 1.12 or later; otherwise take the import ID from the provider version's documentation. verify_import_plan decides identity from the plan, not from your claim. " + importSecretFilesRule + " " + importNeverApplyRule + " " + importArchiveRootRule + " " + importNothingCreated
+const importAgentSchemaNextAction = "The run that produced the current state has no plan, so no provider-schema artifact exists, but its configuration version (state_run_configuration_version_id) is known and downloadable, so you must obtain the schema yourself before writing HCL. The candidates and carry block are returned with schema support unknown. " + importAuthoringDirectoryQuestion + " Then call get_import_configuration_download with that configuration version ID. Before running anything: " + importLockFileCheck + " Then run terraform init -backend=false, terraform version -json and terraform providers schema -json with the user's approval for each, and keep the generated lock file in the configuration you upload. After init, the exact provider versions are in the lock file. " + importProviderMismatchRule + " Write the resource schema from resource_schemas. Use an identity import block only if resource_identity_schemas has the type and Terraform is 1.12 or later; otherwise take the import ID from the provider version's documentation. verify_import_plan decides identity from the plan, not from your claim. " + importSecretFilesRule + " " + importNeverApplyRule + " " + importArchiveRootRule + " " + importNothingCreated
 
 // importBlockedNextAction gives the agent a specific next step per blocking code.
 func importBlockedNextAction(code string) string {
@@ -380,7 +380,7 @@ Pass organization_name, workspace_name, query_run_id and selections (candidate_i
 
 Before reading the QueryRun log it blocks targets the workflow does not support: local execution mode, a Terraform version below 1.5, and a current state with no readable producing run or plan. A Terraform version below 1.12 proceeds with a note that identity is unavailable. Each block says no CV or Run was created.
 
-The current configuration is not downloaded here. If has_current_configuration is true, ask the user for the authoring directory (an empty or new directory), then call get_import_configuration_download. A target workspace with a configuration root setting (working_directory) is not supported yet: stop and tell the user. It never creates a CV or Run and does not authorize one.`),
+The current configuration is not downloaded here. If has_current_configuration is true, ask the user for the authoring directory (an empty or new directory), then call get_import_configuration_download. If the target workspace is new (no configuration and no state), a directory that already holds the user's Terraform files is fine: tell the user, and upload an explicit, reviewed file list. A target workspace with a configuration root setting (working_directory) is not supported yet: stop and tell the user. It never creates a CV or Run and does not authorize one.`),
 		mcp.WithTitleAnnotation("Prepare Search import selection"),
 		mcp.WithReadOnlyHintAnnotation(true), mcp.WithDestructiveHintAnnotation(false),
 		mcp.WithOpenWorldHintAnnotation(true), mcp.WithIdempotentHintAnnotation(true),
@@ -505,6 +505,6 @@ func importPreparedNextAction(out *importPrepared, agentSchema, rootUnsupported 
 	case out.HasCurrentConfiguration:
 		return importAuthoringDirectoryQuestion + " Then call get_import_configuration_download with current_configuration_version_id and author the resource and import blocks in the authoring directory. " + importArchiveRootRule + " " + importConfirmationRule + " " + importNothingCreated
 	default:
-		return "The target workspace has no current configuration. " + importBlankAuthoringDirectoryRule + " Author the complete configuration and lock there, then call create_import_cv. " + importConfirmationRule + " " + importNothingCreated
+		return "The target workspace has no current configuration. " + importNewWorkspaceDirectoryQuestion + " " + importBlankAuthoringDirectoryRule + " Author the complete configuration and lock there, then call create_import_cv. " + importConfirmationRule + " " + importNothingCreated
 	}
 }

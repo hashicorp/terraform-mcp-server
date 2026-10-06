@@ -21,12 +21,15 @@ func importToolTexts(t *testing.T) map[string]string {
 		"importAgentSchemaNextAction": importAgentSchemaNextAction,
 		"importGuideOnlyNextAction":   importGuideOnlyNextAction("reason"),
 		"importAuthoringQuestion":     importAuthoringDirectoryQuestion,
+		"importNewWorkspaceQuestion":  importNewWorkspaceDirectoryQuestion,
+		"importNewWorkspaceUpload":    importNewWorkspaceUploadRule,
 		"importBlankAuthoringRule":    importBlankAuthoringDirectoryRule,
 		"importArchiveRootRule":       importArchiveRootRule,
 		"importConfigurationRootStop": importConfigurationRootStop,
 		"importConfirmationRule":      importConfirmationRule,
 		"importClosingRule":           importClosingRule,
-		"importScratchRule":           importScratchRule,
+		"importSourceVersionRule":     importSourceVersionRule,
+		"importDeleteDirectoryRule":   importDeleteDirectoryRule,
 		"importValidationRule":        importValidationRule,
 		"importSensitiveFileRule":     importSensitiveFileRule,
 		"importAdaptationGuidance":    importAdaptationGuidance,
@@ -57,22 +60,24 @@ func TestImportToolTextUsesSharedVocabulary(t *testing.T) {
 
 func TestImportToolTextStatesVocabularyRules(t *testing.T) {
 	q := importAuthoringDirectoryQuestion
-	for _, want := range []string{"existing empty directory", "new directory", "never overwrite", "git", "do not choose one yourself", "persists"} {
+	for _, want := range []string{"existing empty directory", "new directory", "never overwrite", "git", "do not choose one yourself", "including a temporary one for testing", "run the local Terraform checks", "git work tree", "may include sensitive files"} {
 		assert.Contains(t, q, want)
 	}
 	for _, want := range []string{"no path stripping", "no wrapper folder", "same relative paths", "authoring directory root"} {
 		assert.Contains(t, importArchiveRootRule, want)
 	}
-	for _, want := range []string{".env", ".envrc", "*.tfstate", ".terraform/", ".git/", "plan as creates", "explicit file list", "backend or cloud block"} {
+	for _, want := range []string{".env", ".envrc", "*.tfstate", ".terraform/", ".git/", "plan as creates", "explicit file list", "backend or cloud block", "*.tfvars", "exact file list in the review, before uploading"} {
 		assert.Contains(t, importBlankAuthoringDirectoryRule, want)
 	}
 	for _, want := range []string{"target workspace (organization/name)", "authoring directory path", "create_import_cv", "create_import_run"} {
 		assert.Contains(t, importConfirmationRule, want)
 	}
-	for _, want := range []string{"scratch directory", "never the authoring directory", "Never delete the authoring directory"} {
-		assert.Contains(t, importScratchRule+importValidationRule, want)
+	for _, want := range []string{"terraform fmt", "terraform init -backend=false", "terraform validate", "in the authoring directory", importLockFileCheck, "For a new workspace, the lock file init writes is the one you upload", "never use -upgrade", "never upload .terraform/", "Do not run these after the upload"} {
+		assert.Contains(t, importValidationRule, want)
 	}
-	assert.Contains(t, importValidationRule, "-backend=false")
+	for _, want := range []string{"already has a configuration or state", "different provider version", "lock file you upload", "does not apply to it"} {
+		assert.Contains(t, importSourceVersionRule, want)
+	}
 	assert.Contains(t, importClosingRule, "cannot download")
 	assert.Contains(t, importSensitiveFileRule, "silently")
 	assert.Contains(t, importConfigurationRootStop, "Do not ask for an authoring directory")
@@ -81,7 +86,7 @@ func TestImportToolTextStatesVocabularyRules(t *testing.T) {
 	assert.Contains(t, CreateImportCVDefinition().Description, importValidationRule)
 	assert.Contains(t, CreateImportCVDefinition().Description, importArchiveRootRule)
 	assert.Contains(t, strings.Join(importDownloadInstructions, " "), importArchiveRootRule)
-	assert.Contains(t, strings.Join(importToolInstructions, " "), importScratchRule)
+	assert.Contains(t, strings.Join(importToolInstructions, " "), importSourceVersionRule)
 	assert.Contains(t, importAgentSchemaNextAction, importAuthoringDirectoryQuestion)
 }
 
@@ -101,6 +106,8 @@ func TestPrepareImportBlankTargetGetsFileListRules(t *testing.T) {
 	require.Equal(t, "ready_for_authoring", out.Status, out.Diagnostics)
 	assert.Contains(t, out.NextAction, importBlankAuthoringDirectoryRule)
 	assert.Contains(t, out.NextAction, importConfirmationRule)
+	assert.Contains(t, out.NextAction, importNewWorkspaceDirectoryQuestion)
+	assert.NotContains(t, out.NextAction, "git work tree", "a new workspace downloads nothing")
 	assert.NotContains(t, out.NextAction, importAuthoringDirectoryQuestion, "a blank target downloads nothing")
 }
 
@@ -147,7 +154,13 @@ func TestSharedSentencesStayOnTheirSurfaces(t *testing.T) {
 		{"archive root", importArchiveRootRule, map[string]string{"prepare instructions": instructions, "download instructions": download, "create_import_cv": create, "agent schema": importAgentSchemaNextAction}},
 		{"confirmation", importConfirmationRule, map[string]string{"prepare instructions": instructions, "create_import_cv": create}},
 		{"signed URL", importArchiveURLRule, map[string]string{"download instructions": download}},
-		{"closing", importClosingRule, map[string]string{"prepare instructions": instructions, "verify next action": verifyDone}},
+		{"delete directory", importDeleteDirectoryRule, map[string]string{"prepare instructions": instructions, "create_import_cv": create}},
+		{"source version", importSourceVersionRule, map[string]string{"prepare instructions": instructions}},
+		{"validation", importValidationRule, map[string]string{"prepare instructions": instructions, "create_import_cv": create}},
+		{"closing", importClosingRule, map[string]string{"verify next action": verifyDone}},
+		{"existing question closing", "should not be committed as is", map[string]string{"existing question": importAuthoringDirectoryQuestion}},
+		{"new question closing", "ready to review and commit to their own source", map[string]string{"new question": importNewWorkspaceDirectoryQuestion}},
+		{"new workspace upload", importNewWorkspaceUploadRule, map[string]string{"create_import_cv": create}},
 		{"authoring directory", importAuthoringDirectoryQuestion, map[string]string{"agent schema": importAgentSchemaNextAction}},
 	} {
 		for surface, text := range tc.surfaces {
@@ -160,4 +173,62 @@ func TestEveryBlockedNextActionSaysNothingWasCreated(t *testing.T) {
 	for _, code := range []string{"workspace_execution_mode_local", "terraform_version_unsupported", "state_producing_run_missing", "target_config_not_downloadable", "schema_source_plan_unavailable", "workspace_ownership_unverified", ""} {
 		assert.Contains(t, importBlockedNextAction(code), importNothingCreated, code)
 	}
+}
+
+func TestDirectoryRulesStaySimple(t *testing.T) {
+	assert.Equal(t, "Do not delete or clean up the authoring directory without asking the user first.", importDeleteDirectoryRule)
+	for name, text := range importToolTexts(t) {
+		lower := strings.ToLower(text)
+		for _, banned := range []string{"never delete", "scratch", "temporary area", "persistent location", "remind the user to save", "only a backup", "ephemeral"} {
+			assert.NotContains(t, lower, banned, name)
+		}
+	}
+}
+
+func TestNewWorkspaceQuestionOmitsTheGitWarningAndAllowsExistingFiles(t *testing.T) {
+	for _, want := range []string{"new (no configuration and no state)", "nothing is downloaded", "already holds their Terraform files", "Tell the user", "do not choose one yourself", "including a temporary one for testing"} {
+		assert.Contains(t, importNewWorkspaceDirectoryQuestion, want)
+	}
+	for _, unwanted := range []string{"git work tree", "must be an existing empty directory", "Never extract into a directory"} {
+		assert.NotContains(t, importNewWorkspaceDirectoryQuestion, unwanted)
+	}
+	for _, want := range []string{"git work tree", "must be an existing empty directory", "Never extract into a directory"} {
+		assert.Contains(t, importAuthoringDirectoryQuestion, want)
+	}
+	// Each variant carries its own guidance for the end of the workflow; the
+	// closing in verify_import_plan is the same for both.
+	assert.Contains(t, importAuthoringDirectoryQuestion, "should not be committed as is")
+	assert.NotContains(t, importNewWorkspaceDirectoryQuestion, "should not be committed as is")
+	assert.Contains(t, importNewWorkspaceDirectoryQuestion, "not to commit .terraform/ or any state files")
+	assert.Contains(t, importNewWorkspaceDirectoryQuestion, "check .tfvars files for secrets first")
+	assert.Contains(t, importAuthoringDirectoryQuestion, "If the user already named a path, check it is empty or new first")
+	assert.NotContains(t, importClosingRule, "should not be committed as is")
+	assert.NotContains(t, importClosingRule, "sensitive files")
+	assert.False(t, forbiddenNextActionWords.MatchString(importClosingRule), "no safe, approved or apply wording")
+}
+
+func TestNewWorkspaceUploadRuleIsAtTheUploadStep(t *testing.T) {
+	for _, want := range []string{"key or credential files", "*.pem", "*.key", "*.tfbackend", "symlinks pointing out of the directory", "inline credentials", "provider keys", "upload only the file list the user confirmed"} {
+		assert.Contains(t, importNewWorkspaceUploadRule, want)
+	}
+	// The question-time rule keeps the common exclusions and the exact file list in the review.
+	for _, want := range []string{".env", ".envrc", "credential files", "*.tfstate", ".terraform/", ".git/", "exact file list in the review, before uploading"} {
+		assert.Contains(t, importBlankAuthoringDirectoryRule, want)
+	}
+	for _, notThere := range []string{"inline credentials", "*.pem", "symlinks"} {
+		assert.NotContains(t, importBlankAuthoringDirectoryRule, notThere)
+	}
+	assert.Contains(t, CreateImportCVDefinition().Description, importNewWorkspaceUploadRule)
+}
+
+func TestCreateImportCVReturnsTheUploadRuleOnlyForANewWorkspace(t *testing.T) {
+	importExecutionFixture(t)
+	existing := callCreate(t, false, createArgs(nil))
+	require.Equal(t, "awaiting_agent_upload", existing.Status, existing.Diagnostics)
+	assert.NotContains(t, existing.UploadInstructions, importNewWorkspaceUploadRule, "an existing workspace's upload is not a new-workspace upload")
+
+	blankImportFixture(t)
+	blank := callCreate(t, false, createArgs(map[string]any{"baseline_cv_id": nil, "baseline_state_id": nil, "baseline_state_serial": nil}))
+	require.Equal(t, "awaiting_agent_upload", blank.Status, blank.Diagnostics)
+	assert.Contains(t, blank.UploadInstructions, importNewWorkspaceUploadRule)
 }

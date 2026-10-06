@@ -166,7 +166,7 @@ func TestCreateToolTextAsksForOneConfirmation(t *testing.T) {
 		assert.Contains(t, tool.text, "no input changes that", tool.name)
 	}
 	assert.Contains(t, CreateImportCVDefinition().Description, "terraform fmt")
-	assert.Contains(t, CreateImportCVDefinition().Description, "Do not run them after the upload")
+	assert.Contains(t, CreateImportCVDefinition().Description, "Do not run these after the upload")
 	f, uploaded, _ := importExecutionFixture(t)
 	_ = uploaded
 	out := callCreate(t, false, createArgs(nil))
@@ -180,8 +180,8 @@ func TestCreateToolTextAsksForOneConfirmation(t *testing.T) {
 func TestPrepareImportToolTextCoversReviewValidationAndSecrets(t *testing.T) {
 	joined := strings.Join(importToolInstructions, " ")
 	assert.Contains(t, joined, "ask once")
-	assert.Contains(t, joined, "terraform fmt and terraform validate")
-	assert.Contains(t, joined, "Do not run them after the upload")
+	assert.Contains(t, joined, "terraform fmt before the upload")
+	assert.Contains(t, joined, "Do not run these after the upload")
 	assert.Contains(t, joined, ".envrc")
 	assert.Contains(t, strings.Join(importDownloadInstructions, " "), ".envrc")
 	assert.Contains(t, importGuideOnlyNextAction("x"), ".envrc")

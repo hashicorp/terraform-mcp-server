@@ -48,7 +48,7 @@ func downloadImportConfiguration(ctx context.Context, c *tfe.Client, input impor
 	switch ctxResult.Status {
 	case "blank_workspace":
 		out.Status = "blank_workspace"
-		out.NextAction = "The target workspace has no current configuration or state. " + importBlankAuthoringDirectoryRule + " Author the complete configuration and lock there, then call create_import_cv. " + importConfirmationRule
+		out.NextAction = "The target workspace has no current configuration or state. " + importNewWorkspaceDirectoryQuestion + " " + importBlankAuthoringDirectoryRule + " Author the complete configuration and lock there, then call create_import_cv. " + importConfirmationRule
 		return out
 	case "available":
 		if ctxResult.Context == nil || ctxResult.Context.ConfigurationVersionID != requestedCV {

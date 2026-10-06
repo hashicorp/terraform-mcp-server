@@ -81,18 +81,28 @@ The Terraform MCP server provides tools for generating better Terraform code thr
    provider schema JSON, the locked provider version's documentation, the
    versioned Terraform docs and `terraform validate`, not fixed rules, and list
    each adaptation in the review.
-3. Ask the user for the **authoring directory**: an existing empty directory, or
-   a new one you create at the path they give. If the target workspace has a
-   current configuration, call `get_import_configuration_download` and extract
-   it there with a plain GET and no Authorization header; the directory must be
-   empty. If the target workspace has no configuration yet, the directory may
-   already hold the user's Terraform files and you upload an explicit, reviewed
-   file list. Keep the archive root exactly as downloaded and re-archive from
+3. Ask the user for the **authoring directory**; you work in it for everything.
+   If the target workspace has a current configuration, it must be an existing
+   empty directory, or a new one you create at the path they give: call
+   `get_import_configuration_download` and extract the configuration there with a
+   plain GET and no Authorization header, and warn once if the path is inside a
+   git work tree (the download may include `.env` or `.tfvars` files). If the
+   target workspace is new (no configuration and no state), nothing is downloaded
+   and a directory that already holds the user's Terraform files is fine, so tell
+   the user; you upload an explicit, reviewed file list that excludes secrets
+   (`.env`, credential files, state, `.terraform/`, `.git/`), flags `.tfvars`
+   files and shows the file list in the review; before the upload re-check it for
+   key and credential files, symlinks out of the directory and inline credentials
+   in the `.tf` files. Keep the archive root exactly as downloaded and re-archive from
    it with the same relative paths, author and review the HCL, and upload the
    complete reviewed archive to the URL returned by `create_import_cv`. Never
-   add, or silently drop, sensitive files; flag them to the user. Use a scratch
-   directory (your own, in the OS temp area) only for small disposable checks
-   such as `terraform validate` on a copy. A target workspace with a
+   add, or silently drop, sensitive files; flag them to the user. Run `terraform
+   fmt`, then `terraform init -backend=false` and `terraform validate`, in the
+   authoring directory before the upload (lock-file check first for an existing
+   configuration; never `-upgrade`; never upload `.terraform/`). On a workspace
+   that already has a configuration or state, do not run `init` for a different
+   provider version there. Do not delete or clean up the authoring directory
+   without asking the user first. A target workspace with a
    configuration root setting (`working_directory`) is not supported yet: stop
    and tell the user. MCP does not download, edit, or upload archive bytes and
    takes no local path.
