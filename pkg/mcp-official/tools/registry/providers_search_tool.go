@@ -108,7 +108,7 @@ func searchProviders(ctx context.Context, request *mcp.CallToolRequest, input Se
 		fullContent := fmt.Sprintf("# %s provider docs\n\n%s",
 			providerDetail.ProviderName, content)
 
-		return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: fullContent}}}, nil, nil
+		return textResult(fullContent), nil, nil
 	}
 
 	// For resources/data-sources, use the v1 API for better performance (single response)
@@ -149,7 +149,7 @@ func searchProviders(ctx context.Context, request *mcp.CallToolRequest, input Se
 		return nil, nil, fmt.Errorf("no documentation found for service_slug '%s' - try a more relevant service_slug, or use the provider_name as the value", serviceSlug)
 	}
 
-	return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: builder.String()}}}, nil, nil
+	return textResult(builder.String()), nil, nil
 }
 
 func resolveProviderDetails(ctx context.Context, input SearchProvidersArguments, httpClient *http.Client, logger *log.Logger) (client.ProviderDetail, error) {
