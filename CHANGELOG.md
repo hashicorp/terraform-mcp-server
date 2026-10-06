@@ -1,3 +1,9 @@
+# Unreleased
+
+IMPROVEMENTS
+
+* Add an "Add to Kiro" one-click MCP install button and a dedicated "Usage with Kiro" section to the README. [527](https://github.com/hashicorp/terraform-mcp-server/pull/527)
+
 # 1.3.1
 
 IMPROVEMENTS
