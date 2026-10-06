@@ -23,7 +23,7 @@ import (
 
 type SearchProvidersArguments struct {
 	ProviderName         string `json:"provider_name" jsonschema:"The name of the Terraform provider to perform the read or deployment operation"`
-	ProviderNamespace    string `json:"provider_namespace,omitempty" jsonschema:"The publisher of the Terraform provider, typically the name of the company, or their GitHub organization name that created the provider (defaults to hashicorp)"`
+	ProviderNamespace    string `json:"provider_namespace,omitempty" jsonschema:"The publisher of the Terraform provider, typically the name of the company, or their GitHub organization name that created the provider (defaults to hashicorp). If you are not certain of the namespace, do not guess, ask the user. Most HashiCorp-maintained providers are in the hashicorp namespace"`
 	ServiceSlug          string `json:"service_slug" jsonschema:"The slug of the service you want to deploy or read using the Terraform provider, prefer using a single word, use underscores for multiple words and if unsure about the service_slug, use the provider_name for its value"`
 	ProviderDocumentType string `json:"provider_document_type,omitempty" jsonschema:"Document category: resources (default), data-sources, functions, guides, overview, actions, or list-resources"`
 	ProviderVersion      string `json:"provider_version,omitempty" jsonschema:"Provider version in x.y.z format, or latest (default)"`
