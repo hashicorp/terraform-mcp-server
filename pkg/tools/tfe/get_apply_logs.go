@@ -51,6 +51,10 @@ func getApplyLogsHandler(ctx context.Context, request mcp.CallToolRequest, logge
 		return ToolErrorf(logger, "apply not found: %s", applyID)
 	}
 
+	if apply.Status == tfe.ApplyUnreachable {
+		return ToolErrorf(logger, "apply %s is unreachable and has no logs: the run stopped before the apply phase (e.g. no changes, plan-only run, or failed plan), and this apply will never run. Check get_plan_logs for the reason.", applyID)
+	}
+
 	terminalStatuses := []tfe.ApplyStatus{
 		tfe.ApplyErrored,
 		tfe.ApplyFinished,

@@ -100,6 +100,24 @@ var officialFactories = map[string]func(svr *mcp.Server, logger *slog.Logger){
 	"detach_variable_set_from_workspaces": func(svr *mcp.Server, _ *slog.Logger) {
 		mcp.AddTool(svr, tfeTools.DetachVariableSetFromWorkspacesTool(), tfeTools.DetachVariableSetFromWorkspacesFunc)
 	},
+	"get_plan_logs": func(svr *mcp.Server, _ *slog.Logger) {
+		mcp.AddTool(svr, tfeTools.GetPlanLogsTool(), tfeTools.GetPlanLogsFunc)
+	},
+	"get_plan_details": func(svr *mcp.Server, _ *slog.Logger) {
+		mcp.AddTool(svr, tfeTools.GetPlanDetailsTool(), tfeTools.GetPlanDetailsFunc)
+	},
+	"get_plan_json_output": func(svr *mcp.Server, _ *slog.Logger) {
+		mcp.AddTool(svr, tfeTools.GetPlanJSONOutputTool(), tfeTools.GetPlanJSONOutputFunc)
+	},
+	"get_apply_logs": func(svr *mcp.Server, _ *slog.Logger) {
+		mcp.AddTool(svr, tfeTools.GetApplyLogsTool(), tfeTools.GetApplyLogsFunc)
+	},
+	"get_apply_details": func(svr *mcp.Server, _ *slog.Logger) {
+		mcp.AddTool(svr, tfeTools.GetApplyDetailsTool(), tfeTools.GetApplyDetailsFunc)
+	},
+	"get_sentinel_mock": func(svr *mcp.Server, logger *slog.Logger) {
+		mcp.AddTool(svr, tfeTools.GetSentinelMockTool(), tfeTools.GetSentinelMockFunc(logger))
+	},
 }
 
 func RegisterTools(svr *mcp.Server, logger *slog.Logger, filter toolsets.ToolFilter) {
