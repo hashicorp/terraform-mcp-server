@@ -71,7 +71,7 @@ func TestToolsFlagAloneDoesNotConflictWithDefaultToolsets(t *testing.T) {
 
 	os.Args = []string{
 		"terraform-mcp-server",
-		"--tools=search_providers,get_provider_details",
+		"--tools=search_provider_docs,get_provider_details",
 	}
 
 	logger, fatalCalled := fatalRecordingLogger()
@@ -85,7 +85,7 @@ func TestToolsFlagAloneDoesNotConflictWithDefaultToolsets(t *testing.T) {
 	assert.False(t, *fatalCalled,
 		"passing only --tools (with --toolsets at its declared 'all' default) must not "+
 			"trigger the --tools/--toolsets conflict Fatal")
-	assert.True(t, captured.IsToolEnabled("search_providers"))
+	assert.True(t, captured.IsToolEnabled("search_provider_docs"))
 	assert.True(t, captured.IsToolEnabled("get_provider_details"))
 
 }
@@ -106,7 +106,7 @@ func TestToolsAndToolsetsTogetherTriggersFatal(t *testing.T) {
 
 	os.Args = []string{
 		"terraform-mcp-server",
-		"--tools=search_providers",
+		"--tools=search_provider_docs",
 		"--toolsets=registry",
 	}
 

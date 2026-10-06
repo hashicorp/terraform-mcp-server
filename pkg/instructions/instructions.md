@@ -57,7 +57,7 @@ The Terraform MCP server provides tools for generating better Terraform code thr
 ## Workflow Patterns
 
 **Code Generation**:
-1. `search_modules`/`search_providers` for available resources
+1. `search_modules`/`search_provider_docs` for available resources
 2. `get_latest_provider_version` if no version available in existing code
 3. `get_module_details` for module requirements
 4. Generate code with discovered constraints
