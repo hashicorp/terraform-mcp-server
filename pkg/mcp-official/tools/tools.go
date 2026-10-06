@@ -18,7 +18,7 @@ import (
 // go-sdk so far. mcp.AddTool is generic per tool (different Arguments/Result
 // types), so each entry is a closure that calls it directly rather than a
 // plain map[string]func(*log.Logger) server.ServerTool like the mark3labs
-// side uses. Tools that log take the server's logger from RegisterTools.
+// side uses. Tools that log, take the server's logger from RegisterTools.
 
 var officialFactories = map[string]func(svr *mcp.Server, logger *slog.Logger){
 	// Add entries here as each tool gets ported to the official go-sdk
@@ -138,6 +138,9 @@ var officialFactories = map[string]func(svr *mcp.Server, logger *slog.Logger){
 	},
 	"search_private_providers": func(svr *mcp.Server, _ *slog.Logger) {
 		mcp.AddTool(svr, tfeTools.SearchPrivateProvidersTool(), tfeTools.SearchPrivateProvidersFunc)
+	},
+	"force_unlock_workspace": func(svr *mcp.Server, _ *slog.Logger) {
+		mcp.AddTool(svr, tfeTools.ForceUnlockWorkspaceTool(), tfeTools.ForceUnlockWorkspaceFunc)
 	},
 }
 
