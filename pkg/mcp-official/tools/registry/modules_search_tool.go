@@ -86,9 +86,7 @@ func searchModules(ctx context.Context, request *mcp.CallToolRequest, input Sear
 		return nil, nil, fmt.Errorf("no modules found for query: %s - try a different search term", moduleQuery)
 	}
 
-	return &mcp.CallToolResult{
-		Content: []mcp.Content{&mcp.TextContent{Text: modulesData}},
-	}, nil, nil
+	return textResult(modulesData), nil, nil
 }
 
 func sendSearchModulesCall(ctx context.Context, httpClient *http.Client, moduleQuery string, currentOffset int, logger *log.Logger) ([]byte, error) {

@@ -83,7 +83,5 @@ func getLatestModuleVersion(ctx context.Context, request *mcp.CallToolRequest, i
 		return nil, nil, fmt.Errorf("unmarshalling module information for %s/%s from the %s provider: %w", modulePublisher, moduleName, moduleProvider, err)
 	}
 
-	return &mcp.CallToolResult{
-		Content: []mcp.Content{&mcp.TextContent{Text: moduleVersionDetails.Version}},
-	}, nil, nil
+	return textResult(moduleVersionDetails.Version), nil, nil
 }
