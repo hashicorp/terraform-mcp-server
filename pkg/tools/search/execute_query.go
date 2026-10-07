@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 
@@ -48,6 +49,21 @@ const executeQuerySource = "terraform-mcp"
 
 // ExecuteQuery creates and immediately executes an HCP Terraform no-code query.
 func ExecuteQuery(logger *log.Logger) server.ServerTool {
+	organizationName := strings.TrimSpace(os.Getenv("TF_CLOUD_ORGANIZATION"))
+	workspaceName := strings.TrimSpace(os.Getenv("TF_WORKSPACE"))
+	organizationOptions := []mcp.PropertyOption{
+		mcp.Description("Organization containing the workspace. Uses TF_CLOUD_ORGANIZATION when set; otherwise ask the user for it."),
+	}
+	if organizationName != "" {
+		organizationOptions = append(organizationOptions, mcp.DefaultString(organizationName))
+	}
+	workspaceOptions := []mcp.PropertyOption{
+		mcp.Description("Workspace in which to execute the query. Uses TF_WORKSPACE when set; otherwise ask the user for it."),
+	}
+	if workspaceName != "" {
+		workspaceOptions = append(workspaceOptions, mcp.DefaultString(workspaceName))
+	}
+
 	return server.ServerTool{
 		Tool: mcp.NewTool("execute_query",
 			mcp.WithDescription(executeQueryDescription),
@@ -55,14 +71,8 @@ func ExecuteQuery(logger *log.Logger) server.ServerTool {
 			mcp.WithOpenWorldHintAnnotation(true),
 			mcp.WithReadOnlyHintAnnotation(false),
 			mcp.WithDestructiveHintAnnotation(false),
-			mcp.WithString("organization_name",
-				mcp.Required(),
-				mcp.Description("Name of the HCP Terraform organization containing the workspace."),
-			),
-			mcp.WithString("workspace_name",
-				mcp.Required(),
-				mcp.Description("Name of the HCP Terraform workspace in which to create and execute the query. The tool resolves its ID using go-tfe."),
-			),
+			mcp.WithString("organization_name", organizationOptions...),
+			mcp.WithString("workspace_name", workspaceOptions...),
 			mcp.WithString("query_configuration",
 				mcp.Required(),
 				mcp.Description(
@@ -81,17 +91,10 @@ func ExecuteQuery(logger *log.Logger) server.ServerTool {
 }
 
 func executeQueryHandler(ctx context.Context, request mcp.CallToolRequest, logger *log.Logger) (*mcp.CallToolResult, error) {
-	organizationName, err := request.RequireString("organization_name")
-	if err != nil || strings.TrimSpace(organizationName) == "" {
-		return toolErrorf(logger, "execute_query", "missing required input: organization_name")
+	organizationName, workspaceName := resolveSearchScope(request)
+	if organizationName == "" || workspaceName == "" {
+		return toolErrorf(logger, "execute_query", "organization_name and workspace_name are required; after checking TF_CLOUD_ORGANIZATION and TF_WORKSPACE, ask the user to provide both before executing the query")
 	}
-	organizationName = strings.TrimSpace(organizationName)
-
-	workspaceName, err := request.RequireString("workspace_name")
-	if err != nil || strings.TrimSpace(workspaceName) == "" {
-		return toolErrorf(logger, "execute_query", "missing required input: workspace_name")
-	}
-	workspaceName = strings.TrimSpace(workspaceName)
 
 	rawConfiguration, err := request.RequireString("query_configuration")
 	if err != nil || strings.TrimSpace(rawConfiguration) == "" {
@@ -217,8 +220,10 @@ const executeQueryDescription = `Creates and immediately executes an HCP Terrafo
 
 MANDATORY WORKFLOW: Before calling this tool, call provider_list_schema_list and then
 generate_query_configuration. Do not skip generate_query_configuration or construct the payload
-directly. Pass an organization name, workspace name, and the provider/resource configuration
-produced from its guidance.
+directly. Use TF_CLOUD_ORGANIZATION and TF_WORKSPACE first and tell the user which organization
+and workspace are being used. If either is unset or empty, ask the user to provide both before
+calling this tool. Pass those values with the provider/resource configuration produced from the
+schema guidance.
 Never construct resource_type from an ordinary managed resource name: it must be an exact key
 in list_resource_schemas for the selected provider version. If no matching key exists, do not
 call this tool. The tool resolves the workspace

@@ -32,11 +32,13 @@ const validExecuteQueryConfiguration = `{
 }`
 
 func TestExecuteQueryDefinition(t *testing.T) {
+	t.Setenv("TF_CLOUD_ORGANIZATION", "default-org")
+	t.Setenv("TF_WORKSPACE", "default-workspace")
 	tool := ExecuteQuery(silentLogger())
 
 	assert.Equal(t, "execute_query", tool.Tool.Name)
-	assert.Contains(t, tool.Tool.InputSchema.Required, "organization_name")
-	assert.Contains(t, tool.Tool.InputSchema.Required, "workspace_name")
+	assert.NotContains(t, tool.Tool.InputSchema.Required, "organization_name")
+	assert.NotContains(t, tool.Tool.InputSchema.Required, "workspace_name")
 	assert.NotContains(t, tool.Tool.InputSchema.Properties, "workspace_id")
 	assert.Contains(t, tool.Tool.InputSchema.Required, "query_configuration")
 	require.NotNil(t, tool.Tool.Annotations.ReadOnlyHint)
@@ -51,6 +53,8 @@ func TestExecuteQueryDefinition(t *testing.T) {
 	assert.Contains(t, tool.Tool.Description, "exact key")
 	assert.Contains(t, tool.Tool.Description, "ordinary managed resource name")
 	assert.Contains(t, tool.Tool.Description, "MANDATORY WORKFLOW")
+	assert.Contains(t, tool.Tool.Description, "Use TF_CLOUD_ORGANIZATION and TF_WORKSPACE first")
+	assert.Contains(t, tool.Tool.Description, "tell the user")
 }
 
 func TestParseExecuteQueryConfiguration(t *testing.T) {
