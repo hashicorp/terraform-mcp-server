@@ -36,6 +36,7 @@ func importToolTexts(t *testing.T) map[string]string {
 		"importArchiveURLRule":        importArchiveURLRule,
 		"importKeepResultRule":        importKeepResultRule,
 		"importCandidateFieldsRule":   importCandidateFieldsRule,
+		"importModuleTargetRule":      importModuleTargetRule,
 	}
 	for _, tool := range []struct{ name, text string }{
 		{"prepare_import", PrepareImportDefinition().Description},

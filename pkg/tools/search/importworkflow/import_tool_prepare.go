@@ -123,6 +123,7 @@ var importToolInstructions = []string{
 	"After downloading the configuration, " + importProviderMismatchRule,
 	"Author exactly one resource instance and one individual import block per candidate in the complete preserved tree. Choose a distinct target address for each. Never use the first N results.",
 	importAdaptationGuidance,
+	importModuleTargetRule,
 	importArchiveRootRule,
 	importSensitiveFileRule,
 	importBlankAuthoringDirectoryRule,
@@ -509,8 +510,8 @@ func importPreparedNextAction(out *importPrepared, agentSchema, rootUnsupported 
 	case rootUnsupported:
 		return importConfigurationRootStop + " get_query_summary still lists the candidates. " + importNothingCreated
 	case out.HasCurrentConfiguration:
-		return importKeepGeneratedShort + " " + importTargetScopeShort + " " + importKeepResultShort + " " + importAuthoringDirectoryQuestion + " Then call get_import_configuration_download with current_configuration_version_id and author the resource and import blocks in the authoring directory. " + importArchiveRootRule + " " + importConfirmationRule + " " + importNothingCreated
+		return importKeepGeneratedShort + " " + importTargetScopeShort + " " + importKeepResultShort + " " + importModuleTargetShort + " " + importAuthoringDirectoryQuestion + " Then call get_import_configuration_download with current_configuration_version_id and author the resource and import blocks in the authoring directory. " + importArchiveRootRule + " " + importConfirmationRule + " " + importNothingCreated
 	default:
-		return "The target workspace has no current configuration. " + importKeepGeneratedShort + " " + importKeepResultShort + " " + importNewWorkspaceDirectoryQuestion + " " + importBlankAuthoringDirectoryRule + " Author the complete configuration and lock there, then call create_import_cv. " + importConfirmationRule + " " + importNothingCreated
+		return "The target workspace has no current configuration. " + importKeepGeneratedShort + " " + importKeepResultShort + " " + importModuleTargetShort + " " + importNewWorkspaceDirectoryQuestion + " " + importBlankAuthoringDirectoryRule + " Author the complete configuration and lock there, then call create_import_cv. " + importConfirmationRule + " " + importNothingCreated
 	}
 }

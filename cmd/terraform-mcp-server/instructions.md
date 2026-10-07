@@ -103,7 +103,10 @@ The Terraform MCP server provides tools for generating better Terraform code thr
    configuration; never `-upgrade`; never upload `.terraform/`). On a workspace
    that already has a configuration or state, do not run `init` for a different
    provider version there. Do not delete or clean up the authoring directory
-   without asking the user first. A target workspace with a
+   without asking the user first. The default is a resource and import block in the root
+   module; if the user wants the resource in an editable local module, follow the
+   module placement guidance in the `prepare_import` response (resource block in the
+   module, import block in the root). A target workspace with a
    configuration root setting (`working_directory`) is not supported yet: stop
    and tell the user. MCP does not download, edit, or upload archive bytes and
    takes no local path.

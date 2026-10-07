@@ -45,7 +45,7 @@ func getPlanLogsHandler(ctx context.Context, request mcp.CallToolRequest, logger
 
 	logReader, err := tfeClient.Plans.Logs(ctx, planID)
 	if err != nil {
-		return ToolErrorf(logger, "failed to retrieve plan logs: %s", planID)
+		return ToolError(logger, "failed to retrieve plan logs: "+planID, err)
 	}
 
 	logBytes, err := io.ReadAll(logReader)

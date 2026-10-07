@@ -35,7 +35,7 @@ var importDownloadInstructions = []string{
 	importArchiveRootRule,
 	importSensitiveFileRule,
 	importSecretFilesRule,
-	"This workflow supports a remote root configuration only. If the target workspace's configuration root setting (working_directory) is set, stop and tell the user.",
+	"This workflow supports a target workspace whose configuration root setting (working_directory) is empty. If it is set, stop and tell the user. A resource may still go in a local module inside the archive (see the module placement guidance from prepare_import).",
 }
 
 // downloadImportConfiguration returns the short-lived archive location of the

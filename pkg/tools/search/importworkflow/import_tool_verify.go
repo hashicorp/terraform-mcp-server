@@ -541,6 +541,9 @@ func verifyNextAction(v importVerified) string {
 			parts = append(parts, fmt.Sprintf("and %d deferred changes", v.Plan.DeferredChanges))
 		}
 		parts[len(parts)-1] += ". Fix the configuration listed in attention, then create a new configuration version and run."
+		if v.Changes[changeNotInPlan] > 0 {
+			parts = append(parts, "A not_in_plan item means no plan entry has exactly that target_address: compare it with the address in unselected or in the plan, including the module path and instance keys.")
+		}
 	case "needs_iteration":
 		if v.ObjectIdentity[identityMismatched] > 0 {
 			parts = append(parts, fmt.Sprintf("%d selected items have an identity that differs from the carried selection. Stop and review this selection with the user.", v.ObjectIdentity[identityMismatched]))
@@ -619,7 +622,7 @@ func VerifyImportPlanDefinition() mcp.Tool {
 	return mcp.NewTool("verify_import_plan",
 		mcp.WithDescription(`Wait up to about 40 seconds for a plan-only import Run, then describe what the finished plan showed. Read-only.
 
-Poll with organization_name, workspace_name and run_id from create_import_run; while the plan runs the result is a short status, so call again with the same run_id. When the plan has finished, call once more with the carry block from prepare_import (unchanged) and bindings: one candidate_id and target_address for every selected candidate. Use the carry block you kept from prepare_import, unchanged.
+Poll with organization_name, workspace_name and run_id from create_import_run; while the plan runs the result is a short status, so call again with the same run_id. When the plan has finished, call once more with the carry block from prepare_import (unchanged) and bindings: one candidate_id and target_address for every selected candidate. target_address is matched exactly against the address in the plan, so give it as Terraform prints it, including any module path and instance keys with double quotes (for example module.network["east"].aws_x.y["a"]). Use the carry block you kept from prepare_import, unchanged.
 
 The result gives, for each selected item, a change (none, update, replace_or_destroy, create, import_missing, not_in_plan, type_mismatch) and an object_identity (matched, mismatched, unsupported, unverified), as counts plus an attention list of items that need a look. unsupported means the identity could not be compared (Terraform below 1.12 or a type with no identity); confirm those import IDs against the documentation of the target workspace's locked provider version. unselected lists extra imports, other actions and drift. No attribute or import ID values are returned; use get_plan_json_output for detail. The summary describes the plan; it is not an approval and a plan-only Run never imports into state.`),
 		mcp.WithTitleAnnotation("Verify import plan"),
