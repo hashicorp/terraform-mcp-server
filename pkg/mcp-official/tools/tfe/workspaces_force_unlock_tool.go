@@ -28,7 +28,7 @@ type ForceUnlockWorkspaceResponse struct {
 func ForceUnlockWorkspaceTool() *mcp.Tool {
 	return &mcp.Tool{
 		Name:        "force_unlock_workspace",
-		Description: `Force unlocks a Terraform workspace stuck in a lock. Prefer using the action_run tool with "discard" or "cancel" before force-unlocking a workspace. Requires workspace admin permissions (e.g. an Owners team token).`,
+		Description: `Force unlocks a Terraform workspace that has a stale lock, meaning the lock was left behind by a run that crashed, got interrupted, or timed out. Do not use this tool while a run is still active. Force-unlocking will not stop that run, it only removes the lock, which can let two runs change the same workspace at the same time. If a run is still active, use the action_run tool with discard or cancel instead. This tool needs workspace admin permissions, such as an Owners team token.`,
 		Annotations: &mcp.ToolAnnotations{
 			Title:           "Force unlock a Terraform workspace by ID",
 			OpenWorldHint:   jsonschema.Ptr(true),
