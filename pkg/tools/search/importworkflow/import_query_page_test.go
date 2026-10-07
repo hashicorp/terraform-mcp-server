@@ -168,7 +168,7 @@ func TestDiscoveryPagePartialMarkers(t *testing.T) {
 	assert.Equal(t, 150, first.Remaining)
 	assert.Contains(t, first.NextAction, "partial page")
 	assert.Contains(t, first.NextAction, "do not restart without after")
-	assert.Contains(t, first.NextAction, "keep the IDs")
+	assert.Contains(t, first.NextAction, "candidate_id and display_name")
 
 	second, err := pageImportDiscovery(d, DiscoveryFilter{Limit: 100, After: first.NextCursor})
 	require.NoError(t, err)
@@ -179,7 +179,7 @@ func TestDiscoveryPagePartialMarkers(t *testing.T) {
 	require.NoError(t, err)
 	assert.False(t, last.HasMore)
 	assert.Equal(t, 0, last.Remaining)
-	assert.Contains(t, last.NextAction, "keep the IDs")
+	assert.Contains(t, last.NextAction, "candidate_id and display_name")
 }
 
 func jsonKeyOrder(t *testing.T, raw []byte) []string {
@@ -239,5 +239,13 @@ func TestPreparedGuidancePrecedesLargeArrays(t *testing.T) {
 		for _, k := range []string{"carry", "diagnostics", "next_action"} {
 			assert.Less(t, indexOf(keys, k), b, k+" before "+big)
 		}
+	}
+}
+
+func TestDiscoveryGuidanceKeepsRowsAndAttributes(t *testing.T) {
+	page, err := pageImportDiscovery(pagedFixture(t, 250), DiscoveryFilter{Limit: 100})
+	require.NoError(t, err)
+	for _, want := range []string{"candidate_id and display_name", "attributes the user's search was about", "only what you return is kept", "returns the same fields"} {
+		assert.Contains(t, page.NextAction, want)
 	}
 }

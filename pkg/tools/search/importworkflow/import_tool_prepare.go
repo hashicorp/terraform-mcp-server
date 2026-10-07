@@ -113,7 +113,7 @@ type importPrepared struct {
 }
 
 var importToolInstructions = []string{
-	"Use prepare_import only for candidates the user has chosen to import. Do not use it to search or filter resources by tag or attribute: get_query_summary returns each result's tags. If you cannot tell what to import, go back to get_query_summary. Pass the candidate_id values you already recorded from get_query_summary when presenting the selection to the user; do not re-read the query pages to rebuild them.",
+	"Use prepare_import only for candidates the user has chosen to import. Do not use it to search or filter resources by tag or attribute: get_query_summary returns each result's tags. If you cannot tell what to import, go back to get_query_summary. Pass the candidate_id values you already kept from get_query_summary when presenting the selection to the user; do not re-read the query pages to rebuild them.",
 	"Read the target managed_schema for each type first, then the selected candidates' observations. Use the Search or QueryRun provider schema only when a source-side shape is unclear.",
 	"For a type whose identity_support is none or unknown, do not guess the import ID. Look up the target workspace's locked provider version's resource documentation for the documented import id form and any identity-to-id mapping. " + importLockedProviderVersionRule,
 	"After downloading the configuration, " + importProviderMismatchRule,

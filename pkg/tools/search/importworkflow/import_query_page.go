@@ -292,7 +292,7 @@ const discoveryCompletenessCaveat = "A query only sees what its filters and list
 
 // discoveryCandidateIDHint tells the agent that prepare_import needs the IDs,
 // so it keeps them instead of re-reading pages after the user confirms.
-const discoveryCandidateIDHint = "prepare_import needs the candidate_id values: keep the IDs of every resource you present to the user and pass them after confirmation instead of paging the query again."
+const discoveryCandidateIDHint = "prepare_import needs the candidate_id values. Always keep the candidate_id and display_name of every resource you present to the user, and keep the attributes the user's search was about (for example tags) for those resources. Print them in your script output, because only what you return is kept. Answer follow-up questions from them and pass the IDs after confirmation; paging the query again returns the same fields."
 
 // discoveryAttributesHint tells the agent whether rows carry resource attributes
 // such as tags, and how to get them. Discovery guidance lives here, not in

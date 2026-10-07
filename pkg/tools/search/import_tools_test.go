@@ -141,3 +141,9 @@ func TestQuerySummaryTextUsesSharedImportVocabulary(t *testing.T) {
 	assert.NotContains(t, lower, "route 1")
 	assert.NotContains(t, lower, "route 2")
 }
+
+func TestGetQuerySummaryDescriptionKeepsRowsAndAttributes(t *testing.T) {
+	for _, want := range []string{"candidate_id and display_name", "attributes the user's search was about", "only what the script returns is kept", "do not re-page after the user confirms"} {
+		assert.Contains(t, getQuerySummaryDescription, want)
+	}
+}
