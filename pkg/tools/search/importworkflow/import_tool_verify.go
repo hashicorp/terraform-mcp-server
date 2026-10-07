@@ -271,15 +271,29 @@ type importVerifyPlanJSON struct {
 func isNoop(actions []string) bool { return len(actions) == 1 && actions[0] == "no-op" }
 
 // actionableOutputChanges counts the outputs the plan would change. Terraform
-// lists every output, so a no-op entry is not a change. An entry whose actions
+// lists every output, so a no-op entry is not a change. Each entry is a change
+// object with "actions" at its top level (jsonplan.MarshalOutputChanges,
+// checked against a real Terraform 1.17 plan); the public format page draws it
+// nested under "change", so that spelling is read too. An entry whose actions
 // are missing or unreadable is counted: unknown is not no-op.
 func actionableOutputChanges(outputs map[string]json.RawMessage) int {
 	n := 0
 	for _, raw := range outputs {
 		var o struct {
 			Actions []string `json:"actions"`
+			Change  *struct {
+				Actions []string `json:"actions"`
+			} `json:"change"`
 		}
-		if json.Unmarshal(raw, &o) != nil || !isNoop(o.Actions) {
+		if json.Unmarshal(raw, &o) != nil {
+			n++
+			continue
+		}
+		actions := o.Actions
+		if len(actions) == 0 && o.Change != nil {
+			actions = o.Change.Actions
+		}
+		if !isNoop(actions) {
 			n++
 		}
 	}

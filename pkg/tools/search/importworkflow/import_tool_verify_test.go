@@ -241,6 +241,19 @@ func TestVerifyOutputChangesCountOnlyActionable(t *testing.T) {
 	assert.Equal(t, 1, mixed.Plan.OutputChanges)
 	assert.Equal(t, "needs_iteration", mixed.Overall)
 
+	// Shape captured from `terraform show -json` on Terraform 1.17.0-beta1
+	// (format_version 1.2): every output is listed, actions are top level.
+	real := with(`{"changes":{"actions":["update"],"before":"one","after":"two","after_unknown":false,"before_sensitive":false,"after_sensitive":false},"stable":{"actions":["no-op"],"before":"same","after":"same","after_unknown":false,"before_sensitive":false,"after_sensitive":false}}`)
+	assert.Equal(t, 1, real.Plan.OutputChanges)
+	assert.Equal(t, "needs_iteration", real.Overall)
+	realNoop := with(`{"stable":{"actions":["no-op"],"before":"same","after":"same","after_unknown":false,"before_sensitive":false,"after_sensitive":false}}`)
+	assert.Equal(t, 0, realNoop.Plan.OutputChanges)
+	assert.Equal(t, "no_unintended_changes", realNoop.Overall)
+
+	// The public format page draws the actions under "change".
+	assert.Equal(t, 0, with(`{"a":{"change":{"actions":["no-op"]}}}`).Plan.OutputChanges)
+	assert.Equal(t, 1, with(`{"a":{"change":{"actions":["create"]}}}`).Plan.OutputChanges)
+
 	for name, outputs := range map[string]string{"empty entry": `{"x":{}}`, "no actions": `{"x":{"actions":[]}}`, "not an object": `{"x":"y"}`} {
 		got := with(outputs)
 		assert.Equal(t, 1, got.Plan.OutputChanges, name)
