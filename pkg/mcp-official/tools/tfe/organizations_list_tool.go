@@ -52,7 +52,7 @@ func ListTerraformOrganizationsTool() *mcp.Tool {
 						Properties: map[string]*jsonschema.Schema{
 							"organization_name":  {Type: "string"},
 							"organization_email": {Type: "string"},
-							"created_at":         {Type: "string"},
+							"created_at":         {Type: "string", Format: "date-time"},
 						},
 						PropertyOrder:        []string{"organization_name", "organization_email", "created_at"},
 						Required:             []string{"organization_name", "organization_email", "created_at"},

@@ -105,7 +105,7 @@ func ListWorkspacesTool() *mcp.Tool {
 							"workspace_name": {Type: "string"},
 							"description":    {Type: "string"},
 							"environment":    {Type: "string"},
-							"created_at":     {Type: "string"},
+							"created_at":     {Type: "string", Format: "date-time"},
 							"execution_mode": {Type: "string"},
 						},
 						PropertyOrder:        []string{"id", "workspace_name", "description", "environment", "created_at", "execution_mode"},
