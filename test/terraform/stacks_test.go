@@ -125,10 +125,10 @@ func TestGetStackDetails(t *testing.T) {
 		require.False(t, result.IsError, "get_stack_details should not return an error")
 		require.NotEmpty(t, resultText, "get_stack_details should return a non-empty response")
 
-		assert.Equal(t, stack.ID, gjson.Get(resultText, "data.id").String(), "response should echo back the requested stack ID")
-		assert.Equal(t, stackName, gjson.Get(resultText, "data.attributes.name").String(), "response should contain the stack name")
-		assert.True(t, gjson.Get(resultText, "data.attributes.description").Exists(), "response should contain the description field")
-		assert.True(t, gjson.Get(resultText, "data.attributes.created-at").Exists(), "response should contain the created-at field")
+		assert.Equal(t, stack.ID, gjson.Get(resultText, idPath()).String(), "response should echo back the requested stack ID")
+		assert.Equal(t, stackName, gjson.Get(resultText, attr("name")).String(), "response should contain the stack name")
+		assert.True(t, gjson.Get(resultText, attr("description")).Exists(), "response should contain the description field")
+		assert.True(t, gjson.Get(resultText, attr("created_at")).Exists(), "response should contain the created-at field")
 	})
 
 	t.Run("returns an error for a non-existent stack_id", func(t *testing.T) {

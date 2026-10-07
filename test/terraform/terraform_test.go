@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -208,6 +209,7 @@ func getTextContent(result *mcp.CallToolResult) string {
 }
 
 func callTool(t *testing.T, s *mcp.ClientSession, toolName string, arguments map[string]any) (*mcp.CallToolResult, string) {
+	requireTool(t, s, toolName)
 	result, err := s.CallTool(t.Context(), &mcp.CallToolParams{
 		Name:      toolName,
 		Arguments: arguments,
@@ -290,4 +292,51 @@ func uploadConfiguration(t *testing.T, client *tfe.Client, workspaceID string, c
 		}
 		return configurationVersion, nil
 	})
+}
+
+// officialEndpoint reports whether the tests are pointed at the official
+// server. mark3labs wraps get and create responses in a jsonapi
+// envelope the official sdk returns the resource as a flat typed struct.
+func officialEndpoint() bool {
+	return strings.HasSuffix(mcpEndpoint, "/official")
+}
+
+// idPath returns the gjson path for the resource id in a get or create resp
+func idPath() string {
+	if officialEndpoint() {
+		return "id"
+	}
+	return "data.id"
+}
+
+func attr(name string) string {
+	if officialEndpoint() {
+		return name
+	}
+	return "data.attributes." + strings.ReplaceAll(name, "_", "-")
+}
+
+// availableTools caches the tools/list result per session so callTool only
+// pays for one round trip per test rather than one per call.
+var availableTools sync.Map
+
+// requireTool skips the test when the server does not expose the named tool.
+// the official sdk endpoint only has the tools that have been migrated so
+// far, so without this the official hcpt job would fail on every test for a
+// tool that still lives on mark3labs only.
+func requireTool(t *testing.T, s *mcp.ClientSession, name string) {
+	t.Helper()
+	names, ok := availableTools.Load(s)
+	if !ok {
+		tools, err := s.ListTools(t.Context(), nil)
+		require.NoError(t, err, "listing tools")
+		set := make(map[string]bool, len(tools.Tools))
+		for _, tool := range tools.Tools {
+			set[tool.Name] = true
+		}
+		names, _ = availableTools.LoadOrStore(s, set)
+	}
+	if !names.(map[string]bool)[name] {
+		t.Skipf("tool %q is not available on %s", name, mcpEndpoint)
+	}
 }
