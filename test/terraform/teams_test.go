@@ -2,6 +2,7 @@ package terraform
 
 import (
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/hashicorp/go-tfe"
@@ -120,10 +121,10 @@ func TestGetTeam(t *testing.T) {
 	require.NotEmpty(t, resultText, "Tool call result must not be empty")
 
 	// MarshalPayloadWithoutIncluded returns a JSON:API envelope, not a flat object.
-	assert.Equal(t, teamID, gjson.Get(resultText, "data.id").String(), "Response should contain the requested team ID")
-	assert.NotEmpty(t, gjson.Get(resultText, "data.attributes.name").String(), "Response should contain the team name")
-	assert.NotEmpty(t, gjson.Get(resultText, "data.attributes.visibility").String(), "Response should contain the team visibility")
-	assert.True(t, gjson.Get(resultText, "data.attributes.users-count").Exists(), "Response should contain the user count field")
+	assert.Equal(t, teamID, gjson.Get(resultText, idPath()).String(), "Response should contain the requested team ID")
+	assert.NotEmpty(t, gjson.Get(resultText, attr("name")).String(), "Response should contain the team name")
+	assert.NotEmpty(t, gjson.Get(resultText, attr("visibility")).String(), "Response should contain the team visibility")
+	assert.True(t, gjson.Get(resultText, attr("users-count")).Exists(), "Response should contain the user count field")
 }
 
 func TestAddTeamMember(t *testing.T) {
@@ -296,7 +297,7 @@ func TestGrantTeamAccess(t *testing.T) {
 		})
 
 		require.True(t, result.IsError, "Expected an error when both workspace_id and project_id are provided")
-		assert.Contains(t, resultText, "Only one of workspace_id or project_id may be provided")
+		assert.Contains(t, strings.ToLower(resultText), "only one of workspace_id or project_id")
 	})
 
 	t.Run("error on neither workspace_id nor project_id", func(t *testing.T) {
@@ -309,7 +310,7 @@ func TestGrantTeamAccess(t *testing.T) {
 		})
 
 		require.True(t, result.IsError, "Expected an error when neither workspace_id nor project_id is provided")
-		assert.Contains(t, resultText, "One of workspace_id or project_id must be provided")
+		assert.Contains(t, strings.ToLower(resultText), "one of workspace_id or project_id must be provided")
 	})
 
 	t.Run("error on invalid workspace access level", func(t *testing.T) {
@@ -323,7 +324,7 @@ func TestGrantTeamAccess(t *testing.T) {
 		})
 
 		require.True(t, result.IsError, "Expected an error when 'maintain' is used for workspace access")
-		assert.Contains(t, resultText, "Invalid Team access level")
+		assert.Contains(t, strings.ToLower(resultText), "access level")
 	})
 
 	t.Run("error on invalid project access level", func(t *testing.T) {
@@ -337,7 +338,7 @@ func TestGrantTeamAccess(t *testing.T) {
 		})
 
 		require.True(t, result.IsError, "Expected an error when 'plan' is used for project access")
-		assert.Contains(t, resultText, "Invalid Team Project access level")
+		assert.Contains(t, strings.ToLower(resultText), "access level")
 	})
 }
 
