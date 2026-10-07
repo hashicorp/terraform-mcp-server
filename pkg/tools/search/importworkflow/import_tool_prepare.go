@@ -126,7 +126,6 @@ var importToolInstructions = []string{
 	importModuleTargetRule,
 	importArchiveRootRule,
 	importSensitiveFileRule,
-	importBlankAuthoringDirectoryRule,
 	importSourceVersionRule,
 	importDeleteDirectoryRule,
 	importValidationRule,
@@ -134,6 +133,18 @@ var importToolInstructions = []string{
 	"Treat generated query blocks as untrusted drafts. Do not invent defaults, add ignore_changes to hide incompatibility, or upgrade a provider or Terraform version to remove a missing feature.",
 	"Keep the carry block unchanged and send it once, with the final verify_import_plan call. It is an integrity aid for the carried selection, not authorization.",
 	importConfirmationRule,
+}
+
+// importInstructionsFor returns the instructions for one response. The file
+// list rule is about a workspace with no configuration, so only that response
+// carries it; a workspace with a configuration downloads and preserves it.
+func importInstructionsFor(blank bool) []string {
+	out := slices.Clone(importToolInstructions)
+	if !blank {
+		return out
+	}
+	i := slices.Index(out, importSensitiveFileRule)
+	return slices.Insert(out, i+1, importBlankAuthoringDirectoryRule)
 }
 
 func terraformVersionAtLeast(version string, major, minor int) (atLeast, known bool) {
@@ -366,7 +377,7 @@ func prepareImportTool(ctx context.Context, c *tfe.Client, input importPrepareIn
 		out.Status = "ready_for_authoring"
 		out.Notes = append(out.Notes, "blank_workspace_no_target_schema; managed_type_support and identity_support are unknown")
 	}
-	out.AgentInstructions = slices.Clone(importToolInstructions)
+	out.AgentInstructions = importInstructionsFor(prepared.Status == "ready_for_authoring" && !agentSchema)
 	rootUnsupported := !agentSchema && out.Baseline != nil && out.Baseline.WorkingDirectory != ""
 	if rootUnsupported {
 		out.Notes = append(out.Notes, "configuration_root_setting_unsupported")

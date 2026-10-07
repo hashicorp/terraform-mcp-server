@@ -112,6 +112,20 @@ func TestPrepareImportBlankTargetGetsFileListRules(t *testing.T) {
 	assert.Contains(t, out.NextAction, importNewWorkspaceDirectoryQuestion)
 	assert.NotContains(t, out.NextAction, "git work tree", "a new workspace downloads nothing")
 	assert.NotContains(t, out.NextAction, importAuthoringDirectoryQuestion, "a blank target downloads nothing")
+	assert.Contains(t, strings.Join(out.AgentInstructions, " "), importBlankAuthoringDirectoryRule)
+}
+
+func TestPrepareImportExistingConfigurationOmitsNewWorkspaceRule(t *testing.T) {
+	f := importBackendFixture(t)
+	out := prepareImportTool(context.Background(), f.client, importFixtureInput(t))
+	require.Equal(t, "prepared", out.Status, out.Diagnostics)
+	joined := strings.Join(out.AgentInstructions, " ")
+	assert.NotContains(t, joined, "For this new workspace")
+	assert.NotContains(t, joined, importBlankAuthoringDirectoryRule)
+	assert.Contains(t, joined, importArchiveRootRule)
+	assert.Contains(t, joined, importSensitiveFileRule)
+	assert.Contains(t, joined, importSourceVersionRule)
+	assert.NotContains(t, strings.Join(importToolInstructions, " "), "For this new workspace")
 }
 
 func TestPrepareImportStopsEarlyForConfigurationRootSetting(t *testing.T) {

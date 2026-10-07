@@ -227,6 +227,27 @@ func TestVerifyDeferredAndOutputChanges(t *testing.T) {
 	assert.Equal(t, "needs_iteration", verifyFacts(t, f, []byte(plan)).Overall)
 }
 
+func TestVerifyOutputChangesCountOnlyActionable(t *testing.T) {
+	f := newVerifyFixture(t, 1, importIdentitySupported, "1.16.1")
+	base := string(planJSON("1.16.1", f.cleanEntries(true), ""))
+	with := func(outputs string) importVerified {
+		return verifyFacts(t, f, []byte(strings.Replace(base, `"output_changes":{}`, `"output_changes":`+outputs, 1)))
+	}
+	noop := with(`{"a":{"actions":["no-op"]},"b":{"actions":["no-op"]}}`)
+	assert.Equal(t, 0, noop.Plan.OutputChanges)
+	assert.Equal(t, "no_unintended_changes", noop.Overall)
+
+	mixed := with(`{"a":{"actions":["no-op"]},"b":{"actions":["update"]}}`)
+	assert.Equal(t, 1, mixed.Plan.OutputChanges)
+	assert.Equal(t, "needs_iteration", mixed.Overall)
+
+	for name, outputs := range map[string]string{"empty entry": `{"x":{}}`, "no actions": `{"x":{"actions":[]}}`, "not an object": `{"x":"y"}`} {
+		got := with(outputs)
+		assert.Equal(t, 1, got.Plan.OutputChanges, name)
+		assert.Equal(t, "needs_iteration", got.Overall, name)
+	}
+}
+
 func TestVerifyDetailReturnsNamesNotValues(t *testing.T) {
 	f := newVerifyFixture(t, 1, importIdentitySupported, "1.16.1")
 	e := f.cleanEntries(true)

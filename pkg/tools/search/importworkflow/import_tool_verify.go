@@ -104,7 +104,7 @@ type importVerifiedPlan struct {
 	TerraformVersion string `json:"terraform_version,omitempty"`
 	FormatVersion    string `json:"format_version,omitempty"`
 	ResourceChanges  int    `json:"resource_changes"`
-	OutputChanges    int    `json:"output_changes"`
+	OutputChanges    int    `json:"output_changes"` // outputs with an action other than no-op
 	DeferredChanges  int    `json:"deferred_changes"`
 }
 
@@ -270,6 +270,22 @@ type importVerifyPlanJSON struct {
 
 func isNoop(actions []string) bool { return len(actions) == 1 && actions[0] == "no-op" }
 
+// actionableOutputChanges counts the outputs the plan would change. Terraform
+// lists every output, so a no-op entry is not a change. An entry whose actions
+// are missing or unreadable is counted: unknown is not no-op.
+func actionableOutputChanges(outputs map[string]json.RawMessage) int {
+	n := 0
+	for _, raw := range outputs {
+		var o struct {
+			Actions []string `json:"actions"`
+		}
+		if json.Unmarshal(raw, &o) != nil || !isNoop(o.Actions) {
+			n++
+		}
+	}
+	return n
+}
+
 func classifyChange(actions []string) string {
 	has := func(a string) bool {
 		for _, x := range actions {
@@ -362,7 +378,7 @@ func verifyImportPlanFacts(raw []byte, carry *importCarryBlock, byCandidate map[
 
 	out := importVerified{ContractVersion: importToolContractVersion, Status: "plan_available", Selected: len(carry.Candidates), Diagnostics: []string{},
 		Changes: map[string]int{}, ObjectIdentity: map[string]int{},
-		Plan: &importVerifiedPlan{TerraformVersion: plan.TerraformVersion, FormatVersion: plan.FormatVersion, ResourceChanges: len(plan.ResourceChanges), OutputChanges: len(plan.OutputChanges), DeferredChanges: len(plan.DeferredChanges)}}
+		Plan: &importVerifiedPlan{TerraformVersion: plan.TerraformVersion, FormatVersion: plan.FormatVersion, ResourceChanges: len(plan.ResourceChanges), OutputChanges: actionableOutputChanges(plan.OutputChanges), DeferredChanges: len(plan.DeferredChanges)}}
 	for _, k := range verifyChangeKeys {
 		out.Changes[k] = 0
 	}
