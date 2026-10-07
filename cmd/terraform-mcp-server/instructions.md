@@ -69,8 +69,9 @@ The Terraform MCP server provides tools for generating better Terraform code thr
    query only sees what its filters and list arguments cover, so more matching
    resources may exist, and exactly 100 results in a list may be the default
    limit.
-2. Call `prepare_import` once with the selection. It is the only tool that reads
-   the query log. It returns the target managed schema for each distinct
+2. Call `prepare_import` with the selection and keep the complete response
+   (the carry block and every selected candidate's blocks). It returns the
+   target managed schema for each distinct
    type, per-type `identity_support`, the target workspace's Terraform versions,
    its baseline and a carry block.
    The Search provider version, observations, and generated HCL are source

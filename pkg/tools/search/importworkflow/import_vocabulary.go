@@ -89,6 +89,16 @@ const (
 	// importTargetScopeShort opens next_action.
 	importTargetScopeShort = "Scope: types and schema_source are the target workspace's resource shape; candidates and carry.providers come from the QueryRun, whose provider version can differ from the target's."
 
+	// importKeepResultRule asks the agent to retain the whole prepared result,
+	// because a script that returns only part of it loses the rest.
+	importKeepResultRule = "Keep the complete prepare_import response from the call that returns it: the unchanged carry block, the types with their schemas, and for every selected candidate its resource_object, configuration and import_configuration. If a script handles the result, return or save all of these for every selected candidate, not only the first or a summary, so you can author the HCL and later call verify_import_plan with the carry block."
+
+	// importKeepResultShort opens next_action.
+	importKeepResultShort = "Keep this whole response: the carry block and every selected candidate's resource_object, configuration and import_configuration."
+
+	// importCandidateFieldsRule names what each candidate field is for.
+	importCandidateFieldsRule = "Candidate fields: resource_object is the resource's attributes as the Search provider observed them (absent when the query did not capture attributes); configuration and import_configuration are Search-generated HCL drafts of the resource block and the import block. All three describe the QueryRun's source resource. The target workspace's schema (types) decides what you author."
+
 	// importAdaptationGuidance points the agent at evidence for adapting the
 	// suggested blocks; it deliberately states no blanket rule, because accepted
 	// argument placement (for example provider on an import block) differs

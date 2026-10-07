@@ -357,6 +357,8 @@ func TestVerifyImportPlanHandlerPollsThenSummarizes(t *testing.T) {
 	*finished = true
 	needCarry := call(nil)
 	assert.Equal(t, "carry_required", needCarry.Status)
+	assert.Contains(t, needCarry.NextAction, "carry block you kept from prepare_import")
+	assert.NotContains(t, strings.ToLower(needCarry.NextAction), "prepare_import again")
 
 	rawCarry, _ := json.Marshal(carry)
 	var carryArg map[string]any

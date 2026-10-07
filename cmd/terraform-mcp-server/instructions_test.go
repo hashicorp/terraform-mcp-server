@@ -35,7 +35,7 @@ func TestServerInstructionsPreserveExistingWorkflowsAndGuideSearchImport(t *test
 		"preserve its constraints and lock selections", "Do not substitute a public provider or module for a private source",
 		"Local validation does not replace the target workspace's plan",
 		"**Search-to-Import (when Search tools are enabled)**:",
-		"`get_query_summary`", "Explicitly", "select up to 100", "`prepare_import` once", "`identity_support`",
+		"`get_query_summary`", "Explicitly", "select up to 100", "keep the complete response", "`identity_support`",
 		"Search provider version, observations, and generated HCL are source",
 		"**authoring directory**", "Keep the archive root exactly as downloaded", "explicit, reviewed file list", "re-check it for\n   key and credential files", "git work tree", "already holds the user's Terraform files is fine", "not supported yet: stop", "takes no local path", "without asking the user first", "`terraform init -backend=false`", "do not run `init` for a different\n   provider version", "not fixed rules", "list\n   each adaptation", "exactly 100 results", "MCP does not download, edit, or upload archive bytes",
 		"`get_import_configuration_download`", "`create_import_cv`", "`create_import_run`", "`verify_import_plan`",

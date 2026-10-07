@@ -34,6 +34,8 @@ func importToolTexts(t *testing.T) map[string]string {
 		"importSensitiveFileRule":     importSensitiveFileRule,
 		"importAdaptationGuidance":    importAdaptationGuidance,
 		"importArchiveURLRule":        importArchiveURLRule,
+		"importKeepResultRule":        importKeepResultRule,
+		"importCandidateFieldsRule":   importCandidateFieldsRule,
 	}
 	for _, tool := range []struct{ name, text string }{
 		{"prepare_import", PrepareImportDefinition().Description},
@@ -275,4 +277,39 @@ func TestTargetScopeSeparatesTargetShapeFromQueryRun(t *testing.T) {
 	}
 	assert.Contains(t, importProviderMismatchRule, "is expected")
 	assert.Contains(t, importLockedProviderVersionRule, "configuration_baseline_relation")
+}
+
+func TestPrepareImportAsksForTheWholeResultAndNamesCandidateFields(t *testing.T) {
+	assert.Equal(t, importKeepResultRule, importToolInstructions[2])
+	assert.Equal(t, importCandidateFieldsRule, importToolInstructions[3])
+	for _, want := range []string{"complete prepare_import response", "unchanged carry block", "every selected candidate", "not only the first or a summary"} {
+		assert.Contains(t, importKeepResultRule, want)
+	}
+	for _, want := range []string{"resource_object", "as the Search provider observed them", "Search-generated HCL drafts", "describe the QueryRun's source resource"} {
+		assert.Contains(t, importCandidateFieldsRule, want)
+	}
+	d := PrepareImportDefinition().Description
+	for _, want := range []string{"complete response", "not only the first candidate", "resource_object (the attributes the Search provider observed", "Search-generated HCL drafts"} {
+		assert.Contains(t, d, want)
+	}
+	for _, next := range []string{
+		importPreparedNextAction(&importPrepared{HasCurrentConfiguration: true}, false, false),
+		importPreparedNextAction(&importPrepared{}, false, false),
+	} {
+		assert.Contains(t, next, importKeepResultShort)
+		assert.Less(t, strings.Index(next, importKeepResultShort), strings.Index(next, "authoring directory"))
+	}
+
+	// The tool text guides what to keep. It does not tell the agent to avoid
+	// or to repeat the call, and the retired "once per selection" is gone.
+	for name, text := range map[string]string{
+		"prepare_import description": d,
+		"prepare_import guidance":    strings.Join(importToolInstructions, " "),
+		"verify_import_plan":         VerifyImportPlanDefinition().Description,
+	} {
+		lower := strings.ToLower(text)
+		assert.NotContains(t, lower, "once per selection", name)
+		assert.NotContains(t, lower, "retry", name)
+		assert.NotContains(t, lower, "do not call prepare_import again", name)
+	}
 }
