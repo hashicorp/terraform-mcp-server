@@ -50,7 +50,11 @@ type importBackendTest struct {
 	stateChanged     bool
 	deniedDownloads  int
 	queryLog         []byte
-	baselineChanged  bool
+	// logChunkMax caps the bytes one /logs response returns; zero means no cap.
+	logChunkMax int
+	// logAuth records the Authorization header of each /logs request.
+	logAuth         []string
+	baselineChanged bool
 	// changeReads is how many reads of the workspace or state see the original
 	// before baselineChanged/stateChanged take effect. Zero means one.
 	changeReads     int
@@ -89,6 +93,10 @@ func importBackendFixture(t *testing.T) *importBackendTest {
 			log = append(log, 3)
 			offset, _ := strconv.Atoi(r.URL.Query().Get("offset"))
 			limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
+			f.logAuth = append(f.logAuth, r.Header.Get("Authorization"))
+			if f.logChunkMax > 0 && limit > f.logChunkMax {
+				limit = f.logChunkMax
+			}
 			if offset < len(log) {
 				_, _ = w.Write(log[offset:min(offset+limit, len(log))])
 			}

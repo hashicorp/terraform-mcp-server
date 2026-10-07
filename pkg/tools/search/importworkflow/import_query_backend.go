@@ -8,6 +8,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/url"
@@ -133,6 +134,9 @@ type importQueryProvenance struct {
 	Providers     map[string]workspaceProvider
 	// GenerateConfigOut is nil when the query attribute is not reported.
 	GenerateConfigOut *bool
+	// LogReadURL is the finished QueryRun's log location, used to read the log
+	// in a few large requests.
+	LogReadURL string
 }
 
 // Query inputs are read from the selected query's backend relationship, never
@@ -237,20 +241,26 @@ func readImportQueryProvenance(ctx context.Context, c *tfe.Client, queryID strin
 			providers[resourceType] = provider
 		}
 	}
-	return &importQueryProvenance{QueryRunID: queryID, WorkspaceID: w.ID, NoCodeQueryID: nc.ID, Providers: providers, GenerateConfigOut: wire.Data.Attributes.GenerateConfigOut}, nil
+	return &importQueryProvenance{QueryRunID: queryID, WorkspaceID: w.ID, NoCodeQueryID: nc.ID, Providers: providers, GenerateConfigOut: wire.Data.Attributes.GenerateConfigOut, LogReadURL: q.LogReadURL}, nil
 }
 
 // readImportDiscoveryLog reads and parses the QueryRun log. It is the expensive
 // step: ranged archivist reads of the whole log.
 func readImportDiscoveryLog(ctx context.Context, c *tfe.Client, prov *importQueryProvenance) (*importDiscovery, error) {
 	queryID, providers := prov.QueryRunID, prov.Providers
-	logs, err := c.QueryRuns.Logs(ctx, queryID)
+	data, complete, err := readImportQueryLog(ctx, c, prov.LogReadURL)
 	if err != nil {
 		return nil, importReadError(err, 0)
 	}
-	data, err := io.ReadAll(io.LimitReader(logs, maxImportEvidenceBytes+1))
-	if err != nil {
-		return nil, importReadError(err, 0)
+	if !complete {
+		logs, err := c.QueryRuns.Logs(ctx, queryID)
+		if err != nil {
+			return nil, importReadError(err, 0)
+		}
+		data, err = io.ReadAll(io.LimitReader(logs, maxImportEvidenceBytes+1))
+		if err != nil {
+			return nil, importReadError(err, 0)
+		}
 	}
 	if len(data) > maxImportEvidenceBytes {
 		return nil, importEvidenceFailure("query_evidence_size_limit")
@@ -260,6 +270,83 @@ func readImportDiscoveryLog(ctx context.Context, c *tfe.Client, prov *importQuer
 		return nil, err
 	}
 	return &importDiscovery{QueryRunID: queryID, WorkspaceID: prov.WorkspaceID, NoCodeQueryID: prov.NoCodeQueryID, Provenance: "query_bound_no_code_selections", LogDigest: importEvidenceDigest(data), Candidates: candidates, GenerateConfigOut: prov.GenerateConfigOut}, nil
+}
+
+const (
+	importLogSTX = 2
+	importLogETX = 3
+	// importLogReadMaxRequests bounds the ranged reads of one log. A log that
+	// does not finish within it is read the slow way instead.
+	importLogReadMaxRequests = 32
+)
+
+// readImportQueryLog reads a finished QueryRun's log with a few large ranged
+// requests. go-tfe's LogReader makes one request per body read (about 4 KB), so
+// a log of several hundred KB took hundreds of requests and most of the tool's
+// time budget. The log is read from the same location, with the same limit and
+// offset parameters and no credentials, as LogReader, and the STX and ETX
+// markers are removed the same way. complete is false when the log could not be
+// read this way (no location, an unusable response, or too many requests); the
+// caller then falls back to LogReader. Size and cancellation errors are returned.
+func readImportQueryLog(ctx context.Context, c *tfe.Client, logReadURL string) (data []byte, complete bool, err error) {
+	if logReadURL == "" {
+		return nil, false, nil
+	}
+	u, parseErr := url.Parse(logReadURL)
+	if parseErr != nil {
+		return nil, false, nil
+	}
+	// Room for both markers and one byte over the evidence bound, so a log
+	// that is too large is detected.
+	rawLimit := maxImportEvidenceBytes + 3
+	var raw []byte
+	finished := false
+	for i := 0; i < importLogReadMaxRequests && len(raw) < rawLimit; i++ {
+		remaining := rawLimit - len(raw)
+		u.RawQuery = fmt.Sprintf("limit=%d&offset=%d", remaining, len(raw))
+		req, reqErr := c.NewRequest(http.MethodGet, u.String(), nil)
+		if reqErr != nil {
+			return nil, false, nil
+		}
+		// The log location is signed. NewRequest adds the API token, which is
+		// not sent to the log host.
+		delete(req.Header, "Authorization")
+		delete(req.Header, "Accept")
+		b := &importBoundedBuffer{limit: remaining}
+		if doErr := req.Do(ctx, b); doErr != nil {
+			var evidence *importEvidenceError
+			if errors.As(doErr, &evidence) && importDiagnosticCode(doErr) == "evidence_size_limit" {
+				return nil, false, importEvidenceFailure("query_evidence_size_limit")
+			}
+			if ctx.Err() != nil {
+				return nil, false, doErr
+			}
+			return nil, false, nil
+		}
+		chunk := b.buffer.Bytes()
+		if len(chunk) == 0 {
+			finished = true
+			break
+		}
+		raw = append(raw, chunk...)
+		if raw[0] == importLogSTX && raw[len(raw)-1] == importLogETX {
+			finished = true
+			break
+		}
+	}
+	if len(raw) >= rawLimit {
+		return nil, false, importEvidenceFailure("query_evidence_size_limit")
+	}
+	if !finished {
+		return nil, false, nil
+	}
+	if len(raw) > 0 && raw[0] == importLogSTX {
+		raw = raw[1:]
+		if len(raw) > 0 && raw[len(raw)-1] == importLogETX {
+			raw = raw[:len(raw)-1]
+		}
+	}
+	return raw, true, nil
 }
 
 // importCandidateID derives a stable ID from Search-side facts only. It can be
