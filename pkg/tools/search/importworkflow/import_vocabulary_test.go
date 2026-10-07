@@ -256,3 +256,23 @@ func TestKeepGeneratedBlocksRuleIsProviderNeutralAndFirst(t *testing.T) {
 		assert.Less(t, strings.Index(next, importKeepGeneratedShort), strings.Index(next, "authoring directory"))
 	}
 }
+
+func TestTargetScopeSeparatesTargetShapeFromQueryRun(t *testing.T) {
+	assert.Equal(t, importKeepGeneratedRule, importToolInstructions[0])
+	assert.Equal(t, importTargetScopeRule, importToolInstructions[1])
+	for _, want := range []string{"describe the target workspace", "managed_schema, identity_schema", "describe the QueryRun", "no-code QueryRun", "can differ from the target's"} {
+		assert.Contains(t, importTargetScopeRule, want)
+	}
+	existing := importPreparedNextAction(&importPrepared{HasCurrentConfiguration: true}, false, false)
+	assert.Contains(t, existing, importTargetScopeShort)
+	assert.Less(t, strings.Index(existing, importTargetScopeShort), strings.Index(existing, "authoring directory"))
+	assert.NotContains(t, importPreparedNextAction(&importPrepared{}, false, false), importTargetScopeShort, "a new workspace has no target schema")
+	assert.NotContains(t, importAgentSchemaNextAction, importTargetScopeShort)
+
+	d := PrepareImportDefinition().Description
+	for _, want := range []string{"identity_schema exists", "describe the QueryRun", "could not be read", "supported means"} {
+		assert.Contains(t, d, want)
+	}
+	assert.Contains(t, importProviderMismatchRule, "is expected")
+	assert.Contains(t, importLockedProviderVersionRule, "configuration_baseline_relation")
+}

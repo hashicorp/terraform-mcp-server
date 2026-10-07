@@ -82,6 +82,13 @@ const (
 	// importKeepGeneratedShort opens next_action so the key decision is first.
 	importKeepGeneratedShort = "Key rule: keep the generated blocks as returned (every attribute, the identity form of the import block and its scoping values such as region, project or subscription). Change one only on evidence of incompatibility, and never replace an identity import with an id import while identity_support is supported."
 
+	// importTargetScopeRule separates the target workspace's resource shape from
+	// what the QueryRun found, which are easy to confuse.
+	importTargetScopeRule = "Scope: types, schema_source and target describe the target workspace: the resource shape (managed_schema, identity_schema) read from the run that produced its current state. Author against this shape. candidates and carry.providers describe the QueryRun: the resources it found and the provider version the no-code QueryRun ran with, which can differ from the target's and is not a reason to change the generated blocks."
+
+	// importTargetScopeShort opens next_action.
+	importTargetScopeShort = "Scope: types and schema_source are the target workspace's resource shape; candidates and carry.providers come from the QueryRun, whose provider version can differ from the target's."
+
 	// importAdaptationGuidance points the agent at evidence for adapting the
 	// suggested blocks; it deliberately states no blanket rule, because accepted
 	// argument placement (for example provider on an import block) differs
@@ -107,11 +114,11 @@ const (
 
 	// importLockedProviderVersionRule says where the target's provider versions
 	// come from and what to do when no lock file exists.
-	importLockedProviderVersionRule = "The target workspace's provider versions are in the .terraform.lock.hcl of its downloaded configuration; Atlas does not record them. Read the exact version there, search_providers with that provider_version, then get_provider_details. If the archive has no lock file the version is uncertain: say so and fall back to the required_providers constraint. A blank workspace has no lock file yet, so use the version you choose and pin in the lock file you author."
+	importLockedProviderVersionRule = "The target workspace's provider versions are in the .terraform.lock.hcl of its downloaded configuration; Atlas does not record them. Read the exact version there, search_providers with that provider_version, then get_provider_details. If the archive has no lock file the version is uncertain: say so and fall back to the required_providers constraint. A blank workspace has no lock file yet, so use the version you choose and pin in the lock file you author. If schema_source.configuration_baseline_relation is not same_configuration_version, the returned shape may predate the current configuration: confirm against the documentation for the locked version before relying on identity_support."
 
 	// importProviderMismatchRule compares the target's locked versions with the
 	// Search source versions.
-	importProviderMismatchRule = "Compare the provider versions in the .terraform.lock.hcl with the source versions in the carry block and tell the user about any mismatch. Never upgrade the target provider or Terraform to remove a mismatch."
+	importProviderMismatchRule = "Compare the provider versions in the .terraform.lock.hcl with the QueryRun's versions in the carry block and tell the user about any mismatch. A difference is expected and is not by itself a reason to change the generated blocks. Never upgrade the target provider or Terraform to remove a mismatch."
 
 	// importDeleteDirectoryRule keeps authored work from being deleted.
 	importDeleteDirectoryRule = "Do not delete or clean up the authoring directory without asking the user first."
