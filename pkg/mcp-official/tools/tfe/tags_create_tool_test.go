@@ -19,7 +19,7 @@ func TestCreateWorkspaceTagsTool(t *testing.T) {
 	assert.Equal(t, "Create Terraform workspace tags", tool.Annotations.Title)
 	assert.False(t, tool.Annotations.ReadOnlyHint, "the tool writes tag bindings")
 	require.NotNil(t, tool.Annotations.DestructiveHint)
-	assert.False(t, *tool.Annotations.DestructiveHint, "adding tags is additive")
+	assert.True(t, *tool.Annotations.DestructiveHint, "adding a tag with an existing key replaces its value")
 
 	// The arguments carry no constraints beyond being required, so the SDK infers
 	// the input schema from the struct tags.

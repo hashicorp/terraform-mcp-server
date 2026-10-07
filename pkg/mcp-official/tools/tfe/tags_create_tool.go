@@ -31,7 +31,7 @@ type CreateWorkspaceTagsResult struct {
 func CreateWorkspaceTagsTool() *mcp.Tool {
 	return &mcp.Tool{
 		Name:        "create_workspace_tags",
-		Description: "Add tags to a Terraform workspace.",
+		Description: "Add tags to a Terraform workspace. If a tag with the same key already exists, its value is replaced with the new value.",
 		OutputSchema: &jsonschema.Schema{
 			Type: "object",
 			Properties: map[string]*jsonschema.Schema{
@@ -48,7 +48,7 @@ func CreateWorkspaceTagsTool() *mcp.Tool {
 		Annotations: &mcp.ToolAnnotations{
 			Title:           "Create Terraform workspace tags",
 			ReadOnlyHint:    false,
-			DestructiveHint: jsonschema.Ptr(false),
+			DestructiveHint: jsonschema.Ptr(true),
 		},
 	}
 }
