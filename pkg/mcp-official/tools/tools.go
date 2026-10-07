@@ -142,6 +142,18 @@ var officialFactories = map[string]func(svr *mcp.Server, logger *slog.Logger){
 	"force_unlock_workspace": func(svr *mcp.Server, _ *slog.Logger) {
 		mcp.AddTool(svr, tfeTools.ForceUnlockWorkspaceTool(), tfeTools.ForceUnlockWorkspaceFunc)
 	},
+	"read_workspace_tags": func(svr *mcp.Server, _ *slog.Logger) {
+		mcp.AddTool(svr, tfeTools.ReadWorkspaceTagsTool(), tfeTools.ReadWorkspaceTagsFunc)
+	},
+	"list_workspace_policy_sets": func(svr *mcp.Server, _ *slog.Logger) {
+		mcp.AddTool(svr, tfeTools.ListWorkspacePolicySetsTool(), tfeTools.ListWorkspacePolicySetsFunc)
+	},
+	"attach_policy_set_to_workspaces": func(svr *mcp.Server, _ *slog.Logger) {
+		mcp.AddTool(svr, tfeTools.AttachPolicySetToWorkspacesTool(), tfeTools.AttachPolicySetToWorkspacesFunc)
+	},
+	"create_workspace_tags": func(svr *mcp.Server, _ *slog.Logger) {
+		mcp.AddTool(svr, tfeTools.CreateWorkspaceTagsTool(), tfeTools.CreateWorkspaceTagsFunc)
+	},
 }
 
 func RegisterTools(svr *mcp.Server, logger *slog.Logger, filter toolsets.ToolFilter) {
