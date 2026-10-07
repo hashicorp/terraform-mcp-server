@@ -25,6 +25,18 @@ var officialFactories = map[string]func(svr *mcp.Server, logger *slog.Logger){
 	"list_workspaces": func(svr *mcp.Server, _ *slog.Logger) {
 		mcp.AddTool(svr, tfeTools.ListWorkspacesTool(), tfeTools.ListWorkspacesFunc)
 	},
+	"create_workspace": func(svr *mcp.Server, _ *slog.Logger) {
+		mcp.AddTool(svr, tfeTools.CreateWorkspaceTool(), tfeTools.CreateWorkspaceFunc)
+	},
+	"get_workspace_details": func(svr *mcp.Server, _ *slog.Logger) {
+		mcp.AddTool(svr, tfeTools.GetWorkspaceDetailsTool(), tfeTools.GetWorkspaceDetailsFunc)
+	},
+	"update_workspace": func(svr *mcp.Server, _ *slog.Logger) {
+		mcp.AddTool(svr, tfeTools.UpdateWorkspaceTool(), tfeTools.UpdateWorkspaceFunc)
+	},
+	"delete_workspace_safely": func(svr *mcp.Server, _ *slog.Logger) {
+		mcp.AddTool(svr, tfeTools.DeleteWorkspaceSafelyTool(), tfeTools.DeleteWorkspaceSafelyFunc)
+	},
 	"list_terraform_orgs": func(svr *mcp.Server, _ *slog.Logger) {
 		mcp.AddTool(svr, tfeTools.ListTerraformOrganizationsTool(), tfeTools.ListTerraformOrganizationsFunc)
 	},
