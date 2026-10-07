@@ -113,6 +113,7 @@ type importPrepared struct {
 }
 
 var importToolInstructions = []string{
+	importKeepGeneratedRule,
 	"Use prepare_import only for candidates the user has chosen to import. Do not use it to search or filter resources by tag or attribute: get_query_summary returns each result's tags. If you cannot tell what to import, go back to get_query_summary. Pass the candidate_id values you already kept from get_query_summary when presenting the selection to the user; do not re-read the query pages to rebuild them.",
 	"Read the target managed_schema for each type first, then the selected candidates' observations. Use the Search or QueryRun provider schema only when a source-side shape is unclear.",
 	"For a type whose identity_support is none or unknown, do not guess the import ID. Look up the target workspace's locked provider version's resource documentation for the documented import id form and any identity-to-id mapping. " + importLockedProviderVersionRule,
@@ -505,8 +506,8 @@ func importPreparedNextAction(out *importPrepared, agentSchema, rootUnsupported 
 	case rootUnsupported:
 		return importConfigurationRootStop + " get_query_summary still lists the candidates. " + importNothingCreated
 	case out.HasCurrentConfiguration:
-		return importAuthoringDirectoryQuestion + " Then call get_import_configuration_download with current_configuration_version_id and author the resource and import blocks in the authoring directory. " + importArchiveRootRule + " " + importConfirmationRule + " " + importNothingCreated
+		return importKeepGeneratedShort + " " + importAuthoringDirectoryQuestion + " Then call get_import_configuration_download with current_configuration_version_id and author the resource and import blocks in the authoring directory. " + importArchiveRootRule + " " + importConfirmationRule + " " + importNothingCreated
 	default:
-		return "The target workspace has no current configuration. " + importNewWorkspaceDirectoryQuestion + " " + importBlankAuthoringDirectoryRule + " Author the complete configuration and lock there, then call create_import_cv. " + importConfirmationRule + " " + importNothingCreated
+		return "The target workspace has no current configuration. " + importKeepGeneratedShort + " " + importNewWorkspaceDirectoryQuestion + " " + importBlankAuthoringDirectoryRule + " Author the complete configuration and lock there, then call create_import_cv. " + importConfirmationRule + " " + importNothingCreated
 	}
 }

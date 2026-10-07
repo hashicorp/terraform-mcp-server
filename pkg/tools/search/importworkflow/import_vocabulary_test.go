@@ -241,3 +241,18 @@ func TestSensitiveInformationIsFlaggedNotAvoidedByPath(t *testing.T) {
 		assert.Contains(t, importSensitiveFileRule, want)
 	}
 }
+
+func TestKeepGeneratedBlocksRuleIsProviderNeutralAndFirst(t *testing.T) {
+	for _, want := range []string{"Keep the generated resource and import blocks as returned", "identity form of the import block", "scoping values", "region, project, location, subscription or account", "Do not replace an identity import with an id import unless identity_support", "may look in the wrong place", "describes the target workspace's last plan"} {
+		assert.Contains(t, importKeepGeneratedRule, want)
+	}
+	assert.Equal(t, importKeepGeneratedRule, importToolInstructions[0])
+	assert.Contains(t, importConfirmationRule, "from an identity import to an id import")
+	for _, next := range []string{
+		importPreparedNextAction(&importPrepared{HasCurrentConfiguration: true}, false, false),
+		importPreparedNextAction(&importPrepared{}, false, false),
+	} {
+		assert.True(t, strings.HasPrefix(next, importKeepGeneratedShort) || strings.Contains(next, importKeepGeneratedShort))
+		assert.Less(t, strings.Index(next, importKeepGeneratedShort), strings.Index(next, "authoring directory"))
+	}
+}
