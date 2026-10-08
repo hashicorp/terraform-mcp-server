@@ -43,7 +43,7 @@ func TestGetWorkspaceDetailsToolOutputSchema(t *testing.T) {
 	resolved, err := schema.Resolve(nil)
 	require.NoError(t, err)
 	response := GetWorkspaceDetailsResponse{
-		WorkspaceDetails: WorkspaceDetails{TriggerPrefixes: []string{}, TagNames: []string{}},
+		WorkspaceDetails: WorkspaceDetails{TriggerPrefixes: []string{}, TriggerPatterns: []string{}, TagNames: []string{}},
 		Variables:        []VariableSummary{},
 		Readme:           "README",
 	}
