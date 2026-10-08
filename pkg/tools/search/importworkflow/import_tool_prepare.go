@@ -125,6 +125,7 @@ var importToolInstructions = []string{
 	importCandidateFieldsRule,
 	"Use prepare_import only for candidates the user has chosen to import. Do not use it to search or filter resources by tag or attribute: get_query_summary returns each result's tags. If you cannot tell what to import, go back to get_query_summary. Pass the candidate_id values you already kept from get_query_summary when presenting the selection to the user; do not re-read the query pages to rebuild them.",
 	importIdentityCompatibilityRule,
+	importConfidenceReportRule,
 	"Read the target managed_schema for each type first, then the selected candidates' observations. Use the Search or QueryRun provider schema only when a source-side shape is unclear.",
 	"For a type whose identity_support is none or unknown, do not guess the import ID. Look up the target workspace's locked provider version's resource documentation for the documented import id form and any identity-to-id mapping. " + importLockedProviderVersionRule,
 	"After downloading the configuration, " + importProviderMismatchRule,
@@ -402,7 +403,7 @@ func PrepareImportDefinition() mcp.Tool {
 	return mcp.NewTool("prepare_import",
 		mcp.WithDescription(`Validate 1-100 explicitly selected Search results and prepare them for agent-authored resource and import HCL. Use it only for candidates chosen for import, not to search or filter by tag (get_query_summary returns tags). Use the candidate_id values you kept from get_query_summary; do not page the query again after the user confirms. Keep the complete response from the call that returns it (the unchanged carry block, the types with their schemas, and every selected candidate's resource_object, configuration and import_configuration); if a script handles it, return or save all of that, not only the first candidate or a summary.
 
-Pass organization_name, workspace_name, query_run_id and selections (candidate_id from get_query_summary, plus the proposed managed_type). types, schema_source and target describe the target workspace; candidates and carry.providers describe the QueryRun, whose provider version can differ from the target's. The result contains the target managed schema for each distinct type (managed_schema, identity_schema), per-type identity_support, the verdict from the target's own schema (supported means identity_schema exists, so an identity import block is valid; none means the target's schema has no identity, Terraform 1.12 or later; unknown means the schema could not be read; for none or unknown the import ID must come from the documentation of the target workspace's locked provider version, read from the downloaded .terraform.lock.hcl), identity_compatibility (how the Search identity keys and identity schema version fit the target identity schema, with a short guidance sentence), the target Terraform versions (target.terraform_version_setting, the workspace setting that new runs use and may be a constraint, and target.terraform_version_last_run, exact, from the run that produced the state), the workspace baseline, a carry block, and for each selected candidate its resource_object (the attributes the Search provider observed, absent when the query did not capture them) and configuration and import_configuration (Search-generated HCL drafts of the resource block and the import block). Send the carry block unchanged with the final verify_import_plan call.
+Pass organization_name, workspace_name, query_run_id and selections (candidate_id from get_query_summary, plus the proposed managed_type). types, schema_source and target describe the target workspace; candidates and carry.providers describe the QueryRun, whose provider version can differ from the target's. The result contains the target managed schema for each distinct type (managed_schema, identity_schema), per-type identity_support, the verdict from the target's own schema (supported means identity_schema exists, so an identity import block is valid; none means the target's schema has no identity, Terraform 1.12 or later; unknown means the schema could not be read; for none or unknown the import ID must come from the documentation of the target workspace's locked provider version, read from the downloaded .terraform.lock.hcl), identity_compatibility (how the Search identity keys and identity schema version fit the target identity schema, with a short guidance sentence; if a type is not the same version, tell the user before authoring that identity stays unverified even if the plan only imports), the target Terraform versions (target.terraform_version_setting, the workspace setting that new runs use and may be a constraint, and target.terraform_version_last_run, exact, from the run that produced the state), the workspace baseline, a carry block, and for each selected candidate its resource_object (the attributes the Search provider observed, absent when the query did not capture them) and configuration and import_configuration (Search-generated HCL drafts of the resource block and the import block). Send the carry block unchanged with the final verify_import_plan call.
 
 Before reading the QueryRun log it blocks targets the workflow does not support: local execution mode, a Terraform version below 1.5, and a current state with no readable producing run or plan. A Terraform version below 1.12 proceeds with a note that identity is unavailable. Each block says no CV or Run was created.
 
@@ -522,15 +523,37 @@ func importPreparedTypes(carry *importCarryBlock, entries map[string]importManag
 // importPreparedNextAction picks the next step for a prepared response: the
 // agent-supplied schema path, an early stop for a configuration root setting,
 // downloading the current configuration, or authoring in a blank workspace.
+// identityCompatNextAction names the types whose identity fit is not confirmed so
+// the agent tells the user before authoring. It is empty when every type has
+// the same identity schema version.
+func identityCompatNextAction(types []importPreparedType) string {
+	seen := map[string]bool{}
+	var names []string
+	for _, t := range types {
+		c := t.IdentityCompatibility
+		if c == nil || c.Status == identityCompatSameVersion || seen[t.ManagedType] {
+			continue
+		}
+		seen[t.ManagedType] = true
+		names = append(names, t.ManagedType)
+	}
+	if len(names) == 0 {
+		return ""
+	}
+	sort.Strings(names)
+	return " Identity compatibility is not confirmed for " + strings.Join(names, ", ") + " (types[].identity_compatibility); tell the user before authoring. " + importIdentityUnverifiedLead
+}
+
 func importPreparedNextAction(out *importPrepared, agentSchema, rootUnsupported bool) string {
+	compat := identityCompatNextAction(out.Types)
 	switch {
 	case agentSchema:
 		return importAgentSchemaNextAction
 	case rootUnsupported:
 		return importConfigurationRootStop + " get_query_summary still lists the candidates. " + importNothingCreated
 	case out.HasCurrentConfiguration:
-		return importKeepGeneratedShort + " " + importTargetScopeShort + " " + importKeepResultShort + " " + importModuleTargetShort + " " + importAuthoringDirectoryQuestion + " Then call get_import_configuration_download with current_configuration_version_id and author the resource and import blocks in the authoring directory. " + importArchiveRootRule + " " + importConfirmationRule + " " + importNothingCreated
+		return importKeepGeneratedShort + compat + " " + importTargetScopeShort + " " + importKeepResultShort + " " + importModuleTargetShort + " " + importAuthoringDirectoryQuestion + " Then call get_import_configuration_download with current_configuration_version_id and author the resource and import blocks in the authoring directory. " + importArchiveRootRule + " " + importConfirmationRule + " " + importNothingCreated
 	default:
-		return "The target workspace has no current configuration. " + importKeepGeneratedShort + " " + importKeepResultShort + " " + importModuleTargetShort + " " + importNewWorkspaceDirectoryQuestion + " " + importBlankAuthoringDirectoryRule + " Author the complete configuration and lock there, then call create_import_cv. " + importConfirmationRule + " " + importNothingCreated
+		return "The target workspace has no current configuration. " + importKeepGeneratedShort + compat + " " + importKeepResultShort + " " + importModuleTargetShort + " " + importNewWorkspaceDirectoryQuestion + " " + importBlankAuthoringDirectoryRule + " Author the complete configuration and lock there, then call create_import_cv. " + importConfirmationRule + " " + importNothingCreated
 	}
 }

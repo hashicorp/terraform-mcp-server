@@ -279,3 +279,80 @@ func TestVerifyAcceptsCarryWithSearchVersionAndKeepsCandidateIDs(t *testing.T) {
 	_, err = validateImportCarry(plain.carry, plain.bindings)
 	assert.NoError(t, err)
 }
+
+func TestVerifyNextActionLeadsWithUnverifiedIdentityAndDoesNotAskForIteration(t *testing.T) {
+	f := withSearchVersion(newVerifyFixture(t, 1, importIdentitySupported, "1.16.1"), intPtr(0))
+	out := verifyFacts(t, f, planWithIdentityVersions(f, f.cleanEntries(true), map[string]int{"aws_iam_role.r0": 1}, false))
+	require.Equal(t, 1, out.ObjectIdentity[identityUnverified])
+	next := out.NextAction
+
+	assert.True(t, strings.HasPrefix(next, "1 selected identities are unverified because the Search and plan identity schema versions differ (both known, unequal)"), next)
+	assert.Contains(t, next, "even if the values look equal and the plan only imports")
+	assert.Contains(t, next, "An import-only plan says what Terraform proposes")
+	assert.Contains(t, next, "the only open item is identity")
+	assert.Contains(t, next, importConfidenceReportRule)
+	// Nothing needs iterating: do not send the agent to rewrite a block.
+	assert.NotContains(t, next, "adjust the configuration")
+	assert.NotContains(t, next, "create a new configuration version")
+	assert.False(t, forbiddenNextActionWords.MatchString(next), next)
+}
+
+func TestVerifyNextActionStillAsksForIterationWhenThePlanHasOtherChanges(t *testing.T) {
+	f := withSearchVersion(newVerifyFixture(t, 1, importIdentitySupported, "1.16.1"), intPtr(0))
+	e := f.cleanEntries(true)
+	e[0].actions = []string{"update"}
+	out := verifyFacts(t, f, planWithIdentityVersions(f, e, map[string]int{"aws_iam_role.r0": 1}, false))
+	assert.True(t, strings.HasPrefix(out.NextAction, "1 selected identities are unverified"), out.NextAction)
+	assert.Contains(t, out.NextAction, "adjust the configuration")
+	assert.NotContains(t, out.NextAction, "the only open item is identity")
+}
+
+func TestVerifyNextActionHasNoIdentityLeadWhenMatched(t *testing.T) {
+	f := withSearchVersion(newVerifyFixture(t, 1, importIdentitySupported, "1.16.1"), intPtr(0))
+	out := verifyFacts(t, f, planWithIdentityVersions(f, f.cleanEntries(true), map[string]int{"aws_iam_role.r0": 0}, false))
+	assert.NotContains(t, out.NextAction, "unverified")
+	assert.NotContains(t, out.NextAction, importConfidenceReportRule)
+}
+
+func TestPreparedNextActionNamesTypesWhoseIdentityFitIsNotConfirmed(t *testing.T) {
+	typ := func(name, status string) importPreparedType {
+		return importPreparedType{ManagedType: name, IdentityCompatibility: &importIdentityCompatibility{Status: status}}
+	}
+	assert.Empty(t, identityCompatNextAction(nil))
+	assert.Empty(t, identityCompatNextAction([]importPreparedType{typ("aws_sqs_queue", identityCompatSameVersion)}))
+
+	for _, status := range []string{identityCompatVersionDiffers, identityCompatVersionUnknown, identityCompatShapeDiffers, identityCompatNoTarget, identityCompatTargetNotRead} {
+		out := &importPrepared{HasCurrentConfiguration: true, Types: []importPreparedType{typ("aws_sqs_queue", status), typ("aws_iam_role", identityCompatSameVersion), typ("aws_sqs_queue", status)}}
+		next := importPreparedNextAction(out, false, false)
+		assert.True(t, strings.HasPrefix(next, importKeepGeneratedShort), status)
+		assert.Contains(t, next, "Identity compatibility is not confirmed for aws_sqs_queue (types[].identity_compatibility); tell the user before authoring.", status)
+		assert.NotContains(t, next, "aws_iam_role", status)
+		assert.Contains(t, next, importIdentityUnverifiedLead, status)
+		assert.Equal(t, 1, strings.Count(next, importIdentityUnverifiedLead), status)
+		assert.False(t, forbiddenNextActionWords.MatchString(identityCompatNextAction(out.Types)), status)
+	}
+
+	// The new-workspace branch gets it too, after the keep-generated rule.
+	blank := &importPrepared{Types: []importPreparedType{typ("aws_sqs_queue", identityCompatVersionDiffers)}}
+	assert.Contains(t, importPreparedNextAction(blank, false, false), importIdentityUnverifiedLead)
+}
+
+func TestIdentityTextStatesUnverifiedAndAvoidsVerdictWords(t *testing.T) {
+	for _, s := range []string{importIdentityUnverifiedLead, importConfidenceReportRule, identityCompatGuidanceVersionDiffers, identityCompatGuidanceVersionUnknown, identityCompatGuidanceOptionalScope} {
+		assert.False(t, forbiddenNextActionWords.MatchString(s), s)
+	}
+	assert.Contains(t, importIdentityUnverifiedLead, "even if Terraform plans only the import")
+	assert.Contains(t, identityCompatGuidanceVersionDiffers, "Identity will stay unverified")
+	assert.Contains(t, identityCompatGuidanceVersionDiffers, "may predate the plan")
+	assert.Contains(t, identityCompatGuidanceOptionalScope, "from its provider configuration or from the remote API")
+	assert.Contains(t, importConfidenceReportRule, "confident")
+	assert.Contains(t, importConfidenceReportRule, "unsure")
+	assert.Contains(t, importConfidenceReportRule, "conflicting")
+	assert.Contains(t, strings.Join(importToolInstructions, " "), importConfidenceReportRule)
+	assert.Contains(t, importIdentityCompatibilityRule, importIdentityUnverifiedLead)
+	assert.Contains(t, importKeepGeneratedRule, "A difference in identity schema version alone is neither a reason to change the block")
+	desc := VerifyImportPlanDefinition().Description
+	assert.Contains(t, desc, "both available and unequal")
+	assert.Contains(t, desc, "an import-only plan does not confirm identity")
+	assert.Contains(t, PrepareImportDefinition().Description, "identity stays unverified even if the plan only imports")
+}
