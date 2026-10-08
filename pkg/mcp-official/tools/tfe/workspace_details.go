@@ -11,6 +11,8 @@ import (
 )
 
 // WorkspaceDetails is the bounded workspace representation returned by workspace CRUD tools.
+// All fields are populated from the single API response — no extra API calls are needed.
+// For tag bindings, state versions, or the current run use the dedicated tools instead.
 type WorkspaceDetails struct {
 	ID                  string    `json:"workspace_id"`
 	Name                string    `json:"workspace_name"`
@@ -33,6 +35,9 @@ type WorkspaceDetails struct {
 	UpdatedAt           time.Time `json:"updated_at"`
 }
 
+// workspaceDetailsSchema returns the shared OutputSchema for workspace CRUD tools.
+// It is used directly by create_workspace and update_workspace, and extended by
+// get_workspace_details which adds the variables and readme fields on top.
 func workspaceDetailsSchema() *jsonschema.Schema {
 	return &jsonschema.Schema{
 		Type: "object",
@@ -75,6 +80,8 @@ func workspaceDetailsSchema() *jsonschema.Schema {
 	}
 }
 
+// workspaceToDetails maps a tfe.Workspace API response onto WorkspaceDetails.
+// It ensures slice fields are always non-nil so they serialise as [] rather than null.
 func workspaceToDetails(workspace *tfe.Workspace) WorkspaceDetails {
 	if workspace == nil {
 		return WorkspaceDetails{
