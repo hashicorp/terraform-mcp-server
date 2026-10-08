@@ -41,7 +41,7 @@ If there are multiple good matches, mention this but proceed with the most relev
 			),
 			mcp.WithString("provider_namespace",
 				mcp.Required(),
-				mcp.Description("The publisher of the Terraform provider, typically the name of the company, or their GitHub organization name that created the provider"),
+				mcp.Description("The publisher of the Terraform provider, typically the name of the company, or their GitHub organization name that created the provider. If you are not certain of the namespace, do not guess, ask the user. Most HashiCorp-maintained providers are in the 'hashicorp' namespace"),
 			),
 			mcp.WithString("service_slug",
 				mcp.Required(),
