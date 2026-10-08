@@ -93,14 +93,9 @@ func ReadWorkspaceTagsFunc(ctx context.Context, request *mcp.CallToolRequest, in
 		return nil, nil, fmt.Errorf("failed to list tag bindings for workspace %q: %w", workspaceName, err)
 	}
 
-	tagBindings := []string{}
-	for _, binding := range bindings {
-		tagBindings = append(tagBindings, formatTagBinding(binding))
-	}
-
 	return nil, &ReadWorkspaceTagsResult{
 		WorkspaceName: workspaceName,
 		Tags:          tagNames,
-		TagBindings:   tagBindings,
+		TagBindings:   formatTagBindings(bindings),
 	}, nil
 }

@@ -21,8 +21,8 @@ type CreateWorkspaceTagsArguments struct {
 	Tags             string `json:"tags" jsonschema:"Comma-separated list of tag names to add, for key-value tags use key:value"`
 }
 
-// CreateWorkspaceTagsResult reports the tags that were added, in the same key:value form
-// read_workspace_tags returns, so a caller can confirm how its tag string was parsed.
+// CreateWorkspaceTagsResult reports the tags accepted by the API in the same key:value
+// form returned by read_workspace_tags.
 type CreateWorkspaceTagsResult struct {
 	WorkspaceName string   `json:"workspace_name"`
 	TagsAdded     []string `json:"tags_added"`
@@ -85,19 +85,15 @@ func CreateWorkspaceTagsFunc(ctx context.Context, request *mcp.CallToolRequest, 
 		return nil, nil, fmt.Errorf("workspace %q not found in org %q: %w", workspaceName, terraformOrgName, err)
 	}
 
-	if _, err := tfeClient.Workspaces.AddTagBindings(ctx, workspace.ID, tfe.WorkspaceAddTagBindingsOptions{
+	addedBindings, err := tfeClient.Workspaces.AddTagBindings(ctx, workspace.ID, tfe.WorkspaceAddTagBindingsOptions{
 		TagBindings: bindings,
-	}); err != nil {
+	})
+	if err != nil {
 		return nil, nil, fmt.Errorf("failed to add tags to workspace %q: %w", workspaceName, err)
-	}
-
-	tagsAdded := make([]string, len(bindings))
-	for i, binding := range bindings {
-		tagsAdded[i] = formatTagBinding(binding)
 	}
 
 	return nil, &CreateWorkspaceTagsResult{
 		WorkspaceName: workspaceName,
-		TagsAdded:     tagsAdded,
+		TagsAdded:     formatTagBindings(addedBindings),
 	}, nil
 }

@@ -42,3 +42,15 @@ func formatTagBinding(binding *tfe.TagBinding) string {
 	}
 	return fmt.Sprintf("%s:%s", binding.Key, binding.Value)
 }
+
+// formatTagBindings renders a slice of tag bindings into their string form,
+// returning [] for an empty input and skipping any unexpected nil entries.
+func formatTagBindings(bindings []*tfe.TagBinding) []string {
+	formatted := make([]string, 0, len(bindings))
+	for _, binding := range bindings {
+		if binding != nil {
+			formatted = append(formatted, formatTagBinding(binding))
+		}
+	}
+	return formatted
+}

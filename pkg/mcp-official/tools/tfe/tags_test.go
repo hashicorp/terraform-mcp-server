@@ -90,6 +90,17 @@ func TestFormatTagBinding(t *testing.T) {
 	}
 }
 
+func TestFormatTagBindings(t *testing.T) {
+	bindings := []*tfe.TagBinding{
+		{ID: "tag-1", Key: "production"},
+		nil,
+		{ID: "tag-2", Key: "env", Value: "staging"},
+	}
+
+	assert.Equal(t, []string{"production", "env:staging"}, formatTagBindings(bindings))
+	assert.NotNil(t, formatTagBindings(nil))
+}
+
 // TestTagBindingRoundTrip pins the property the tag tools depend on: a tag created from a
 // caller's string reads back in the form the caller wrote it.
 func TestTagBindingRoundTrip(t *testing.T) {
