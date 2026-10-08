@@ -20,7 +20,7 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-const importToolContractVersion = "6"
+const importToolContractVersion = "7"
 
 // Identity support of a target managed type. The target Terraform
 // version is part of the answer: a plan schema produced below Terraform 1.12
@@ -46,6 +46,10 @@ type importCarryCandidate struct {
 	ListType    string         `json:"list_type"`
 	ManagedType string         `json:"managed_type"`
 	Identity    map[string]any `json:"identity"`
+	// SearchIdentityVersion is the identity schema version of the provider
+	// release that ran the query. It sits beside candidate_id, which does not
+	// include it. A pointer, because 0 is a real version.
+	SearchIdentityVersion *int `json:"search_identity_version,omitempty"`
 }
 
 // importCarryBlock is what prepare_import hands the agent to carry unchanged
@@ -77,6 +81,8 @@ type importPreparedType struct {
 	IdentitySupport    string         `json:"identity_support"`
 	IdentitySchema     map[string]any `json:"identity_schema,omitempty"`
 	ManagedSchema      map[string]any `json:"managed_schema,omitempty"`
+	// IdentityCompatibility compares the Search identity with IdentitySchema.
+	IdentityCompatibility *importIdentityCompatibility `json:"identity_compatibility,omitempty"`
 }
 
 // importTarget reports the target workspace's Terraform versions. Provider
@@ -118,6 +124,7 @@ var importToolInstructions = []string{
 	importKeepResultRule,
 	importCandidateFieldsRule,
 	"Use prepare_import only for candidates the user has chosen to import. Do not use it to search or filter resources by tag or attribute: get_query_summary returns each result's tags. If you cannot tell what to import, go back to get_query_summary. Pass the candidate_id values you already kept from get_query_summary when presenting the selection to the user; do not re-read the query pages to rebuild them.",
+	importIdentityCompatibilityRule,
 	"Read the target managed_schema for each type first, then the selected candidates' observations. Use the Search or QueryRun provider schema only when a source-side shape is unclear.",
 	"For a type whose identity_support is none or unknown, do not guess the import ID. Look up the target workspace's locked provider version's resource documentation for the documented import id form and any identity-to-id mapping. " + importLockedProviderVersionRule,
 	"After downloading the configuration, " + importProviderMismatchRule,
@@ -365,6 +372,7 @@ func prepareImportTool(ctx context.Context, c *tfe.Client, input importPrepareIn
 	if err != nil {
 		return fail(err)
 	}
+	addImportIdentityCompatibility(types, candidates, input.Selections)
 	out.Types = types
 	carry.SelectionDigest = importCarryDigest(*carry)
 	out.Candidates, out.Carry = candidates, carry
@@ -394,7 +402,7 @@ func PrepareImportDefinition() mcp.Tool {
 	return mcp.NewTool("prepare_import",
 		mcp.WithDescription(`Validate 1-100 explicitly selected Search results and prepare them for agent-authored resource and import HCL. Use it only for candidates chosen for import, not to search or filter by tag (get_query_summary returns tags). Use the candidate_id values you kept from get_query_summary; do not page the query again after the user confirms. Keep the complete response from the call that returns it (the unchanged carry block, the types with their schemas, and every selected candidate's resource_object, configuration and import_configuration); if a script handles it, return or save all of that, not only the first candidate or a summary.
 
-Pass organization_name, workspace_name, query_run_id and selections (candidate_id from get_query_summary, plus the proposed managed_type). types, schema_source and target describe the target workspace; candidates and carry.providers describe the QueryRun, whose provider version can differ from the target's. The result contains the target managed schema for each distinct type (managed_schema, identity_schema), per-type identity_support, the verdict from the target's own schema (supported means identity_schema exists, so an identity import block is valid; none means the target's schema has no identity, Terraform 1.12 or later; unknown means the schema could not be read; for none or unknown the import ID must come from the documentation of the target workspace's locked provider version, read from the downloaded .terraform.lock.hcl), the target Terraform versions (target.terraform_version_setting, the workspace setting that new runs use and may be a constraint, and target.terraform_version_last_run, exact, from the run that produced the state), the workspace baseline, a carry block, and for each selected candidate its resource_object (the attributes the Search provider observed, absent when the query did not capture them) and configuration and import_configuration (Search-generated HCL drafts of the resource block and the import block). Send the carry block unchanged with the final verify_import_plan call.
+Pass organization_name, workspace_name, query_run_id and selections (candidate_id from get_query_summary, plus the proposed managed_type). types, schema_source and target describe the target workspace; candidates and carry.providers describe the QueryRun, whose provider version can differ from the target's. The result contains the target managed schema for each distinct type (managed_schema, identity_schema), per-type identity_support, the verdict from the target's own schema (supported means identity_schema exists, so an identity import block is valid; none means the target's schema has no identity, Terraform 1.12 or later; unknown means the schema could not be read; for none or unknown the import ID must come from the documentation of the target workspace's locked provider version, read from the downloaded .terraform.lock.hcl), identity_compatibility (how the Search identity keys and identity schema version fit the target identity schema, with a short guidance sentence), the target Terraform versions (target.terraform_version_setting, the workspace setting that new runs use and may be a constraint, and target.terraform_version_last_run, exact, from the run that produced the state), the workspace baseline, a carry block, and for each selected candidate its resource_object (the attributes the Search provider observed, absent when the query did not capture them) and configuration and import_configuration (Search-generated HCL drafts of the resource block and the import block). Send the carry block unchanged with the final verify_import_plan call.
 
 Before reading the QueryRun log it blocks targets the workflow does not support: local execution mode, a Terraform version below 1.5, and a current state with no readable producing run or plan. A Terraform version below 1.12 proceeds with a note that identity is unavailable. Each block says no CV or Run was created.
 
@@ -468,7 +476,7 @@ func newImportCarry(input importPrepareInput, candidates []importDiscoveryCandid
 	for i, candidate := range candidates {
 		managed := input.Selections[i].ManagedType
 		carry.Providers[candidate.ResourceType] = importCarryProvider{Source: candidate.Provider.Source, Version: candidate.Provider.Version}
-		carry.Candidates = append(carry.Candidates, importCarryCandidate{CandidateID: candidate.CandidateID, ListType: candidate.ResourceType, ManagedType: managed, Identity: candidate.Identity})
+		carry.Candidates = append(carry.Candidates, importCarryCandidate{CandidateID: candidate.CandidateID, ListType: candidate.ResourceType, ManagedType: managed, Identity: candidate.Identity, SearchIdentityVersion: candidate.IdentityVersion})
 		key := candidate.Provider.Source + "/" + managed
 		if !seenType[key] {
 			seenType[key] = true

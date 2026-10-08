@@ -61,6 +61,11 @@ const (
 	reasonCLINoIdentity  = "terraform_cli_no_identity"
 	reasonTypeNoIdentity = "resource_type_no_identity"
 	reasonUndetermined   = "support_undetermined"
+	// reasonIdentityVersionDiffers: the Search and the plan's identity schema
+	// versions differ, so equal-looking values are not comparable.
+	reasonIdentityVersionDiffers = "identity_schema_version_differs"
+	// suffixVersionNotCompared is added to a match when a version was missing.
+	suffixVersionNotCompared = "; identity_schema_version_not_compared"
 )
 
 var verifyChangeKeys = []string{changeNone, changeUpdate, changeReplace, changeCreate, changeMissing, changeNotInPlan, changeType}
@@ -260,12 +265,40 @@ type importVerifyPlanJSON struct {
 	ResourceChanges  []importPlanResourceChange `json:"resource_changes"`
 	OutputChanges    map[string]json.RawMessage `json:"output_changes"`
 	DeferredChanges  []json.RawMessage          `json:"deferred_changes"`
+	PlannedValues    struct {
+		RootModule importPlanModule `json:"root_module"`
+	} `json:"planned_values"`
+	// identityVersions maps a resource instance address to the identity schema
+	// version the plan's provider used, from planned_values.
+	identityVersions map[string]uint64
 	ResourceDrift    []struct {
 		Address string `json:"address"`
 		Change  struct {
 			Actions []string `json:"actions"`
 		} `json:"change"`
 	} `json:"resource_drift"`
+}
+
+// importPlanModule is one module of the plan's planned_values tree.
+type importPlanModule struct {
+	Resources []struct {
+		Address               string  `json:"address"`
+		IdentitySchemaVersion *uint64 `json:"identity_schema_version"`
+	} `json:"resources"`
+	ChildModules []importPlanModule `json:"child_modules"`
+}
+
+// collectIdentityVersions walks planned_values, including child modules. Version
+// 0 is valid, so presence is kept separate from the value.
+func collectIdentityVersions(m importPlanModule, into map[string]uint64) {
+	for _, r := range m.Resources {
+		if r.IdentitySchemaVersion != nil {
+			into[r.Address] = *r.IdentitySchemaVersion
+		}
+	}
+	for _, c := range m.ChildModules {
+		collectIdentityVersions(c, into)
+	}
 }
 
 func isNoop(actions []string) bool { return len(actions) == 1 && actions[0] == "no-op" }
@@ -358,10 +391,18 @@ func changedPaths(before, after, unknown json.RawMessage) []string {
 // classifyIdentity compares the provider-returned identity with the carried
 // Search identity. Support comes from the plan's own Terraform version and
 // per-resource after_identity; the carried target only names the reason.
-func classifyIdentity(planVersion string, carried importCarryCandidate, support string, afterIdentity json.RawMessage) (string, string) {
+func classifyIdentity(planVersion string, carried importCarryCandidate, support string, afterIdentity json.RawMessage, planIdentityVersion *uint64) (string, string) {
 	hasAfter := len(afterIdentity) > 0 && !bytes.Equal(bytes.TrimSpace(afterIdentity), []byte("null"))
 	if hasAfter {
+		// Equal-looking values under different identity schema versions are not
+		// proof: a key can keep its name and change its meaning.
+		if carried.SearchIdentityVersion != nil && planIdentityVersion != nil && uint64(*carried.SearchIdentityVersion) != *planIdentityVersion {
+			return identityUnverified, reasonIdentityVersionDiffers
+		}
 		status, reason := importCompareProviderIdentity(carried.Identity, afterIdentity)
+		if status == identityMatched && (carried.SearchIdentityVersion == nil || planIdentityVersion == nil) {
+			reason += suffixVersionNotCompared
+		}
 		return status, reason
 	}
 	if atLeast, known := terraformVersionAtLeast(planVersion, 1, 12); known && !atLeast {
@@ -399,6 +440,9 @@ func verifyImportPlanFacts(raw []byte, carry *importCarryBlock, byCandidate map[
 	for _, k := range verifyIdentityKeys {
 		out.ObjectIdentity[k] = 0
 	}
+
+	plan.identityVersions = map[string]uint64{}
+	collectIdentityVersions(plan.PlannedValues.RootModule, plan.identityVersions)
 
 	byAddress := map[string]int{}
 	index := map[string]int{}
@@ -493,7 +537,11 @@ func classifyImportCandidate(plan *importVerifyPlanJSON, carry *importCarryBlock
 		if item.Change != changeNone {
 			item.ChangedPaths = changedPaths(rc.Change.Before, rc.Change.After, rc.Change.AfterUnknown)
 		}
-		item.ObjectIdentity, item.IdentityReason = classifyIdentity(plan.TerraformVersion, cand, carry.Target.IdentitySupport[cand.ManagedType], afterIdentity)
+		var planIdentityVersion *uint64
+		if v, ok := plan.identityVersions[addr]; ok {
+			planIdentityVersion = &v
+		}
+		item.ObjectIdentity, item.IdentityReason = classifyIdentity(plan.TerraformVersion, cand, carry.Target.IdentitySupport[cand.ManagedType], afterIdentity, planIdentityVersion)
 	}
 	detail := &importVerifyDetail{TargetAddress: addr, Actions: rc.Change.Actions, ImportIDPresent: idPresent, IdentityPresent: importJSONPresent(afterIdentity), ChangedPaths: changedPaths(rc.Change.Before, rc.Change.After, rc.Change.AfterUnknown), ReplacePaths: len(rc.Change.ReplacePaths)}
 	return item, detail, nil
@@ -559,6 +607,16 @@ func verifyOverall(v importVerified) string {
 	return "no_unintended_changes"
 }
 
+func countIdentityVersionDiffers(v importVerified) int {
+	n := 0
+	for _, a := range v.Attention {
+		if a.IdentityReason == reasonIdentityVersionDiffers {
+			n++
+		}
+	}
+	return n
+}
+
 // verifyNextAction describes what the plan showed with counts. It never says
 // safe, verified or approved, and never suggests an apply (ADR 0005).
 func verifyNextAction(v importVerified) string {
@@ -575,6 +633,9 @@ func verifyNextAction(v importVerified) string {
 			parts = append(parts, "A not_in_plan item means no plan entry has exactly that target_address: compare it with the address in unselected or in the plan, including the module path and instance keys.")
 		}
 	case "needs_iteration":
+		if n := countIdentityVersionDiffers(v); n > 0 {
+			parts = append(parts, fmt.Sprintf("%d selected identities are unverified because the Search and plan identity schema versions differ, even if the values look equal. Read the documentation of the target workspace's locked provider version for those types and review them with the user.", n))
+		}
 		if v.ObjectIdentity[identityMismatched] > 0 {
 			parts = append(parts, fmt.Sprintf("%d selected items have an identity that differs from the carried selection. Stop and review this selection with the user.", v.ObjectIdentity[identityMismatched]))
 		}
@@ -654,7 +715,7 @@ func VerifyImportPlanDefinition() mcp.Tool {
 
 Poll with organization_name, workspace_name and run_id from create_import_run; while the plan runs the result is a short status, so call again with the same run_id. When the plan has finished, call once more with the carry block from prepare_import (unchanged) and bindings: one candidate_id and target_address for every selected candidate. target_address is matched exactly against the address in the plan, so give it as Terraform prints it, including any module path and instance keys with double quotes (for example module.network["east"].aws_x.y["a"]). Use the carry block you kept from prepare_import, unchanged.
 
-The result gives, for each selected item, a change (none, update, replace_or_destroy, create, import_missing, not_in_plan, type_mismatch) and an object_identity (matched, mismatched, unsupported, unverified), as counts plus an attention list of items that need a look. unsupported means the identity could not be compared (Terraform below 1.12 or a type with no identity); confirm those import IDs against the documentation of the target workspace's locked provider version. unselected lists extra imports, other actions and drift. No attribute or import ID values are returned; use get_plan_json_output for detail. The summary describes the plan; it is not an approval and a plan-only Run never imports into state.`),
+The result gives, for each selected item, a change (none, update, replace_or_destroy, create, import_missing, not_in_plan, type_mismatch) and an object_identity (matched, mismatched, unsupported, unverified), as counts plus an attention list of items that need a look. unsupported means the identity could not be compared (Terraform below 1.12 or a type with no identity); confirm those import IDs against the documentation of the target workspace's locked provider version. When the Search and the plan's identity schema versions are both known and differ, the identity is unverified (identity_schema_version_differs) even if the values look equal. unselected lists extra imports, other actions and drift. No attribute or import ID values are returned; use get_plan_json_output for detail. The summary describes the plan; it is not an approval and a plan-only Run never imports into state.`),
 		mcp.WithTitleAnnotation("Verify import plan"),
 		mcp.WithReadOnlyHintAnnotation(true), mcp.WithDestructiveHintAnnotation(false),
 		mcp.WithOpenWorldHintAnnotation(true), mcp.WithIdempotentHintAnnotation(true),

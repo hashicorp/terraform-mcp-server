@@ -149,9 +149,9 @@ func TestPrepareImportToolScenarioMatrix(t *testing.T) {
 // With support unknown (agent-supplied schema) the plan's own identity decides.
 func TestIdentityClassificationWhenSupportUnknown(t *testing.T) {
 	carried := importCarryCandidate{Identity: map[string]any{"name": "role-a"}}
-	status, _ := classifyIdentity("1.16.1", carried, importIdentityUnknown, json.RawMessage(`{"name":"role-a"}`))
+	status, _ := classifyIdentity("1.16.1", carried, importIdentityUnknown, json.RawMessage(`{"name":"role-a"}`), nil)
 	assert.Equal(t, identityMatched, status)
-	status, reason := classifyIdentity("1.16.1", carried, importIdentityUnknown, nil)
+	status, reason := classifyIdentity("1.16.1", carried, importIdentityUnknown, nil, nil)
 	assert.Equal(t, identityUnsupported, status)
 	assert.Equal(t, reasonUndetermined, reason)
 }
