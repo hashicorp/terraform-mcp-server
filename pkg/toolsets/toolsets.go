@@ -173,5 +173,5 @@ func GenerateToolsHelp() string {
 		"When specified, only these tools will be available.\n" +
 		"Cannot be used together with --toolsets flag.\n" +
 		"Example:\n" +
-		"  - --tools=search_providers,get_provider_details,search_modules"
+		"  - --tools=search_provider_docs,get_provider_details,search_modules"
 }

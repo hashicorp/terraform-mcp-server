@@ -18,7 +18,7 @@ type ToolDef struct {
 // if-chain (see filter.go).
 var AllTools = []ToolDef{
 	// Public Registry tools (providers, modules, policies) — no TFE session needed
-	{Name: "search_providers", Toolset: Registry},
+	{Name: "search_provider_docs", Toolset: Registry},
 	{Name: "get_provider_details", Toolset: Registry},
 	{Name: "get_latest_provider_version", Toolset: Registry},
 	{Name: "get_provider_capabilities", Toolset: Registry},

@@ -21,7 +21,7 @@ import (
 )
 
 type GetProviderDetailsArguments struct {
-	ProviderDocID string `json:"provider_doc_id" jsonschema:"Exact tfprovider-compatible provider_doc_id, (e.g., '8894603', '8906901') retrieved from 'search_providers'"`
+	ProviderDocID string `json:"provider_doc_id" jsonschema:"Exact tfprovider-compatible provider_doc_id, (e.g., '8894603', '8906901') retrieved from 'search_provider_docs'"`
 }
 
 func GetProviderDetailsTool() *mcp.Tool {
@@ -32,7 +32,7 @@ func GetProviderDetailsTool() *mcp.Tool {
 
 	return &mcp.Tool{
 		Name:        "get_provider_details",
-		Description: `Fetches up-to-date documentation for a specific service from a Terraform provider. You must call 'search_providers' tool first to obtain the exact tfprovider-compatible provider_doc_id required to use this tool.`,
+		Description: `Fetches up-to-date documentation for a specific service from a Terraform provider. You must call 'search_provider_docs' tool first to obtain the exact tfprovider-compatible provider_doc_id required to use this tool.`,
 		Annotations: &mcp.ToolAnnotations{
 			Title:           "Fetch detailed Terraform provider documentation using a document ID",
 			OpenWorldHint:   jsonschema.Ptr(true),
@@ -58,7 +58,7 @@ func getProviderDetails(ctx context.Context, request *mcp.CallToolRequest, input
 		return nil, nil, fmt.Errorf("provider_doc_id cannot be empty")
 	}
 	if _, err := strconv.Atoi(providerDocID); err != nil {
-		return nil, nil, fmt.Errorf("provider_doc_id must be a valid number - use search_providers first to find valid IDs")
+		return nil, nil, fmt.Errorf("provider_doc_id must be a valid number - use search_provider_docs first to find valid IDs")
 	}
 
 	httpClient, err := client.GetHttpClient(ctx, client.SessionIDFromRequest(request))
@@ -68,7 +68,7 @@ func getProviderDetails(ctx context.Context, request *mcp.CallToolRequest, input
 
 	detailResp, err := registryapi.SendRegistryCall(ctx, httpClient, "GET", path.Join("provider-docs", providerDocID), logger, "v2")
 	if err != nil {
-		return nil, nil, fmt.Errorf("provider doc not found: %s - use search_providers first to find valid provider_doc_id values", providerDocID)
+		return nil, nil, fmt.Errorf("provider doc not found: %s - use search_provider_docs first to find valid provider_doc_id values", providerDocID)
 	}
 
 	var details registryapi.ProviderResourceDetails
