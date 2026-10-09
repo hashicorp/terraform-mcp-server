@@ -90,6 +90,7 @@ func ListStateVersionsTool() *mcp.Tool {
 		},
 		Annotations: &mcp.ToolAnnotations{
 			Title:           "List Terraform state versions",
+			OpenWorldHint:   jsonschema.Ptr(true),
 			ReadOnlyHint:    true,
 			DestructiveHint: jsonschema.Ptr(false),
 		},
@@ -117,7 +118,7 @@ func ListStateVersionsFunc(ctx context.Context, request *mcp.CallToolRequest, in
 		ListOptions:  input.ListOptions(),
 	})
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to list workspace state versions: %w", err)
+		return nil, nil, fmt.Errorf("listing state versions for workspace %q in organization %q: %w", workspaceName, terraformOrgName, err)
 	}
 
 	var result *mcp.CallToolResult
