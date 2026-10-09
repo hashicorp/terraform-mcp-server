@@ -82,7 +82,15 @@ func getQuerySummaryHandler(ctx context.Context, request mcp.CallToolRequest, lo
 		return toolErrorf(logger, "get_query_summary", "failed to get Terraform client: %v", err)
 	}
 
-	summary, err := readQuerySummary(ctx, tfeClient, strings.TrimSpace(queryRunID))
+	queryRunID = strings.TrimSpace(queryRunID)
+	if err := authorizeQueryRunOrganization(ctx, tfeClient, queryRunID); err != nil {
+		if result, denied := queryRunDenied(logger, "get_query_summary", queryRunID, err); denied {
+			return result, nil
+		}
+		return toolErrorf(logger, "get_query_summary", "failed to get query summary for %q: %v", queryRunID, err)
+	}
+
+	summary, err := readQuerySummary(ctx, tfeClient, queryRunID)
 	if err != nil {
 		return toolErrorf(logger, "get_query_summary", "failed to get query summary for %q: %v", queryRunID, err)
 	}
