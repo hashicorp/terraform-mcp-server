@@ -16,26 +16,87 @@ import (
 
 // UpdateWorkspaceArguments holds the inputs for updating a workspace.
 type UpdateWorkspaceArguments struct {
-	TerraformOrgName    string `json:"terraform_org_name" jsonschema:"The name of the Terraform Cloud/Enterprise organization"`
-	WorkspaceName       string `json:"workspace_name" jsonschema:"The name of the workspace to update"`
-	NewName             string `json:"new_name,omitempty" jsonschema:"Optional new name for the workspace"`
-	Description         string `json:"description,omitempty" jsonschema:"Optional new description for the workspace"`
-	TerraformVersion    string `json:"terraform_version,omitempty" jsonschema:"Optional new Terraform version to use (e.g., '1.5.0')"`
-	WorkingDirectory    string `json:"working_directory,omitempty" jsonschema:"Optional new working directory for Terraform operations"`
-	AutoApply           string `json:"auto_apply,omitempty" jsonschema:"Whether to automatically apply successful plans: 'true' or 'false'"`
-	ExecutionMode       string `json:"execution_mode,omitempty" jsonschema:"Execution mode: 'remote', 'local', or 'agent'"`
-	QueueAllRuns        string `json:"queue_all_runs,omitempty" jsonschema:"Whether to queue all runs: 'true' or 'false'"`
-	SpeculativeEnabled  string `json:"speculative_enabled,omitempty" jsonschema:"Whether speculative plans are enabled: 'true' or 'false'"`
-	TriggerPrefixes     string `json:"trigger_prefixes,omitempty" jsonschema:"Optional comma-separated list of trigger prefixes"`
-	FileTriggersEnabled string `json:"file_triggers_enabled,omitempty" jsonschema:"Whether file triggers are enabled: 'true' or 'false'"`
-	Tags                string `json:"tags,omitempty" jsonschema:"Accepted for legacy compatibility but ignored; use create_workspace_tags to modify tags"`
+	TerraformOrgName    string   `json:"terraform_org_name"`
+	WorkspaceName       string   `json:"workspace_name"`
+	NewName             string   `json:"new_name,omitempty"`
+	Description         *string  `json:"description,omitempty"`
+	TerraformVersion    string   `json:"terraform_version,omitempty"`
+	WorkingDirectory    *string  `json:"working_directory,omitempty"`
+	AutoApply           *bool    `json:"auto_apply,omitempty"`
+	ExecutionMode       string   `json:"execution_mode,omitempty"`
+	QueueAllRuns        *bool    `json:"queue_all_runs,omitempty"`
+	SpeculativeEnabled  *bool    `json:"speculative_enabled,omitempty"`
+	TriggerPrefixes     []string `json:"trigger_prefixes,omitempty"`
+	FileTriggersEnabled *bool    `json:"file_triggers_enabled,omitempty"`
 }
 
 // UpdateWorkspaceTool describes the update_workspace tool.
 func UpdateWorkspaceTool() *mcp.Tool {
 	return &mcp.Tool{
-		Name:         "update_workspace",
-		Description:  "Updates an existing Terraform workspace configuration.",
+		Name:        "update_workspace",
+		Description: "Updates an existing Terraform workspace configuration. To add or update workspace tags, use create_workspace_tags.",
+		InputSchema: &jsonschema.Schema{
+			Type: "object",
+			Properties: map[string]*jsonschema.Schema{
+				"terraform_org_name": {
+					Type:        "string",
+					Description: "The name of the Terraform Cloud/Enterprise organization",
+				},
+				"workspace_name": {
+					Type:        "string",
+					Description: "The name of the workspace to update",
+				},
+				"new_name": {
+					Type:        "string",
+					Description: "Optional new name for the workspace",
+				},
+				"description": {
+					Type:        "string",
+					Description: "Optional new description; use an empty string to clear it",
+				},
+				"terraform_version": {
+					Type:        "string",
+					Description: "Optional new Terraform version to use (e.g., '1.5.0')",
+				},
+				"working_directory": {
+					Type:        "string",
+					Description: "Optional new working directory; use an empty string to clear it",
+				},
+				"auto_apply": {
+					Type:        "boolean",
+					Description: "Whether to automatically apply successful plans",
+				},
+				"execution_mode": {
+					Type:        "string",
+					Description: "Optional execution mode: local or remote",
+					Enum:        enumOf(validExecutionModes...),
+				},
+				"queue_all_runs": {
+					Type:        "boolean",
+					Description: "Whether to queue all runs",
+				},
+				"speculative_enabled": {
+					Type:        "boolean",
+					Description: "Whether speculative plans are enabled",
+				},
+				"trigger_prefixes": {
+					Type:        "array",
+					Description: "Optional trigger prefixes; use an empty array to clear them",
+					Items:       &jsonschema.Schema{Type: "string"},
+				},
+				"file_triggers_enabled": {
+					Type:        "boolean",
+					Description: "Whether file triggers are enabled",
+				},
+			},
+			PropertyOrder: []string{
+				"terraform_org_name", "workspace_name", "new_name", "description",
+				"terraform_version", "working_directory", "auto_apply", "execution_mode",
+				"queue_all_runs", "speculative_enabled", "trigger_prefixes", "file_triggers_enabled",
+			},
+			Required:             []string{"terraform_org_name", "workspace_name"},
+			AdditionalProperties: &jsonschema.Schema{Not: &jsonschema.Schema{}},
+		},
 		OutputSchema: workspaceDetailsSchema(),
 		Annotations: &mcp.ToolAnnotations{
 			Title:           "Update an existing Terraform workspace",
@@ -78,48 +139,58 @@ func UpdateWorkspaceFunc(ctx context.Context, request *mcp.CallToolRequest, inpu
 
 func workspaceUpdateOptions(input UpdateWorkspaceArguments) (tfe.WorkspaceUpdateOptions, error) {
 	options := tfe.WorkspaceUpdateOptions{}
+	changed := false
 
 	if input.NewName != "" {
 		options.Name = tfe.String(input.NewName)
+		changed = true
 	}
-	if input.Description != "" {
-		options.Description = tfe.String(input.Description)
+	if input.Description != nil {
+		options.Description = input.Description
+		changed = true
 	}
 	if input.TerraformVersion != "" {
 		options.TerraformVersion = tfe.String(input.TerraformVersion)
+		changed = true
 	}
-	if input.WorkingDirectory != "" {
-		options.WorkingDirectory = tfe.String(input.WorkingDirectory)
+	if input.WorkingDirectory != nil {
+		options.WorkingDirectory = input.WorkingDirectory
+		changed = true
 	}
-	if input.AutoApply != "" {
-		options.AutoApply = tfe.Bool(strings.EqualFold(input.AutoApply, "true"))
+	if input.AutoApply != nil {
+		options.AutoApply = input.AutoApply
+		changed = true
 	}
-	if input.QueueAllRuns != "" {
-		options.QueueAllRuns = tfe.Bool(strings.EqualFold(input.QueueAllRuns, "true"))
+	if input.QueueAllRuns != nil {
+		options.QueueAllRuns = input.QueueAllRuns
+		changed = true
 	}
-	if input.SpeculativeEnabled != "" {
-		options.SpeculativeEnabled = tfe.Bool(strings.EqualFold(input.SpeculativeEnabled, "true"))
+	if input.SpeculativeEnabled != nil {
+		options.SpeculativeEnabled = input.SpeculativeEnabled
+		changed = true
 	}
-	if input.FileTriggersEnabled != "" {
-		options.FileTriggersEnabled = tfe.Bool(strings.EqualFold(input.FileTriggersEnabled, "true"))
+	if input.FileTriggersEnabled != nil {
+		options.FileTriggersEnabled = input.FileTriggersEnabled
+		changed = true
 	}
 
 	if input.ExecutionMode != "" {
-		executionMode := strings.ToLower(input.ExecutionMode)
-		switch executionMode {
-		case "remote", "local", "agent":
-			options.ExecutionMode = tfe.String(executionMode)
+		switch input.ExecutionMode {
+		case executionModeLocal, executionModeRemote:
+			options.ExecutionMode = tfe.String(input.ExecutionMode)
+			changed = true
 		default:
-			return tfe.WorkspaceUpdateOptions{}, fmt.Errorf("execution_mode %q must be one of: remote, local, agent", input.ExecutionMode)
+			return tfe.WorkspaceUpdateOptions{}, fmt.Errorf("execution_mode %q must be one of: %s", input.ExecutionMode, strings.Join(validExecutionModes, ", "))
 		}
 	}
 
-	if input.TriggerPrefixes != "" {
-		prefixes := strings.Split(strings.TrimSpace(input.TriggerPrefixes), ",")
-		for i := range prefixes {
-			prefixes[i] = strings.TrimSpace(prefixes[i])
-		}
-		options.TriggerPrefixes = prefixes
+	if input.TriggerPrefixes != nil {
+		options.TriggerPrefixes = append([]string{}, input.TriggerPrefixes...)
+		changed = true
+	}
+
+	if !changed {
+		return tfe.WorkspaceUpdateOptions{}, fmt.Errorf("at least one workspace setting must be provided")
 	}
 
 	return options, nil
