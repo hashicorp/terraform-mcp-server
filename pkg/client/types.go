@@ -439,6 +439,7 @@ type TerraformPolicyDetails struct {
 	} `json:"included"`
 }
 
+// TODO: Remove after migration is complete. No longer needed in new sdk tools.
 type WorkspaceToolResponse struct {
 	Type        string          `jsonapi:"primary,tool"`
 	Success     bool            `jsonapi:"attr,success"`
