@@ -100,6 +100,18 @@ var officialFactories = map[string]func(svr *mcp.Server, logger *slog.Logger){
 	"detach_variable_set_from_workspaces": func(svr *mcp.Server, _ *slog.Logger) {
 		mcp.AddTool(svr, tfeTools.DetachVariableSetFromWorkspacesTool(), tfeTools.DetachVariableSetFromWorkspacesFunc)
 	},
+	"list_runs": func(svr *mcp.Server, _ *slog.Logger) {
+		mcp.AddTool(svr, tfeTools.ListRunsTool(), tfeTools.ListRunsFunc)
+	},
+	"get_run_details": func(svr *mcp.Server, _ *slog.Logger) {
+		mcp.AddTool(svr, tfeTools.GetRunDetailsTool(), tfeTools.GetRunDetailsFunc)
+	},
+	"get_run_comments": func(svr *mcp.Server, _ *slog.Logger) {
+		mcp.AddTool(svr, tfeTools.GetRunCommentsTool(), tfeTools.GetRunCommentsFunc)
+	},
+	"action_run": func(svr *mcp.Server, _ *slog.Logger) {
+		mcp.AddTool(svr, tfeTools.ActionRunTool(), tfeTools.ActionRunFunc)
+	},
 	"get_plan_logs": func(svr *mcp.Server, _ *slog.Logger) {
 		mcp.AddTool(svr, tfeTools.GetPlanLogsTool(), tfeTools.GetPlanLogsFunc)
 	},
