@@ -66,8 +66,8 @@ func ProviderListSchemaList(logger *log.Logger) server.ServerTool {
 			mcp.WithString("workspace_name",
 				mcp.Required(),
 				mcp.Description(
-					"HCP Terraform workspace name that will execute the query. "+
-						"If the user has not supplied it, ask for both organization_name and workspace_name before calling this tool.",
+					"Search source workspace (A) that will execute the query, not automatically the import target. "+
+						"If the user has not chosen it, ask for its organization and workspace before calling this tool; never infer A from the destination.",
 				),
 			),
 		),
@@ -298,9 +298,11 @@ func doProviderRequest(ctx context.Context, request *tfe.ClientRequest, response
 const providerListSchemaListDescription = `Fetches list_resource_schemas for a search-compatible Terraform provider from the
 HCP Terraform no-code stub endpoint (GET /api/v2/search/provider-versions).
 
-Every call must be scoped with organization_name and workspace_name. Never call this tool
-without them. If either value is not present in the user's request, ask the user to provide
-both values before making any tool call. Do not attempt an unscoped request first.
+Every call must be scoped with organization_name and workspace_name for the **Search source A**,
+not automatically the import target. Before the first workspace-scoped Search tool call,
+confirm which organization/workspace the user chose for Search; if not specified, ask and
+wait for the answer. Do not infer A from the destination, an open project or a recent workspace. Never
+call this tool without both values. Do not attempt an unscoped request first.
 
 The tool has two modes:
 
@@ -317,8 +319,9 @@ LIST mode (organization_name and workspace_name supplied; no provider identifier
     to use search_providers to find the provider in the public Terraform Registry.
 
 Typical agent workflow:
-  1. Obtain organization_name and workspace_name from the user's request. If either is absent,
-     ask the user for both and wait for their response.
+  1. Confirm the Search source organization_name and workspace_name with the user (A).
+     If either is absent, ask for both and wait for their response; do not use a target
+     workspace name as A without an explicit choice.
   2. Call provider_list_schema_list(organization_name, workspace_name) to discover available providers.
   3. Call provider_list_schema_list(organization_name, workspace_name, provider_namespace,
      provider_name) to fetch the catalog-selected version and its schema.
@@ -327,7 +330,9 @@ Typical agent workflow:
   5. Select only an exact resource type key present in list_resource_schemas. Never infer list
      support from an ordinary managed resource name. If no key matches the user's request,
      explain that the selected provider version cannot list that resource and stop.
-  6. Fill in the configuration and pass it with organization_name and workspace_name to execute_query.
+   6. Fill in the configuration and pass it with the same Search source A to execute_query.
+      This Search-only step does not require an import target. If the user later
+      asks to import, offer the same-A or different-target choice before prepare_import.
 
 Requires TFE_TOKEN and TFE_ADDRESS to be configured (same credentials used for
 other HCP Terraform tools).`

@@ -19,6 +19,7 @@ import (
 // log it, store it, or expose it beyond the authorized caller's tool response.
 type importArchiveLocation struct {
 	ConfigurationVersionID string `json:"configuration_version_id"`
+	ConfigurationRole      string `json:"configuration_role"`
 	DownloadURL            string `json:"download_url"`
 	WorkingDirectory       string `json:"working_directory"`
 }
@@ -85,6 +86,9 @@ func lookupImportConfiguration(ctx context.Context, c *tfe.Client, input importP
 		return fail(importEvidenceFailure("workspace_ownership_unverified"))
 	}
 	result.WorkspaceID = w.ID
+	if !importInputName(input.PreparedTargetID) || w.ID != input.PreparedTargetID {
+		return fail(importEvidenceFailure("prepared_target_workspace_mismatch"))
+	}
 	if w.CurrentConfigurationVersion == nil || w.CurrentConfigurationVersion.ID == "" {
 		if err := checkImportBlankBaseline(ctx, c, w); err == nil {
 			result.Status = "blank_workspace"
@@ -126,7 +130,11 @@ func lookupImportConfiguration(ctx context.Context, c *tfe.Client, input importP
 	if current.ID != w.ID || importCurrentConfigurationID(current) != importCurrentConfigurationID(w) || current.WorkingDirectory != w.WorkingDirectory {
 		return fail(importEvidenceFailure("baseline_changed"))
 	}
-	result.Context = &importArchiveLocation{ConfigurationVersionID: cvID, DownloadURL: location, WorkingDirectory: w.WorkingDirectory}
+	role := "current_configuration"
+	if stateRunCV {
+		role = "state_run_configuration"
+	}
+	result.Context = &importArchiveLocation{ConfigurationVersionID: cvID, ConfigurationRole: role, DownloadURL: location, WorkingDirectory: w.WorkingDirectory}
 	result.Status = "available"
 	return result
 }

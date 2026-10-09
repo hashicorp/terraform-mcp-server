@@ -61,7 +61,7 @@ func ExecuteQuery(logger *log.Logger) server.ServerTool {
 			),
 			mcp.WithString("workspace_name",
 				mcp.Required(),
-				mcp.Description("Name of the HCP Terraform workspace in which to create and execute the query. The tool resolves its ID using go-tfe."),
+				mcp.Description("Search source workspace (A) explicitly chosen by the user; not automatically the import target. The tool resolves its ID using go-tfe."),
 			),
 			mcp.WithString("query_configuration",
 				mcp.Required(),
@@ -214,6 +214,14 @@ func submitExecuteQuery(ctx context.Context, tfeClient *tfe.Client, workspaceID 
 }
 
 const executeQueryDescription = `Creates and immediately executes an HCP Terraform Search query.
+
+Before starting a new query, confirm with the user which organization/workspace
+Search should run in (source A). Ask and wait if it has not been chosen; do not
+infer it from an import destination, the open project or a recent workspace.
+This is the Search source, not automatically the import target. Search alone
+does not require a destination. Only if the user asks to import, offer the
+choice of this same workspace or a different target in the same organization
+before prepare_import; do not infer the target from this query.
 
 MANDATORY WORKFLOW: Before calling this tool, call provider_list_schema_list and then
 generate_query_configuration. Do not skip generate_query_configuration or construct the payload

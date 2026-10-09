@@ -129,33 +129,37 @@ type importVerifyDetail struct {
 // It never approves, certifies or recommends an apply, and it carries no
 // attribute or import ID values.
 type importVerified struct {
-	ContractVersion     string                   `json:"contract_version"`
-	Status              string                   `json:"status"`
-	RunID               string                   `json:"run_id,omitempty"`
-	RunStatus           string                   `json:"run_status,omitempty"`
-	PlanStatus          string                   `json:"plan_status,omitempty"`
-	Selected            int                      `json:"selected,omitempty"`
-	Changes             map[string]int           `json:"changes,omitempty"`
-	ObjectIdentity      map[string]int           `json:"object_identity,omitempty"`
-	IdentityUnsupported []importUnsupportedGroup `json:"identity_unsupported,omitempty"`
-	Attention           []importAttention        `json:"attention,omitempty"`
-	AttentionTruncated  bool                     `json:"attention_truncated,omitempty"`
-	Unselected          *importUnselected        `json:"unselected,omitempty"`
-	Plan                *importVerifiedPlan      `json:"plan,omitempty"`
-	Detail              []importVerifyDetail     `json:"detail,omitempty"`
-	Diagnostics         []string                 `json:"diagnostics"`
-	NextAction          string                   `json:"next_action"`
+	ContractVersion        string                   `json:"contract_version"`
+	Status                 string                   `json:"status"`
+	WorkspaceID            string                   `json:"workspace_id,omitempty"`
+	ConfigurationVersionID string                   `json:"configuration_version_id,omitempty"`
+	RunID                  string                   `json:"run_id,omitempty"`
+	PlanID                 string                   `json:"plan_id,omitempty"`
+	RunStatus              string                   `json:"run_status,omitempty"`
+	PlanStatus             string                   `json:"plan_status,omitempty"`
+	Selected               int                      `json:"selected,omitempty"`
+	Changes                map[string]int           `json:"changes,omitempty"`
+	ObjectIdentity         map[string]int           `json:"object_identity,omitempty"`
+	IdentityUnsupported    []importUnsupportedGroup `json:"identity_unsupported,omitempty"`
+	Attention              []importAttention        `json:"attention,omitempty"`
+	AttentionTruncated     bool                     `json:"attention_truncated,omitempty"`
+	Unselected             *importUnselected        `json:"unselected,omitempty"`
+	Plan                   *importVerifiedPlan      `json:"plan,omitempty"`
+	Detail                 []importVerifyDetail     `json:"detail,omitempty"`
+	Diagnostics            []string                 `json:"diagnostics"`
+	NextAction             string                   `json:"next_action"`
 }
 
 func (v importVerified) isBlocked() bool { return v.Status == "blocked" || v.Status == "failed" }
 
 type importVerifyArgs struct {
-	Organization string                `json:"organization_name"`
-	Workspace    string                `json:"workspace_name"`
-	RunID        string                `json:"run_id"`
-	Carry        *importCarryBlock     `json:"carry"`
-	Bindings     []importVerifyBinding `json:"bindings"`
-	Detail       []string              `json:"detail_addresses"`
+	Organization           string                `json:"organization_name"`
+	Workspace              string                `json:"workspace_name"`
+	RunID                  string                `json:"run_id"`
+	ConfigurationVersionID string                `json:"configuration_version_id"`
+	Carry                  *importCarryBlock     `json:"carry"`
+	Bindings               []importVerifyBinding `json:"bindings"`
+	Detail                 []string              `json:"detail_addresses"`
 }
 
 func verifyBlocked(runID, code, next string) importVerified {
@@ -166,7 +170,7 @@ func verifyBlocked(runID, code, next string) importVerified {
 // carried selection. This catches transcription errors; it is not QueryRun
 // attestation and not authorization.
 func validateImportCarry(carry *importCarryBlock, bindings []importVerifyBinding) (map[string]string, error) {
-	if carry == nil || carry.QueryRunID == "" || len(carry.Candidates) < 1 || len(carry.Candidates) > maxImportSelections || carry.Target.IdentitySupport == nil {
+	if carry == nil || carry.QueryRunID == "" || !importInputName(carry.Target.WorkspaceID) || len(carry.Candidates) < 1 || len(carry.Candidates) > maxImportSelections || carry.Target.IdentitySupport == nil {
 		return nil, importEvidenceFailure("carry_invalid")
 	}
 	if importCarryDigest(*carry) != carry.SelectionDigest {
@@ -210,7 +214,7 @@ func validateImportCarry(carry *importCarryBlock, bindings []importVerifyBinding
 
 // waitForImportPlan polls the exact run for a bounded time. A timeout returns
 // pending, never a verdict.
-func waitForImportPlan(ctx context.Context, c *tfe.Client, w *tfe.Workspace, runID string) (*tfe.Run, *tfe.Plan, string, error) {
+func waitForImportPlan(ctx context.Context, c *tfe.Client, w *tfe.Workspace, runID, expectedCVID string) (*tfe.Run, *tfe.Plan, string, error) {
 	deadline := time.Now().Add(importVerifyWait)
 	for {
 		r, err := c.Runs.Read(ctx, runID)
@@ -218,22 +222,40 @@ func waitForImportPlan(ctx context.Context, c *tfe.Client, w *tfe.Workspace, run
 			return nil, nil, "", importReadError(err, 0)
 		}
 		if r.ID != runID || !r.PlanOnly || r.Workspace == nil || r.Workspace.ID != w.ID || r.ConfigurationVersion == nil || r.ConfigurationVersion.ID == "" {
-			return nil, nil, "", importEvidenceFailure("run_association_unverified")
+			return r, nil, "", importEvidenceFailure("run_association_unverified")
 		}
 		if r.AutoApply {
-			return nil, nil, "", importEvidenceFailure("run_not_plan_only")
+			return r, nil, "", importEvidenceFailure("run_not_plan_only")
+		}
+		if r.ConfigurationVersion.ID != expectedCVID {
+			return r, nil, "", importEvidenceFailure("run_configuration_version_mismatch")
 		}
 		state := "pending"
 		var p *tfe.Plan
+		// Run failure is terminal even if no Plan was ever created. A terminal
+		// successful Run with no Plan cannot supply plan evidence either.
+		switch r.Status {
+		case tfe.RunErrored, tfe.RunCanceled, tfe.RunDiscarded:
+			state = "failed"
+		case tfe.RunPlannedAndFinished:
+			if r.Plan == nil || r.Plan.ID == "" {
+				state = "plan_unavailable"
+			}
+		}
 		if r.Plan != nil && r.Plan.ID != "" {
 			if p, err = c.Plans.Read(ctx, r.Plan.ID); err != nil {
-				return nil, nil, "", importReadError(err, 0)
+				return r, nil, "", importReadError(err, 0)
+			}
+			if p == nil || p.ID != r.Plan.ID {
+				return r, nil, "", importEvidenceFailure("plan_association_unverified")
 			}
 			switch {
 			case p.Status == tfe.PlanErrored || p.Status == tfe.PlanCanceled || p.Status == tfe.PlanUnreachable || r.Status == tfe.RunErrored || r.Status == tfe.RunCanceled || r.Status == tfe.RunDiscarded:
 				state = "failed"
 			case p.Status == tfe.PlanFinished && r.Status == tfe.RunPlannedAndFinished:
 				state = "finished"
+			case r.Status == tfe.RunPlannedAndFinished:
+				state = "plan_unavailable"
 			}
 		}
 		if state != "pending" || !time.Now().Add(importVerifyInterval).Before(deadline) {
@@ -244,6 +266,27 @@ func waitForImportPlan(ctx context.Context, c *tfe.Client, w *tfe.Workspace, run
 			return r, p, "pending", nil
 		case <-time.After(importVerifyInterval):
 		}
+	}
+}
+
+// observedImportRun carries only backend-observed relationships. In particular,
+// the expected CV is never substituted for a missing Run relationship.
+func observedImportRun(out *importVerified, r *tfe.Run, p *tfe.Plan) {
+	if r == nil {
+		return
+	}
+	out.RunStatus = string(r.Status)
+	if r.Workspace != nil {
+		out.WorkspaceID = r.Workspace.ID
+	}
+	if r.ConfigurationVersion != nil {
+		out.ConfigurationVersionID = r.ConfigurationVersion.ID
+	}
+	if r.Plan != nil {
+		out.PlanID = r.Plan.ID
+	}
+	if p != nil {
+		out.PlanStatus = string(p.Status)
 	}
 }
 
@@ -731,30 +774,37 @@ func verifyNextAction(v importVerified) string {
 }
 
 func verifyImportPlan(ctx context.Context, c *tfe.Client, a importVerifyArgs) importVerified {
+	out := importVerified{ContractVersion: importToolContractVersion, RunID: a.RunID, Diagnostics: []string{}}
 	w, err := c.Workspaces.Read(ctx, a.Organization, a.Workspace)
 	if err != nil {
 		return verifyBlocked(a.RunID, importDiagnosticCode(importReadError(err, 0)), "Resolve the reported diagnostic and call verify_import_plan again.")
 	}
+	out.WorkspaceID = w.ID
 	if w.Organization == nil || !strings.EqualFold(w.Organization.Name, a.Organization) {
-		return verifyBlocked(a.RunID, "workspace_ownership_unverified", "Use the organization and workspace the run was created in.")
+		out.Status, out.Diagnostics, out.NextAction = "blocked", []string{"workspace_ownership_unverified"}, "Use the organization and workspace the run was created in."
+		return out
 	}
-	r, p, state, err := waitForImportPlan(ctx, c, w, a.RunID)
+	r, p, state, err := waitForImportPlan(ctx, c, w, a.RunID, a.ConfigurationVersionID)
+	observedImportRun(&out, r, p)
 	if err != nil {
-		return verifyBlocked(a.RunID, importDiagnosticCode(err), "Resolve the reported diagnostic. Use the run_id returned by create_import_run.")
-	}
-	out := importVerified{ContractVersion: importToolContractVersion, RunID: a.RunID, RunStatus: string(r.Status), Diagnostics: []string{}}
-	if p != nil {
-		out.PlanStatus = string(p.Status)
+		out.Status, out.Diagnostics = "blocked", []string{importDiagnosticCode(err)}
+		out.NextAction = "Resolve the reported diagnostic. Use the run_id and configuration_version_id returned by this attempt's create_import_run; no plan JSON was read."
+		return out
 	}
 	switch state {
 	case "pending":
 		out.Status = "pending"
-		out.NextAction = "The plan has not finished. Call verify_import_plan again with the same run_id."
+		out.NextAction = "The plan has not finished. Call verify_import_plan again with the same run_id and configuration_version_id."
 		return out
 	case "failed":
 		out.Status = "failed"
 		out.Diagnostics = []string{"speculative_plan_failed"}
-		out.NextAction = "The plan did not finish successfully. Read get_plan_logs for this plan, repair the configuration, and create a new configuration version and run. Do not retry a create blindly."
+		out.NextAction = "The Run or plan failed. If plan_id is present, inspect that Plan's logs in HCP Terraform (or with get_plan_logs when the Terraform toolset is available). If no plan_id exists, inspect the Run's diagnostics in HCP Terraform. Repair only after reviewing the failure; a new configuration version and Run need a reviewed attempt. Do not retry a create blindly."
+		return out
+	case "plan_unavailable":
+		out.Status = "blocked"
+		out.Diagnostics = append(out.Diagnostics, "plan_evidence_unavailable")
+		out.NextAction = "The Run is terminal but has no finished Plan evidence. Inspect this Run in HCP Terraform; do not treat it as an import-plan result."
 		return out
 	}
 	if a.Carry == nil || len(a.Bindings) == 0 {
@@ -764,17 +814,26 @@ func verifyImportPlan(ctx context.Context, c *tfe.Client, a importVerifyArgs) im
 	}
 	byCandidate, err := validateImportCarry(a.Carry, a.Bindings)
 	if err != nil {
-		return verifyBlocked(a.RunID, importDiagnosticCode(err), "The carried selection is not consistent. Pass the carry block exactly as prepare_import returned it, with one binding per candidate. Nothing about the plan was read.")
+		out.Status, out.Diagnostics, out.NextAction = "blocked", []string{importDiagnosticCode(err)}, "The carried selection is not consistent. Pass the carry block exactly as prepare_import returned it, with one binding per candidate. No plan JSON was read."
+		return out
+	}
+	if a.Carry.Target.WorkspaceID != w.ID {
+		out.Status, out.Diagnostics, out.NextAction = "blocked", []string{"prepared_target_workspace_mismatch"}, "The carried target differs from the run's workspace. Verify the target selection; no plan JSON was read."
+		return out
 	}
 	raw, status, err := readImportBackendJSON(ctx, c, "plans/"+url.PathEscape(p.ID)+"/json-output", maxImportSchemaBytes)
 	if err != nil || status != 200 {
-		return verifyBlocked(a.RunID, importDiagnosticCode(importReadError(err, status)), "The plan JSON could not be read. Call verify_import_plan again, or read get_plan_json_output.")
+		out.Status, out.Diagnostics, out.NextAction = "blocked", []string{importDiagnosticCode(importReadError(err, status))}, "The plan JSON could not be read. Inspect this Plan in HCP Terraform; if the Terraform toolset is available, get_plan_json_output accepts plan_id. Do not claim full plan review from this summary."
+		return out
 	}
 	facts, err := verifyImportPlanFacts(raw, a.Carry, byCandidate, a.Detail)
 	if err != nil {
-		return verifyBlocked(a.RunID, importDiagnosticCode(err), "The plan could not be summarized completely. Read get_plan_json_output for this plan; do not treat a partial summary as complete.")
+		out.Status, out.Diagnostics, out.NextAction = "blocked", []string{importDiagnosticCode(err)}, "The plan could not be summarized completely. Inspect this Plan in HCP Terraform; if the Terraform toolset is available, get_plan_json_output accepts plan_id. Do not treat a partial summary as complete."
+		return out
 	}
-	facts.RunID, facts.RunStatus, facts.PlanStatus = a.RunID, string(r.Status), string(p.Status)
+	facts.RunID, facts.WorkspaceID, facts.ConfigurationVersionID, facts.PlanID = out.RunID, out.WorkspaceID, out.ConfigurationVersionID, out.PlanID
+	facts.RunStatus, facts.PlanStatus = out.RunStatus, out.PlanStatus
+	facts.NextAction += " Inspect the full Plan in HCP Terraform using plan_id; when the Terraform toolset is available, get_plan_logs and get_plan_json_output also accept plan_id. This bounded summary alone is not a full-plan review."
 	return facts
 }
 
@@ -783,7 +842,7 @@ func VerifyImportPlanDefinition() mcp.Tool {
 	return mcp.NewTool("verify_import_plan",
 		mcp.WithDescription(`Wait up to about 40 seconds for a plan-only import Run, then describe what the finished plan showed. Read-only.
 
-Poll with organization_name, workspace_name and run_id from create_import_run; while the plan runs the result is a short status, so call again with the same run_id. When the plan has finished, call once more with the carry block from prepare_import (unchanged) and bindings: one candidate_id and target_address for every selected candidate. target_address is matched exactly against the address in the plan, so give it as Terraform prints it, including any module path and instance keys with double quotes (for example module.network["east"].aws_x.y["a"]). Use the carry block you kept from prepare_import, unchanged.
+Poll with target organization_name, workspace_name, run_id and configuration_version_id from this attempt's create_import_run; the backend Run must reference exactly that CV even while pending. Keep both IDs on every poll. A matching CV relationship does not prove the reviewed archive bytes were uploaded. The response returns workspace_id, configuration_version_id, run_id and plan_id whenever observed; a Plan may not exist. When the plan has finished, call once more with the carry block from prepare_import (unchanged) and bindings: one candidate_id and target_address for every selected candidate. The carried target workspace ID must equal the run's workspace; this is an integrity check, not proof of user approval or archive review. target_address is matched exactly against the address in the plan, so give it as Terraform prints it, including any module path and instance keys with double quotes (for example module.network["east"].aws_x.y["a"]). Use the carry block you kept from prepare_import, unchanged.
 
 The result gives, for each selected item, a change (none, update, replace_or_destroy, create, import_missing, not_in_plan, type_mismatch) and an object_identity (matched, mismatched, unsupported, unverified), as counts plus an attention list of items that need a look. These are two independent axes: there is no overall or combined verdict. status plan_available means only that the plan was read; it is not a judgment, and the result is not an error even when the plan has actions or identity is uncertain. Plan actions (changes, unselected, plan) and identity (object_identity, identity_unsupported, attention) are reported independently. next_action leads with identity uncertainty and conflicts, then separately describes every plan action (selected imports not taking effect, updates or replacements, extra imports, other managed actions, drift, output changes, deferred changes). matched is bounded evidence (complete primitive after_identity equal to the Search identity, with equal known identity schema versions), not a general correctness guarantee. unsupported means the identity could not be compared (Terraform below 1.12, or prepare-time target schema evidence without identity); absence of after_identity does not prove the speculative plan's current target schema lacks identity. Confirm those import IDs against the documentation of the target workspace's locked provider version. When the Search and the plan's identity schema versions are both available and unequal (identity_schema_version_differs), the identity is unverified, not unsupported, even if the values look equal and the plan only imports: an import-only plan does not confirm identity. When the plan reports no identity schema version for the address but the identity otherwise looks equal, it is unverified with identity_schema_version_not_compared. Identity uncertainty alone is not a reason to change the configuration or create a new configuration version or Run. Tell the user, and report what you are confident about, unsure about and what conflicts. unselected lists extra imports, other actions and drift. The carry block must include every candidate's search_identity_version; a carry without it is rejected. No attribute or import ID values are returned; use get_plan_json_output for detail. The summary describes the plan; it is not an approval and a plan-only Run never imports into state.`),
 		mcp.WithTitleAnnotation("Verify import plan"),
@@ -792,6 +851,7 @@ The result gives, for each selected item, a change (none, update, replace_or_des
 		mcp.WithString("organization_name", mcp.Required(), mcp.Description("HCP Terraform organization.")),
 		mcp.WithString("workspace_name", mcp.Required(), mcp.Description("Target workspace name.")),
 		mcp.WithString("run_id", mcp.Required(), mcp.Description("Run ID returned by create_import_run.")),
+		mcp.WithString("configuration_version_id", mcp.Required(), mcp.Description("Expected uploaded CV ID retained from this attempt's create_import_cv/create_import_run. Checked against the Run on every poll; does not attest reviewed archive bytes.")),
 		mcp.WithObject("carry", mcp.Description("The carry block from prepare_import, unchanged. Required once the plan has finished.")),
 		mcp.WithArray("bindings", mcp.Description("One entry per selected candidate. Required once the plan has finished."), mcp.MaxItems(maxImportSelections), mcp.Items(map[string]any{
 			"type": "object", "required": []string{"candidate_id", "target_address"},
@@ -806,8 +866,8 @@ The result gives, for each selected item, a change (none, update, replace_or_des
 // HandleVerifyImportPlan serves verify_import_plan.
 func HandleVerifyImportPlan(ctx context.Context, request mcp.CallToolRequest, logger *log.Logger) (*mcp.CallToolResult, error) {
 	var a importVerifyArgs
-	if err := decodeImportToolArguments(request.GetArguments(), &a, maxVerifyArgumentBytes); err != nil || !importInputName(a.Organization) || !importInputName(a.Workspace) || !importInputName(a.RunID) || len(a.Bindings) > maxImportSelections || len(a.Detail) > maxVerifyDetail {
-		return importToolResult(verifyBlocked("", "import_input_invalid", "Supply organization_name, workspace_name and run_id; once the plan has finished also the carry block and bindings."))
+	if err := decodeImportToolArguments(request.GetArguments(), &a, maxVerifyArgumentBytes); err != nil || !importInputName(a.Organization) || !importInputName(a.Workspace) || !importInputName(a.RunID) || !importInputName(a.ConfigurationVersionID) || len(a.Bindings) > maxImportSelections || len(a.Detail) > maxVerifyDetail {
+		return importToolResult(verifyBlocked(a.RunID, "import_input_invalid", "Supply organization_name, workspace_name, run_id and configuration_version_id from this attempt; once the plan has finished also the carry block and bindings."))
 	}
 	if err := client.AuthorizeOrganization(ctx, a.Organization); err != nil {
 		return importToolResult(verifyBlocked(a.RunID, "organization_not_allowed", "Use an organization allowed by this server."))

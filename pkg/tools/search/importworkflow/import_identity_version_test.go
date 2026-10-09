@@ -116,7 +116,7 @@ func TestInvalidIdentityVersionBlocksPrepareAndPaging(t *testing.T) {
 	assert.Contains(t, out.Diagnostics, "query_identity_version_invalid")
 	assert.Nil(t, out.Carry, "no carry from a non-selectable QueryRun")
 	assert.Empty(t, out.Candidates)
-	assert.Equal(t, "8", out.ContractVersion)
+	assert.Equal(t, "10", out.ContractVersion)
 	assert.Contains(t, out.NextAction, "whole QueryRun is not selectable")
 	assert.Contains(t, out.NextAction, importNothingCreated)
 	assert.False(t, forbiddenNextActionWords.MatchString(out.NextAction), out.NextAction)
@@ -160,7 +160,7 @@ func TestVerifyResultVariantsSerializeWithoutOverall(t *testing.T) {
 	}
 	for _, status := range []string{"pending", "failed", "carry_required", "blocked"} {
 		t.Run("response schema "+status, func(t *testing.T) {
-			assertResult(t, importVerified{ContractVersion: importToolContractVersion, Status: status, Diagnostics: []string{}, NextAction: "Review the response."})
+			assertResult(t, importVerified{ContractVersion: importToolContractVersion, Status: status, WorkspaceID: "ws-fixture", ConfigurationVersionID: "cv-import", RunID: "run-import", PlanID: "plan-import", Diagnostics: []string{}, NextAction: "Review the response."})
 		})
 	}
 

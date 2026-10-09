@@ -160,6 +160,8 @@ type importDiscovery struct {
 type importQueryProvenance struct {
 	QueryRunID    string
 	WorkspaceID   string
+	WorkspaceName string
+	Organization  string
 	NoCodeQueryID string
 	Providers     map[string]workspaceProvider
 	// GenerateConfigOut is nil when the query attribute is not reported.
@@ -191,7 +193,7 @@ func readImportQueryProvenance(ctx context.Context, c *tfe.Client, queryID strin
 	if err != nil {
 		return nil, importReadError(err, 0)
 	}
-	if w.ID != q.Workspace.ID || w.Organization == nil || w.Organization.Name == "" {
+	if w.ID != q.Workspace.ID || w.Name == "" || w.Organization == nil || w.Organization.Name == "" {
 		return nil, importEvidenceFailure("query_ownership_unverified")
 	}
 	if err := client.AuthorizeOrganization(ctx, w.Organization.Name); err != nil {
@@ -271,7 +273,7 @@ func readImportQueryProvenance(ctx context.Context, c *tfe.Client, queryID strin
 			providers[resourceType] = provider
 		}
 	}
-	return &importQueryProvenance{QueryRunID: queryID, WorkspaceID: w.ID, NoCodeQueryID: nc.ID, Providers: providers, GenerateConfigOut: wire.Data.Attributes.GenerateConfigOut, LogReadURL: q.LogReadURL}, nil
+	return &importQueryProvenance{QueryRunID: queryID, WorkspaceID: w.ID, WorkspaceName: w.Name, Organization: w.Organization.Name, NoCodeQueryID: nc.ID, Providers: providers, GenerateConfigOut: wire.Data.Attributes.GenerateConfigOut, LogReadURL: q.LogReadURL}, nil
 }
 
 // readImportDiscoveryLog reads and parses the QueryRun log. It is the expensive

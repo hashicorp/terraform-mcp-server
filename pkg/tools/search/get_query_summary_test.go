@@ -25,6 +25,8 @@ func TestGetQuerySummaryDefinition(t *testing.T) {
 	tool := GetQuerySummary(silentLogger())
 
 	assert.Equal(t, "get_query_summary", tool.Tool.Name)
+	assert.Contains(t, tool.Tool.Description, "Search-only callers need no import target")
+	assert.Contains(t, tool.Tool.Description, "If the user asks to import")
 	assert.Contains(t, tool.Tool.InputSchema.Required, "query_run_id")
 	assert.Contains(t, tool.Tool.Description, "get_query_status")
 	require.NotNil(t, tool.Tool.Annotations.ReadOnlyHint)

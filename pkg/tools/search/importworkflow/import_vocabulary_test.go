@@ -132,9 +132,9 @@ func TestPrepareImportStopsEarlyForConfigurationRootSetting(t *testing.T) {
 	f := importBackendFixture(t)
 	setWorkspaceAttribute(t, f, "working-directory", "environments/production")
 	out := prepareImportTool(context.Background(), f.client, importFixtureInput(t))
-	require.NotNil(t, out.Carry, "candidates are still returned")
-	assert.Contains(t, out.Notes, "configuration_root_setting_unsupported")
-	assert.Contains(t, out.NextAction, importConfigurationRootStop)
+	require.Equal(t, "blocked", out.Status)
+	assert.Nil(t, out.Carry, "no candidates should be offered for an ineligible target")
+	assert.Contains(t, out.Diagnostics, "configuration_root_setting_unsupported")
 	assert.NotContains(t, out.NextAction, "Ask the user where the authoring directory")
 	assert.NotContains(t, out.NextAction, importConfirmationRule)
 }

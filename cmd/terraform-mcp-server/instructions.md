@@ -57,7 +57,17 @@ The Terraform MCP server provides tools for generating better Terraform code thr
 ## Workflow Patterns
 
 **Search-to-Import (when Search tools are enabled)**:
-1. Discover the relevant Search provider/list-resource schema, create a no-code
+1. **Before starting a new Search query or making a workspace-scoped Search
+   call, confirm which HCP Terraform organization and workspace should run it
+   (source A); ask and wait if the user has not chosen them.** Do not take the
+   import destination, an open project, or
+   the most recently used workspace as A without the user's explicit choice.
+   Use A for `provider_list_schema_list` and `execute_query`; its catalog is
+   Search list-resource schema, not a target managed-resource schema. If the
+   user instead supplies an existing QueryRun ID, use `get_query_summary` to
+   display its backend-derived source organization/workspace/ID; do not start
+   a new query just to rediscover A. Search-only requests need no import target.
+2. Discover the relevant Search provider/list-resource schema, create a no-code
    query, and wait for its completed results. Browse results with
    `get_query_summary` (filter by `resource_type`, `address` or `name_contains`
    and page with `after`); a query can hold more than 100 results. Explicitly
@@ -69,7 +79,19 @@ The Terraform MCP server provides tools for generating better Terraform code thr
    query only sees what its filters and list arguments cover, so more matching
    resources may exist, and exactly 100 results in a list may be the default
    limit.
-2. Call `prepare_import` with the selection and keep the complete response
+3. **Only if the user wants to import**, once A is known, offer the choice:
+   "Import into the same workspace that ran Search (A), or designate a
+   different target workspace (B) in the same organization?" Name A's
+   organization/workspace. If B is chosen, ask for its exact name and confirm
+   it. Wait for the user's choice before `prepare_import`; never infer a target
+   from A, a local project or prior tool calls. If the user only wants Search,
+   stop after reporting results without asking for a target or starting import
+   preparation. A and B may be the same **only when chosen explicitly**. One
+   attempt has one target; do not advertise a multi-target workflow or assume
+   another workspace's state is free of the selected object. Preserve the
+   QueryRun ID and candidate_id values; target state, schema, baseline, CV,
+   Run and Plan reads belong only to the confirmed target. Call
+   `prepare_import` with the selection and keep the complete response
    (the carry block and every selected candidate's blocks). It returns the
    target managed schema for each distinct
    type, per-type `identity_support`, the target workspace's Terraform versions,
@@ -84,10 +106,11 @@ The Terraform MCP server provides tools for generating better Terraform code thr
    provider schema JSON, the locked provider version's documentation, the
    versioned Terraform docs and `terraform validate`, not fixed rules, and list
    each adaptation in the review.
-3. Ask the user for the **authoring directory**; you work in it for everything.
+4. Ask the user for the **authoring directory**; you work in it for everything.
    If the target workspace has a current configuration, it must be an existing
    empty directory, or a new one you create at the path they give: call
-   `get_import_configuration_download` and extract the configuration there with a
+   `get_import_configuration_download` with prepared_target_workspace_id
+   (the target workspace_id from `prepare_import`) and extract the configuration there with a
    plain GET and no Authorization header, and warn once if the path is inside a
    git work tree (the download may include `.env` or `.tfvars` files). If the
    target workspace is new (no configuration and no state), nothing is downloaded
@@ -112,12 +135,14 @@ The Terraform MCP server provides tools for generating better Terraform code thr
    configuration root setting (`working_directory`) is not supported yet: stop
    and tell the user. MCP does not download, edit, or upload archive bytes and
    takes no local path.
-4. Create the speculative configuration version (`create_import_cv`) and the
+5. Create the speculative configuration version (`create_import_cv`) and the
    plan-only Run (`create_import_run`) after the single user review described
-   in the `prepare_import` response, which names the target workspace and the
-   authoring directory. An uncertain create must be reconciled
+   in the `prepare_import` response, which names A and the explicitly chosen
+   target (even when they are the same workspace) and the authoring directory.
+   An uncertain create must be reconciled
    before retrying.
-5. Call `verify_import_plan` with the run ID until the plan finishes, then once
+6. Call `verify_import_plan` with the run ID **and the exact CV ID from this
+   attempt** on every poll until the plan finishes, then once
    more with the carry block unchanged and a binding of `candidate_id` to
    `target_address` for every selection. It describes what the finished plan
    showed (changes and identity as separate counts, plus items needing
@@ -129,7 +154,10 @@ The Terraform MCP server provides tools for generating better Terraform code thr
    new configuration version or Run. Even a `matched` identity is bounded
    evidence, not a general correctness guarantee. Review the full finished plan, including selected and
    unrelated imports, resource/output actions, deferred actions, and
-   refresh drift; use `get_plan_json_output` for detail. A plan does not
+   refresh drift. Use the returned plan_id to inspect the full Plan in HCP
+   Terraform, or `get_plan_logs`/`get_plan_json_output` when the Terraform
+   toolset is available. Those readers are not in the Search-only toolset;
+   do not call a bounded summary a full-plan review. A plan does not
    persist an import; applying it requires separate review and approval.
 
 **Code Generation**:

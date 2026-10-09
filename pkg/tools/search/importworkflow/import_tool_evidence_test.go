@@ -133,10 +133,16 @@ func TestPrepareImportToolIndependentOfCreateEligibility(t *testing.T) {
 			f.responses[path], err = json.Marshal(wire)
 			require.NoError(t, err)
 			out := prepareImportTool(context.Background(), f.client, importFixtureInput(t))
-			require.Equal(t, "prepared", out.Status, out.Diagnostics)
+			require.Equal(t, "blocked", out.Status, out.Diagnostics)
+			if mode == "agent" {
+				assert.Contains(t, out.Diagnostics, "execution_source_not_supported")
+			} else {
+				assert.Contains(t, out.Diagnostics, "workspace_vcs_source_unsupported")
+			}
 			assert.Equal(t, mode, out.ExecutionMode)
 			assert.Equal(t, "environments/production", out.Baseline.WorkingDirectory)
 			assert.False(t, out.HasCurrentConfiguration)
+			assert.Empty(t, out.Candidates)
 		})
 	}
 }
@@ -185,7 +191,7 @@ func TestDownloadToolFailuresReturnNoURL(t *testing.T) {
 			t.Setenv(client.TerraformAddress, f.url)
 			t.Setenv(client.TerraformToken, "fixture-token")
 			tc.change(f)
-			out := downloadImportConfiguration(context.Background(), f.client, importPrepareInput{Organization: "fixture-org", Workspace: "import-root"}, "cv-current", silentLogger())
+			out := downloadImportConfiguration(context.Background(), f.client, importPrepareInput{Organization: "fixture-org", Workspace: "import-root", PreparedTargetID: "ws-fixture"}, "cv-current", silentLogger())
 			assert.Equal(t, "blocked", out.Status)
 			assert.Contains(t, out.Diagnostics, tc.code)
 			assert.Empty(t, out.DownloadURL)
@@ -198,11 +204,11 @@ func TestDownloadToolFailuresReturnNoURL(t *testing.T) {
 
 func TestDownloadToolBlankWorkspaceDoesNotClaimUnobservedState(t *testing.T) {
 	f, _, _ := blankImportFixture(t)
-	out := downloadImportConfiguration(context.Background(), f.client, importPrepareInput{Organization: "fixture-org", Workspace: "import-root"}, "cv-current", silentLogger())
+	out := downloadImportConfiguration(context.Background(), f.client, importPrepareInput{Organization: "fixture-org", Workspace: "import-root", PreparedTargetID: "ws-fixture"}, "cv-current", silentLogger())
 	assert.Equal(t, "blank_workspace", out.Status)
 	assert.Empty(t, out.DownloadURL)
 	f.stateStatus = http.StatusForbidden
-	blocked := downloadImportConfiguration(context.Background(), f.client, importPrepareInput{Organization: "fixture-org", Workspace: "import-root"}, "cv-current", silentLogger())
+	blocked := downloadImportConfiguration(context.Background(), f.client, importPrepareInput{Organization: "fixture-org", Workspace: "import-root", PreparedTargetID: "ws-fixture"}, "cv-current", silentLogger())
 	assert.Equal(t, "blocked", blocked.Status)
 }
 

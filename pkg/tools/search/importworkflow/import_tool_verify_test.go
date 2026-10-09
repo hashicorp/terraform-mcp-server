@@ -34,7 +34,7 @@ func newVerifyFixture(t *testing.T, n int, support, destVersion string) verifyFi
 	carry := &importCarryBlock{
 		QueryRunID: "qry-verify",
 		Providers:  map[string]importCarryProvider{"aws_iam_role": {Source: verifyProvider, Version: "6.62.0"}},
-		Target:     importCarryTarget{TerraformVersion: destVersion, IdentitySupport: map[string]string{"aws_iam_role": support}},
+		Target:     importCarryTarget{WorkspaceID: "ws-fixture", TerraformVersion: destVersion, IdentitySupport: map[string]string{"aws_iam_role": support}},
 	}
 	f := verifyFixture{carry: carry, byCand: map[string]string{}}
 	for i := 0; i < n; i++ {
@@ -420,7 +420,7 @@ func TestVerifyImportPlanHandlerPollsThenSummarizes(t *testing.T) {
 	}
 
 	call := func(extra map[string]any) importVerified {
-		args := map[string]any{"organization_name": "fixture-org", "workspace_name": "import-root", "run_id": "run-import"}
+		args := map[string]any{"organization_name": "fixture-org", "workspace_name": "import-root", "run_id": "run-import", "configuration_version_id": "cv-import"}
 		for k, v := range extra {
 			args[k] = v
 		}
@@ -434,10 +434,14 @@ func TestVerifyImportPlanHandlerPollsThenSummarizes(t *testing.T) {
 	pending := call(nil)
 	assert.Equal(t, "pending", pending.Status)
 	assert.Contains(t, pending.NextAction, "same run_id")
+	assert.Equal(t, "ws-fixture", pending.WorkspaceID)
+	assert.Equal(t, "cv-import", pending.ConfigurationVersionID)
+	assert.Equal(t, "plan-import", pending.PlanID)
 
 	*finished = true
 	needCarry := call(nil)
 	assert.Equal(t, "carry_required", needCarry.Status)
+	assert.Equal(t, "plan-import", needCarry.PlanID)
 	assert.Contains(t, needCarry.NextAction, "carry block you kept from prepare_import")
 	assert.NotContains(t, strings.ToLower(needCarry.NextAction), "prepare_import again")
 
@@ -446,12 +450,89 @@ func TestVerifyImportPlanHandlerPollsThenSummarizes(t *testing.T) {
 	require.NoError(t, json.Unmarshal(rawCarry, &carryArg))
 	done := call(map[string]any{"carry": carryArg, "bindings": []any{map[string]any{"candidate_id": carry.Candidates[0].CandidateID, "target_address": "aws_iam_role.selected"}}})
 	require.Equal(t, "plan_available", done.Status, done.Diagnostics)
+	assert.Equal(t, "plan-import", done.PlanID)
+	assert.Equal(t, "cv-import", done.ConfigurationVersionID)
 	assert.Equal(t, 1, done.ObjectIdentity[identityMatched])
 
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	assert.Equal(t, logReads, f.requests["GET /logs"], "verify never reads the QueryRun log")
 	assert.Equal(t, queryReads, f.requests["GET /api/v2/queries/qry-fixture"])
+}
+
+func TestVerifyExpectedCVAndTerminalNoPlanResponse(t *testing.T) {
+	oldWait, oldInterval := importVerifyWait, importVerifyInterval
+	importVerifyWait, importVerifyInterval = 5*time.Millisecond, time.Millisecond
+	t.Cleanup(func() { importVerifyWait, importVerifyInterval = oldWait, oldInterval })
+	for _, tc := range []struct {
+		name, runStatus, expectedCV, planID, wantStatus, wantCode string
+	}{
+		{"wrong CV in same target", "planned_and_finished", "cv-other", "plan-import", "blocked", "run_configuration_version_mismatch"},
+		{"run failed without plan", "errored", "cv-import", "", "failed", "speculative_plan_failed"},
+		{"run canceled without plan", "canceled", "cv-import", "", "failed", "speculative_plan_failed"},
+		{"terminal without plan evidence", "planned_and_finished", "cv-import", "", "blocked", "plan_evidence_unavailable"},
+		{"pending without plan", "pending", "cv-import", "", "pending", ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			f, _, _ := importExecutionFixture(t)
+			inner := f.mutationHandler
+			f.mutationHandler = func(w http.ResponseWriter, r *http.Request) bool {
+				if r.Method == http.MethodGet && r.URL.Path == "/api/v2/runs/run-import" {
+					plan := "null"
+					if tc.planID != "" {
+						plan = `{"id":"plan-import","type":"plans"}`
+					}
+					_, _ = fmt.Fprintf(w, `{"data":{"id":"run-import","type":"runs","attributes":{"status":%q,"plan-only":true},"relationships":{"workspace":{"data":{"id":"ws-fixture","type":"workspaces"}},"configuration-version":{"data":{"id":"cv-import","type":"configuration-versions"}},"plan":{"data":%s}}}}`, tc.runStatus, plan)
+					return true
+				}
+				return inner(w, r)
+			}
+			args := map[string]any{"organization_name": "fixture-org", "workspace_name": "import-root", "run_id": "run-import", "configuration_version_id": tc.expectedCV}
+			res, err := HandleVerifyImportPlan(context.Background(), mcp.CallToolRequest{Params: mcp.CallToolParams{Arguments: args}}, silentLogger())
+			require.NoError(t, err)
+			out := res.StructuredContent.(importVerified)
+			assert.Equal(t, tc.wantStatus, out.Status, out)
+			assert.Equal(t, tc.wantStatus == "blocked" || tc.wantStatus == "failed", res.IsError)
+			if tc.wantCode != "" {
+				assert.Contains(t, out.Diagnostics, tc.wantCode)
+			}
+			assert.Equal(t, "ws-fixture", out.WorkspaceID)
+			assert.Equal(t, "cv-import", out.ConfigurationVersionID, "observed CV, not caller expectation")
+			assert.Equal(t, "run-import", out.RunID)
+			assert.Equal(t, tc.planID, out.PlanID)
+			text, ok := mcp.AsTextContent(res.Content[0])
+			require.True(t, ok)
+			assert.JSONEq(t, stringMustMarshal(t, res.StructuredContent), text.Text)
+			f.mu.Lock()
+			if tc.wantStatus != "pending" {
+				assert.Zero(t, f.requests["GET /api/v2/plans/plan-import/json-output"])
+			}
+			if tc.wantCode == "run_configuration_version_mismatch" {
+				assert.Zero(t, f.requests["GET /api/v2/plans/plan-import"], "wrong CV blocks before plan metadata")
+			}
+			f.mu.Unlock()
+		})
+	}
+}
+
+func TestVerifyRejectsPlanReadWithDifferentIDBeforeJSON(t *testing.T) {
+	f, _, finished := importExecutionFixture(t)
+	*finished = true
+	inner := f.mutationHandler
+	f.mutationHandler = func(w http.ResponseWriter, r *http.Request) bool {
+		if r.URL.Path == "/api/v2/plans/plan-import" {
+			_, _ = io.WriteString(w, `{"data":{"id":"plan-other","type":"plans","attributes":{"status":"finished"}}}`)
+			return true
+		}
+		return inner(w, r)
+	}
+	out := verifyImportPlan(context.Background(), f.client, importVerifyArgs{Organization: "fixture-org", Workspace: "import-root", RunID: "run-import", ConfigurationVersionID: "cv-import"})
+	assert.Equal(t, "blocked", out.Status)
+	assert.Contains(t, out.Diagnostics, "plan_association_unverified")
+	assert.Equal(t, "plan-import", out.PlanID, "only the Run relationship is handed off")
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	assert.Zero(t, f.requests["GET /api/v2/plans/plan-import/json-output"])
 }
 
 func TestVerifyImportPlanHandlerRejectsTamperedCarryBeforeReadingPlan(t *testing.T) {
@@ -464,7 +545,7 @@ func TestVerifyImportPlanHandlerRejectsTamperedCarryBeforeReadingPlan(t *testing
 	var carryArg map[string]any
 	require.NoError(t, json.Unmarshal(rawCarry, &carryArg))
 	res, err := HandleVerifyImportPlan(context.Background(), mcp.CallToolRequest{Params: mcp.CallToolParams{Arguments: map[string]any{
-		"organization_name": "fixture-org", "workspace_name": "import-root", "run_id": "run-import", "carry": carryArg,
+		"organization_name": "fixture-org", "workspace_name": "import-root", "run_id": "run-import", "configuration_version_id": "cv-import", "carry": carryArg,
 		"bindings": []any{map[string]any{"candidate_id": prepared.Carry.Candidates[0].CandidateID, "target_address": "aws_iam_role.selected"}},
 	}}}, silentLogger())
 	require.NoError(t, err)

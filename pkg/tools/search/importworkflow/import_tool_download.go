@@ -18,6 +18,7 @@ type importDownload struct {
 	Status                 string   `json:"status"`
 	WorkspaceID            string   `json:"workspace_id,omitempty"`
 	ConfigurationVersionID string   `json:"configuration_version_id,omitempty"`
+	ConfigurationRole      string   `json:"configuration_role,omitempty"`
 	WorkingDirectory       string   `json:"working_directory,omitempty"`
 	DownloadURL            string   `json:"download_url,omitempty"`
 	Instructions           []string `json:"instructions,omitempty"`
@@ -58,6 +59,7 @@ func downloadImportConfiguration(ctx context.Context, c *tfe.Client, input impor
 		}
 		out.Status = "available"
 		out.ConfigurationVersionID = ctxResult.Context.ConfigurationVersionID
+		out.ConfigurationRole = ctxResult.Context.ConfigurationRole
 		out.WorkingDirectory = ctxResult.Context.WorkingDirectory
 		out.DownloadURL = ctxResult.Context.DownloadURL
 		out.Instructions = slices.Clone(importDownloadInstructions)
@@ -79,13 +81,14 @@ func GetImportConfigurationDownloadDefinition() mcp.Tool {
 	return mcp.NewTool("get_import_configuration_download",
 		mcp.WithDescription(`Return a short-lived download URL for the target workspace's current configuration archive, so the calling agent does not need its own HCP Terraform API access.
 
-Call this only after prepare_import reports has_current_configuration and the user has chosen the authoring directory. Pass the current_configuration_version_id, or when status is agent_schema_required the state_run_configuration_version_id, from prepare_import. The tool checks that it is the workspace's current configuration version, or, when prepare_import returns agent_schema_required, the state run's configuration version. It returns the URL and download instructions: use a plain GET with no Authorization header, extract into the authoring directory, and treat the URL as a secret. Call again for a fresh URL if it expires. For a workspace with no configuration it returns blank_workspace. The server never downloads the archive.`),
+Call this only after prepare_import reports has_current_configuration and the user has chosen the authoring directory. Pass prepared_target_workspace_id from prepare_import.workspace_id and current_configuration_version_id, or when status is agent_schema_required the state_run_configuration_version_id, from prepare_import. The server checks the target workspace ID before releasing a bearer URL; this is not authorization or archive attestation. The tool checks that the CV is the workspace's current configuration version or the permitted state-run configuration version, and returns configuration_role to distinguish them. It returns the URL and download instructions: use a plain GET with no Authorization header, extract into the authoring directory, and treat the URL as a secret. Call again for a fresh URL if it expires. For a workspace with no configuration it returns blank_workspace. The server never downloads the archive.`),
 		mcp.WithTitleAnnotation("Get current configuration download URL"),
 		mcp.WithReadOnlyHintAnnotation(true), mcp.WithDestructiveHintAnnotation(false),
 		mcp.WithOpenWorldHintAnnotation(true), mcp.WithIdempotentHintAnnotation(true),
 		mcp.WithString("organization_name", mcp.Required(), mcp.Description("HCP Terraform organization.")),
 		mcp.WithString("workspace_name", mcp.Required(), mcp.Description("Target workspace name.")),
-		mcp.WithString("configuration_version_id", mcp.Required(), mcp.Description("Current configuration version ID from prepare_import.")),
+		mcp.WithString("configuration_version_id", mcp.Required(), mcp.Description("Current or permitted state-run configuration version ID from prepare_import.")),
+		mcp.WithString("prepared_target_workspace_id", mcp.Required(), mcp.Description("Target workspace_id returned by prepare_import; checked before returning a bearer URL.")),
 		mcp.WithSchemaAdditionalProperties(false),
 		mcp.WithOutputSchema[importDownload]())
 }
@@ -96,12 +99,13 @@ func HandleGetImportConfigurationDownload(ctx context.Context, request mcp.CallT
 		Organization string `json:"organization_name"`
 		Workspace    string `json:"workspace_name"`
 		CVID         string `json:"configuration_version_id"`
+		TargetID     string `json:"prepared_target_workspace_id"`
 	}
 	blocked := func(code, next string) (*mcp.CallToolResult, error) {
 		return importToolResult(importDownload{ContractVersion: importToolContractVersion, Status: "blocked", Diagnostics: []string{code}, NextAction: next})
 	}
-	if err := decodeImportToolArguments(request.GetArguments(), &args, maxDownloadArgumentBytes); err != nil || !importInputName(args.Organization) || !importInputName(args.Workspace) || !importInputName(args.CVID) {
-		return blocked("import_input_invalid", "Supply organization_name, workspace_name and configuration_version_id.")
+	if err := decodeImportToolArguments(request.GetArguments(), &args, maxDownloadArgumentBytes); err != nil || !importInputName(args.Organization) || !importInputName(args.Workspace) || !importInputName(args.CVID) || !importInputName(args.TargetID) {
+		return blocked("import_input_invalid", "Supply organization_name, workspace_name, prepared_target_workspace_id and configuration_version_id from prepare_import.")
 	}
 	if err := client.AuthorizeOrganization(ctx, args.Organization); err != nil {
 		return blocked("organization_not_allowed", "Use an organization allowed by this server.")
@@ -112,5 +116,5 @@ func HandleGetImportConfigurationDownload(ctx context.Context, request mcp.CallT
 	if err != nil {
 		return blocked("backend_client_unavailable", "Supply current backend credentials and retry.")
 	}
-	return importToolResult(downloadImportConfiguration(ctx, c, importPrepareInput{Organization: args.Organization, Workspace: args.Workspace}, args.CVID, logger))
+	return importToolResult(downloadImportConfiguration(ctx, c, importPrepareInput{Organization: args.Organization, Workspace: args.Workspace, PreparedTargetID: args.TargetID}, args.CVID, logger))
 }

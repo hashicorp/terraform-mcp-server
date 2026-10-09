@@ -16,7 +16,8 @@ import (
 func createArgs(extra map[string]any) map[string]any {
 	args := map[string]any{
 		"organization_name": "fixture-org", "workspace_name": "import-root",
-		"baseline_cv_id": "cv-current", "baseline_state_id": "sv-current", "baseline_state_serial": float64(42),
+		"prepared_target_workspace_id": "ws-fixture",
+		"baseline_cv_id":               "cv-current", "baseline_state_id": "sv-current", "baseline_state_serial": float64(42),
 		"confirm_speculative_run": true,
 	}
 	for k, v := range extra {

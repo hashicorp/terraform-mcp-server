@@ -49,6 +49,27 @@ func TestServerInstructionsPreserveExistingWorkflowsAndGuideSearchImport(t *test
 	assert.NotContains(t, instructions, "public as fallback")
 }
 
+func TestServerInstructionsScopeTargetChoiceToImportIntent(t *testing.T) {
+	source := strings.Index(instructions, "source A); ask and wait")
+	discovery := strings.Index(instructions, "Discover the relevant Search provider/list-resource schema")
+	intent := strings.Index(instructions, "Only if the user wants to import")
+	choice := strings.Index(instructions, "Import into the same workspace that ran Search (A), or designate a")
+	prepare := strings.Index(instructions, "`prepare_import` with the selection")
+	require.NotEqual(t, -1, source)
+	require.NotEqual(t, -1, discovery)
+	require.NotEqual(t, -1, intent)
+	require.NotEqual(t, -1, choice)
+	require.NotEqual(t, -1, prepare)
+	assert.Less(t, source, discovery, "choose the Search source before looking up provider schemas")
+	assert.Less(t, discovery, intent, "a Search-only request does not ask for a target")
+	assert.Less(t, intent, choice, "ask for a target only on import intent")
+	assert.Less(t, choice, prepare, "offer the same-workspace choice before target preparation")
+	assert.Contains(t, instructions, "user instead supplies an existing QueryRun ID")
+	assert.Contains(t, instructions, "stop after reporting results without asking for a target")
+	assert.Contains(t, instructions, "same **only when chosen explicitly**")
+	assert.Contains(t, instructions, "do not advertise a multi-target workflow")
+}
+
 func TestServerInitializationDeliversSearchImportGuidance(t *testing.T) {
 	for _, transport := range []string{"in_process", "streamable_http"} {
 		t.Run(transport, func(t *testing.T) {
@@ -71,6 +92,9 @@ func TestServerInitializationDeliversSearchImportGuidance(t *testing.T) {
 			require.NoError(t, err)
 			assert.Equal(t, instructions, result.Instructions)
 			assert.Contains(t, result.Instructions, "**Search-to-Import (when Search tools are enabled)**")
+			assert.Contains(t, result.Instructions, "source A); ask and wait")
+			assert.Contains(t, result.Instructions, "Only if the user wants to import")
+			assert.Contains(t, result.Instructions, "same workspace that ran Search (A)")
 		})
 	}
 }
@@ -89,6 +113,7 @@ func TestOfficialServerInitializationUsesSameInstructions(t *testing.T) {
 	defer clientSession.Close()
 	require.NotNil(t, clientSession.InitializeResult())
 	assert.Equal(t, instructions, clientSession.InitializeResult().Instructions)
+	assert.Contains(t, clientSession.InitializeResult().Instructions, "Only if the user wants to import")
 }
 
 func TestServerInstructionsUseSharedImportVocabulary(t *testing.T) {

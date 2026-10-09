@@ -23,12 +23,13 @@ func TestImportConfigurationDownloadToolReturnsURLWithoutReadingLogOrArchive(t *
 	f := importBackendFixture(t)
 	t.Setenv(client.TerraformAddress, f.url)
 	t.Setenv(client.TerraformToken, "fixture-token")
-	result, err := HandleGetImportConfigurationDownload(context.Background(), downloadRequest(map[string]any{"organization_name": "fixture-org", "workspace_name": "import-root", "configuration_version_id": "cv-current"}), silentLogger())
+	result, err := HandleGetImportConfigurationDownload(context.Background(), downloadRequest(map[string]any{"organization_name": "fixture-org", "workspace_name": "import-root", "prepared_target_workspace_id": "ws-fixture", "configuration_version_id": "cv-current"}), silentLogger())
 	require.NoError(t, err)
 	require.False(t, result.IsError, result.StructuredContent)
 	out, ok := result.StructuredContent.(importDownload)
 	require.True(t, ok)
 	assert.Equal(t, "available", out.Status)
+	assert.Equal(t, "current_configuration", out.ConfigurationRole)
 	assert.Equal(t, f.url+"/cv-archive?signed=fixture", out.DownloadURL)
 	assert.Contains(t, strings.Join(out.Instructions, " "), "no Authorization header")
 	assert.Contains(t, strings.Join(out.Instructions, " "), "secret")
@@ -45,11 +46,28 @@ func TestImportConfigurationDownloadToolReturnsURLWithoutReadingLogOrArchive(t *
 	}
 }
 
+func TestImportDownloadRejectsWrongPreparedTargetBeforeURL(t *testing.T) {
+	f := importBackendFixture(t)
+	t.Setenv(client.TerraformAddress, f.url)
+	t.Setenv(client.TerraformToken, "fixture-token")
+	res, err := HandleGetImportConfigurationDownload(context.Background(), downloadRequest(map[string]any{
+		"organization_name": "fixture-org", "workspace_name": "import-root", "prepared_target_workspace_id": "ws-other", "configuration_version_id": "cv-current",
+	}), silentLogger())
+	require.NoError(t, err)
+	assert.True(t, res.IsError)
+	out := res.StructuredContent.(importDownload)
+	assert.Contains(t, out.Diagnostics, "prepared_target_workspace_mismatch")
+	assert.Empty(t, out.DownloadURL)
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	assert.Zero(t, f.requests["GET /api/v2/configuration-versions/cv-current/download"])
+}
+
 func TestImportConfigurationDownloadToolRejectsNonCurrentConfigurationVersion(t *testing.T) {
 	f := importBackendFixture(t)
 	t.Setenv(client.TerraformAddress, f.url)
 	t.Setenv(client.TerraformToken, "fixture-token")
-	result, err := HandleGetImportConfigurationDownload(context.Background(), downloadRequest(map[string]any{"organization_name": "fixture-org", "workspace_name": "import-root", "configuration_version_id": "cv-speculative"}), silentLogger())
+	result, err := HandleGetImportConfigurationDownload(context.Background(), downloadRequest(map[string]any{"organization_name": "fixture-org", "workspace_name": "import-root", "prepared_target_workspace_id": "ws-fixture", "configuration_version_id": "cv-speculative"}), silentLogger())
 	require.NoError(t, err)
 	assert.True(t, result.IsError)
 	out := result.StructuredContent.(importDownload)

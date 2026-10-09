@@ -31,13 +31,14 @@ type importCreated struct {
 func (c importCreated) isBlocked() bool { return c.Status == "blocked" }
 
 type importCreateArgs struct {
-	Organization    string `json:"organization_name"`
-	Workspace       string `json:"workspace_name"`
-	BaselineCVID    string `json:"baseline_cv_id"`
-	BaselineStateID string `json:"baseline_state_id"`
-	BaselineSerial  *int64 `json:"baseline_state_serial"`
-	Confirm         bool   `json:"confirm_speculative_run"`
-	CVID            string `json:"configuration_version_id"`
+	Organization     string `json:"organization_name"`
+	Workspace        string `json:"workspace_name"`
+	PreparedTargetID string `json:"prepared_target_workspace_id"`
+	BaselineCVID     string `json:"baseline_cv_id"`
+	BaselineStateID  string `json:"baseline_state_id"`
+	BaselineSerial   *int64 `json:"baseline_state_serial"`
+	Confirm          bool   `json:"confirm_speculative_run"`
+	CVID             string `json:"configuration_version_id"`
 }
 
 func importCreateBlocked(code, next string, extra ...string) importCreated {
@@ -64,6 +65,9 @@ func checkImportCreateBaseline(ctx context.Context, c *tfe.Client, a importCreat
 	}
 	if w.Organization == nil || !strings.EqualFold(w.Organization.Name, a.Organization) {
 		return nil, importEvidenceFailure("workspace_ownership_unverified")
+	}
+	if w.ID != a.PreparedTargetID {
+		return nil, importEvidenceFailure("prepared_target_workspace_mismatch")
 	}
 	if err := client.AuthorizeOrganization(ctx, w.Organization.Name); err != nil {
 		return nil, importEvidenceFailure("organization_not_allowed")
@@ -97,8 +101,8 @@ func createImportCV(ctx context.Context, c *tfe.Client, a importCreateArgs, logg
 	if !a.Confirm {
 		return importCreateBlocked("confirm_speculative_run_required", "Review the authored archive with the user and ask once to confirm the speculative path (this CV, the upload, a plan-only run that cannot apply, and verification). Then set confirm_speculative_run=true to authorize only a speculative CV create.")
 	}
-	if !importInputName(a.Organization) || !importInputName(a.Workspace) || !validImportCreateBaseline(a) || a.CVID != "" {
-		return importCreateBlocked("import_input_invalid", "Supply organization_name and workspace_name, and either all of baseline_cv_id, baseline_state_id and baseline_state_serial from prepare_import, or none for a blank workspace.")
+	if !importInputName(a.Organization) || !importInputName(a.Workspace) || !importInputName(a.PreparedTargetID) || !validImportCreateBaseline(a) || a.CVID != "" {
+		return importCreateBlocked("import_input_invalid", "Supply the confirmed target organization_name and workspace_name, prepared_target_workspace_id from prepare_import, and either all baseline fields or none for a verified blank workspace.")
 	}
 	w, err := checkImportCreateBaseline(ctx, c, a)
 	if err != nil {
@@ -139,13 +143,16 @@ func createImportRun(ctx context.Context, c *tfe.Client, a importCreateArgs, log
 	if !a.Confirm {
 		return importCreateBlocked("confirm_speculative_run_required", "Confirm with the user that they accepted the speculative path for the reviewed archive (one confirmation covers create_import_cv and create_import_run), then set confirm_speculative_run=true to authorize only a CV-bound plan-only Run.")
 	}
-	if !importInputName(a.Organization) || !importInputName(a.Workspace) || !importInputName(a.CVID) || !validImportCreateBaseline(a) {
-		return importCreateBlocked("import_input_invalid", "Supply organization_name, workspace_name, configuration_version_id from create_import_cv, and the same baseline fields (or none for a blank workspace).")
+	if !importInputName(a.Organization) || !importInputName(a.Workspace) || !importInputName(a.PreparedTargetID) || !importInputName(a.CVID) || !validImportCreateBaseline(a) {
+		return importCreateBlocked("import_input_invalid", "Supply the confirmed target organization_name and workspace_name, prepared_target_workspace_id from prepare_import, configuration_version_id from create_import_cv, and the same baseline fields (or none for a verified blank workspace).")
 	}
 	lookup := importPrepareInput{Organization: a.Organization, Workspace: a.Workspace, ConfigurationVersionID: a.CVID}
-	_, cv, err := readImportExecutionCV(ctx, c, lookup)
+	executionWorkspace, cv, err := readImportExecutionCV(ctx, c, lookup)
 	if err != nil {
 		return importCreateBlocked(importDiagnosticCode(err), "Resolve the reported diagnostic. Use the configuration_version_id returned by create_import_cv.")
+	}
+	if executionWorkspace.ID != a.PreparedTargetID {
+		return importCreateBlocked("prepared_target_workspace_mismatch", "The uploaded configuration version is not in the prepared target workspace; prepare again.")
 	}
 	if cv.Status != tfe.ConfigurationUploaded {
 		return importCreateBlocked("execution_cv_not_uploaded", "The configuration version is not uploaded yet. PUT the archive and retry.")
@@ -175,7 +182,7 @@ func createImportRun(ctx context.Context, c *tfe.Client, a importCreateArgs, log
 		return out
 	}
 	out.Status, out.CreateOutcome = "pending", "created"
-	out.NextAction = "Poll verify_import_plan with this run_id until the plan finishes. The Run is plan-only and has not imported anything into state."
+	out.NextAction = "Poll verify_import_plan with this run_id and configuration_version_id until the plan finishes. The Run is plan-only and has not imported anything into state."
 	return out
 }
 
@@ -187,6 +194,7 @@ func importCreateDefinition(name, title, description string, run bool) mcp.Tool 
 		mcp.WithOpenWorldHintAnnotation(true), mcp.WithIdempotentHintAnnotation(false),
 		mcp.WithString("organization_name", mcp.Required(), mcp.Description("HCP Terraform organization.")),
 		mcp.WithString("workspace_name", mcp.Required(), mcp.Description("Target workspace name.")),
+		mcp.WithString("prepared_target_workspace_id", mcp.Required(), mcp.Description("Target workspace_id returned by prepare_import; use unchanged on both creates.")),
 		mcp.WithString("baseline_cv_id", mcp.Description("Current configuration version ID from prepare_import. Omit all baseline fields only for a verified blank workspace.")),
 		mcp.WithString("baseline_state_id", mcp.Description("Current state version ID from prepare_import.")),
 		mcp.WithNumber("baseline_state_serial", mcp.Description("Current state serial from prepare_import.")),
@@ -203,14 +211,14 @@ func importCreateDefinition(name, title, description string, run bool) mcp.Tool 
 func CreateImportCVDefinition() mcp.Tool {
 	return importCreateDefinition("create_import_cv", "Create speculative import configuration version", `Create a speculative, non-provisional configuration version (auto-queue off) in the target workspace and return its one-use upload URL. This is a mutation. The server always creates a speculative, non-applying configuration version and a plan-only run; no input changes that. After that single confirmation set confirm_speculative_run=true here and on create_import_run. `+" "+importConfirmationRule+" "+importValidationRule+" "+importArchiveRootRule+" "+importDeleteDirectoryRule+`
 
-Pass the baseline fields from prepare_import (or none for a verified blank workspace). `+importNewWorkspaceUploadRule+` The server re-checks that the workspace is still a remote, API-upload root at that baseline; it does not re-read the QueryRun and does not read the archive. PUT the complete reviewed .tar.gz directly to upload_url, then call create_import_run. If the outcome is unknown, reconcile in HCP Terraform; never retry blindly.`, false)
+Pass prepared_target_workspace_id (workspace_id from prepare_import) and the baseline fields (or none for a verified blank workspace). `+importNewWorkspaceUploadRule+` The server re-checks the target ID, remote API-upload root and baseline; it does not re-read the QueryRun and does not read the archive. PUT the complete reviewed .tar.gz directly to upload_url, then call create_import_run. If the outcome is unknown, reconcile in HCP Terraform; never retry blindly.`, false)
 }
 
 // CreateImportRunDefinition describes create_import_run.
 func CreateImportRunDefinition() mcp.Tool {
 	return importCreateDefinition("create_import_run", "Create CV-bound plan-only import run", `Create a plan-only Run bound to the uploaded speculative configuration version (AutoApply=false, config generation off). This is a mutation. The server always creates a plan-only run and no input changes that. Set confirm_speculative_run=true only if the user confirmed the speculative path (see create_import_cv); one confirmation covers both calls. If the archive or baseline changed after that confirmation, ask again.
 
-Pass the configuration_version_id from create_import_cv and the same baseline fields. The server re-checks that the CV belongs to the workspace, is speculative and uploaded, and that the workspace baseline is unchanged. It does not re-read the QueryRun. Then call verify_import_plan with the returned run_id. A plan-only Run never imports into state. If the outcome is unknown, reconcile; never retry blindly. This is separate from create_run, which is unchanged.`, true)
+Pass prepared_target_workspace_id from prepare_import, configuration_version_id from create_import_cv and the same baseline fields. The server re-checks that the CV belongs to the prepared target workspace, is speculative and uploaded, and that the workspace baseline is unchanged. It does not re-read the QueryRun. Then call verify_import_plan with this attempt's returned run_id and configuration_version_id on every poll. A plan-only Run never imports into state. If the outcome is unknown, reconcile; never retry blindly. This is separate from create_run, which is unchanged.`, true)
 }
 
 func handleImportCreate(ctx context.Context, request mcp.CallToolRequest, logger *log.Logger, run bool) (*mcp.CallToolResult, error) {

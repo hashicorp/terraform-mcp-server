@@ -51,19 +51,22 @@ type discoveryGroup struct {
 // discoveryPage lists guidance fields (notes, next_cursor, next_action) before
 // lists so a client that truncates a large page still sees them.
 type discoveryPage struct {
-	QueryRunID            string           `json:"query_run_id"`
-	LogDigest             string           `json:"log_digest"`
-	ResourcesDiscovered   int              `json:"resources_discovered"`
-	ByType                map[string]int   `json:"by_type"`
-	TotalMatching         int              `json:"total_matching"`
-	RowsWithoutAttributes int              `json:"rows_without_attributes,omitempty"`
-	Returned              int              `json:"returned"`
-	HasMore               bool             `json:"has_more"`
-	Remaining             int              `json:"remaining"`
-	Notes                 []string         `json:"notes,omitempty"`
-	NextCursor            string           `json:"next_cursor,omitempty"`
-	NextAction            string           `json:"next_action"`
-	Lists                 []discoveryGroup `json:"lists"`
+	QueryRunID             string           `json:"query_run_id"`
+	SourceOrganizationName string           `json:"source_organization_name"`
+	SourceWorkspaceName    string           `json:"source_workspace_name"`
+	SourceWorkspaceID      string           `json:"source_workspace_id"`
+	LogDigest              string           `json:"log_digest"`
+	ResourcesDiscovered    int              `json:"resources_discovered"`
+	ByType                 map[string]int   `json:"by_type"`
+	TotalMatching          int              `json:"total_matching"`
+	RowsWithoutAttributes  int              `json:"rows_without_attributes,omitempty"`
+	Returned               int              `json:"returned"`
+	HasMore                bool             `json:"has_more"`
+	Remaining              int              `json:"remaining"`
+	Notes                  []string         `json:"notes,omitempty"`
+	NextCursor             string           `json:"next_cursor,omitempty"`
+	NextAction             string           `json:"next_action"`
+	Lists                  []discoveryGroup `json:"lists"`
 }
 
 // groupDiscoveryRows groups rows by list address in first-seen order and hoists
@@ -254,11 +257,20 @@ func pageImportDiscovery(d *importDiscovery, f DiscoveryFilter) (*discoveryPage,
 
 // ReadDiscoveryPage supplies get_query_summary with one bounded, filtered page.
 func ReadDiscoveryPage(ctx context.Context, c *tfe.Client, queryID string, f DiscoveryFilter) (any, error) {
-	d, err := readImportDiscovery(ctx, c, queryID)
+	prov, err := readImportQueryProvenance(ctx, c, queryID)
 	if err != nil {
 		return nil, err
 	}
-	return pageImportDiscovery(d, f)
+	d, err := readImportDiscoveryLog(ctx, c, prov)
+	if err != nil {
+		return nil, err
+	}
+	page, err := pageImportDiscovery(d, f)
+	if err != nil {
+		return nil, err
+	}
+	page.SourceOrganizationName, page.SourceWorkspaceName, page.SourceWorkspaceID = prov.Organization, prov.WorkspaceName, prov.WorkspaceID
+	return page, nil
 }
 
 // discoveryTags returns the result's tags, or nil when it has none. Only simple

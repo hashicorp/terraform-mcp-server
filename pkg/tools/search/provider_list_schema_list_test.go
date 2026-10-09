@@ -470,6 +470,11 @@ func TestProviderListSchemaList_ToolDefinition(t *testing.T) {
 	assert.ElementsMatch(t, []string{"organization_name", "workspace_name"}, tool.Tool.InputSchema.Required)
 	assert.Contains(t, tool.Tool.Description, "Do not attempt an unscoped request first")
 	assert.Contains(t, tool.Tool.Description, "always read from the provider catalog response")
+	assert.Contains(t, tool.Tool.Description, "Search source A")
+	assert.Contains(t, tool.Tool.Description, "confirm which organization/workspace the user chose for Search")
+	assert.Contains(t, tool.Tool.Description, "if not specified, ask and\nwait for the answer")
+	assert.Contains(t, tool.Tool.Description, "This Search-only step does not require an import target")
+	assert.Contains(t, tool.Tool.Description, "If the user later\n      asks to import")
 }
 
 func TestProviderListSchemaList_RejectsMissingScopeBeforeRequest(t *testing.T) {

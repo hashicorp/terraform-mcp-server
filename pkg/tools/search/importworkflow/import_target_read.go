@@ -48,6 +48,7 @@ type importPrepareInput struct {
 	QueryID                string            `json:"query_run_id"`
 	Selections             []importSelection `json:"selections"`
 	ConfigurationVersionID string            `json:"-"`
+	PreparedTargetID       string            `json:"-"`
 }
 
 // importTargetRead is what the shared target read learns about the target
@@ -102,7 +103,7 @@ func validImportSelections(input importPrepareInput) bool {
 // resolves the baseline and schema source only; prepareImportTool downloads the
 // schema artifact once for all selected types (ADR 0007). With agentSchema set
 // (the schema artifact is missing, ADR 0008) it only re-checks the baseline.
-func readImportTarget(ctx context.Context, c *tfe.Client, input importPrepareInput, discovery *importDiscovery, agentSchema bool) importTargetRead {
+func readImportTarget(ctx context.Context, c *tfe.Client, input importPrepareInput, discovery *importDiscovery, targetID string, agentSchema bool) importTargetRead {
 	result := importTargetRead{Status: "blocked", Stage: "workspace", Diagnostics: []string{}}
 	fail := func(err error) importTargetRead {
 		result.Diagnostics = append(result.Diagnostics, importDiagnosticCode(err))
@@ -113,6 +114,9 @@ func readImportTarget(ctx context.Context, c *tfe.Client, input importPrepareInp
 		return fail(importReadError(err, 0))
 	}
 	result.WorkspaceID = w.ID
+	if w.ID != targetID {
+		return fail(importEvidenceFailure("prepared_target_workspace_mismatch"))
+	}
 	if w.Organization == nil || !strings.EqualFold(w.Organization.Name, input.Organization) {
 		return fail(importEvidenceFailure("workspace_ownership_unverified"))
 	}
@@ -125,14 +129,14 @@ func readImportTarget(ctx context.Context, c *tfe.Client, input importPrepareInp
 		result.Notes = append(result.Notes, "configuration_baseline_unavailable")
 	}
 	result.Stage = "query_selection"
-	if discovery.WorkspaceID != w.ID {
-		return fail(importEvidenceFailure("query_workspace_mismatch"))
-	}
 	selected, found := findImportCandidate(discovery, input.Selections[0].CandidateID)
 	if !found {
 		return fail(importEvidenceFailure("selected_candidate_not_found"))
 	}
 	result.Stage = "current_state"
+	if w.ExecutionMode != "remote" || w.VCSRepo != nil || w.WorkingDirectory != "" {
+		return fail(importEvidenceFailure("execution_source_not_supported"))
+	}
 	sv, stateErr := readImportCurrentState(ctx, c, w.ID)
 	if result.Baseline.ConfigurationVersionID == "" && importDiagnosticCode(stateErr) == "current_state_unavailable_or_inaccessible" {
 		if err := checkImportBlankBaseline(ctx, c, w); err != nil {
@@ -210,6 +214,8 @@ func recheckImportBaseline(ctx context.Context, c *tfe.Client, input importPrepa
 		return err
 	}
 	changed := current.ID != w.ID ||
+		current.Organization == nil || !strings.EqualFold(current.Organization.Name, input.Organization) ||
+		current.ExecutionMode != "remote" || current.VCSRepo != nil ||
 		importCurrentConfigurationID(current) != importCurrentConfigurationID(w) ||
 		current.WorkingDirectory != w.WorkingDirectory ||
 		currentState.ID != sv.ID || currentState.Serial != sv.Serial

@@ -110,7 +110,7 @@ func TestBlankBaselineAuthorizedAcceptedByAllEntryPoints(t *testing.T) {
 	f, uploaded, _ := blankImportFixture(t)
 	out := prepareImportTool(context.Background(), f.client, importFixtureInput(t))
 	require.Equal(t, "ready_for_authoring", out.Status, out.Diagnostics)
-	dl := downloadImportConfiguration(context.Background(), f.client, importPrepareInput{Organization: "fixture-org", Workspace: "import-root"}, "cv-current", silentLogger())
+	dl := downloadImportConfiguration(context.Background(), f.client, importPrepareInput{Organization: "fixture-org", Workspace: "import-root", PreparedTargetID: "ws-fixture"}, "cv-current", silentLogger())
 	assert.Equal(t, "blank_workspace", dl.Status, dl.Diagnostics)
 	cv := callCreate(t, false, createArgs(blankCreateArgs(false)))
 	require.Equal(t, "awaiting_agent_upload", cv.Status, cv.Diagnostics)
@@ -135,6 +135,9 @@ func TestBlankBaselineUnestablishedEvidenceFailsClosed(t *testing.T) {
 				if tc.name == "relationship malformed" || tc.name == "relationship data malformed" {
 					code = "backend_evidence_unavailable"
 				}
+				if tc.name == "organization mismatch" {
+					code = "query_organization_mismatch"
+				}
 				assert.Contains(t, out.Diagnostics, code)
 				assert.Nil(t, out.Carry)
 			})
@@ -142,7 +145,7 @@ func TestBlankBaselineUnestablishedEvidenceFailsClosed(t *testing.T) {
 		t.Run("download "+tc.name, func(t *testing.T) {
 			f, _, _ := blankImportFixture(t)
 			tc.apply(t, f)
-			out := downloadImportConfiguration(context.Background(), f.client, importPrepareInput{Organization: "fixture-org", Workspace: "import-root"}, "cv-current", silentLogger())
+			out := downloadImportConfiguration(context.Background(), f.client, importPrepareInput{Organization: "fixture-org", Workspace: "import-root", PreparedTargetID: "ws-fixture"}, "cv-current", silentLogger())
 			assert.Equal(t, "blocked", out.Status)
 			assert.Empty(t, out.DownloadURL)
 		})

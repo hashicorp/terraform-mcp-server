@@ -119,8 +119,8 @@ func TestPrepareImportReportsIdentityCompatibilityAndCarriesSearchVersion(t *tes
 	assert.Equal(t, 0, *c.SearchIdentityVersion)
 	p := out.Carry.Providers[c.ListType]
 	assert.Equal(t, c.CandidateID, importCandidateID("qry-fixture", workspaceProvider{Source: p.Source, Version: p.Version}, c.ListType, c.Identity))
-	assert.Equal(t, "8", out.ContractVersion)
-	assert.Equal(t, "8", importToolContractVersion)
+	assert.Equal(t, "10", out.ContractVersion)
+	assert.Equal(t, "10", importToolContractVersion)
 
 	// The carried version is covered by the digest.
 	changed := *out.Carry

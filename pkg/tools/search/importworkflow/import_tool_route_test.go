@@ -62,13 +62,14 @@ func TestDownloadToolAcceptsStateRunConfigurationVersionOnlyWhenAgentMustObtainS
 	t.Setenv(client.TerraformAddress, f.url)
 	t.Setenv(client.TerraformToken, "fixture-token")
 	call := func(cv string) importDownload {
-		result, err := HandleGetImportConfigurationDownload(context.Background(), downloadRequest(map[string]any{"organization_name": "fixture-org", "workspace_name": "import-root", "configuration_version_id": cv}), silentLogger())
+		result, err := HandleGetImportConfigurationDownload(context.Background(), downloadRequest(map[string]any{"organization_name": "fixture-org", "workspace_name": "import-root", "prepared_target_workspace_id": "ws-fixture", "configuration_version_id": cv}), silentLogger())
 		require.NoError(t, err)
 		return result.StructuredContent.(importDownload)
 	}
 	ok := call("cv-run")
 	assert.Equal(t, "available", ok.Status, ok.Diagnostics)
 	assert.Equal(t, "cv-run", ok.ConfigurationVersionID)
+	assert.Equal(t, "state_run_configuration", ok.ConfigurationRole)
 	assert.Equal(t, f.url+"/cv-archive?signed=fixture", ok.DownloadURL)
 	other := call("cv-speculative")
 	assert.Equal(t, "blocked", other.Status)
@@ -85,7 +86,7 @@ func TestDownloadToolAcceptsStateRunConfigurationVersionOnlyWhenAgentMustObtainS
 func TestDownloadToolRejectsOtherVersionWhenStateRunHasPlan(t *testing.T) {
 	f := importBackendFixture(t)
 	f.responses["/api/v2/configuration-versions/cv-run"] = json.RawMessage(`{"data":{"type":"configuration-versions","id":"cv-run","attributes":{"status":"uploaded"}}}`)
-	out := downloadImportConfiguration(context.Background(), f.client, importPrepareInput{Organization: "fixture-org", Workspace: "import-root"}, "cv-run", silentLogger())
+	out := downloadImportConfiguration(context.Background(), f.client, importPrepareInput{Organization: "fixture-org", Workspace: "import-root", PreparedTargetID: "ws-fixture"}, "cv-run", silentLogger())
 	assert.Equal(t, "blocked", out.Status)
 	assert.Contains(t, out.Diagnostics, "configuration_version_not_current")
 }
@@ -122,7 +123,7 @@ func TestPrepareImportToolScenarioMatrix(t *testing.T) {
 			setWorkspaceAttribute(t, f, "execution-mode", "local")
 			return f
 		}},
-		{"S19 agent prepares", "prepared", "", true, func(t *testing.T) *importBackendTest {
+		{"S19 agent stops before authoring", "blocked", "execution_source_not_supported", false, func(t *testing.T) *importBackendTest {
 			f := importBackendFixture(t)
 			setWorkspaceAttribute(t, f, "execution-mode", "agent")
 			return f

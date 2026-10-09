@@ -51,6 +51,9 @@ func TestExecuteQueryDefinition(t *testing.T) {
 	assert.Contains(t, tool.Tool.Description, "exact key")
 	assert.Contains(t, tool.Tool.Description, "ordinary managed resource name")
 	assert.Contains(t, tool.Tool.Description, "MANDATORY WORKFLOW")
+	assert.Contains(t, tool.Tool.Description, "Search should run in (source A)")
+	assert.Contains(t, tool.Tool.Description, "Search alone\ndoes not require a destination")
+	assert.Contains(t, tool.Tool.Description, "Only if the user asks to import")
 }
 
 func TestParseExecuteQueryConfiguration(t *testing.T) {
