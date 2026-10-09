@@ -15,7 +15,18 @@ permissions:
 
 jobs:
   test:
+    name: test (${{ matrix.sdk }})
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - sdk: mark3labs
+            endpoint: /mcp
+            official_enabled: "false"
+          - sdk: official
+            endpoint: /mcp/official
+            official_enabled: "true"
 
     steps:
       - name: Check out code
@@ -33,12 +44,13 @@ jobs:
       - name: Start server
         env:
           ENABLE_TF_OPERATIONS: true
+          TF_X_OFFICIAL_SDK_ENABLED: ${{ matrix.official_enabled }}
         run: |
           nohup ./bin/terraform-mcp-server streamable-http --transport-host 0.0.0.0 --transport-port 8080 2>&1 &
 
       - name: Run tests against HCPT
         env:
-          TF_MCP_ENDPOINT: http://localhost:8080/mcp
+          TF_MCP_ENDPOINT: http://localhost:8080${{ matrix.endpoint }}
           TFE_TOKEN: ${{ secrets.TFE_TOKEN_TESTING }}
           TFE_ORG_NAME: ${{ vars.TEST_TF_ORG_NAME }}
           TFE_USERNAME: ${{ vars.TEST_TF_USERNAME }}
