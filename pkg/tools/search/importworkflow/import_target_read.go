@@ -151,6 +151,9 @@ func readImportTarget(ctx context.Context, c *tfe.Client, input importPrepareInp
 	}
 	result.Baseline.StateVersionID = sv.ID
 	result.Baseline.StateSerial = &sv.Serial
+	if result.Baseline.ConfigurationVersionID == "" {
+		return fail(importEvidenceFailure("configuration_baseline_unavailable"))
+	}
 	if agentSchema {
 		// The agent obtains the schema (ADR 0008); only re-check the baseline.
 		if err := recheckImportBaseline(ctx, c, input, w, sv, ""); err != nil {

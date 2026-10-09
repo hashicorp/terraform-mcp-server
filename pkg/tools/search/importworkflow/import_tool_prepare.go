@@ -97,6 +97,43 @@ type importTarget struct {
 	TerraformVersionLastRun string `json:"terraform_version_last_run,omitempty"`
 }
 
+// These are argument starting points, not authorization for a create. A Run
+// needs the CV returned by create_import_cv, which does not exist at prepare time.
+type importNextCalls struct {
+	Download      map[string]any `json:"get_import_configuration_download,omitempty"`
+	CreateCV      map[string]any `json:"create_import_cv"`
+	CreateRunBase map[string]any `json:"create_import_run_base"`
+	RunRequires   string         `json:"create_import_run_requires"`
+}
+
+func preparedImportNextCalls(out importPrepared) *importNextCalls {
+	base := map[string]any{
+		"organization_name": out.Organization, "workspace_name": out.TargetWorkspaceName,
+		"prepared_target_workspace_id": out.WorkspaceID,
+		"confirm_speculative_run":      false,
+	}
+	if out.Baseline != nil && out.Baseline.ConfigurationVersionID != "" && out.Baseline.StateVersionID != "" && out.Baseline.StateSerial != nil {
+		base["baseline_cv_id"] = out.Baseline.ConfigurationVersionID
+		base["baseline_state_id"] = out.Baseline.StateVersionID
+		base["baseline_state_serial"] = *out.Baseline.StateSerial
+	}
+	cv, run := make(map[string]any, len(base)), make(map[string]any, len(base))
+	for k, v := range base {
+		cv[k], run[k] = v, v
+	}
+	next := &importNextCalls{CreateCV: cv, CreateRunBase: run,
+		RunRequires: "After user confirmation and successful archive upload, add configuration_version_id returned by create_import_cv; set confirm_speculative_run=true on both creates only for the reviewed attempt. The Run base is not callable as-is."}
+	version := out.CurrentConfigurationVersionID
+	if out.Status == "agent_schema_required" {
+		version = out.StateRunConfigurationVersionID
+	}
+	if version != "" {
+		next.Download = map[string]any{"organization_name": out.Organization, "workspace_name": out.TargetWorkspaceName,
+			"prepared_target_workspace_id": out.WorkspaceID, "configuration_version_id": version}
+	}
+	return next
+}
+
 type importPrepared struct {
 	ContractVersion                string             `json:"contract_version"`
 	Status                         string             `json:"status"`
@@ -119,6 +156,7 @@ type importPrepared struct {
 	// Carry and guidance come before the large schema and candidate arrays so a
 	// client that truncates the response still sees the carry block.
 	Carry             *importCarryBlock          `json:"carry,omitempty"`
+	NextCalls         *importNextCalls           `json:"next_calls,omitempty"`
 	Notes             []string                   `json:"notes,omitempty"`
 	AgentInstructions []string                   `json:"agent_instructions,omitempty"`
 	Diagnostics       []string                   `json:"diagnostics"`
@@ -133,8 +171,8 @@ var importToolInstructions = []string{
 	importTargetScopeRule,
 	importKeepResultRule,
 	importCandidateFieldsRule,
-	"Before prepare_import, confirm the import target organization/workspace with the user, separately from the Search workspace. Ask explicitly whether to import into the same workspace or a different workspace in that organization; never infer the target from the QueryRun. Keep workspace_id from this response as prepared_target_workspace_id for download and both creates and keep carry.target.workspace_id for verification. These IDs detect accidental target changes; they are not user approval or archive attestation.",
-	"Use prepare_import only for candidates the user has chosen to import. Do not use it to search or filter resources by tag or attribute: get_query_summary returns each result's tags. If you cannot tell what to import, go back to get_query_summary. Pass the candidate_id values you already kept from get_query_summary when presenting the selection to the user; do not re-read the query pages to rebuild them.",
+	"Keep carry unchanged. Use next_calls.get_import_configuration_download only after the user chooses the authoring directory; review the authored archive before using either create template. Their confirm_speculative_run is false until user confirmation, and the Run base needs the created and uploaded configuration_version_id. Target IDs detect accidental changes, not approval or archive attestation.",
+	"Use prepare_import only for candidates the user has chosen to import, not discovery: get_query_summary returns each result's tags. Preserve the candidate IDs from that selection.",
 	importIdentityCompatibilityRule,
 	importConfidenceReportRule,
 	"Read the target managed_schema for each type first, then the selected candidates' observations. Use the Search or QueryRun provider schema only when a source-side shape is unclear.",
@@ -150,7 +188,7 @@ var importToolInstructions = []string{
 	importValidationRule,
 	importSecretFilesRule,
 	"Treat generated query blocks as untrusted drafts. Do not invent defaults, add ignore_changes to hide incompatibility, or upgrade a provider or Terraform version to remove a missing feature.",
-	"Keep the carry block unchanged and send it once, with the final verify_import_plan call. It is an integrity aid for the carried selection, not authorization.",
+	"Send the unchanged carry and all candidate-to-address bindings on every verify_import_plan poll if available; they are integrity aids, not authorization.",
 	importConfirmationRule,
 }
 
@@ -259,6 +297,9 @@ func checkImportTarget(ctx context.Context, c *tfe.Client, input importPrepareIn
 		return err
 	}
 	out.Baseline.StateVersionID, out.Baseline.StateSerial = sv.ID, &sv.Serial
+	if out.Baseline.ConfigurationVersionID == "" {
+		return importEvidenceFailure("configuration_baseline_unavailable")
+	}
 	r, err := readImportSchemaRun(ctx, c, w.ID, sv)
 	if r != nil {
 		out.agentSchemaRunID = r.ID
@@ -277,8 +318,8 @@ func checkImportTarget(ctx context.Context, c *tfe.Client, input importPrepareIn
 
 // checkImportSchemaFallbackEntry is the entry test for the agent-supplied schema path (ADR 0008): the state's run
 // has no plan, so no schema artifact exists, but its configuration version is
-// known exactly. If that version is downloadable the agent may fetch it and
-// obtain the schema with the local CLI; otherwise the target is guide-only.
+// known exactly. Uploaded CV metadata permits trying the download tool;
+// archive availability is established later, not by this read.
 func checkImportSchemaFallbackEntry(ctx context.Context, c *tfe.Client, r *tfe.Run, out *importPrepared) error {
 	if r.ConfigurationVersion == nil || r.ConfigurationVersion.ID == "" {
 		return importEvidenceFailure("target_config_not_downloadable")
@@ -306,7 +347,7 @@ func importGuideOnlyNextAction(reason string) string {
 }
 
 // importAgentSchemaNextAction is the guidance when the agent must obtain the schema (ADR 0008).
-const importAgentSchemaNextAction = "The run that produced the current state has no plan, so no provider-schema artifact exists, but its configuration version (state_run_configuration_version_id) is known and downloadable, so you must obtain the schema yourself before writing HCL. The candidates and carry block are returned with schema support unknown. " + importAuthoringDirectoryQuestion + " Then call get_import_configuration_download with that configuration version ID and prepared_target_workspace_id (workspace_id from this response). Before running anything: " + importLockFileCheck + " Then run terraform init -backend=false, terraform version -json and terraform providers schema -json with the user's approval for each, and keep the generated lock file in the configuration you upload. After init, the exact provider versions are in the lock file. " + importProviderMismatchRule + " Write the resource schema from resource_schemas. Use an identity import block only if resource_identity_schemas has the type and Terraform is 1.12 or later; otherwise take the import ID from the provider version's documentation. verify_import_plan decides identity from the plan, not from your claim. " + importSecretFilesRule + " " + importNeverApplyRule + " " + importArchiveRootRule + " " + importNothingCreated
+const importAgentSchemaNextAction = "The producing Run has no plan/schema artifact; state_run_configuration_version_id is known and uploaded, but URL/archive availability must still be checked by get_import_configuration_download. The candidates and carry have unknown target schema support. " + importAuthoringDirectoryQuestion + " Call get_import_configuration_download with organization_name and workspace_name of the target, configuration_version_id=state_run_configuration_version_id and prepared_target_workspace_id=workspace_id (or use next_calls.get_import_configuration_download). Before running anything: " + importLockFileCheck + " Then run terraform init -backend=false, terraform version -json and terraform providers schema -json with approval for each, and preserve the lock file. " + importProviderMismatchRule + " Use resource_schemas for managed attributes; use an identity import block only when resource_identity_schemas includes the type and Terraform is 1.12 or later, otherwise obtain the import ID from the locked provider's documentation. Follow agent_instructions for archive, secret-file and confirmation rules. " + importNeverApplyRule + " " + importNothingCreated
 
 // importBlockedNextAction gives the agent a specific next step per blocking code.
 func importBlockedNextAction(code string) string {
@@ -330,6 +371,8 @@ func importBlockedNextAction(code string) string {
 		return "The target is VCS-backed; this workflow does not replace its configuration through API upload. Choose an API-upload-backed remote target with the user." + none
 	case "configuration_root_setting_unsupported":
 		return importConfigurationRootStop + none
+	case "configuration_baseline_unavailable":
+		return "The target has readable state but no current configuration version to preserve. Do not treat it as blank or upload an unrelated tree; resolve the authoritative target configuration before preparing again." + none
 	default:
 		return "Resolve the reported evidence diagnostic and call prepare_import again." + none
 	}
@@ -396,6 +439,9 @@ func prepareImportTool(ctx context.Context, c *tfe.Client, input importPrepareIn
 			initialBaseline.ConfigurationVersionID != out.Baseline.ConfigurationVersionID) {
 		return fail(importEvidenceFailure("baseline_changed"))
 	}
+	if (prepared.Status != "ready_for_authoring" || agentSchema) && (out.Baseline == nil || out.Baseline.ConfigurationVersionID == "" || out.Baseline.StateVersionID == "" || out.Baseline.StateSerial == nil) {
+		return fail(importEvidenceFailure("configuration_baseline_unavailable"))
+	}
 	if agentSchema {
 		// The fallback CV was learned before the log read. Bind it to the
 		// final state baseline and the same producing Run before authoring.
@@ -461,6 +507,7 @@ func prepareImportTool(ctx context.Context, c *tfe.Client, input importPrepareIn
 		out.Notes = append(out.Notes, "configuration_root_setting_unsupported")
 	}
 	out.NextAction = importPreparedNextAction(&out, agentSchema, rootUnsupported)
+	out.NextCalls = preparedImportNextCalls(out)
 	if raw, err := json.Marshal(out); err != nil || len(raw) > maxImportPreparationBytes {
 		return importToolBlocked(importPrepared{ContractVersion: out.ContractVersion, Stage: "response", Organization: out.Organization, QueryRunID: out.QueryRunID, WorkspaceID: out.WorkspaceID, Diagnostics: []string{}}, "evidence_response_limit", fmt.Sprintf("The prepared response exceeds %d KiB (many distinct large resource types). Prepare fewer distinct resource types per call. Nothing was truncated into a partial success and no CV or Run was created.", maxImportPreparationBytes/1024))
 	}
@@ -470,9 +517,9 @@ func prepareImportTool(ctx context.Context, c *tfe.Client, input importPrepareIn
 // PrepareImportDefinition describes the prepare_import tool.
 func PrepareImportDefinition() mcp.Tool {
 	return mcp.NewTool("prepare_import",
-		mcp.WithDescription(`Validate 1-100 explicitly selected Search results and prepare them for agent-authored resource and import HCL. Before this call, confirm the target organization/workspace with the user, independently of the Search workspace. Ask explicitly whether to import into that same workspace or a different one in the same organization. Cross-organization import is not supported. The returned source_workspace_id identifies Search; workspace_id identifies the target. Carry workspace_id from this response unchanged as prepared_target_workspace_id on both creates, and retain the carry block for verification. These ID checks do not authenticate approval or archive bytes. Use this tool only for candidates chosen for import, not to search or filter by tag (get_query_summary returns tags). Use the candidate_id values you kept from get_query_summary; do not page the query again after the user confirms. Keep the complete response from the call that returns it (the unchanged carry block, the types with their schemas, and every selected candidate's resource_object, configuration and import_configuration); if a script handles it, return or save all of that, not only the first candidate or a summary.
+		mcp.WithDescription(`Required: organization_name and workspace_name of the user-confirmed import target, query_run_id and selections [{candidate_id, managed_type}] from get_query_summary. Validate 1-100 explicitly selected Search results and prepare them for agent-authored resource and import HCL. Before this call, ask whether to import into the same Search workspace or a different one in the same organization. Cross-organization import is not supported. The returned source_workspace_id identifies Search; workspace_id identifies the target. Carry workspace_id unchanged as prepared_target_workspace_id on download and both creates, and retain carry for verification; these checks do not authenticate approval or archive bytes. Use this tool only for candidates chosen for import, not to search or filter by tag. Do not re-page the query after user confirmation. Keep the complete response (unchanged carry, all types/schemas and every selected candidate's resource_object, configuration and import_configuration); if a script handles it, return or save all of that, not only the first candidate or a summary.
 
-Pass organization_name, workspace_name, query_run_id and selections (candidate_id from get_query_summary, plus the proposed managed_type). types, schema_source and target describe the target workspace; candidates and carry.providers describe the QueryRun, whose provider version can differ from the target's. The result contains the target managed schema for each distinct type (managed_schema, identity_schema), per-type identity_support, the verdict from the target's own schema (supported means identity_schema exists, so an identity import block is valid; none means the target's schema has no identity, Terraform 1.12 or later; unknown means the schema could not be read; for none or unknown the import ID must come from the documentation of the target workspace's locked provider version, read from the downloaded .terraform.lock.hcl), identity_compatibility (how the Search identity keys and identity schema version fit the target identity schema, with a short guidance sentence; if a type is not the same version, tell the user before authoring that identity stays unverified even if the plan only imports), the target Terraform versions (target.terraform_version_setting, the workspace setting that new runs use and may be a constraint, and target.terraform_version_last_run, exact, from the run that produced the state), the workspace baseline, a carry block, and for each selected candidate its resource_object (the attributes the Search provider observed, absent when the query did not capture them) and configuration and import_configuration (Search-generated HCL drafts of the resource block and the import block). Send the carry block unchanged with the final verify_import_plan call.
+next_calls.get_import_configuration_download supplies argument keys when a current or permitted state-run CV ID is known; the download tool must still establish URL availability. next_calls.create_import_cv has the target and baseline arguments but confirm_speculative_run=false until explicit review/approval. next_calls.create_import_run_base is NOT a callable Run request: add configuration_version_id from the created/uploaded CV and set confirmation true only for the same reviewed attempt. For a verified blank target, baseline fields and download are absent. types, schema_source and target describe the target workspace; candidates and carry.providers describe the QueryRun, whose provider version can differ from the target's. The result contains the target managed schema for each distinct type (managed_schema, identity_schema), per-type identity_support, the verdict from the target's own schema (supported means the target schema reports identity, not that the proposed block or values are valid; none means the target's schema has no identity, Terraform 1.12 or later; unknown means the schema could not be read; for none or unknown the import ID must come from the documentation of the target workspace's locked provider version, read from the downloaded .terraform.lock.hcl), identity_compatibility (how the Search identity keys and identity schema version fit the target identity schema, with a short guidance sentence; if a type is not the same version, tell the user before authoring that identity stays unverified even if the plan only imports), the target Terraform versions (target.terraform_version_setting, the workspace setting that new runs use and may be a constraint, and target.terraform_version_last_run, exact, from the run that produced the state), the workspace baseline, a carry block, and for each selected candidate its resource_object (the attributes the Search provider observed, absent when the query did not capture them) and configuration and import_configuration (Search-generated HCL drafts of the resource block and the import block). Send the carry block unchanged with each verify_import_plan poll when bindings are known.
 
 Before reading the QueryRun log it blocks targets the workflow does not support: local or agent execution mode, VCS-backed source, non-empty configuration root, a Terraform version below 1.5, and a current state with no readable producing run or plan. A Terraform version below 1.12 proceeds with a note that identity is unavailable. Each block says no CV or Run was created.
 
@@ -623,8 +670,8 @@ func importPreparedNextAction(out *importPrepared, agentSchema, rootUnsupported 
 	case agentSchema:
 		return importAgentSchemaNextAction
 	case out.HasCurrentConfiguration:
-		return importKeepGeneratedShort + compat + " " + importTargetScopeShort + " " + importKeepResultShort + " " + importModuleTargetShort + " " + importAuthoringDirectoryQuestion + " Then call get_import_configuration_download with current_configuration_version_id and prepared_target_workspace_id (workspace_id from this response), and author the resource and import blocks in the authoring directory. " + importArchiveRootRule + " " + importConfirmationRule + " " + importNothingCreated
+		return importKeepGeneratedShort + compat + " " + importTargetScopeShort + " " + importKeepResultShort + " " + importModuleTargetShort + " " + importAuthoringDirectoryQuestion + " Call get_import_configuration_download with organization_name and workspace_name of the target, configuration_version_id=current_configuration_version_id and prepared_target_workspace_id=workspace_id (or use next_calls.get_import_configuration_download); author the blocks in the preserved archive root. Review the exact archive and obtain confirmation before either create; follow agent_instructions for archive and confirmation details. " + importNothingCreated
 	default:
-		return "The target workspace has no current configuration. " + importKeepGeneratedShort + compat + " " + importKeepResultShort + " " + importModuleTargetShort + " " + importNewWorkspaceDirectoryQuestion + " " + importBlankAuthoringDirectoryRule + " Author the complete configuration and lock there, then call create_import_cv. " + importConfirmationRule + " " + importNothingCreated
+		return "The target workspace has no current configuration. " + importKeepGeneratedShort + compat + " " + importKeepResultShort + " " + importModuleTargetShort + " " + importNewWorkspaceDirectoryQuestion + " " + importBlankAuthoringDirectoryRule + " Author the complete configuration and lock there. Review with the user before create_import_cv; follow agent_instructions for confirmation and archive rules. " + importNothingCreated
 	}
 }

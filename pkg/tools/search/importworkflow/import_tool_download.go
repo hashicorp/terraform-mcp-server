@@ -29,8 +29,8 @@ type importDownload struct {
 func (d importDownload) isBlocked() bool { return d.Status == "blocked" }
 
 var importDownloadInstructions = []string{
-	"Download the archive with a plain HTTP GET that writes binary bytes to a file. Send no Authorization header: the URL is already authorized.",
-	"Treat download_url as a secret. Do not print it, log it, or store it. If the download fails or the URL has expired, call this tool again for a fresh one.",
+	"Use a binary-capable client to GET download_url directly into a file; send no Authorization header. A text/JSON-only sandbox cannot safely transfer a binary archive: use an approved binary-capable client or ask the user to perform the transfer. Do not decode or print archive bytes into tool output.",
+	"Treat download_url as a secret. Do not print it, log it, or store it. Call again for a fresh URL on expiry; diagnose persistent denial or other transfer failures rather than assuming expiry.",
 	importArchiveURLRule,
 	"Extract into the authoring directory, which must be empty or new. Check archive paths and links before extracting. Keep .terraform.lock.hcl and do not add secrets.",
 	importArchiveRootRule,
@@ -79,9 +79,9 @@ func downloadImportConfiguration(ctx context.Context, c *tfe.Client, input impor
 // GetImportConfigurationDownloadDefinition describes the download tool.
 func GetImportConfigurationDownloadDefinition() mcp.Tool {
 	return mcp.NewTool("get_import_configuration_download",
-		mcp.WithDescription(`Return a short-lived download URL for the target workspace's current configuration archive, so the calling agent does not need its own HCP Terraform API access.
+		mcp.WithDescription(`Required arguments: organization_name and workspace_name of the target, prepared_target_workspace_id=prepare_import.workspace_id, configuration_version_id=prepare_import.current_configuration_version_id (or state_run_configuration_version_id when agent_schema_required). Call only after the user chooses an authoring directory. Return a short-lived secret download_url; the server does not transfer archive bytes.
 
-Call this only after prepare_import reports has_current_configuration and the user has chosen the authoring directory. Pass prepared_target_workspace_id from prepare_import.workspace_id and current_configuration_version_id, or when status is agent_schema_required the state_run_configuration_version_id, from prepare_import. The server checks the target workspace ID before releasing a bearer URL; this is not authorization or archive attestation. The tool checks that the CV is the workspace's current configuration version or the permitted state-run configuration version, and returns configuration_role to distinguish them. It returns the URL and download instructions: use a plain GET with no Authorization header, extract into the authoring directory, and treat the URL as a secret. Call again for a fresh URL if it expires. For a workspace with no configuration it returns blank_workspace. The server never downloads the archive.`),
+The server checks the target workspace ID before releasing a bearer URL; this is not authorization or archive attestation. It checks the current or permitted state-run CV and returns configuration_role to distinguish them. Use a binary-capable client for plain GET to a file, with no Authorization header; extract into the authoring directory after checking paths. If a sandbox exposes only text/json or cannot write binary files, use an approved client-side binary transfer or ask the user; never serialize bytes or signed URLs into printed tool output. A shell-only client needs secure secret injection into curl configuration/stdin without echoing the URL in the command or logs; if that cannot be assured, stop and ask the user. Call again if the URL expires. A blank workspace returns blank_workspace.`),
 		mcp.WithTitleAnnotation("Get current configuration download URL"),
 		mcp.WithReadOnlyHintAnnotation(true), mcp.WithDestructiveHintAnnotation(false),
 		mcp.WithOpenWorldHintAnnotation(true), mcp.WithIdempotentHintAnnotation(true),

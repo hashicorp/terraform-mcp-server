@@ -80,13 +80,15 @@ type importVerifyBinding struct {
 }
 
 type importAttention struct {
-	CandidateID    string   `json:"candidate_id"`
-	TargetAddress  string   `json:"target_address"`
-	ManagedType    string   `json:"managed_type"`
-	Change         string   `json:"change"`
-	ObjectIdentity string   `json:"object_identity"`
-	ChangedPaths   []string `json:"changed_paths,omitempty"`
-	IdentityReason string   `json:"identity_reason,omitempty"`
+	CandidateID           string   `json:"candidate_id"`
+	TargetAddress         string   `json:"target_address"`
+	ManagedType           string   `json:"managed_type"`
+	Change                string   `json:"change"`
+	ObjectIdentity        string   `json:"object_identity"`
+	ChangedPaths          []string `json:"changed_paths,omitempty"`
+	IdentityReason        string   `json:"identity_reason,omitempty"`
+	SearchIdentityVersion *int     `json:"search_identity_version,omitempty"`
+	PlanIdentityVersion   *uint64  `json:"plan_identity_version,omitempty"`
 }
 
 type importUnsupportedGroup struct {
@@ -117,12 +119,14 @@ type importVerifiedPlan struct {
 }
 
 type importVerifyDetail struct {
-	TargetAddress   string   `json:"target_address"`
-	Actions         []string `json:"actions"`
-	ImportIDPresent bool     `json:"import_id_present"`
-	IdentityPresent bool     `json:"after_identity_present"`
-	ChangedPaths    []string `json:"changed_paths,omitempty"`
-	ReplacePaths    int      `json:"replace_path_count,omitempty"`
+	TargetAddress         string   `json:"target_address"`
+	Actions               []string `json:"actions"`
+	ImportIDPresent       bool     `json:"import_id_present"`
+	IdentityPresent       bool     `json:"after_identity_present"`
+	ChangedPaths          []string `json:"changed_paths,omitempty"`
+	ReplacePaths          int      `json:"replace_path_count,omitempty"`
+	SearchIdentityVersion *int     `json:"search_identity_version,omitempty"`
+	PlanIdentityVersion   *uint64  `json:"plan_identity_version,omitempty"`
 }
 
 // importVerified is a factual description of what a finished plan showed.
@@ -216,10 +220,14 @@ func validateImportCarry(carry *importCarryBlock, bindings []importVerifyBinding
 // pending, never a verdict.
 func waitForImportPlan(ctx context.Context, c *tfe.Client, w *tfe.Workspace, runID, expectedCVID string) (*tfe.Run, *tfe.Plan, string, error) {
 	deadline := time.Now().Add(importVerifyWait)
+	var lastRun *tfe.Run
+	var lastPlan *tfe.Plan
 	for {
 		r, err := c.Runs.Read(ctx, runID)
 		if err != nil {
-			return nil, nil, "", importReadError(err, 0)
+			// Keep only relationships actually seen on a previous successful poll;
+			// they may be stale, but are useful for recovery after interruption.
+			return lastRun, lastPlan, "", importReadError(err, 0)
 		}
 		if r.ID != runID || !r.PlanOnly || r.Workspace == nil || r.Workspace.ID != w.ID || r.ConfigurationVersion == nil || r.ConfigurationVersion.ID == "" {
 			return r, nil, "", importEvidenceFailure("run_association_unverified")
@@ -230,6 +238,8 @@ func waitForImportPlan(ctx context.Context, c *tfe.Client, w *tfe.Workspace, run
 		if r.ConfigurationVersion.ID != expectedCVID {
 			return r, nil, "", importEvidenceFailure("run_configuration_version_mismatch")
 		}
+		lastRun = r
+		lastPlan = nil // Never pair Plan metadata with a different Run observation.
 		state := "pending"
 		var p *tfe.Plan
 		// Run failure is terminal even if no Plan was ever created. A terminal
@@ -249,6 +259,7 @@ func waitForImportPlan(ctx context.Context, c *tfe.Client, w *tfe.Workspace, run
 			if p == nil || p.ID != r.Plan.ID {
 				return r, nil, "", importEvidenceFailure("plan_association_unverified")
 			}
+			lastPlan = p
 			switch {
 			case p.Status == tfe.PlanErrored || p.Status == tfe.PlanCanceled || p.Status == tfe.PlanUnreachable || r.Status == tfe.RunErrored || r.Status == tfe.RunCanceled || r.Status == tfe.RunDiscarded:
 				state = "failed"
@@ -263,7 +274,7 @@ func waitForImportPlan(ctx context.Context, c *tfe.Client, w *tfe.Workspace, run
 		}
 		select {
 		case <-ctx.Done():
-			return r, p, "pending", nil
+			return r, p, "", importReadError(ctx.Err(), 0)
 		case <-time.After(importVerifyInterval):
 		}
 	}
@@ -564,7 +575,10 @@ func importJSONPresent(raw json.RawMessage) bool {
 // at its target address (rc is nil when the plan has none). It returns the
 // attention item and, when the entry matched the selection, the detail for it.
 func classifyImportCandidate(plan *importVerifyPlanJSON, carry *importCarryBlock, cand importCarryCandidate, addr string, rc *importPlanResourceChange) (importAttention, *importVerifyDetail, error) {
-	item := importAttention{CandidateID: cand.CandidateID, TargetAddress: addr, ManagedType: cand.ManagedType}
+	item := importAttention{CandidateID: cand.CandidateID, TargetAddress: addr, ManagedType: cand.ManagedType, SearchIdentityVersion: cand.SearchIdentityVersion}
+	if v, ok := plan.identityVersions[addr]; ok {
+		item.PlanIdentityVersion = &v
+	}
 	if rc == nil {
 		item.Change, item.ObjectIdentity, item.IdentityReason = changeNotInPlan, identityUnverified, "no_matching_plan_entry"
 		return item, nil, nil
@@ -590,13 +604,9 @@ func classifyImportCandidate(plan *importVerifyPlanJSON, carry *importCarryBlock
 		if item.Change != changeNone {
 			item.ChangedPaths = changedPaths(rc.Change.Before, rc.Change.After, rc.Change.AfterUnknown)
 		}
-		var planIdentityVersion *uint64
-		if v, ok := plan.identityVersions[addr]; ok {
-			planIdentityVersion = &v
-		}
-		item.ObjectIdentity, item.IdentityReason = classifyIdentity(plan.TerraformVersion, cand, carry.Target.IdentitySupport[cand.ManagedType], afterIdentity, planIdentityVersion)
+		item.ObjectIdentity, item.IdentityReason = classifyIdentity(plan.TerraformVersion, cand, carry.Target.IdentitySupport[cand.ManagedType], afterIdentity, item.PlanIdentityVersion)
 	}
-	detail := &importVerifyDetail{TargetAddress: addr, Actions: rc.Change.Actions, ImportIDPresent: idPresent, IdentityPresent: importJSONPresent(afterIdentity), ChangedPaths: changedPaths(rc.Change.Before, rc.Change.After, rc.Change.AfterUnknown), ReplacePaths: len(rc.Change.ReplacePaths)}
+	detail := &importVerifyDetail{TargetAddress: addr, Actions: rc.Change.Actions, ImportIDPresent: idPresent, IdentityPresent: importJSONPresent(afterIdentity), ChangedPaths: changedPaths(rc.Change.Before, rc.Change.After, rc.Change.AfterUnknown), ReplacePaths: len(rc.Change.ReplacePaths), SearchIdentityVersion: item.SearchIdentityVersion, PlanIdentityVersion: item.PlanIdentityVersion}
 	return item, detail, nil
 }
 
@@ -788,13 +798,13 @@ func verifyImportPlan(ctx context.Context, c *tfe.Client, a importVerifyArgs) im
 	observedImportRun(&out, r, p)
 	if err != nil {
 		out.Status, out.Diagnostics = "blocked", []string{importDiagnosticCode(err)}
-		out.NextAction = "Resolve the reported diagnostic. Use the run_id and configuration_version_id returned by this attempt's create_import_run; no plan JSON was read."
+		out.NextAction = "Resolve the reported diagnostic. Any IDs in this response come from backend reads and may be stale after an interrupted poll; confirm them in HCP Terraform. Use this attempt's run_id and configuration_version_id; no plan JSON was read."
 		return out
 	}
 	switch state {
 	case "pending":
 		out.Status = "pending"
-		out.NextAction = "The plan has not finished. Call verify_import_plan again with the same run_id and configuration_version_id."
+		out.NextAction = "The plan has not finished. If you already have the unchanged carry from prepare_import and one candidate_id/target_address binding per selection, send them on every poll to get the full result on the first finished call. Otherwise poll with the same run_id and configuration_version_id and supply carry/bindings when finished."
 		return out
 	case "failed":
 		out.Status = "failed"
@@ -809,7 +819,7 @@ func verifyImportPlan(ctx context.Context, c *tfe.Client, a importVerifyArgs) im
 	}
 	if a.Carry == nil || len(a.Bindings) == 0 {
 		out.Status = "carry_required"
-		out.NextAction = "The plan finished. Call verify_import_plan again with the carry block you kept from prepare_import (unchanged) and bindings (candidate_id and target_address for every selection)."
+		out.NextAction = "The plan finished; no plan JSON was summarized. Call verify_import_plan with the unchanged carry from prepare_import and one candidate_id/target_address binding per selection. You can send these on every poll to avoid this extra call."
 		return out
 	}
 	byCandidate, err := validateImportCarry(a.Carry, a.Bindings)
@@ -840,11 +850,11 @@ func verifyImportPlan(ctx context.Context, c *tfe.Client, a importVerifyArgs) im
 // VerifyImportPlanDefinition describes verify_import_plan.
 func VerifyImportPlanDefinition() mcp.Tool {
 	return mcp.NewTool("verify_import_plan",
-		mcp.WithDescription(`Wait up to about 40 seconds for a plan-only import Run, then describe what the finished plan showed. Read-only.
+		mcp.WithDescription(`Required inputs: organization_name, workspace_name (target), run_id and configuration_version_id from this attempt. Send the unchanged carry from prepare_import and one candidate_id/target_address binding per selection on every poll when available, so the first finished call returns the full result. Without them a finished plan returns carry_required. Read-only; waits up to about 40 seconds per call.
 
-Poll with target organization_name, workspace_name, run_id and configuration_version_id from this attempt's create_import_run; the backend Run must reference exactly that CV even while pending. Keep both IDs on every poll. A matching CV relationship does not prove the reviewed archive bytes were uploaded. The response returns workspace_id, configuration_version_id, run_id and plan_id whenever observed; a Plan may not exist. When the plan has finished, call once more with the carry block from prepare_import (unchanged) and bindings: one candidate_id and target_address for every selected candidate. The carried target workspace ID must equal the run's workspace; this is an integrity check, not proof of user approval or archive review. target_address is matched exactly against the address in the plan, so give it as Terraform prints it, including any module path and instance keys with double quotes (for example module.network["east"].aws_x.y["a"]). Use the carry block you kept from prepare_import, unchanged.
+The backend Run must reference exactly that CV even while pending; a matching CV relationship does not prove the reviewed archive bytes were uploaded. The response returns workspace_id, configuration_version_id, run_id and plan_id whenever observed; a Plan may not exist. The carried target workspace ID must equal the run's workspace; this is an integrity check, not proof of user approval or archive review. target_address is matched exactly against the address in the plan, including module path and instance keys with double quotes (for example module.network["east"].aws_x.y["a"]).
 
-The result gives, for each selected item, a change (none, update, replace_or_destroy, create, import_missing, not_in_plan, type_mismatch) and an object_identity (matched, mismatched, unsupported, unverified), as counts plus an attention list of items that need a look. These are two independent axes: there is no overall or combined verdict. status plan_available means only that the plan was read; it is not a judgment, and the result is not an error even when the plan has actions or identity is uncertain. Plan actions (changes, unselected, plan) and identity (object_identity, identity_unsupported, attention) are reported independently. next_action leads with identity uncertainty and conflicts, then separately describes every plan action (selected imports not taking effect, updates or replacements, extra imports, other managed actions, drift, output changes, deferred changes). matched is bounded evidence (complete primitive after_identity equal to the Search identity, with equal known identity schema versions), not a general correctness guarantee. unsupported means the identity could not be compared (Terraform below 1.12, or prepare-time target schema evidence without identity); absence of after_identity does not prove the speculative plan's current target schema lacks identity. Confirm those import IDs against the documentation of the target workspace's locked provider version. When the Search and the plan's identity schema versions are both available and unequal (identity_schema_version_differs), the identity is unverified, not unsupported, even if the values look equal and the plan only imports: an import-only plan does not confirm identity. When the plan reports no identity schema version for the address but the identity otherwise looks equal, it is unverified with identity_schema_version_not_compared. Identity uncertainty alone is not a reason to change the configuration or create a new configuration version or Run. Tell the user, and report what you are confident about, unsure about and what conflicts. unselected lists extra imports, other actions and drift. The carry block must include every candidate's search_identity_version; a carry without it is rejected. No attribute or import ID values are returned; use get_plan_json_output for detail. The summary describes the plan; it is not an approval and a plan-only Run never imports into state.`),
+The summary reports plan changes and object identity as separate axes; there is no overall or combined verdict. plan_available means only that the Plan was read, never approval. Inspect the full Plan separately (HCP Terraform UI or Terraform-toolset readers). attention reports search_identity_version and plan_identity_version for flagged candidates where known; request detail_addresses for clean candidates whose versions you want to inspect without enlarging the default summary. In the full plan JSON, find planned_values.root_module.resources[] (recursively child_modules[]), locate the exact address, and read identity_schema_version; after_identity_schema_version is not the plan field. Version 0 is valid. An absent version remains unverified when otherwise equal; when both available and unequal, identity_schema_version_differs stays unverified even if keys and values look equal: an import-only plan does not confirm identity. Do not upgrade to matched on those grounds. matched requires complete comparable provider-returned after_identity values and equal known versions, and is bounded evidence, not proof of object correctness. Absent after_identity may be unsupported or unverified; consult the reason and target provider documentation. The carry must include every candidate's search_identity_version and unchanged bindings. Report uncertainty before plan actions, including unselected imports, drift, output/deferred actions; identity uncertainty alone does not call for another CV/Run. The plan-only Run never imports into persisted state. No attribute or import ID values are returned.`),
 		mcp.WithTitleAnnotation("Verify import plan"),
 		mcp.WithReadOnlyHintAnnotation(true), mcp.WithDestructiveHintAnnotation(false),
 		mcp.WithOpenWorldHintAnnotation(true), mcp.WithIdempotentHintAnnotation(true),

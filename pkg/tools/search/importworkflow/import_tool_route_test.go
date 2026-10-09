@@ -191,7 +191,7 @@ func TestPrepareImportToolTextCoversReviewValidationAndSecrets(t *testing.T) {
 	assert.Contains(t, joined, ".envrc")
 	assert.Contains(t, strings.Join(importDownloadInstructions, " "), ".envrc")
 	assert.Contains(t, importGuideOnlyNextAction("x"), ".envrc")
-	assert.Contains(t, importAgentSchemaNextAction, ".envrc")
+	assert.Contains(t, importAgentSchemaNextAction, "Follow agent_instructions for archive, secret-file and confirmation rules")
 	assert.Contains(t, importGuideOnlyNextAction("x"), "HCP Terraform run write its state")
 }
 
@@ -312,7 +312,7 @@ func TestDownloadInstructionsKeepSignedURLOffCommandLines(t *testing.T) {
 	joined := strings.Join(importDownloadInstructions, " ")
 	assert.Contains(t, joined, importArchiveURLRule)
 	assert.Contains(t, importArchiveURLRule, "curl --config -")
-	assert.Contains(t, importArchiveURLRule, "reduces exposure but does not remove it")
+	assert.Contains(t, importArchiveURLRule, "do not put the literal URL in a shell command")
 	assert.Contains(t, importArchiveURLRule, "stop and ask")
 	assert.NotContains(t, strings.ToLower(joined), "print the url")
 }

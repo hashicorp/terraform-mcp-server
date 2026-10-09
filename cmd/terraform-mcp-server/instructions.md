@@ -109,9 +109,12 @@ The Terraform MCP server provides tools for generating better Terraform code thr
 4. Ask the user for the **authoring directory**; you work in it for everything.
    If the target workspace has a current configuration, it must be an existing
    empty directory, or a new one you create at the path they give: call
-   `get_import_configuration_download` with prepared_target_workspace_id
-   (the target workspace_id from `prepare_import`) and extract the configuration there with a
-   plain GET and no Authorization header, and warn once if the path is inside a
+   `get_import_configuration_download` with `organization_name` and `workspace_name`
+   of the target, `prepared_target_workspace_id` (the target `workspace_id` from
+   `prepare_import`) and `configuration_version_id` (the prepared current CV, or
+   permitted state-run CV). `next_calls.get_import_configuration_download` supplies
+   those exact arguments. Extract the archive there with a binary-capable plain GET
+   and no Authorization header, and warn once if the path is inside a
    git work tree (the download may include `.env` or `.tfvars` files). If the
    target workspace is new (no configuration and no state), nothing is downloaded
    and a directory that already holds the user's Terraform files is fine, so tell
@@ -134,22 +137,35 @@ The Terraform MCP server provides tools for generating better Terraform code thr
    module, import block in the root). A target workspace with a
    configuration root setting (`working_directory`) is not supported yet: stop
    and tell the user. MCP does not download, edit, or upload archive bytes and
-   takes no local path.
+    takes no local path. Keep signed URLs out of printed output and logged shell
+    commands; if the client cannot securely transfer binary data (for example a
+    text-only sandbox with no secure shell handoff), stop and ask the user to
+    perform the transfer. Do not offer a server-side local-path helper: the server
+    may be remote and deliberately does not read or write the client's archive.
 5. Create the speculative configuration version (`create_import_cv`) and the
    plan-only Run (`create_import_run`) after the single user review described
    in the `prepare_import` response, which names A and the explicitly chosen
    target (even when they are the same workspace) and the authoring directory.
-   An uncertain create must be reconciled
+    `next_calls.create_import_cv` and `create_import_run_base` carry the baseline;
+    they do **not** authorize mutations. Set `confirm_speculative_run=true` only
+    after review and add the created/uploaded `configuration_version_id` to the
+    Run call. An uncertain create must be reconciled
    before retrying.
-6. Call `verify_import_plan` with the run ID **and the exact CV ID from this
-   attempt** on every poll until the plan finishes, then once
-   more with the carry block unchanged and a binding of `candidate_id` to
-   `target_address` for every selection. It describes what the finished plan
+6. Call `verify_import_plan` with target `organization_name`, `workspace_name`,
+   the `run_id` and exact `configuration_version_id` from this attempt on every
+   poll. When known, include the unchanged carry and a `candidate_id` →
+   `target_address` binding for every selection on **every poll**, so the first
+   finished call can return the summary (otherwise `carry_required` needs another
+   call). It describes what the finished plan
    showed (changes and identity as separate counts, plus items needing
    attention); there is no overall verdict, `plan_available` only means the plan
    was read, and it is not an approval. Report identity uncertainty and
    conflicts first (`unverified`, `mismatched`, `unsupported`), including a
-   missing plan identity schema version, and discuss plan actions separately.
+    missing plan identity schema version, and discuss plan actions separately.
+    The plan version is `identity_schema_version` on the addressed resource in
+    `planned_values.root_module.resources[]` (or nested `child_modules[]`), not
+    `after_identity_schema_version`; verify reports both compared versions when
+    available. Unequal versions remain unverified even when values look equal.
    Identity uncertainty alone does not call for repairing the HCL or creating a
    new configuration version or Run. Even a `matched` identity is bounded
    evidence, not a general correctness guarantee. Review the full finished plan, including selected and

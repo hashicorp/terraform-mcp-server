@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -87,7 +88,7 @@ func TestImportToolTextStatesVocabularyRules(t *testing.T) {
 
 	assert.Contains(t, CreateImportCVDefinition().Description, importConfirmationRule)
 	assert.Contains(t, CreateImportCVDefinition().Description, importValidationRule)
-	assert.Contains(t, CreateImportCVDefinition().Description, importArchiveRootRule)
+	assert.Contains(t, CreateImportCVDefinition().Description, "Follow prepare_import's archive-root rule")
 	assert.Contains(t, strings.Join(importDownloadInstructions, " "), importArchiveRootRule)
 	assert.Contains(t, strings.Join(importToolInstructions, " "), importSourceVersionRule)
 	assert.Contains(t, importAgentSchemaNextAction, importAuthoringDirectoryQuestion)
@@ -98,9 +99,39 @@ func TestPrepareImportAsksForAuthoringDirectoryWithConfirmationNamingBoth(t *tes
 	out := prepareImportTool(context.Background(), f.client, importFixtureInput(t))
 	require.Equal(t, "prepared", out.Status, out.Diagnostics)
 	assert.Contains(t, out.NextAction, importAuthoringDirectoryQuestion)
-	assert.Contains(t, out.NextAction, importArchiveRootRule)
-	assert.Contains(t, out.NextAction, importConfirmationRule)
+	assert.Contains(t, out.NextAction, "configuration_version_id=current_configuration_version_id")
+	assert.Contains(t, out.NextAction, "organization_name and workspace_name")
+	assert.Contains(t, strings.Join(out.AgentInstructions, " "), importArchiveRootRule)
+	assert.Contains(t, strings.Join(out.AgentInstructions, " "), importConfirmationRule)
 	assert.NotContains(t, out.Notes, "configuration_root_setting_unsupported")
+}
+
+func TestFollowOnToolDescriptionsLeadWithActualRequiredArguments(t *testing.T) {
+	for _, tc := range []struct {
+		tool     string
+		desc     string
+		required []string
+	}{
+		{"prepare_import", PrepareImportDefinition().Description, []string{"organization_name", "workspace_name", "query_run_id", "selections"}},
+		{"get_import_configuration_download", GetImportConfigurationDownloadDefinition().Description, []string{"organization_name", "workspace_name", "prepared_target_workspace_id", "configuration_version_id"}},
+		{"create_import_cv", CreateImportCVDefinition().Description, []string{"organization_name", "workspace_name", "prepared_target_workspace_id", "confirm_speculative_run"}},
+		{"create_import_run", CreateImportRunDefinition().Description, []string{"organization_name", "workspace_name", "prepared_target_workspace_id", "configuration_version_id", "confirm_speculative_run"}},
+		{"verify_import_plan", VerifyImportPlanDefinition().Description, []string{"organization_name", "workspace_name", "run_id", "configuration_version_id"}},
+	} {
+		t.Run(tc.tool, func(t *testing.T) {
+			first := strings.SplitN(tc.desc, "\n", 2)[0]
+			for _, field := range tc.required {
+				assert.Contains(t, first, field)
+			}
+		})
+	}
+}
+
+func TestNextCallsDownloadPrecedesReviewButCreatesDoNot(t *testing.T) {
+	instructions := strings.Join(importToolInstructions, " ")
+	assert.Contains(t, instructions, "get_import_configuration_download only after the user chooses the authoring directory")
+	assert.Contains(t, instructions, "review the authored archive before using either create template")
+	assert.NotContains(t, instructions, "use next_calls only after the user has reviewed")
 }
 
 func TestPrepareImportBlankTargetGetsFileListRules(t *testing.T) {
@@ -108,11 +139,85 @@ func TestPrepareImportBlankTargetGetsFileListRules(t *testing.T) {
 	out := prepareImportTool(context.Background(), f.client, importFixtureInput(t))
 	require.Equal(t, "ready_for_authoring", out.Status, out.Diagnostics)
 	assert.Contains(t, out.NextAction, importBlankAuthoringDirectoryRule)
-	assert.Contains(t, out.NextAction, importConfirmationRule)
+	assert.Contains(t, out.NextAction, "Review with the user before create_import_cv")
 	assert.Contains(t, out.NextAction, importNewWorkspaceDirectoryQuestion)
 	assert.NotContains(t, out.NextAction, "git work tree", "a new workspace downloads nothing")
 	assert.NotContains(t, out.NextAction, importAuthoringDirectoryQuestion, "a blank target downloads nothing")
 	assert.Contains(t, strings.Join(out.AgentInstructions, " "), importBlankAuthoringDirectoryRule)
+}
+
+func TestPrepareNextCallsAreTargetScopedAndNotPreauthorized(t *testing.T) {
+	for _, tc := range []struct {
+		route   string
+		fixture func(*testing.T) *importBackendTest
+	}{
+		{"existing", importBackendFixture},
+		{"agent_schema", func(t *testing.T) *importBackendTest { return schemaFallbackFixture(t, "uploaded") }},
+		{"blank", func(t *testing.T) *importBackendTest { f, _, _ := blankImportFixture(t); return f }},
+	} {
+		t.Run(tc.route, func(t *testing.T) {
+			f := tc.fixture(t)
+			if tc.route == "existing" {
+				separateImportSource(t, f, "fixture-org")
+				path := "/api/v2/workspaces/ws-fixture/current-state-version"
+				f.responses[path] = []byte(strings.Replace(string(f.responses[path]), `"serial":42`, `"serial":0`, 1))
+			}
+			out := prepareImportTool(context.Background(), f.client, importFixtureInput(t))
+			require.NotEqual(t, "blocked", out.Status, out.Diagnostics)
+			if tc.route == "existing" {
+				assert.Equal(t, "ws-search", out.SourceWorkspaceID)
+			}
+			require.NotNil(t, out.NextCalls)
+			cv, run := out.NextCalls.CreateCV, out.NextCalls.CreateRunBase
+			for _, args := range []map[string]any{cv, run} {
+				assert.Equal(t, "fixture-org", args["organization_name"])
+				assert.Equal(t, "import-root", args["workspace_name"])
+				assert.Equal(t, "ws-fixture", args["prepared_target_workspace_id"])
+				assert.Equal(t, false, args["confirm_speculative_run"])
+			}
+			assert.NotContains(t, run, "configuration_version_id")
+			if tc.route == "blank" {
+				assert.Empty(t, out.NextCalls.Download)
+				assert.NotContains(t, cv, "baseline_cv_id")
+				assert.NotContains(t, cv, "baseline_state_id")
+				assert.NotContains(t, cv, "baseline_state_serial")
+			} else {
+				assert.Equal(t, out.Baseline.ConfigurationVersionID, cv["baseline_cv_id"])
+				assert.Equal(t, out.Baseline.StateVersionID, cv["baseline_state_id"])
+				assert.Equal(t, *out.Baseline.StateSerial, cv["baseline_state_serial"])
+				if tc.route == "existing" {
+					assert.Equal(t, int64(0), cv["baseline_state_serial"])
+				}
+				assert.Equal(t, cv["baseline_state_id"], run["baseline_state_id"])
+				dl := out.NextCalls.Download
+				assert.Equal(t, "fixture-org", dl["organization_name"])
+				assert.Equal(t, "import-root", dl["workspace_name"])
+				assert.Equal(t, "ws-fixture", dl["prepared_target_workspace_id"])
+				version := out.CurrentConfigurationVersionID
+				if tc.route == "agent_schema" {
+					version = out.StateRunConfigurationVersionID
+				}
+				assert.Equal(t, version, dl["configuration_version_id"])
+				assert.NotContains(t, dl, "current_configuration_version_id")
+				for _, field := range GetImportConfigurationDownloadDefinition().InputSchema.Required {
+					assert.Contains(t, dl, field)
+				}
+			}
+			for _, tool := range []struct {
+				definition mcp.Tool
+				args       map[string]any
+			}{
+				{CreateImportCVDefinition(), cv}, {CreateImportRunDefinition(), run},
+			} {
+				for _, field := range tool.definition.InputSchema.Required {
+					if field == "configuration_version_id" {
+						continue
+					} // created CV is not known at preparation
+					assert.Contains(t, tool.args, field)
+				}
+			}
+		})
+	}
 }
 
 func TestPrepareImportExistingConfigurationOmitsNewWorkspaceRule(t *testing.T) {
@@ -161,14 +266,14 @@ func TestSharedSentencesStayOnTheirSurfaces(t *testing.T) {
 		name, sentence string
 		surfaces       map[string]string
 	}{
-		{"secret files", importSecretFilesRule, map[string]string{"prepare instructions": instructions, "download instructions": download, "guide-only": guide, "agent schema": importAgentSchemaNextAction}},
+		{"secret files", importSecretFilesRule, map[string]string{"prepare instructions": instructions, "download instructions": download, "guide-only": guide}},
 		{"nothing created", importNothingCreated, map[string]string{"guide-only": guide, "agent schema": importAgentSchemaNextAction}},
 		{"lock file check", importLockFileCheck, map[string]string{"guide-only": guide, "agent schema": importAgentSchemaNextAction}},
 		{"never apply", importNeverApplyRule, map[string]string{"guide-only": guide, "agent schema": importAgentSchemaNextAction}},
 		{"locked provider version", importLockedProviderVersionRule, map[string]string{"prepare instructions": instructions}},
 		{"provider mismatch", importProviderMismatchRule, map[string]string{"prepare instructions": instructions, "agent schema": importAgentSchemaNextAction}},
 		{"adaptation guidance", importAdaptationGuidance, map[string]string{"prepare instructions": instructions}},
-		{"archive root", importArchiveRootRule, map[string]string{"prepare instructions": instructions, "download instructions": download, "create_import_cv": create, "agent schema": importAgentSchemaNextAction}},
+		{"archive root", importArchiveRootRule, map[string]string{"prepare instructions": instructions, "download instructions": download}},
 		{"confirmation", importConfirmationRule, map[string]string{"prepare instructions": instructions, "create_import_cv": create}},
 		{"signed URL", importArchiveURLRule, map[string]string{"download instructions": download}},
 		{"delete directory", importDeleteDirectoryRule, map[string]string{"prepare instructions": instructions, "create_import_cv": create}},
@@ -260,7 +365,7 @@ func TestSensitiveInformationIsFlaggedNotAvoidedByPath(t *testing.T) {
 }
 
 func TestKeepGeneratedBlocksRuleIsProviderNeutralAndFirst(t *testing.T) {
-	for _, want := range []string{"Keep the generated resource and import blocks as returned", "identity form of the import block", "scoping values", "region, project, location, subscription or account", "Do not replace an identity import with an id import unless identity_support", "may look in the wrong place", "describes the target workspace's last plan"} {
+	for _, want := range []string{"Keep the generated resource and import blocks as returned", "identity form of the import block", "scoping values", "region, project, location, subscription or account", "Do not replace an identity import with an id import unless identity_support", "id import can encode scope", "neither source nor correctness of the resolved scope follows from the ID alone", "describes the target workspace's last plan"} {
 		assert.Contains(t, importKeepGeneratedRule, want)
 	}
 	assert.Equal(t, importKeepGeneratedRule, importToolInstructions[0])
@@ -287,7 +392,7 @@ func TestTargetScopeSeparatesTargetShapeFromQueryRun(t *testing.T) {
 	assert.NotContains(t, importAgentSchemaNextAction, importTargetScopeShort)
 
 	d := PrepareImportDefinition().Description
-	for _, want := range []string{"identity_schema exists", "describe the QueryRun", "could not be read", "supported means"} {
+	for _, want := range []string{"target schema reports identity", "not that the proposed block or values are valid", "describe the QueryRun", "could not be read", "supported means"} {
 		assert.Contains(t, d, want)
 	}
 	assert.Contains(t, importProviderMismatchRule, "is expected")

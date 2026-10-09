@@ -119,6 +119,60 @@ func TestBlankBaselineAuthorizedAcceptedByAllEntryPoints(t *testing.T) {
 	require.Equal(t, "pending", run.Status, run.Diagnostics)
 }
 
+func TestStatefulTargetWithoutCurrentCVDoesNotProduceBlankCreateTemplate(t *testing.T) {
+	for _, route := range []string{"schema", "agent_schema"} {
+		t.Run(route, func(t *testing.T) {
+			f := importBackendFixture(t)
+			if route == "agent_schema" {
+				f = schemaFallbackFixture(t, "uploaded")
+			}
+			mutateBlankWorkspace(t, f, func(_ map[string]any, rels map[string]any) {
+				rels["current-configuration-version"] = map[string]any{"data": nil}
+			}, false)
+			out := prepareImportTool(context.Background(), f.client, importFixtureInput(t))
+			assert.Equal(t, "blocked", out.Status)
+			assert.Contains(t, out.Diagnostics, "configuration_baseline_unavailable")
+			assert.Nil(t, out.Carry)
+			assert.Nil(t, out.NextCalls)
+			assert.Zero(t, logRequests(f), "block before expensive query log")
+			f.mu.Lock()
+			assert.Zero(t, f.requests["POST /api/v2/workspaces/ws-fixture/configuration-versions"])
+			assert.Zero(t, f.requests["POST /api/v2/runs"])
+			f.mu.Unlock()
+		})
+	}
+}
+
+func TestCurrentCVDisappearsDuringQueryLogBlocksPreparation(t *testing.T) {
+	for _, route := range []string{"schema", "agent_schema"} {
+		t.Run(route, func(t *testing.T) {
+			f := importBackendFixture(t)
+			if route == "agent_schema" {
+				f = schemaFallbackFixture(t, "uploaded")
+			}
+			f.mutationHandler = func(_ http.ResponseWriter, r *http.Request) bool {
+				if r.URL.Path == "/logs" {
+					mutateBlankWorkspace(t, f, func(_ map[string]any, rels map[string]any) {
+						rels["current-configuration-version"] = map[string]any{"data": nil}
+					}, false)
+				}
+				return false
+			}
+			out := prepareImportTool(context.Background(), f.client, importFixtureInput(t))
+			assert.Equal(t, "blocked", out.Status)
+			assert.Contains(t, out.Diagnostics, "configuration_baseline_unavailable")
+			assert.Nil(t, out.Carry)
+			assert.Nil(t, out.NextCalls)
+			assert.Empty(t, out.AgentInstructions)
+			assert.NotZero(t, logRequests(f))
+			f.mu.Lock()
+			assert.Zero(t, f.requests["POST /api/v2/workspaces/ws-fixture/configuration-versions"])
+			assert.Zero(t, f.requests["POST /api/v2/runs"])
+			f.mu.Unlock()
+		})
+	}
+}
+
 func TestBlankBaselineUnestablishedEvidenceFailsClosed(t *testing.T) {
 	for _, tc := range blankBaselineCases {
 		// With a readable current state and no current configuration, prepare

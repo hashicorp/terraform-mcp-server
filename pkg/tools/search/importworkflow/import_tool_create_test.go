@@ -5,6 +5,7 @@ package importworkflow
 
 import (
 	"context"
+	"encoding/json"
 	"strings"
 	"testing"
 
@@ -12,6 +13,54 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func TestPreparedNextCallsJSONRoundTripIntoCreateHandlers(t *testing.T) {
+	for _, blank := range []bool{false, true} {
+		name := "existing"
+		if blank {
+			name = "blank"
+		}
+		t.Run(name, func(t *testing.T) {
+			var f *importBackendTest
+			var uploaded *bool
+			if blank {
+				f, uploaded, _ = blankImportFixture(t)
+			} else {
+				f, uploaded, _ = importExecutionFixture(t)
+			}
+			prepared := prepareImportTool(context.Background(), f.client, importFixtureInput(t))
+			require.NotEqual(t, "blocked", prepared.Status, prepared.Diagnostics)
+			raw, err := json.Marshal(prepared.NextCalls)
+			require.NoError(t, err)
+			var wire map[string]json.RawMessage
+			require.NoError(t, json.Unmarshal(raw, &wire))
+			if blank {
+				assert.NotContains(t, wire, "get_import_configuration_download")
+			} else {
+				require.Contains(t, wire, "get_import_configuration_download")
+			}
+			var cv, run map[string]any
+			require.NoError(t, json.Unmarshal(wire["create_import_cv"], &cv))
+			require.NoError(t, json.Unmarshal(wire["create_import_run_base"], &run))
+			assert.NotContains(t, run, "configuration_version_id")
+			if blank {
+				for _, key := range []string{"baseline_cv_id", "baseline_state_id", "baseline_state_serial"} {
+					assert.NotContains(t, cv, key)
+					assert.NotContains(t, run, key)
+				}
+			}
+			assert.Equal(t, "blocked", callCreate(t, false, cv).Status, "template must not preauthorize a create")
+			cv["confirm_speculative_run"] = true // simulate explicit review in this hermetic fixture
+			created := callCreate(t, false, cv)
+			require.Equal(t, "awaiting_agent_upload", created.Status, created.Diagnostics)
+			*uploaded = true // fixture's binary PUT completed
+			run["configuration_version_id"] = created.ConfigurationVersionID
+			run["confirm_speculative_run"] = true
+			planned := callCreate(t, true, run)
+			assert.Equal(t, "pending", planned.Status, planned.Diagnostics)
+		})
+	}
+}
 
 func createArgs(extra map[string]any) map[string]any {
 	args := map[string]any{

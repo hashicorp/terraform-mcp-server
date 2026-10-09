@@ -146,6 +146,38 @@ func TestVerifyAllNoChangeMatchedIdentity(t *testing.T) {
 	assert.Contains(t, out.NextAction, "not a general correctness guarantee")
 }
 
+func TestVerifyShowsIdentityVersionsWithoutChangingUnverifiedDecision(t *testing.T) {
+	f := newVerifyFixture(t, 1, importIdentitySupported, "1.16.1")
+	entry := f.cleanEntries(true)[0]
+	entry.identityVersion = intPtr(1)
+	out := verifyFacts(t, f, planJSON("1.16.1", []planEntry{entry}, ""), entry.address)
+	require.Len(t, out.Attention, 1)
+	assert.Equal(t, identityUnverified, out.Attention[0].ObjectIdentity)
+	assert.Equal(t, reasonIdentityVersionDiffers, out.Attention[0].IdentityReason)
+	assert.Equal(t, 0, *out.Attention[0].SearchIdentityVersion)
+	assert.Equal(t, uint64(1), *out.Attention[0].PlanIdentityVersion)
+	require.Len(t, out.Detail, 1)
+	assert.Equal(t, uint64(1), *out.Detail[0].PlanIdentityVersion)
+
+	entry.identityVersion = nil
+	out = verifyFacts(t, f, planJSON("1.16.1", []planEntry{entry}, ""), entry.address)
+	require.Len(t, out.Attention, 1)
+	assert.Nil(t, out.Attention[0].PlanIdentityVersion)
+	assert.Equal(t, reasonIdentityVersionNotCompared, out.Attention[0].IdentityReason)
+	missingVersionJSON, err := json.Marshal(out)
+	require.NoError(t, err)
+	assert.NotContains(t, string(missingVersionJSON), `"plan_identity_version"`)
+	entry.identityVersion = intPtr(0)
+	out = verifyFacts(t, f, planJSON("1.16.1", []planEntry{entry}, ""), entry.address)
+	assert.Empty(t, out.Attention)
+	require.Len(t, out.Detail, 1)
+	assert.Equal(t, uint64(0), *out.Detail[0].PlanIdentityVersion)
+	zeroVersionJSON, err := json.Marshal(out)
+	require.NoError(t, err)
+	assert.Contains(t, string(zeroVersionJSON), `"plan_identity_version":0`)
+	assert.Contains(t, string(zeroVersionJSON), `"search_identity_version":0`)
+}
+
 func TestVerifyIdentityUnsupportedReasons(t *testing.T) {
 	for _, tt := range []struct {
 		name, support, planVersion, reason string
@@ -437,18 +469,23 @@ func TestVerifyImportPlanHandlerPollsThenSummarizes(t *testing.T) {
 	assert.Equal(t, "ws-fixture", pending.WorkspaceID)
 	assert.Equal(t, "cv-import", pending.ConfigurationVersionID)
 	assert.Equal(t, "plan-import", pending.PlanID)
+	assert.Contains(t, pending.NextAction, "send them on every poll")
 
 	*finished = true
 	needCarry := call(nil)
 	assert.Equal(t, "carry_required", needCarry.Status)
 	assert.Equal(t, "plan-import", needCarry.PlanID)
-	assert.Contains(t, needCarry.NextAction, "carry block you kept from prepare_import")
+	assert.Contains(t, needCarry.NextAction, "unchanged carry from prepare_import")
 	assert.NotContains(t, strings.ToLower(needCarry.NextAction), "prepare_import again")
 
 	rawCarry, _ := json.Marshal(carry)
 	var carryArg map[string]any
 	require.NoError(t, json.Unmarshal(rawCarry, &carryArg))
-	done := call(map[string]any{"carry": carryArg, "bindings": []any{map[string]any{"candidate_id": carry.Candidates[0].CandidateID, "target_address": "aws_iam_role.selected"}}})
+	*finished = false
+	withCarry := map[string]any{"carry": carryArg, "bindings": []any{map[string]any{"candidate_id": carry.Candidates[0].CandidateID, "target_address": "aws_iam_role.selected"}}}
+	assert.Equal(t, "pending", call(withCarry).Status)
+	*finished = true
+	done := call(withCarry)
 	require.Equal(t, "plan_available", done.Status, done.Diagnostics)
 	assert.Equal(t, "plan-import", done.PlanID)
 	assert.Equal(t, "cv-import", done.ConfigurationVersionID)
@@ -511,6 +548,86 @@ func TestVerifyExpectedCVAndTerminalNoPlanResponse(t *testing.T) {
 				assert.Zero(t, f.requests["GET /api/v2/plans/plan-import"], "wrong CV blocks before plan metadata")
 			}
 			f.mu.Unlock()
+		})
+	}
+}
+
+func TestVerifyPollingCancellationIsNotSuccessfulPending(t *testing.T) {
+	f, _, _ := importExecutionFixture(t)
+	inner := f.mutationHandler
+	f.mutationHandler = func(w http.ResponseWriter, r *http.Request) bool {
+		if r.Method == http.MethodGet && r.URL.Path == "/api/v2/runs/run-import" {
+			_, _ = io.WriteString(w, `{"data":{"id":"run-import","type":"runs","attributes":{"status":"pending","plan-only":true},"relationships":{"workspace":{"data":{"id":"ws-fixture","type":"workspaces"}},"configuration-version":{"data":{"id":"cv-import","type":"configuration-versions"}},"plan":{"data":null}}}}`)
+			return true
+		}
+		return inner(w, r)
+	}
+	w, err := f.client.Workspaces.Read(context.Background(), "fixture-org", "import-root")
+	require.NoError(t, err)
+	oldWait, oldInterval := importVerifyWait, importVerifyInterval
+	importVerifyWait, importVerifyInterval = time.Second, 100*time.Millisecond
+	t.Cleanup(func() { importVerifyWait, importVerifyInterval = oldWait, oldInterval })
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Millisecond)
+	defer cancel()
+	r, _, state, err := waitForImportPlan(ctx, f.client, w, "run-import", "cv-import")
+	require.NotNil(t, r, "cancellation must follow a successful pending Run read")
+	assert.Empty(t, state)
+	assert.Equal(t, "evidence_read_interrupted", importDiagnosticCode(err))
+	importVerifyWait, importVerifyInterval = time.Millisecond, 10*time.Millisecond
+	_, _, state, err = waitForImportPlan(context.Background(), f.client, w, "run-import", "cv-import")
+	require.NoError(t, err)
+	assert.Equal(t, "pending", state, "only the verifier's own budget may finish a successful pending poll")
+}
+
+func TestVerifyLaterRunReadFailureRetainsObservedRecoveryIDs(t *testing.T) {
+	for _, tc := range []struct {
+		name, wantCode string
+		cancel         bool
+	}{
+		{"backend_error", "backend_evidence_unavailable", false},
+		{"caller_cancel", "evidence_read_interrupted", true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			f, _, _ := importExecutionFixture(t)
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			reads := 0
+			inner := f.mutationHandler
+			f.mutationHandler = func(w http.ResponseWriter, r *http.Request) bool {
+				if r.Method == http.MethodGet && r.URL.Path == "/api/v2/runs/run-import" {
+					reads++
+					if reads == 2 {
+						if tc.cancel {
+							cancel()
+							<-r.Context().Done()
+						} else {
+							w.WriteHeader(http.StatusBadRequest)
+						}
+						return true
+					}
+				}
+				return inner(w, r)
+			}
+			oldWait, oldInterval := importVerifyWait, importVerifyInterval
+			importVerifyWait, importVerifyInterval = time.Second, time.Millisecond
+			t.Cleanup(func() { importVerifyWait, importVerifyInterval = oldWait, oldInterval })
+			result, err := HandleVerifyImportPlan(ctx, mcp.CallToolRequest{Params: mcp.CallToolParams{Arguments: map[string]any{
+				"organization_name": "fixture-org", "workspace_name": "import-root", "run_id": "run-import", "configuration_version_id": "cv-import",
+			}}}, silentLogger())
+			require.NoError(t, err)
+			out := result.StructuredContent.(importVerified)
+			assert.Equal(t, 2, reads)
+			assert.True(t, result.IsError)
+			assert.Equal(t, "blocked", out.Status)
+			assert.Contains(t, out.Diagnostics, tc.wantCode)
+			assert.Equal(t, "ws-fixture", out.WorkspaceID)
+			assert.Equal(t, "cv-import", out.ConfigurationVersionID)
+			assert.Equal(t, "run-import", out.RunID)
+			assert.Equal(t, "plan-import", out.PlanID)
+			assert.Contains(t, out.NextAction, "may be stale")
+			text, ok := mcp.AsTextContent(result.Content[0])
+			require.True(t, ok)
+			assert.JSONEq(t, stringMustMarshal(t, out), text.Text)
 		})
 	}
 }
