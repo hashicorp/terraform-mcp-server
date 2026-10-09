@@ -105,6 +105,16 @@ func getQueryStatusHandlerWithConfig(ctx context.Context, request mcp.CallToolRe
 		return toolErrorf(logger, "get_query_status", "failed to get query run %q: %v", queryRunID, err)
 	}
 
+	if err := authorizeQueryRunOrganization(pollCtx, tfeClient, queryRunID); err != nil {
+		if callerErr := callerCancellation(ctx); callerErr != nil {
+			return toolErrorf(logger, "get_query_status", "failed to get query run %q: %v", queryRunID, callerErr)
+		}
+		if result, denied := queryRunDenied(logger, "get_query_status", queryRunID, err); denied {
+			return result, nil
+		}
+		return toolErrorf(logger, "get_query_status", "failed to get query run %q: %v", queryRunID, err)
+	}
+
 	response, err := waitForQueryStatus(ctx, pollCtx, tfeClient, queryRunID, config.pollInterval, logger)
 	if err != nil {
 		return toolErrorf(logger, "get_query_status", "failed to get query run %q: %v", queryRunID, err)
