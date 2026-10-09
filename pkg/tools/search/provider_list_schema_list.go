@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"os"
 	"strings"
 
 	"github.com/hashicorp/go-tfe"
@@ -36,6 +37,27 @@ import (
 // When neither is supplied, it lists all supported providers for the required
 // organization context so the agent can pick one and call the tool again.
 func ProviderListSchemaList(logger *log.Logger) server.ServerTool {
+	organizationName := strings.TrimSpace(os.Getenv("TF_CLOUD_ORGANIZATION"))
+	workspaceName := strings.TrimSpace(os.Getenv("TF_WORKSPACE"))
+	organizationOptions := []mcp.PropertyOption{
+		mcp.Description(
+			"HCP Terraform organization name used to scope every provider catalog request. " +
+				"Uses TF_CLOUD_ORGANIZATION when set; otherwise ask the user for it before calling this tool.",
+		),
+	}
+	if organizationName != "" {
+		organizationOptions = append(organizationOptions, mcp.DefaultString(organizationName))
+	}
+	workspaceOptions := []mcp.PropertyOption{
+		mcp.Description(
+			"HCP Terraform workspace name that will execute the query. " +
+				"Uses TF_WORKSPACE when set; otherwise ask the user for it before calling this tool.",
+		),
+	}
+	if workspaceName != "" {
+		workspaceOptions = append(workspaceOptions, mcp.DefaultString(workspaceName))
+	}
+
 	return server.ServerTool{
 		Tool: mcp.NewTool("provider_list_schema_list",
 			mcp.WithDescription(providerListSchemaListDescription),
@@ -56,20 +78,8 @@ func ProviderListSchemaList(logger *log.Logger) server.ServerTool {
 						"Required together with provider_namespace to fetch a schema directly.",
 				),
 			),
-			mcp.WithString("organization_name",
-				mcp.Required(),
-				mcp.Description(
-					"HCP Terraform organization name used to scope every provider catalog request. "+
-						"If the user has not supplied it, ask for both organization_name and workspace_name before calling this tool.",
-				),
-			),
-			mcp.WithString("workspace_name",
-				mcp.Required(),
-				mcp.Description(
-					"HCP Terraform workspace name that will execute the query. "+
-						"If the user has not supplied it, ask for both organization_name and workspace_name before calling this tool.",
-				),
-			),
+			mcp.WithString("organization_name", organizationOptions...),
+			mcp.WithString("workspace_name", workspaceOptions...),
 		),
 		Handler: func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			return providerListSchemaListHandler(ctx, request, logger)
@@ -80,10 +90,9 @@ func ProviderListSchemaList(logger *log.Logger) server.ServerTool {
 func providerListSchemaListHandler(ctx context.Context, request mcp.CallToolRequest, logger *log.Logger) (*mcp.CallToolResult, error) {
 	providerNamespace := strings.TrimSpace(request.GetString("provider_namespace", ""))
 	providerName := strings.TrimSpace(strings.ToLower(request.GetString("provider_name", "")))
-	orgName := strings.TrimSpace(request.GetString("organization_name", ""))
-	workspaceName := strings.TrimSpace(request.GetString("workspace_name", ""))
+	orgName, workspaceName := resolveSearchScope(request)
 	if orgName == "" || workspaceName == "" {
-		return toolErrorf(logger, "provider_list_schema_list", "organization_name and workspace_name are required; ask the user to provide both before fetching provider schemas")
+		return toolErrorf(logger, "provider_list_schema_list", "organization_name and workspace_name are required; after checking TF_CLOUD_ORGANIZATION and TF_WORKSPACE, ask the user to provide both before fetching provider schemas")
 	}
 
 	tfeClient, err := client.GetTfeClientFromContext(ctx, logger)
@@ -109,6 +118,18 @@ func providerListSchemaListHandler(ctx context.Context, request mcp.CallToolRequ
 	}
 
 	return fetchProviderSchema(ctx, tfeClient, orgName, providerNamespace, providerName, providerVersion, logger)
+}
+
+func resolveSearchScope(request mcp.CallToolRequest) (string, string) {
+	orgName := strings.TrimSpace(os.Getenv("TF_CLOUD_ORGANIZATION"))
+	if orgName == "" {
+		orgName = strings.TrimSpace(request.GetString("organization_name", ""))
+	}
+	workspaceName := strings.TrimSpace(os.Getenv("TF_WORKSPACE"))
+	if workspaceName == "" {
+		workspaceName = strings.TrimSpace(request.GetString("workspace_name", ""))
+	}
+	return orgName, workspaceName
 }
 
 // ── list all supported providers ─────────────────────────────────────────────
@@ -286,9 +307,10 @@ func doProviderRequest(ctx context.Context, request *tfe.ClientRequest, response
 const providerListSchemaListDescription = `Fetches list_resource_schemas for a search-compatible Terraform provider from the
 HCP Terraform no-code stub endpoint (GET /api/v2/search/provider-versions).
 
-Every call must be scoped with organization_name and workspace_name. Never call this tool
-without them. If either value is not present in the user's request, ask the user to provide
-both values before making any tool call. Do not attempt an unscoped request first.
+Every call requires organization_name and workspace_name. First use TF_CLOUD_ORGANIZATION and
+TF_WORKSPACE and tell the user which values are being used. If either environment variable is
+unset or empty, ask the user for both values before fetching provider schemas. Never make an
+unscoped request.
 
 The tool has two modes:
 
@@ -305,8 +327,8 @@ LIST mode (organization_name and workspace_name supplied; no provider identifier
     to use search_providers to find the provider in the public Terraform Registry.
 
 Typical agent workflow:
-  1. Obtain organization_name and workspace_name from the user's request. If either is absent,
-     ask the user for both and wait for their response.
+  1. Use TF_CLOUD_ORGANIZATION and TF_WORKSPACE first and tell the user which organization and
+     workspace are being used. If either is unset or empty, ask the user to provide both and wait.
   2. Call provider_list_schema_list(organization_name, workspace_name) to discover available providers.
   3. Call provider_list_schema_list(organization_name, workspace_name, provider_namespace,
      provider_name) to fetch the catalog-selected version and its schema.
