@@ -31,7 +31,6 @@ func TestVerifyMatchesModuleAndIndexedAddressesExactly(t *testing.T) {
 	}
 	f := bindAddresses(newVerifyFixture(t, len(addrs), importIdentitySupported, "1.16.1"), addrs...)
 	out := verifyFacts(t, f, planJSON("1.16.1", f.cleanEntries(true), ""))
-	assert.Equal(t, "no_unintended_changes", out.Overall)
 	assert.Equal(t, len(addrs), out.Changes[changeNone])
 	assert.Equal(t, len(addrs), out.ObjectIdentity[identityMatched])
 	assert.Zero(t, out.Unselected.ExtraImports)
@@ -43,7 +42,6 @@ func TestVerifySameNameInAnotherModuleIsNotConflated(t *testing.T) {
 	// The import landed in module.b instead of the bound module.a.
 	entries[0].address = "module.b.aws_iam_role.r"
 	out := verifyFacts(t, f, planJSON("1.16.1", entries, ""))
-	assert.Equal(t, "blocked", out.Overall)
 	assert.Equal(t, 1, out.Changes[changeNotInPlan])
 	assert.Equal(t, 0, out.ObjectIdentity[identityMatched])
 	assert.Equal(t, 1, out.Unselected.ExtraImports, "the import at the other address is reported, not accepted")
@@ -63,7 +61,7 @@ func TestVerifyWrongOrDifferentlyQuotedKeyIsNotInPlan(t *testing.T) {
 			entries[0].address = `module.network["east"].aws_iam_role.r`
 			out := verifyFacts(t, f, planJSON("1.16.1", entries, ""))
 			assert.Equal(t, 1, out.Changes[changeNotInPlan])
-			assert.Equal(t, "blocked", out.Overall)
+			assert.Contains(t, out.NextAction, "not taking effect")
 		})
 	}
 }
@@ -73,7 +71,8 @@ func TestVerifyReportsASiblingCreateWhenAModuleIsCalledTwice(t *testing.T) {
 	entries := f.cleanEntries(true)
 	entries = append(entries, planEntry{address: "module.west.aws_iam_role.r", actions: []string{"create"}, importing: "null"})
 	out := verifyFacts(t, f, planJSON("1.16.1", entries, ""))
-	assert.Equal(t, "needs_iteration", out.Overall, "the selected import is fine, the sibling instance is not")
+	assert.Equal(t, 1, out.Changes[changeNone], "the selected import is fine, the sibling instance is not")
+	assert.Contains(t, out.NextAction, "other managed actions 1 outside the selection")
 	assert.Equal(t, 1, out.Changes[changeNone])
 	assert.Equal(t, 1, out.Unselected.OtherManagedAction)
 	require.Len(t, out.Unselected.Addresses, 1)
@@ -86,14 +85,16 @@ func TestVerifyReportsASiblingKeyOfAnIndexedResource(t *testing.T) {
 	entries := f.cleanEntries(true)
 	entries = append(entries, planEntry{address: `aws_iam_role.set["b"]`, actions: []string{"update"}, importing: "null"})
 	out := verifyFacts(t, f, planJSON("1.16.1", entries, ""))
-	assert.Equal(t, "needs_iteration", out.Overall)
+	assert.Contains(t, out.NextAction, "other managed actions 1 outside the selection")
 	assert.Equal(t, 1, out.Unselected.OtherManagedAction)
 }
 
 func TestVerifyDeferredModuleInstanceIsNotClean(t *testing.T) {
 	f := bindAddresses(newVerifyFixture(t, 1, importIdentitySupported, "1.16.1"), `module.network["east"].aws_iam_role.r`)
 	out := verifyFacts(t, f, planJSON("1.16.1", f.cleanEntries(true), `,"deferred_changes":[{"reason":"instance_count_unknown","resource_change":{"address":"module.network[\"west\"].aws_iam_role.r"}}]`))
-	assert.Equal(t, "blocked", out.Overall)
+	assert.Equal(t, 1, out.Plan.DeferredChanges)
+	assert.Contains(t, out.NextAction, "1 deferred changes")
+	assert.NotContains(t, out.NextAction, "no changes and no other actions")
 }
 
 func TestModuleTargetGuidancePointsAtEvidenceAndKeepsTheRootDefault(t *testing.T) {

@@ -20,7 +20,11 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-const importToolContractVersion = "7"
+// importToolContractVersion 8: Search found-resource identity_version is
+// required evidence; verify_import_plan has no overall field, and a missing plan
+// identity version is unverified, not matched. Prototype semantics changed
+// incompatibly; carries from version 7 are not promised to work.
+const importToolContractVersion = "8"
 
 // Identity support of a target managed type. The target Terraform
 // version is part of the answer: a plan schema produced below Terraform 1.12
@@ -47,8 +51,9 @@ type importCarryCandidate struct {
 	ManagedType string         `json:"managed_type"`
 	Identity    map[string]any `json:"identity"`
 	// SearchIdentityVersion is the identity schema version of the provider
-	// release that ran the query. It sits beside candidate_id, which does not
-	// include it. A pointer, because 0 is a real version.
+	// release that ran the query, required evidence for every candidate. It sits
+	// beside candidate_id, which does not include it, and is covered by the
+	// carry digest. A pointer, because 0 is a real version.
 	SearchIdentityVersion *int `json:"search_identity_version,omitempty"`
 }
 
@@ -300,6 +305,8 @@ func importBlockedNextAction(code string) string {
 		return importGuideOnlyNextAction("The run that produced the current state has no plan, and the configuration version it used cannot be downloaded (it is missing, not uploaded, archived or errored).")
 	case "schema_source_plan_unavailable":
 		return importAgentSchemaNextAction
+	case "query_identity_version_invalid":
+		return "A found resource in this QueryRun has no valid identity_version (a nonnegative integer; 0 is valid), so the whole QueryRun is not selectable import evidence and no partial candidate list is offered. Tell the user; do not select from this QueryRun, infer a version or work around it. Running a new query is the user's decision." + none
 	default:
 		return "Resolve the reported evidence diagnostic and call prepare_import again." + none
 	}
@@ -406,6 +413,8 @@ func PrepareImportDefinition() mcp.Tool {
 Pass organization_name, workspace_name, query_run_id and selections (candidate_id from get_query_summary, plus the proposed managed_type). types, schema_source and target describe the target workspace; candidates and carry.providers describe the QueryRun, whose provider version can differ from the target's. The result contains the target managed schema for each distinct type (managed_schema, identity_schema), per-type identity_support, the verdict from the target's own schema (supported means identity_schema exists, so an identity import block is valid; none means the target's schema has no identity, Terraform 1.12 or later; unknown means the schema could not be read; for none or unknown the import ID must come from the documentation of the target workspace's locked provider version, read from the downloaded .terraform.lock.hcl), identity_compatibility (how the Search identity keys and identity schema version fit the target identity schema, with a short guidance sentence; if a type is not the same version, tell the user before authoring that identity stays unverified even if the plan only imports), the target Terraform versions (target.terraform_version_setting, the workspace setting that new runs use and may be a constraint, and target.terraform_version_last_run, exact, from the run that produced the state), the workspace baseline, a carry block, and for each selected candidate its resource_object (the attributes the Search provider observed, absent when the query did not capture them) and configuration and import_configuration (Search-generated HCL drafts of the resource block and the import block). Send the carry block unchanged with the final verify_import_plan call.
 
 Before reading the QueryRun log it blocks targets the workflow does not support: local execution mode, a Terraform version below 1.5, and a current state with no readable producing run or plan. A Terraform version below 1.12 proceeds with a note that identity is unavailable. Each block says no CV or Run was created.
+
+Every found resource in the QueryRun must carry a valid identity_version (a nonnegative integer; 0 is valid). If any does not, the whole QueryRun is not selectable import evidence: the call is blocked with query_identity_version_invalid and no partial candidate list is offered. Each selected candidate's version is carried in the carry block (search_identity_version) and covered by its digest; candidate_id does not include it.
 
 The current configuration is not downloaded here. If has_current_configuration is true, ask the user for the authoring directory (an empty or new directory), then call get_import_configuration_download. If the target workspace is new (no configuration and no state), a directory that already holds the user's Terraform files is fine: tell the user, and upload an explicit, reviewed file list. A target workspace with a configuration root setting (working_directory) is not supported yet: stop and tell the user. It never creates a CV or Run and does not authorize one.`),
 		mcp.WithTitleAnnotation("Prepare Search import selection"),

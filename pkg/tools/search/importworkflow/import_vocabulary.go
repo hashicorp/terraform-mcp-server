@@ -100,7 +100,7 @@ const (
 	// state facts and what to check; they never edit a block for the agent.
 	identityCompatGuidanceSame           = "The generated identity block's keys fit the target identity schema and the identity schema versions match. Keep it unless validate or the plan rejects it."
 	identityCompatGuidanceVersionDiffers = "Identity will stay unverified: the Search and target identity schema versions differ, and a plan that only imports does not change that. The keys fit, but a key can change meaning without changing shape. This target schema comes from the run that produced the state and may predate the plan; verify_import_plan uses the plan's own version. Read the documentation of the target workspace's locked provider version for this type and tell the user."
-	identityCompatGuidanceVersionUnknown = "The keys fit, but an identity schema version is missing, so the versions could not be compared and the identity cannot be confirmed as the same schema. verify_import_plan compares the plan's own version."
+	identityCompatGuidanceVersionUnknown = "The keys fit, but an identity schema version could not be established (the target schema reports none, or the selected candidates carry different Search versions), so the versions could not be compared and the identity cannot be confirmed as the same schema. verify_import_plan compares the plan's own version, and reports the identity as unverified if the plan does not report one."
 	identityCompatGuidanceShape          = "The generated identity block does not fit the target identity schema (see missing_required_keys and unknown_keys), so validate or the plan will reject it. Adapt it from the documentation of the target workspace's locked provider version and keep the identity the user selected, or use an id import only if that release documents one. Do not guess a key mapping. List the change and its evidence in the review."
 	identityCompatGuidanceNoTarget       = "The target schema has no identity for this type. Use the id import form documented for the target workspace's locked provider version, or stop if it documents none. verify_import_plan will report the identity as unsupported."
 	identityCompatGuidanceNotRead        = "The target identity schema was not read, so fit is unknown. Obtain the schema or read the target release's documentation; the plan decides what verify_import_plan can compare."
@@ -108,7 +108,7 @@ const (
 
 	// importIdentityUnverifiedLead is the message to give the user first when the
 	// Search and target identity schemas differ.
-	importIdentityUnverifiedLead = "Identity stays unverified when the Search and target identity schemas differ in version or shape, even if Terraform plans only the import with no adds, changes or destroys: an import-only plan says what Terraform proposes, not that the object it resolved is the one the user selected."
+	importIdentityUnverifiedLead = "Identity stays unverified when the Search and target identity schemas differ in version or shape, or when the plan does not report its identity schema version, even if Terraform plans only the import with no adds, changes or destroys: an import-only plan says what Terraform proposes, not that the object it resolved is the one the user selected."
 
 	// importConfidenceReportRule is the closing report for an unverified or
 	// uncomparable identity. It asks for facts and uncertainty, never a verdict.

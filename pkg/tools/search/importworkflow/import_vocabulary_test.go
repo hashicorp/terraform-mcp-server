@@ -156,7 +156,7 @@ func TestSharedSentencesStayOnTheirSurfaces(t *testing.T) {
 	download := strings.Join(importDownloadInstructions, "\n")
 	guide := importGuideOnlyNextAction("reason")
 	create := CreateImportCVDefinition().Description
-	verifyDone := verifyNextAction(importVerified{Selected: 1, Overall: "no_unintended_changes"})
+	verifyDone := verifyNextAction(importVerified{Selected: 1})
 	for _, tc := range []struct {
 		name, sentence string
 		surfaces       map[string]string

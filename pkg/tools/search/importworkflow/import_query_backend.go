@@ -12,6 +12,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 
 	"github.com/hashicorp/go-tfe"
@@ -83,14 +84,43 @@ type importDiscoveryCandidate struct {
 // names stable while also accepting the older configuration spellings.
 type importDiscoveryFound struct {
 	importDiscoveryCandidate
-	ConfigurationWire *string `json:"configuration"`
-	ImportWire        *string `json:"import_configuration"`
-	Config            *string `json:"config"`
-	ImportConfig      *string `json:"import_config"`
+	// IdentityVersionWire shadows the embedded field so the raw JSON can be
+	// validated strictly: a missing, null, negative, non-integer, non-numeric or
+	// out-of-range version makes the whole QueryRun non-selectable.
+	IdentityVersionWire json.RawMessage `json:"identity_version"`
+	ConfigurationWire   *string         `json:"configuration"`
+	ImportWire          *string         `json:"import_configuration"`
+	Config              *string         `json:"config"`
+	ImportConfig        *string         `json:"import_config"`
+}
+
+// parseImportIdentityVersion accepts only a JSON integer literal that is zero
+// or positive and fits an int. Zero is a valid version. Forms such as 1.0, 1e0,
+// -1, "1", true and null are rejected rather than coerced.
+func parseImportIdentityVersion(raw json.RawMessage) (int, bool) {
+	s := string(bytes.TrimSpace(raw))
+	if s == "" || (len(s) > 1 && s[0] == '0') {
+		return 0, false
+	}
+	for _, r := range s {
+		if r < '0' || r > '9' {
+			return 0, false
+		}
+	}
+	v, err := strconv.ParseInt(s, 10, strconv.IntSize)
+	if err != nil {
+		return 0, false
+	}
+	return int(v), true
 }
 
 func (f *importDiscoveryFound) candidate() (importDiscoveryCandidate, error) {
 	c := f.importDiscoveryCandidate
+	version, ok := parseImportIdentityVersion(f.IdentityVersionWire)
+	if !ok {
+		return c, importEvidenceFailure("query_identity_version_invalid")
+	}
+	c.IdentityVersion = &version
 	if f.Config != nil && f.ConfigurationWire != nil && *f.Config != *f.ConfigurationWire {
 		return c, importEvidenceFailure("query_generated_block_conflict")
 	}

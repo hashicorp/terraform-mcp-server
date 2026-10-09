@@ -64,8 +64,11 @@ const (
 	// reasonIdentityVersionDiffers: the Search and the plan's identity schema
 	// versions differ, so equal-looking values are not comparable.
 	reasonIdentityVersionDiffers = "identity_schema_version_differs"
-	// suffixVersionNotCompared is added to a match when a version was missing.
-	suffixVersionNotCompared = "; identity_schema_version_not_compared"
+	// reasonIdentityVersionNotCompared: the plan did not report an identity
+	// schema version for the target address (or a carried version was absent),
+	// so an otherwise comparable, equal identity is not confirmed. This is not a
+	// target-schema-unsupported case.
+	reasonIdentityVersionNotCompared = "identity_schema_version_not_compared"
 )
 
 var verifyChangeKeys = []string{changeNone, changeUpdate, changeReplace, changeCreate, changeMissing, changeNotInPlan, changeType}
@@ -128,7 +131,6 @@ type importVerifyDetail struct {
 type importVerified struct {
 	ContractVersion     string                   `json:"contract_version"`
 	Status              string                   `json:"status"`
-	Overall             string                   `json:"overall,omitempty"`
 	RunID               string                   `json:"run_id,omitempty"`
 	RunStatus           string                   `json:"run_status,omitempty"`
 	PlanStatus          string                   `json:"plan_status,omitempty"`
@@ -175,6 +177,11 @@ func validateImportCarry(carry *importCarryBlock, bindings []importVerifyBinding
 		p, ok := carry.Providers[c.ListType]
 		if !ok || !importInputName(c.ManagedType) || len(c.Identity) == 0 {
 			return nil, importEvidenceFailure("carry_invalid")
+		}
+		// Search identity version is required evidence. A carry without it is
+		// rejected even if its digest was recomputed to match.
+		if c.SearchIdentityVersion == nil || *c.SearchIdentityVersion < 0 {
+			return nil, importEvidenceFailure("carry_identity_version_invalid")
 		}
 		if importCandidateID(carry.QueryRunID, workspaceProvider{Source: p.Source, Version: p.Version}, c.ListType, c.Identity) != c.CandidateID {
 			return nil, importEvidenceFailure("carry_candidate_id_mismatch")
@@ -396,12 +403,16 @@ func classifyIdentity(planVersion string, carried importCarryCandidate, support 
 	if hasAfter {
 		// Equal-looking values under different identity schema versions are not
 		// proof: a key can keep its name and change its meaning.
-		if carried.SearchIdentityVersion != nil && planIdentityVersion != nil && uint64(*carried.SearchIdentityVersion) != *planIdentityVersion {
+		searchKnown := carried.SearchIdentityVersion != nil && *carried.SearchIdentityVersion >= 0
+		if searchKnown && planIdentityVersion != nil && uint64(*carried.SearchIdentityVersion) != *planIdentityVersion {
 			return identityUnverified, reasonIdentityVersionDiffers
 		}
 		status, reason := importCompareProviderIdentity(carried.Identity, afterIdentity)
-		if status == identityMatched && (carried.SearchIdentityVersion == nil || planIdentityVersion == nil) {
-			reason += suffixVersionNotCompared
+		// A match is bounded evidence only when both versions are known and
+		// equal. A missing plan version (or an absent carried one) leaves the
+		// identity unverified. Shape, type and mismatch results are kept as is.
+		if status == identityMatched && (!searchKnown || planIdentityVersion == nil) {
+			return identityUnverified, reasonIdentityVersionNotCompared
 		}
 		return status, reason
 	}
@@ -497,7 +508,6 @@ func verifyImportPlanFacts(raw []byte, carry *importCarryBlock, byCandidate map[
 	}
 	out.Unselected = un
 
-	out.Overall = verifyOverall(out)
 	out.NextAction = verifyNextAction(out)
 	return out, nil
 }
@@ -596,89 +606,125 @@ func summarizeUnselected(plan *importVerifyPlanJSON, selectedAddr map[string]boo
 	return un, nil
 }
 
-func verifyOverall(v importVerified) string {
-	if v.Changes[changeCreate]+v.Changes[changeMissing]+v.Changes[changeNotInPlan]+v.Changes[changeType] > 0 || v.Plan.DeferredChanges > 0 {
-		return "blocked"
-	}
-	if v.Changes[changeUpdate]+v.Changes[changeReplace] > 0 || v.ObjectIdentity[identityMismatched]+v.ObjectIdentity[identityUnverified] > 0 ||
-		v.Unselected.ExtraImports+v.Unselected.OtherManagedAction+v.Unselected.Drift > 0 || v.Plan.OutputChanges > 0 {
-		return "needs_iteration"
-	}
-	return "no_unintended_changes"
-}
-
-func countIdentityVersionDiffers(v importVerified) int {
+// countIdentityReason counts attention items with the given identity_reason.
+// Every unverified item is attention, and a selection has at most 100 items,
+// so attention is complete for this purpose.
+func countIdentityReason(v importVerified, reason string) int {
 	n := 0
 	for _, a := range v.Attention {
-		if a.IdentityReason == reasonIdentityVersionDiffers {
+		if a.IdentityReason == reason {
 			n++
 		}
 	}
 	return n
 }
 
-// verifyNextAction describes what the plan showed with counts. It never says
-// safe, verified or approved, and never suggests an apply (ADR 0005).
-func verifyNextAction(v importVerified) string {
-	var parts []string
-	n := v.Selected
+// verifyIdentityNextAction states identity uncertainty and conflicts first,
+// including identities that could not be checked. It says nothing about plan
+// actions and never asks for a configuration change.
+func verifyIdentityNextAction(v importVerified) (parts []string, uncertain bool) {
 	unverified := v.ObjectIdentity[identityUnverified]
-	versionDiffers := countIdentityVersionDiffers(v)
-	// The identity message leads: an import-only plan does not confirm identity.
+	versionDiffers := countIdentityReason(v, reasonIdentityVersionDiffers)
+	notCompared := countIdentityReason(v, reasonIdentityVersionNotCompared)
 	if versionDiffers > 0 {
-		parts = append(parts, fmt.Sprintf("%d selected identities are unverified because the Search and plan identity schema versions differ (both known, unequal), even if the values look equal and the plan only imports. An import-only plan says what Terraform proposes, not that the resolved object is the one the user selected. Tell the user this first.", versionDiffers))
+		parts = append(parts, fmt.Sprintf("%d selected identities are unverified because the Search and plan identity schema versions differ (both known, unequal), even if the values look equal and the plan only imports. An import-only plan says what Terraform proposes, not that the resolved object is the one the user selected. Tell the user this first. Read the documentation of the target workspace's locked provider version for those types and review them with the user.", versionDiffers))
 	}
-	if other := unverified - versionDiffers; other > 0 {
+	if notCompared > 0 {
+		parts = append(parts, fmt.Sprintf("%d selected identities are unverified because the plan did not report an identity schema version for the target address, so it was not compared with the Search version (identity_schema_version_not_compared), even though the identity values look equal. An import-only plan says what Terraform proposes, not that the resolved object is the one the user selected. Tell the user this.", notCompared))
+	}
+	if other := unverified - versionDiffers - notCompared; other > 0 {
 		parts = append(parts, fmt.Sprintf("%d selected identities are unverified for another reason (see identity_reason in attention); tell the user.", other))
 	}
-	otherActions := 0
-	if v.Plan != nil {
-		otherActions += v.Plan.OutputChanges
+	if m := v.ObjectIdentity[identityMismatched]; m > 0 {
+		parts = append(parts, fmt.Sprintf("%d selected items have an identity that differs from the carried selection. Stop and review this selection with the user.", m))
 	}
-	if v.Unselected != nil {
-		otherActions += v.Unselected.ExtraImports + v.Unselected.OtherManagedAction + v.Unselected.Drift
-	}
-	identityOnly := v.Changes[changeUpdate]+v.Changes[changeReplace] == 0 && v.ObjectIdentity[identityMismatched] == 0 && otherActions == 0
-	switch v.Overall {
-	case "blocked":
-		parts = append(parts, fmt.Sprintf("The plan shows %d of %d selected imports not taking effect (create %d, import_missing %d, not_in_plan %d, type_mismatch %d)", v.Changes[changeCreate]+v.Changes[changeMissing]+v.Changes[changeNotInPlan]+v.Changes[changeType], n, v.Changes[changeCreate], v.Changes[changeMissing], v.Changes[changeNotInPlan], v.Changes[changeType]))
-		if v.Plan.DeferredChanges > 0 {
-			parts = append(parts, fmt.Sprintf("and %d deferred changes", v.Plan.DeferredChanges))
-		}
-		parts[len(parts)-1] += ". Fix the configuration listed in attention, then create a new configuration version and run."
-		if v.Changes[changeNotInPlan] > 0 {
-			parts = append(parts, "A not_in_plan item means no plan entry has exactly that target_address: compare it with the address in unselected or in the plan, including the module path and instance keys.")
-		}
-	case "needs_iteration":
-		if versionDiffers > 0 {
-			parts = append(parts, "Read the documentation of the target workspace's locked provider version for those types and review them with the user.")
-		}
-		if v.ObjectIdentity[identityMismatched] > 0 {
-			parts = append(parts, fmt.Sprintf("%d selected items have an identity that differs from the carried selection. Stop and review this selection with the user.", v.ObjectIdentity[identityMismatched]))
-		}
-		if identityOnly {
-			parts = append(parts, "The plan shows no updates, replacements or other actions beyond the selected imports; the only open item is identity. This result does not indicate a configuration change.")
-		} else {
-			parts = append(parts, fmt.Sprintf("The plan shows %d selected items with updates or replacements, %d with unverified identity, and %d other actions outside the selection (extra imports %d, other changes %d, drift %d, output changes %d). Review attention and unselected, adjust the configuration, then create a new configuration version and run.",
-				v.Changes[changeUpdate]+v.Changes[changeReplace], v.ObjectIdentity[identityUnverified], v.Unselected.ExtraImports+v.Unselected.OtherManagedAction+v.Unselected.Drift+v.Plan.OutputChanges, v.Unselected.ExtraImports, v.Unselected.OtherManagedAction, v.Unselected.Drift, v.Plan.OutputChanges))
-		}
-	default:
-		parts = append(parts, fmt.Sprintf("The plan shows %d selected imports with no changes and no other actions. %d identities matched the carried selection. Review the plan. "+importClosingRule, n, v.ObjectIdentity[identityMatched]))
-	}
-	if u := v.ObjectIdentity[identityUnsupported]; u > 0 {
+	unsupported := v.ObjectIdentity[identityUnsupported]
+	if unsupported > 0 {
 		undetermined := 0
+		preparedWithoutIdentity := 0
 		for _, g := range v.IdentityUnsupported {
 			if g.Reason == reasonUndetermined {
 				undetermined += g.Count
 			}
+			if g.Reason == reasonTypeNoIdentity {
+				preparedWithoutIdentity += g.Count
+			}
 		}
-		s := fmt.Sprintf("Identity could not be checked for %d items (see identity_unsupported). Confirm each import ID against the documentation of the target workspace's locked provider version.", u)
+		s := fmt.Sprintf("Identity could not be checked for %d items (see identity_unsupported). Confirm each import ID against the documentation of the target workspace's locked provider version.", unsupported)
+		if preparedWithoutIdentity > 0 {
+			s += fmt.Sprintf(" The prepare-time target schema lacked identity for %d of them; absence of after_identity alone does not establish the speculative plan's current schema.", preparedWithoutIdentity)
+		}
 		if undetermined > 0 {
 			s += fmt.Sprintf(" Identity support could not be determined for %d of them; it was not read from HCP (blank workspace, or a schema the agent obtained locally).", undetermined)
 		}
 		parts = append(parts, s)
 	}
-	if unverified > 0 {
+	uncertain = unverified+v.ObjectIdentity[identityMismatched]+unsupported > 0
+	if matched := v.ObjectIdentity[identityMatched]; matched > 0 {
+		parts = append(parts, fmt.Sprintf("%d identities matched the carried selection on complete primitive values with equal identity schema versions; that is bounded evidence, not a general correctness guarantee, and provider scope is still reviewed separately.", matched))
+	}
+	return parts, uncertain
+}
+
+// verifyNextAction describes what the plan showed with counts. Identity
+// uncertainty and conflicts lead; plan actions follow as a separate matter.
+// There is no combined verdict. It never says safe, verified or approved, and
+// never suggests an apply (ADR 0005).
+func verifyNextAction(v importVerified) string {
+	parts, uncertain := verifyIdentityNextAction(v)
+	identityBlocking := v.ObjectIdentity[identityUnverified]+v.ObjectIdentity[identityMismatched] > 0
+	n := v.Selected
+
+	failures := v.Changes[changeCreate] + v.Changes[changeMissing] + v.Changes[changeNotInPlan] + v.Changes[changeType]
+	updates := v.Changes[changeUpdate] + v.Changes[changeReplace]
+	var extra, other, drift, outputs, deferred int
+	if v.Unselected != nil {
+		extra, other, drift = v.Unselected.ExtraImports, v.Unselected.OtherManagedAction, v.Unselected.Drift
+	}
+	if v.Plan != nil {
+		outputs, deferred = v.Plan.OutputChanges, v.Plan.DeferredChanges
+	}
+	actions := failures + updates + extra + other + drift + outputs + deferred
+
+	if actions == 0 {
+		plan := fmt.Sprintf("Plan actions, separate from identity: the plan shows %d selected imports with no changes and no other actions (no updates, replacements, extra imports, other managed actions, drift, output changes or deferred changes).", n)
+		if !identityBlocking {
+			plan += " Review the plan. " + importClosingRule
+		}
+		parts = append(parts, plan)
+	} else {
+		var found []string
+		if failures > 0 {
+			found = append(found, fmt.Sprintf("%d of %d selected imports not taking effect (create %d, import_missing %d, not_in_plan %d, type_mismatch %d)", failures, n, v.Changes[changeCreate], v.Changes[changeMissing], v.Changes[changeNotInPlan], v.Changes[changeType]))
+		}
+		if updates > 0 {
+			found = append(found, fmt.Sprintf("%d selected items with updates or replacements (update %d, replace_or_destroy %d)", updates, v.Changes[changeUpdate], v.Changes[changeReplace]))
+		}
+		if extra+other > 0 {
+			found = append(found, fmt.Sprintf("extra imports %d, other managed actions %d outside the selection (counts may overlap)", extra, other))
+		}
+		if drift > 0 {
+			found = append(found, fmt.Sprintf("refresh drift %d (may include selected addresses)", drift))
+		}
+		if outputs > 0 {
+			found = append(found, fmt.Sprintf("%d output changes", outputs))
+		}
+		if deferred > 0 {
+			found = append(found, fmt.Sprintf("%d deferred changes", deferred))
+		}
+		plan := "Plan actions, separate from identity: the plan shows " + strings.Join(found, "; ") + "."
+		if failures > 0 {
+			plan += " Fix the configuration listed in attention, then create a new configuration version and run."
+			if v.Changes[changeNotInPlan] > 0 {
+				plan += " A not_in_plan item means no plan entry has exactly that target_address: compare it with the address in unselected or in the plan, including the module path and instance keys."
+			}
+		} else {
+			plan += " Review attention and unselected; if any action is unintended, adjust the configuration, then create a new configuration version and run."
+		}
+		parts = append(parts, plan)
+	}
+	if uncertain {
+		parts = append(parts, "Identity uncertainty alone does not call for repairing the configuration, creating a new configuration version or starting another run; any such step above addresses plan actions only.")
 		parts = append(parts, importConfidenceReportRule)
 	}
 	return strings.Join(parts, " ")
@@ -739,7 +785,7 @@ func VerifyImportPlanDefinition() mcp.Tool {
 
 Poll with organization_name, workspace_name and run_id from create_import_run; while the plan runs the result is a short status, so call again with the same run_id. When the plan has finished, call once more with the carry block from prepare_import (unchanged) and bindings: one candidate_id and target_address for every selected candidate. target_address is matched exactly against the address in the plan, so give it as Terraform prints it, including any module path and instance keys with double quotes (for example module.network["east"].aws_x.y["a"]). Use the carry block you kept from prepare_import, unchanged.
 
-The result gives, for each selected item, a change (none, update, replace_or_destroy, create, import_missing, not_in_plan, type_mismatch) and an object_identity (matched, mismatched, unsupported, unverified), as counts plus an attention list of items that need a look. unsupported means the identity could not be compared (Terraform below 1.12 or a type with no identity); confirm those import IDs against the documentation of the target workspace's locked provider version. When the Search and the plan's identity schema versions are both available and unequal (identity_schema_version_differs), the identity is unverified, not unsupported, even if the values look equal and the plan only imports: an import-only plan does not confirm identity. Tell the user, and report what you are confident about, unsure about and what conflicts. unselected lists extra imports, other actions and drift. No attribute or import ID values are returned; use get_plan_json_output for detail. The summary describes the plan; it is not an approval and a plan-only Run never imports into state.`),
+The result gives, for each selected item, a change (none, update, replace_or_destroy, create, import_missing, not_in_plan, type_mismatch) and an object_identity (matched, mismatched, unsupported, unverified), as counts plus an attention list of items that need a look. These are two independent axes: there is no overall or combined verdict. status plan_available means only that the plan was read; it is not a judgment, and the result is not an error even when the plan has actions or identity is uncertain. Plan actions (changes, unselected, plan) and identity (object_identity, identity_unsupported, attention) are reported independently. next_action leads with identity uncertainty and conflicts, then separately describes every plan action (selected imports not taking effect, updates or replacements, extra imports, other managed actions, drift, output changes, deferred changes). matched is bounded evidence (complete primitive after_identity equal to the Search identity, with equal known identity schema versions), not a general correctness guarantee. unsupported means the identity could not be compared (Terraform below 1.12, or prepare-time target schema evidence without identity); absence of after_identity does not prove the speculative plan's current target schema lacks identity. Confirm those import IDs against the documentation of the target workspace's locked provider version. When the Search and the plan's identity schema versions are both available and unequal (identity_schema_version_differs), the identity is unverified, not unsupported, even if the values look equal and the plan only imports: an import-only plan does not confirm identity. When the plan reports no identity schema version for the address but the identity otherwise looks equal, it is unverified with identity_schema_version_not_compared. Identity uncertainty alone is not a reason to change the configuration or create a new configuration version or Run. Tell the user, and report what you are confident about, unsure about and what conflicts. unselected lists extra imports, other actions and drift. The carry block must include every candidate's search_identity_version; a carry without it is rejected. No attribute or import ID values are returned; use get_plan_json_output for detail. The summary describes the plan; it is not an approval and a plan-only Run never imports into state.`),
 		mcp.WithTitleAnnotation("Verify import plan"),
 		mcp.WithReadOnlyHintAnnotation(true), mcp.WithDestructiveHintAnnotation(false),
 		mcp.WithOpenWorldHintAnnotation(true), mcp.WithIdempotentHintAnnotation(true),

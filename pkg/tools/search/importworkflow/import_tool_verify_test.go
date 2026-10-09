@@ -40,7 +40,7 @@ func newVerifyFixture(t *testing.T, n int, support, destVersion string) verifyFi
 	for i := 0; i < n; i++ {
 		identity := map[string]any{"account_id": "123456789012", "name": fmt.Sprintf("role-%d", i)}
 		id := importCandidateID("qry-verify", workspaceProvider{Source: verifyProvider, Version: "6.62.0"}, "aws_iam_role", identity)
-		carry.Candidates = append(carry.Candidates, importCarryCandidate{CandidateID: id, ListType: "aws_iam_role", ManagedType: "aws_iam_role", Identity: identity})
+		carry.Candidates = append(carry.Candidates, importCarryCandidate{CandidateID: id, ListType: "aws_iam_role", ManagedType: "aws_iam_role", Identity: identity, SearchIdentityVersion: intPtr(0)})
 		addr := fmt.Sprintf("aws_iam_role.r%d", i)
 		f.bindings = append(f.bindings, importVerifyBinding{CandidateID: id, TargetAddress: addr})
 		f.byCand[id] = addr
@@ -55,6 +55,9 @@ type planEntry struct {
 	importing              string
 	afterIdentity          string
 	before, after          string
+	// identityVersion is the plan's planned_values identity_schema_version for
+	// the address. nil means the plan reports none.
+	identityVersion *int
 }
 
 func (e planEntry) json() string {
@@ -87,7 +90,7 @@ func (e planEntry) json() string {
 func (f verifyFixture) cleanEntries(withIdentity bool) []planEntry {
 	var entries []planEntry
 	for i, c := range f.carry.Candidates {
-		e := planEntry{address: f.bindings[i].TargetAddress}
+		e := planEntry{address: f.bindings[i].TargetAddress, identityVersion: intPtr(0)}
 		if withIdentity {
 			encoded, _ := json.Marshal(c.Identity)
 			e.afterIdentity = string(encoded)
@@ -97,10 +100,20 @@ func (f verifyFixture) cleanEntries(withIdentity bool) []planEntry {
 	return entries
 }
 
+// planJSON builds a finished plan. Entries with an identityVersion get a
+// planned_values record carrying it, unless extra supplies its own
+// planned_values (a plan that reports no versions, or nested modules).
 func planJSON(version string, entries []planEntry, extra string) []byte {
 	parts := make([]string, len(entries))
+	var versions []string
 	for i, e := range entries {
 		parts[i] = e.json()
+		if e.identityVersion != nil {
+			versions = append(versions, fmt.Sprintf(`{"address":%q,"identity_schema_version":%d}`, e.address, *e.identityVersion))
+		}
+	}
+	if len(versions) > 0 && !strings.Contains(extra, `"planned_values"`) {
+		extra += fmt.Sprintf(`,"planned_values":{"root_module":{"resources":[%s]}}`, strings.Join(versions, ","))
 	}
 	tv := ""
 	if version != "" {
@@ -116,19 +129,21 @@ func verifyFacts(t *testing.T, f verifyFixture, plan []byte, detail ...string) i
 	assert.False(t, forbiddenNextActionWords.MatchString(out.NextAction), out.NextAction)
 	encoded, _ := json.Marshal(out)
 	assert.NotContains(t, string(encoded), "MUST-NOT-LEAK", "import ID values must never be returned")
+	assert.NotContains(t, string(encoded), `"overall"`, "there is no combined verdict")
+	assert.Equal(t, "plan_available", out.Status, "status is availability only")
 	return out
 }
 
 func TestVerifyAllNoChangeMatchedIdentity(t *testing.T) {
 	f := newVerifyFixture(t, 3, importIdentitySupported, "1.16.1")
 	out := verifyFacts(t, f, planJSON("1.16.1", f.cleanEntries(true), ""))
-	assert.Equal(t, "no_unintended_changes", out.Overall)
 	assert.Equal(t, 3, out.Changes[changeNone])
 	assert.Equal(t, 3, out.ObjectIdentity[identityMatched])
 	assert.Empty(t, out.Attention)
 	assert.Empty(t, out.IdentityUnsupported)
 	assert.Contains(t, out.NextAction, "3 selected imports with no changes")
 	assert.Contains(t, out.NextAction, "3 identities matched")
+	assert.Contains(t, out.NextAction, "not a general correctness guarantee")
 }
 
 func TestVerifyIdentityUnsupportedReasons(t *testing.T) {
@@ -145,12 +160,12 @@ func TestVerifyIdentityUnsupportedReasons(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			f := newVerifyFixture(t, 2, tt.support, "1.16.1")
 			out := verifyFacts(t, f, planJSON(tt.planVersion, f.cleanEntries(false), ""))
-			assert.Equal(t, "no_unintended_changes", out.Overall, "unsupported identity is not attention")
 			assert.Equal(t, 2, out.ObjectIdentity[identityUnsupported])
-			assert.Empty(t, out.Attention)
+			assert.Empty(t, out.Attention, "unsupported identity is counted, not attention")
 			require.Len(t, out.IdentityUnsupported, 1)
 			assert.Equal(t, importUnsupportedGroup{ManagedType: "aws_iam_role", Reason: tt.reason, Count: 2}, out.IdentityUnsupported[0])
-			assert.Contains(t, out.NextAction, "Identity could not be checked for 2 items")
+			assert.True(t, strings.HasPrefix(out.NextAction, "Identity could not be checked for 2 items"), "identity uncertainty leads: %s", out.NextAction)
+			assert.Contains(t, out.NextAction, importConfidenceReportRule)
 			assert.Equal(t, tt.undetermined, strings.Contains(out.NextAction, "could not be determined"))
 		})
 	}
@@ -159,11 +174,12 @@ func TestVerifyIdentityUnsupportedReasons(t *testing.T) {
 func TestVerifyExpectedIdentityMissingIsUnverifiedAttention(t *testing.T) {
 	f := newVerifyFixture(t, 1, importIdentitySupported, "1.16.1")
 	out := verifyFacts(t, f, planJSON("1.16.1", f.cleanEntries(false), ""))
-	assert.Equal(t, "needs_iteration", out.Overall)
 	assert.Equal(t, 1, out.ObjectIdentity[identityUnverified])
 	require.Len(t, out.Attention, 1)
 	assert.Equal(t, changeNone, out.Attention[0].Change)
 	assert.Equal(t, identityUnverified, out.Attention[0].ObjectIdentity)
+	assert.Equal(t, "provider_returned_identity_unavailable", out.Attention[0].IdentityReason)
+	assert.True(t, strings.HasPrefix(out.NextAction, "1 selected identities are unverified for another reason"), out.NextAction)
 }
 
 func TestVerifyIdentityMismatchStops(t *testing.T) {
@@ -171,12 +187,13 @@ func TestVerifyIdentityMismatchStops(t *testing.T) {
 	entries := f.cleanEntries(true)
 	entries[1].afterIdentity = `{"account_id":"123456789012","name":"someone-else"}`
 	out := verifyFacts(t, f, planJSON("1.16.1", entries, ""))
-	assert.Equal(t, "needs_iteration", out.Overall)
 	assert.Equal(t, 1, out.ObjectIdentity[identityMismatched])
 	assert.Equal(t, 1, out.ObjectIdentity[identityMatched])
 	require.Len(t, out.Attention, 1)
 	assert.Equal(t, f.bindings[1].TargetAddress, out.Attention[0].TargetAddress)
 	assert.Contains(t, out.NextAction, "Stop and review this selection with the user")
+	assert.True(t, strings.HasPrefix(out.NextAction, "1 selected items have an identity that differs"), out.NextAction)
+	assert.NotContains(t, out.NextAction, importClosingRule, "a conflicting identity is not closed out")
 }
 
 func TestVerifyChangeClassification(t *testing.T) {
@@ -190,7 +207,6 @@ func TestVerifyChangeClassification(t *testing.T) {
 	e[4].typ = "aws_iam_policy"
 	// e[5] (not in plan) is dropped
 	out := verifyFacts(t, f, planJSON("1.16.1", e, ""))
-	assert.Equal(t, "blocked", out.Overall)
 	assert.Equal(t, map[string]int{changeNone: 0, changeUpdate: 1, changeReplace: 1, changeCreate: 1, changeMissing: 1, changeNotInPlan: 1, changeType: 1}, out.Changes)
 	require.NotEmpty(t, out.Attention)
 	assert.Equal(t, []string{"path"}, out.Attention[0].ChangedPaths, "names only")
@@ -199,6 +215,7 @@ func TestVerifyChangeClassification(t *testing.T) {
 		assert.NotEmpty(t, a.ObjectIdentity, "every attention entry carries both axes")
 	}
 	assert.Contains(t, out.NextAction, "not taking effect")
+	assert.Contains(t, out.NextAction, "2 selected items with updates or replacements")
 }
 
 func TestVerifyUnselectedBoundedAndCounted(t *testing.T) {
@@ -216,15 +233,18 @@ func TestVerifyUnselectedBoundedAndCounted(t *testing.T) {
 	assert.Equal(t, 1, out.Unselected.Drift)
 	assert.Len(t, out.Unselected.Addresses, maxVerifyUnselected)
 	assert.True(t, out.Unselected.Truncated)
-	assert.Equal(t, "needs_iteration", out.Overall)
+	assert.Contains(t, out.NextAction, "extra imports 60, other managed actions 1 outside the selection (counts may overlap)")
+	assert.Contains(t, out.NextAction, "refresh drift 1 (may include selected addresses)")
 }
 
 func TestVerifyDeferredAndOutputChanges(t *testing.T) {
 	f := newVerifyFixture(t, 1, importIdentitySupported, "1.16.1")
 	out := verifyFacts(t, f, planJSON("1.16.1", f.cleanEntries(true), `,"deferred_changes":[{}]`))
-	assert.Equal(t, "blocked", out.Overall)
+	assert.Equal(t, 1, out.Plan.DeferredChanges)
+	assert.Contains(t, out.NextAction, "1 deferred changes")
+	assert.NotContains(t, out.NextAction, "no changes and no other actions")
 	plan := strings.Replace(string(planJSON("1.16.1", f.cleanEntries(true), "")), `"output_changes":{}`, `"output_changes":{"x":{}}`, 1)
-	assert.Equal(t, "needs_iteration", verifyFacts(t, f, []byte(plan)).Overall)
+	assert.Contains(t, verifyFacts(t, f, []byte(plan)).NextAction, "1 output changes")
 }
 
 func TestVerifyOutputChangesCountOnlyActionable(t *testing.T) {
@@ -235,20 +255,20 @@ func TestVerifyOutputChangesCountOnlyActionable(t *testing.T) {
 	}
 	noop := with(`{"a":{"actions":["no-op"]},"b":{"actions":["no-op"]}}`)
 	assert.Equal(t, 0, noop.Plan.OutputChanges)
-	assert.Equal(t, "no_unintended_changes", noop.Overall)
+	assert.Contains(t, noop.NextAction, "no changes and no other actions")
 
 	mixed := with(`{"a":{"actions":["no-op"]},"b":{"actions":["update"]}}`)
 	assert.Equal(t, 1, mixed.Plan.OutputChanges)
-	assert.Equal(t, "needs_iteration", mixed.Overall)
+	assert.Contains(t, mixed.NextAction, "1 output changes")
 
 	// Shape captured from `terraform show -json` on Terraform 1.17.0-beta1
 	// (format_version 1.2): every output is listed, actions are top level.
 	real := with(`{"changes":{"actions":["update"],"before":"one","after":"two","after_unknown":false,"before_sensitive":false,"after_sensitive":false},"stable":{"actions":["no-op"],"before":"same","after":"same","after_unknown":false,"before_sensitive":false,"after_sensitive":false}}`)
 	assert.Equal(t, 1, real.Plan.OutputChanges)
-	assert.Equal(t, "needs_iteration", real.Overall)
+	assert.Contains(t, real.NextAction, "1 output changes")
 	realNoop := with(`{"stable":{"actions":["no-op"],"before":"same","after":"same","after_unknown":false,"before_sensitive":false,"after_sensitive":false}}`)
 	assert.Equal(t, 0, realNoop.Plan.OutputChanges)
-	assert.Equal(t, "no_unintended_changes", realNoop.Overall)
+	assert.Contains(t, realNoop.NextAction, "no changes and no other actions")
 
 	// The public format page draws the actions under "change".
 	assert.Equal(t, 0, with(`{"a":{"change":{"actions":["no-op"]}}}`).Plan.OutputChanges)
@@ -257,7 +277,7 @@ func TestVerifyOutputChangesCountOnlyActionable(t *testing.T) {
 	for name, outputs := range map[string]string{"empty entry": `{"x":{}}`, "no actions": `{"x":{"actions":[]}}`, "not an object": `{"x":"y"}`} {
 		got := with(outputs)
 		assert.Equal(t, 1, got.Plan.OutputChanges, name)
-		assert.Equal(t, "needs_iteration", got.Overall, name)
+		assert.Contains(t, got.NextAction, "1 output changes", name)
 	}
 }
 
@@ -330,6 +350,33 @@ func TestValidateImportCarry(t *testing.T) {
 		_, err := validateImportCarry(nil, f.bindings)
 		assert.ErrorContains(t, err, "carry_invalid")
 	})
+	t.Run("a versionless carry is rejected even with a recomputed digest", func(t *testing.T) {
+		c := clone()
+		c.Candidates[1].SearchIdentityVersion = nil
+		c.SelectionDigest = importCarryDigest(*c)
+		_, err := validateImportCarry(c, f.bindings)
+		assert.ErrorContains(t, err, "carry_identity_version_invalid")
+	})
+	t.Run("a negative carried version is rejected even with a recomputed digest", func(t *testing.T) {
+		c := clone()
+		c.Candidates[0].SearchIdentityVersion = intPtr(-1)
+		c.SelectionDigest = importCarryDigest(*c)
+		_, err := validateImportCarry(c, f.bindings)
+		assert.ErrorContains(t, err, "carry_identity_version_invalid")
+	})
+	t.Run("version zero is valid and the digest covers the version", func(t *testing.T) {
+		c := clone()
+		require.NotNil(t, c.Candidates[0].SearchIdentityVersion)
+		assert.Equal(t, 0, *c.Candidates[0].SearchIdentityVersion)
+		_, err := validateImportCarry(c, f.bindings)
+		assert.NoError(t, err)
+		c.Candidates[0].SearchIdentityVersion = intPtr(1)
+		_, err = validateImportCarry(c, f.bindings)
+		assert.ErrorContains(t, err, "carry_digest_mismatch", "a changed version without a fresh digest is tampering")
+		c.SelectionDigest = importCarryDigest(*c)
+		_, err = validateImportCarry(c, f.bindings)
+		assert.NoError(t, err, "candidate_id does not include the version")
+	})
 }
 
 func TestVerifyResponseSizesAtScale(t *testing.T) {
@@ -366,7 +413,7 @@ func TestVerifyImportPlanHandlerPollsThenSummarizes(t *testing.T) {
 	f.mutationHandler = func(w http.ResponseWriter, r *http.Request) bool {
 		if r.Method == http.MethodGet && r.URL.Path == "/api/v2/plans/plan-import/json-output" {
 			encoded, _ := json.Marshal(carry.Candidates[0].Identity)
-			_, _ = io.WriteString(w, string(planJSON("1.16.1", []planEntry{{address: "aws_iam_role.selected", afterIdentity: string(encoded)}}, "")))
+			_, _ = io.WriteString(w, string(planJSON("1.16.1", []planEntry{{address: "aws_iam_role.selected", afterIdentity: string(encoded), identityVersion: intPtr(0)}}, "")))
 			return true
 		}
 		return inner(w, r)
@@ -399,7 +446,6 @@ func TestVerifyImportPlanHandlerPollsThenSummarizes(t *testing.T) {
 	require.NoError(t, json.Unmarshal(rawCarry, &carryArg))
 	done := call(map[string]any{"carry": carryArg, "bindings": []any{map[string]any{"candidate_id": carry.Candidates[0].CandidateID, "target_address": "aws_iam_role.selected"}}})
 	require.Equal(t, "plan_available", done.Status, done.Diagnostics)
-	assert.Equal(t, "no_unintended_changes", done.Overall)
 	assert.Equal(t, 1, done.ObjectIdentity[identityMatched])
 
 	f.mu.Lock()

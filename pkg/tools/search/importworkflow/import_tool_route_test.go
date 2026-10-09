@@ -148,10 +148,15 @@ func TestPrepareImportToolScenarioMatrix(t *testing.T) {
 
 // With support unknown (agent-supplied schema) the plan's own identity decides.
 func TestIdentityClassificationWhenSupportUnknown(t *testing.T) {
-	carried := importCarryCandidate{Identity: map[string]any{"name": "role-a"}}
-	status, _ := classifyIdentity("1.16.1", carried, importIdentityUnknown, json.RawMessage(`{"name":"role-a"}`), nil)
+	carried := importCarryCandidate{Identity: map[string]any{"name": "role-a"}, SearchIdentityVersion: intPtr(0)}
+	planVersion := uint64(0)
+	status, _ := classifyIdentity("1.16.1", carried, importIdentityUnknown, json.RawMessage(`{"name":"role-a"}`), &planVersion)
 	assert.Equal(t, identityMatched, status)
-	status, reason := classifyIdentity("1.16.1", carried, importIdentityUnknown, nil, nil)
+	// Without a plan-time version the same identity is not confirmed.
+	status, reason := classifyIdentity("1.16.1", carried, importIdentityUnknown, json.RawMessage(`{"name":"role-a"}`), nil)
+	assert.Equal(t, identityUnverified, status)
+	assert.Equal(t, reasonIdentityVersionNotCompared, reason)
+	status, reason = classifyIdentity("1.16.1", carried, importIdentityUnknown, nil, nil)
 	assert.Equal(t, identityUnsupported, status)
 	assert.Equal(t, reasonUndetermined, reason)
 }

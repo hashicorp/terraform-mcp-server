@@ -24,6 +24,11 @@ func selectImportCandidates(discovery *importDiscovery, selections []importSelec
 		if !ok {
 			return nil, importEvidenceFailure("selected_candidate_not_found")
 		}
+		// Defense in depth: parsing already rejects a QueryRun with an invalid
+		// version, but a candidate without one must never reach a carry block.
+		if candidate.IdentityVersion == nil || *candidate.IdentityVersion < 0 {
+			return nil, importEvidenceFailure("query_identity_version_invalid")
+		}
 		identity, err := json.Marshal(candidate.Identity)
 		if err != nil {
 			return nil, importEvidenceFailure("query_identity_invalid")

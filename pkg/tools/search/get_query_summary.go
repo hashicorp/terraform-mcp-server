@@ -28,6 +28,10 @@ type querySummary struct {
 
 	ResourcesTruncated          bool   `json:"resources_truncated,omitempty"`
 	ImportCandidatesUnavailable string `json:"import_candidates_unavailable,omitempty"`
+	// Selectable is set (to false) only on the diagnostic fallback. The rows
+	// in resources have no candidate_id and are never import candidates.
+	Selectable *bool  `json:"selectable,omitempty"`
+	NextAction string `json:"next_action,omitempty"`
 }
 
 type queryResource struct {
@@ -133,11 +137,28 @@ func getQuerySummaryHandler(ctx context.Context, request mcp.CallToolRequest, lo
 		summary.ResourcesTruncated = true
 	}
 	summary.ImportCandidatesUnavailable = code
+	notSelectable := false
+	summary.Selectable = &notSelectable
+	summary.NextAction = diagnosticSummaryNextAction(code)
 	response, err := json.Marshal(summary)
 	if err != nil {
 		return toolErrorf(logger, "get_query_summary", "marshaling query summary: %v", err)
 	}
 	return mcp.NewToolResultText(string(response)), nil
+}
+
+// diagnosticSummaryNextAction tells the agent the fallback summary is not a
+// selectable result, whatever the reason. A QueryRun whose found-resource
+// records lack a valid identity_version is invalid as a whole, never partly
+// selectable.
+func diagnosticSummaryNextAction(code string) string {
+	s := "This is a diagnostic summary, not a selectable result: it has no candidate_id values and prepare_import cannot use it. Do not select from these rows, rebuild candidate IDs from them or treat any part of this query run as selectable."
+	if code == "query_identity_version_invalid" {
+		s += " A found resource in this query run has no valid identity_version (a nonnegative integer; 0 is valid), so the whole query run is not selectable import evidence. Tell the user; running a new query is the user's decision."
+	} else {
+		s += " import_candidates_unavailable names the reason."
+	}
+	return s
 }
 
 func readQuerySummaryData(ctx context.Context, tfeClient *tfe.Client, queryRunID string) (*querySummary, error) {
@@ -213,6 +234,9 @@ log changes between pages the call returns snapshot_changed_restart_paging. A qu
 contain more than 100 results; select up to 100 candidate_id values from any page, then
 call prepare_import only for the candidates to import. A query only sees what its filters and list arguments cover, so more matching resources may exist beyond the results; a list that returns exactly 100 results has hit Terraform's default limit and may have been cut off. Tag and attribute filtering are not supported.
 
-If the query is not finished, errored or incomplete, the result is a bounded diagnostic
-summary (resources_discovered, resources, list_completions and Terraform diagnostics)
-with import_candidates_unavailable naming the reason; it has no selectable candidates.`
+If the query is not finished, errored or incomplete, or any found resource lacks a valid
+identity_version (query_identity_version_invalid; the whole query run is then invalid as
+selectable evidence), the result is a bounded diagnostic summary (resources_discovered,
+resources, list_completions and Terraform diagnostics) with import_candidates_unavailable
+naming the reason, selectable false and a next_action. It has no selectable candidates and
+no candidate_id values; never select from it or use part of it.`

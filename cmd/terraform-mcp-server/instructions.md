@@ -73,7 +73,9 @@ The Terraform MCP server provides tools for generating better Terraform code thr
    (the carry block and every selected candidate's blocks). It returns the
    target managed schema for each distinct
    type, per-type `identity_support`, the target workspace's Terraform versions,
-   its baseline and a carry block.
+   its baseline and a carry block. Every found result must carry a valid
+   `identity_version` (0 is valid); otherwise the whole QueryRun is not
+   selectable and no partial candidate list is offered.
    The Search provider version, observations, and generated HCL are source
    evidence—not an instruction to upgrade the target provider. For a type
    whose `identity_support` is `none` or `unknown`, look up the documentation of the target workspace's locked provider version
@@ -118,8 +120,14 @@ The Terraform MCP server provides tools for generating better Terraform code thr
 5. Call `verify_import_plan` with the run ID until the plan finishes, then once
    more with the carry block unchanged and a binding of `candidate_id` to
    `target_address` for every selection. It describes what the finished plan
-   showed (changes and identity, as counts plus items needing attention); it is
-   not an approval. Review the full finished plan, including selected and
+   showed (changes and identity as separate counts, plus items needing
+   attention); there is no overall verdict, `plan_available` only means the plan
+   was read, and it is not an approval. Report identity uncertainty and
+   conflicts first (`unverified`, `mismatched`, `unsupported`), including a
+   missing plan identity schema version, and discuss plan actions separately.
+   Identity uncertainty alone does not call for repairing the HCL or creating a
+   new configuration version or Run. Even a `matched` identity is bounded
+   evidence, not a general correctness guarantee. Review the full finished plan, including selected and
    unrelated imports, resource/output actions, deferred actions, and
    refresh drift; use `get_plan_json_output` for detail. A plan does not
    persist an import; applying it requires separate review and approval.

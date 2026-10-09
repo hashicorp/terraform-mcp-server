@@ -119,8 +119,8 @@ func TestPrepareImportReportsIdentityCompatibilityAndCarriesSearchVersion(t *tes
 	assert.Equal(t, 0, *c.SearchIdentityVersion)
 	p := out.Carry.Providers[c.ListType]
 	assert.Equal(t, c.CandidateID, importCandidateID("qry-fixture", workspaceProvider{Source: p.Source, Version: p.Version}, c.ListType, c.Identity))
-	assert.Equal(t, "7", out.ContractVersion)
-	assert.Equal(t, "7", importToolContractVersion)
+	assert.Equal(t, "8", out.ContractVersion)
+	assert.Equal(t, "8", importToolContractVersion)
 
 	// The carried version is covered by the digest.
 	changed := *out.Carry
@@ -195,8 +195,14 @@ func TestVerifyIdentityVersionComparison(t *testing.T) {
 		f := withSearchVersion(newVerifyFixture(t, 1, importIdentitySupported, "1.16.1"), intPtr(0))
 		out := verifyFacts(t, f, planWithIdentityVersions(f, f.cleanEntries(true), map[string]int{"aws_iam_role.r0": 0}, false))
 		assert.Equal(t, 1, out.ObjectIdentity[identityMatched])
-		assert.Equal(t, "no_unintended_changes", out.Overall)
 		assert.Empty(t, out.Attention)
+	})
+
+	t.Run("known-equal nonzero versions with complete primitive after_identity match", func(t *testing.T) {
+		f := withSearchVersion(newVerifyFixture(t, 1, importIdentitySupported, "1.16.1"), intPtr(3))
+		out := verifyFacts(t, f, planWithIdentityVersions(f, f.cleanEntries(true), map[string]int{"aws_iam_role.r0": 3}, false))
+		assert.Equal(t, 1, out.ObjectIdentity[identityMatched])
+		assert.Zero(t, out.ObjectIdentity[identityUnverified])
 	})
 
 	t.Run("versions differ: equal values are unverified, not matched", func(t *testing.T) {
@@ -206,7 +212,6 @@ func TestVerifyIdentityVersionComparison(t *testing.T) {
 		assert.Equal(t, 2, out.ObjectIdentity[identityUnverified])
 		require.Len(t, out.Attention, 2)
 		assert.Equal(t, reasonIdentityVersionDiffers, out.Attention[0].IdentityReason)
-		assert.Equal(t, "needs_iteration", out.Overall)
 		assert.Contains(t, out.NextAction, "2 selected identities are unverified because the Search and plan identity schema versions differ")
 		assert.False(t, forbiddenNextActionWords.MatchString(out.NextAction), out.NextAction)
 	})
@@ -215,6 +220,7 @@ func TestVerifyIdentityVersionComparison(t *testing.T) {
 		f := withSearchVersion(newVerifyFixture(t, 1, importIdentitySupported, "1.16.1"), intPtr(1))
 		out := verifyFacts(t, f, planWithIdentityVersions(f, f.cleanEntries(true), map[string]int{"aws_iam_role.r0": 0}, false))
 		assert.Equal(t, 1, out.ObjectIdentity[identityUnverified])
+		assert.Equal(t, reasonIdentityVersionDiffers, out.Attention[0].IdentityReason)
 	})
 
 	t.Run("versions differ and values differ is still unverified, not mismatched", func(t *testing.T) {
@@ -226,21 +232,62 @@ func TestVerifyIdentityVersionComparison(t *testing.T) {
 		assert.Equal(t, 0, out.ObjectIdentity[identityMismatched])
 	})
 
-	t.Run("a missing version is noted on a match, never silently compared", func(t *testing.T) {
-		for name, tc := range map[string]struct {
-			search   *int
-			versions map[string]int
-		}{
-			"search version absent": {nil, map[string]int{"aws_iam_role.r0": 0}},
-			"plan version absent":   {intPtr(0), map[string]int{}},
-		} {
-			f := withSearchVersion(newVerifyFixture(t, 1, importIdentitySupported, "1.16.1"), tc.search)
-			out := verifyFacts(t, f, planWithIdentityVersions(f, f.cleanEntries(true), tc.versions, false))
-			assert.Equal(t, 1, out.ObjectIdentity[identityMatched], name)
-			// matched items are counted, not listed; check through the classifier
-			_, reason := classifyIdentity("1.16.1", f.carry.Candidates[0], importIdentitySupported, json.RawMessage(`{"account_id":"123456789012","name":"role-0"}`), nil)
-			assert.Contains(t, reason, suffixVersionNotCompared, name)
+	t.Run("a missing plan version with otherwise equal identity is unverified and listed", func(t *testing.T) {
+		f := withSearchVersion(newVerifyFixture(t, 2, importIdentitySupported, "1.16.1"), intPtr(0))
+		out := verifyFacts(t, f, planWithIdentityVersions(f, f.cleanEntries(true), map[string]int{}, false))
+		assert.Equal(t, 0, out.ObjectIdentity[identityMatched], "never matched without a compared version")
+		assert.Equal(t, 2, out.ObjectIdentity[identityUnverified])
+		assert.Zero(t, out.ObjectIdentity[identityUnsupported], "a missing plan version is not target-schema-unsupported")
+		assert.Empty(t, out.IdentityUnsupported)
+		require.Len(t, out.Attention, 2, "the uncertainty survives aggregation as attention")
+		for _, a := range out.Attention {
+			assert.Equal(t, identityUnverified, a.ObjectIdentity)
+			assert.Equal(t, reasonIdentityVersionNotCompared, a.IdentityReason)
+			assert.Equal(t, changeNone, a.Change, "plan actions are independent of identity")
 		}
+		assert.True(t, strings.HasPrefix(out.NextAction, "2 selected identities are unverified because the plan did not report an identity schema version"), out.NextAction)
+		assert.Contains(t, out.NextAction, reasonIdentityVersionNotCompared)
+		assert.Contains(t, out.NextAction, importConfidenceReportRule)
+	})
+
+	t.Run("a carried version that is absent is never silently compared", func(t *testing.T) {
+		f := withSearchVersion(newVerifyFixture(t, 1, importIdentitySupported, "1.16.1"), nil)
+		out := verifyFacts(t, f, planWithIdentityVersions(f, f.cleanEntries(true), map[string]int{"aws_iam_role.r0": 0}, false))
+		assert.Equal(t, 0, out.ObjectIdentity[identityMatched])
+		assert.Equal(t, 1, out.ObjectIdentity[identityUnverified])
+		assert.Equal(t, reasonIdentityVersionNotCompared, out.Attention[0].IdentityReason)
+		// The classifier itself, for each way a version can be missing.
+		for name, tc := range map[string]struct {
+			search *int
+			plan   *uint64
+		}{"search absent": {nil, new(uint64)}, "search negative": {intPtr(-1), new(uint64)}, "plan absent": {intPtr(0), nil}, "both absent": {nil, nil}} {
+			cand := f.carry.Candidates[0]
+			cand.SearchIdentityVersion = tc.search
+			status, reason := classifyIdentity("1.16.1", cand, importIdentitySupported, json.RawMessage(`{"account_id":"123456789012","name":"role-0"}`), tc.plan)
+			assert.Equal(t, identityUnverified, status, name)
+			assert.Equal(t, reasonIdentityVersionNotCompared, reason, name)
+		}
+	})
+
+	t.Run("a missing plan version keeps shape, type and mismatch precedence", func(t *testing.T) {
+		f := withSearchVersion(newVerifyFixture(t, 1, importIdentitySupported, "1.16.1"), intPtr(0))
+		cand := f.carry.Candidates[0]
+		for name, tc := range map[string]struct {
+			after, status, reason string
+		}{
+			"mismatch":  {`{"account_id":"123456789012","name":"other"}`, identityMismatched, "provider_returned_identity_differs"},
+			"shape":     {`{"name":"role-0"}`, identityUnverified, "identity_shape_not_comparable"},
+			"not equal": {`{"account_id":"123456789012","name":"role-0","extra":"x"}`, identityUnverified, "identity_shape_not_comparable"},
+		} {
+			status, reason := classifyIdentity("1.16.1", cand, importIdentitySupported, json.RawMessage(tc.after), nil)
+			assert.Equal(t, tc.status, status, name)
+			assert.Equal(t, tc.reason, reason, name)
+		}
+		// Composite or numeric source values stay type-not-comparable.
+		cand.Identity = map[string]any{"n": float64(1)}
+		status, reason := classifyIdentity("1.16.1", cand, importIdentitySupported, json.RawMessage(`{"n":1}`), nil)
+		assert.Equal(t, identityUnverified, status)
+		assert.Equal(t, "identity_type_not_comparable", reason)
 	})
 
 	t.Run("a child module address is found", func(t *testing.T) {
@@ -259,6 +306,16 @@ func TestVerifyIdentityVersionComparison(t *testing.T) {
 		assert.Equal(t, 1, out.ObjectIdentity[identityUnsupported])
 		assert.Equal(t, 0, out.ObjectIdentity[identityMatched])
 	})
+
+	t.Run("no after_identity on a supported type stays unavailable, whatever the plan version", func(t *testing.T) {
+		for name, versions := range map[string]map[string]int{"plan version known": {"aws_iam_role.r0": 0}, "plan version missing": {}} {
+			f := withSearchVersion(newVerifyFixture(t, 1, importIdentitySupported, "1.16.1"), intPtr(0))
+			out := verifyFacts(t, f, planWithIdentityVersions(f, f.cleanEntries(false), versions, false))
+			require.Len(t, out.Attention, 1, name)
+			assert.Equal(t, identityUnverified, out.Attention[0].ObjectIdentity, name)
+			assert.Equal(t, "provider_returned_identity_unavailable", out.Attention[0].IdentityReason, name)
+		}
+	})
 }
 
 func TestVerifyAcceptsCarryWithSearchVersionAndKeepsCandidateIDs(t *testing.T) {
@@ -274,10 +331,17 @@ func TestVerifyAcceptsCarryWithSearchVersionAndKeepsCandidateIDs(t *testing.T) {
 	_, err = validateImportCarry(&tampered, f.bindings)
 	assert.ErrorContains(t, err, "carry_digest_mismatch")
 
-	// A carry without a version, as an older caller built it, still validates.
-	plain := newVerifyFixture(t, 2, importIdentitySupported, "1.16.1")
+	// A versionless carry, as the prototype built it, is rejected even when
+	// its digest is recomputed to be self-consistent.
+	plain := withSearchVersion(newVerifyFixture(t, 2, importIdentitySupported, "1.16.1"), nil)
 	_, err = validateImportCarry(plain.carry, plain.bindings)
-	assert.NoError(t, err)
+	assert.ErrorContains(t, err, "carry_identity_version_invalid")
+
+	// The version is not part of candidate_id.
+	other := withSearchVersion(newVerifyFixture(t, 2, importIdentitySupported, "1.16.1"), intPtr(7))
+	for i := range f.carry.Candidates {
+		assert.Equal(t, other.carry.Candidates[i].CandidateID, f.carry.Candidates[i].CandidateID)
+	}
 }
 
 func TestVerifyNextActionLeadsWithUnverifiedIdentityAndDoesNotAskForIteration(t *testing.T) {
@@ -289,11 +353,16 @@ func TestVerifyNextActionLeadsWithUnverifiedIdentityAndDoesNotAskForIteration(t 
 	assert.True(t, strings.HasPrefix(next, "1 selected identities are unverified because the Search and plan identity schema versions differ (both known, unequal)"), next)
 	assert.Contains(t, next, "even if the values look equal and the plan only imports")
 	assert.Contains(t, next, "An import-only plan says what Terraform proposes")
-	assert.Contains(t, next, "the only open item is identity")
+	assert.Contains(t, next, "Plan actions, separate from identity: the plan shows 1 selected imports with no changes and no other actions")
 	assert.Contains(t, next, importConfidenceReportRule)
-	// Nothing needs iterating: do not send the agent to rewrite a block.
+	assert.Contains(t, next, "Identity uncertainty alone does not call for repairing the configuration")
+	// Identity is the only open item: no repair or new run is requested, and
+	// the plan-clean closing is not offered.
 	assert.NotContains(t, next, "adjust the configuration")
-	assert.NotContains(t, next, "create a new configuration version")
+	assert.NotContains(t, next, "Fix the configuration")
+	assert.NotContains(t, next, "then create a new configuration version")
+	assert.NotContains(t, next, importClosingRule)
+	assert.Less(t, strings.Index(next, "unverified"), strings.Index(next, "Plan actions"), "identity leads")
 	assert.False(t, forbiddenNextActionWords.MatchString(next), next)
 }
 
@@ -303,8 +372,12 @@ func TestVerifyNextActionStillAsksForIterationWhenThePlanHasOtherChanges(t *test
 	e[0].actions = []string{"update"}
 	out := verifyFacts(t, f, planWithIdentityVersions(f, e, map[string]int{"aws_iam_role.r0": 1}, false))
 	assert.True(t, strings.HasPrefix(out.NextAction, "1 selected identities are unverified"), out.NextAction)
+	assert.Contains(t, out.NextAction, "1 selected items with updates or replacements")
 	assert.Contains(t, out.NextAction, "adjust the configuration")
-	assert.NotContains(t, out.NextAction, "the only open item is identity")
+	assert.Contains(t, out.NextAction, "Identity uncertainty alone does not call for repairing the configuration")
+	assert.Less(t, strings.Index(out.NextAction, "unverified"), strings.Index(out.NextAction, "Plan actions"))
+	assert.NotContains(t, out.NextAction, "no changes and no other actions")
+	assert.Equal(t, 1, out.Changes[changeUpdate], "plan action and identity are independent axes")
 }
 
 func TestVerifyNextActionHasNoIdentityLeadWhenMatched(t *testing.T) {
@@ -312,6 +385,17 @@ func TestVerifyNextActionHasNoIdentityLeadWhenMatched(t *testing.T) {
 	out := verifyFacts(t, f, planWithIdentityVersions(f, f.cleanEntries(true), map[string]int{"aws_iam_role.r0": 0}, false))
 	assert.NotContains(t, out.NextAction, "unverified")
 	assert.NotContains(t, out.NextAction, importConfidenceReportRule)
+	assert.NotContains(t, out.NextAction, "Identity uncertainty")
+	assert.Contains(t, out.NextAction, importClosingRule)
+}
+
+// A bare verifyNextAction call (no maps, plan or unselected) must not panic and
+// still describes a plan with no actions.
+func TestVerifyNextActionZeroValueIsSafe(t *testing.T) {
+	next := verifyNextAction(importVerified{Selected: 1})
+	assert.Contains(t, next, "1 selected imports with no changes and no other actions")
+	assert.Contains(t, next, importClosingRule)
+	assert.False(t, forbiddenNextActionWords.MatchString(next), next)
 }
 
 func TestPreparedNextActionNamesTypesWhoseIdentityFitIsNotConfirmed(t *testing.T) {
