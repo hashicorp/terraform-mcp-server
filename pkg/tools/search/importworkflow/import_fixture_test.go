@@ -243,6 +243,10 @@ func blankImportFixture(t *testing.T) (*importBackendTest, *bool, *bool) {
 		require.NoError(t, json.Unmarshal(f.responses[path], &document))
 		rel := document["data"].(map[string]any)["relationships"].(map[string]any)
 		rel["current-configuration-version"] = map[string]any{"data": nil}
+		// An authorized caller sees an explicit null current-state relationship.
+		rel["current-state-version"] = map[string]any{"data": nil}
+		attrs := document["data"].(map[string]any)["attributes"].(map[string]any)
+		attrs["permissions"] = map[string]any{"can-read-state-versions": true}
 		var err error
 		f.responses[path], err = json.Marshal(document)
 		require.NoError(t, err)
