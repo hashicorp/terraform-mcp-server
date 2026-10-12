@@ -49,6 +49,13 @@ var officialFactories = map[string]func(svr *mcp.Server, logger *slog.Logger){
 	"get_token_permissions": func(svr *mcp.Server, _ *slog.Logger) {
 		mcp.AddTool(svr, tfeTools.GetTokenPermissionsTool(), tfeTools.GetTokenPermissionsFunc)
 	},
+	"list_state_versions": func(svr *mcp.Server, _ *slog.Logger) {
+		mcp.AddTool(svr, tfeTools.ListStateVersionsTool(), tfeTools.ListStateVersionsFunc)
+	},
+	"get_state_version": func(svr *mcp.Server, _ *slog.Logger) {
+		mcp.AddTool(svr, tfeTools.GetStateVersionTool(), tfeTools.GetStateVersionFunc)
+	},
+	// public registry tools
 	"search_providers": func(svr *mcp.Server, logger *slog.Logger) {
 		mcp.AddTool(svr, registryTools.SearchProvidersTool(), registryTools.SearchProvidersFunc(logger))
 	},

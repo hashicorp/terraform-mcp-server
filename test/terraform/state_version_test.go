@@ -130,11 +130,15 @@ func TestListStateVersionsErrorPaths(t *testing.T) {
 		require.NoError(t, err, "failed to create empty test workspace")
 		defer client.Workspaces.DeleteByID(t.Context(), workspace.ID)
 
-		result, _ := callTool(t, s, "list_state_versions", map[string]any{
+		result, text := callTool(t, s, "list_state_versions", map[string]any{
 			"terraform_org_name": tfeOrgName,
 			"workspace_name":     wsName,
 		})
-		assert.True(t, result.IsError, "list_state_versions on a workspace with no state should return an error")
+		require.False(t, result.IsError, "an empty list should not be a tool error")
+		assert.Equal(t, "workspace has no state versions to list", text)
+
+		structured := result.StructuredContent.(map[string]any)
+		assert.Empty(t, structured["items"], "structured content items should be empty")
 	})
 }
 

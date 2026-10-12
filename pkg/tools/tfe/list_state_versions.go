@@ -81,7 +81,13 @@ func listStateVersionsHandler(ctx context.Context, request mcp.CallToolRequest, 
 		return ToolError(logger, "Failed to list workspace state versions", err)
 	}
 	if len(sv.Items) == 0 {
-		return ToolError(logger, "Workspace has no StateVersions to list", err)
+		return mcp.NewToolResultStructured(
+			&StateVersionsSummaryList{
+				Items:      []*StateVersionsSummary{},
+				Pagination: sv.Pagination,
+			},
+			"workspace has no state versions to list",
+		), nil
 	}
 
 	svSummaries := make([]*StateVersionsSummary, len(sv.Items))
