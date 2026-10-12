@@ -5,6 +5,7 @@ package search
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -51,6 +52,31 @@ func TestPageQueryDiscoveryPreservesMarkersAndSnapshot(t *testing.T) {
 	require.EqualError(t, err, "query_snapshot_changed")
 }
 
+func TestPageQueryDiscoveryProjectsTagsAndExplainsMissingAttributes(t *testing.T) {
+	prov, evidence := testDiscovery(t, "captured", "missing", "untagged")
+	evidence.Results[0].ResourceObject = map[string]any{"tags": map[string]any{"team": "search", "enabled": true, "count": json.Number("2"), "nested": map[string]any{"private": "value"}}}
+	evidence.Results[2].ResourceObject = map[string]any{"name": "untagged"}
+	page, err := pageQueryDiscovery(prov, evidence, QueryDiscoveryFilter{Limit: 1})
+	require.NoError(t, err)
+	require.Equal(t, 1, page.RowsWithoutAttributes)
+	require.True(t, page.HasMore)
+	require.Equal(t, map[string]any{"team": "search", "enabled": true, "count": json.Number("2")}, page.Lists[0].Results[0].Tags)
+	require.True(t, page.Lists[0].Results[0].AttributesCaptured)
+	require.Contains(t, page.NextAction, "any tags")
+	continuation, err := pageQueryDiscovery(prov, evidence, QueryDiscoveryFilter{Limit: 2, After: page.NextCursor})
+	require.NoError(t, err)
+	require.Equal(t, 1, continuation.RowsWithoutAttributes)
+	require.False(t, continuation.Lists[0].Results[0].AttributesCaptured)
+	require.Empty(t, continuation.Lists[0].Results[0].Tags)
+	require.True(t, continuation.Lists[0].Results[1].AttributesCaptured)
+	require.Empty(t, continuation.Lists[0].Results[1].Tags)
+	require.Contains(t, continuation.NextAction, "missing tags are unknown")
+	text, err := FormatQueryDiscoveryPage(continuation)
+	require.NoError(t, err)
+	require.Contains(t, text, `"attributes_captured":false`)
+	require.NotContains(t, text, "private")
+}
+
 func TestPageQueryDiscoveryStopsOnOversizeFirstRow(t *testing.T) {
 	prov, evidence := testDiscovery(t, "first")
 	evidence.Results[0].Identity["large"] = strings.Repeat("x", maxQueryPageBytes)
@@ -77,6 +103,10 @@ func TestPageQueryDiscoveryNeverProjectsSignedArtifact(t *testing.T) {
 	page, err = pageQueryDiscovery(prov, evidence, QueryDiscoveryFilter{})
 	require.NoError(t, err)
 	require.Equal(t, "https://example.com/resources/one", page.Lists[0].Results[0].Identity["url"])
+	evidence.Results[0].ResourceObject = map[string]any{"tags": map[string]any{"link": "https://storage.example/log?X-Amz-Signature=sentinel"}}
+	page, err = pageQueryDiscovery(prov, evidence, QueryDiscoveryFilter{})
+	require.Nil(t, page)
+	require.EqualError(t, err, "query_sensitive_result")
 }
 
 func TestQueryProvenanceChecksBackendAssociations(t *testing.T) {
@@ -124,7 +154,8 @@ func TestLegacyQuerySummaryProjectsBoundedSelectableResults(t *testing.T) {
 		case "/api/v2/search/no-code-query/ncqry-test":
 			_, _ = fmt.Fprint(w, `{"data":{"id":"ncqry-test","attributes":{"no-code-query-providers":[{"namespace":"hashicorp","name":"aws","version":"6.66.0","no-code-query-resources":[{"body":{"resource_type":"aws_s3_buckets"}}]}]},"relationships":{"workspace":{"data":{"id":"ws-test"}}}}}`)
 		case "/logs":
-			data := append([]byte("\x02Terraform query started\n"+`{"type":"provider_installation_start","provider":"aws"}`+"\n"), queryEvidenceFixture("0")...)
+			found := strings.Replace(string(queryEvidenceFixture("0")), `"identity_version":0`, `"identity_version":0,"resource_object":{"tags":{"team":"search"}}`, 1)
+			data := append([]byte("\x02Terraform query started\n"+`{"type":"provider_installation_start","provider":"aws"}`+"\n"), []byte(found)...)
 			data = append(data, 3)
 			offset, _ := strconv.Atoi(r.URL.Query().Get("offset"))
 			limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
@@ -147,8 +178,11 @@ func TestLegacyQuerySummaryProjectsBoundedSelectableResults(t *testing.T) {
 	require.Equal(t, "org", page.SourceOrganizationName)
 	require.Len(t, page.Lists, 1)
 	require.Regexp(t, `^qrm1-`, page.Lists[0].Results[0].Marker)
+	require.Equal(t, map[string]any{"team": "search"}, page.Lists[0].Results[0].Tags)
+	require.True(t, page.Lists[0].Results[0].AttributesCaptured)
 	text, ok := mcp.AsTextContent(result.Content[0])
 	require.True(t, ok)
 	require.Contains(t, text.Text, `"query_result_marker"`)
+	require.Contains(t, text.Text, `"tags":{"team":"search"}`)
 	require.NotContains(t, text.Text, "/logs")
 }

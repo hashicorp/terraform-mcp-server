@@ -32,11 +32,12 @@ type QueryDiscoveryFilter struct {
 }
 
 type queryDiscoveryRow struct {
-	Marker          string         `json:"query_result_marker"`
-	DisplayName     string         `json:"display_name,omitempty"`
-	Identity        map[string]any `json:"identity"`
-	IdentityVersion int            `json:"identity_version"`
-	Tags            map[string]any `json:"tags,omitempty"`
+	Marker             string         `json:"query_result_marker"`
+	DisplayName        string         `json:"display_name,omitempty"`
+	Identity           map[string]any `json:"identity"`
+	IdentityVersion    int            `json:"identity_version"`
+	Tags               map[string]any `json:"tags,omitempty"`
+	AttributesCaptured bool           `json:"attributes_captured"`
 }
 
 type queryDiscoveryGroup struct {
@@ -56,6 +57,7 @@ type QueryDiscoveryPage struct {
 	ResourcesDiscovered    int                   `json:"resources_discovered,omitempty"`
 	ByType                 map[string]int        `json:"by_type,omitempty"`
 	TotalMatching          int                   `json:"total_matching,omitempty"`
+	RowsWithoutAttributes  int                   `json:"rows_without_attributes,omitempty"`
 	Returned               int                   `json:"returned,omitempty"`
 	HasMore                bool                  `json:"has_more,omitempty"`
 	Remaining              int                   `json:"remaining,omitempty"`
@@ -254,6 +256,10 @@ func queryDiscoveryTags(value map[string]any) map[string]any {
 	return tags
 }
 
+func queryDiscoveryResultRow(result queryResultEvidence) queryDiscoveryRow {
+	return queryDiscoveryRow{Marker: result.Marker, DisplayName: result.DisplayName, Identity: result.Identity, IdentityVersion: result.IdentityVersion, Tags: queryDiscoveryTags(result.ResourceObject), AttributesCaptured: result.ResourceObject != nil}
+}
+
 // Do not expose signed artifact capabilities hidden in provider-supplied
 // display names, identity keys/values or tags. An ordinary resource URL
 // without signed-capability evidence is not rejected just for being a URL.
@@ -304,7 +310,7 @@ func pageQueryDiscovery(prov *queryDiscoveryProvenance, evidence *queryEvidence,
 	// Check every record before returning any selectable page. A later oversized
 	// or sensitive row cannot be hidden behind a successful first page.
 	for _, result := range evidence.Results {
-		row := queryDiscoveryRow{Marker: result.Marker, DisplayName: result.DisplayName, Identity: result.Identity, IdentityVersion: result.IdentityVersion, Tags: queryDiscoveryTags(result.ResourceObject)}
+		row := queryDiscoveryResultRow(result)
 		if unsafeDiscoveryValue(result.Address) || unsafeDiscoveryValue(result.ResourceType) || unsafeDiscoveryValue(row.DisplayName) || unsafeDiscoveryValue(row.Identity) || unsafeDiscoveryValue(row.Tags) {
 			return nil, queryEvidenceError("query_sensitive_result")
 		}
@@ -355,6 +361,9 @@ func pageQueryDiscovery(prov *queryDiscoveryProvenance, evidence *queryEvidence,
 	for _, result := range evidence.Results {
 		if matches(result) {
 			page.TotalMatching++
+			if result.ResourceObject == nil {
+				page.RowsWithoutAttributes++
+			}
 		}
 	}
 	for i, result := range evidence.Results {
@@ -367,7 +376,7 @@ func pageQueryDiscovery(prov *queryDiscoveryProvenance, evidence *queryEvidence,
 		if page.Returned >= filter.Limit {
 			continue
 		}
-		row := queryDiscoveryRow{Marker: result.Marker, DisplayName: result.DisplayName, Identity: result.Identity, IdentityVersion: result.IdentityVersion, Tags: queryDiscoveryTags(result.ResourceObject)}
+		row := queryDiscoveryResultRow(result)
 		key := result.Address + "\x00" + result.ResourceType
 		index, exists := groups[key]
 		if !exists {
@@ -412,6 +421,10 @@ func pageQueryDiscovery(prov *queryDiscoveryProvenance, evidence *queryEvidence,
 		page.NextAction = "Continue with next_cursor as after; keep every query_result_marker shown. This page is not the full QueryRun."
 	} else {
 		page.NextAction = "These are all results of this query (not all cloud resources). Select results explicitly using query_result_marker only when import is requested."
+	}
+	page.NextAction += " Keep the query_result_marker, display_name and any tags for each result you present to the user; tags can help choose resources, but cannot be filtered by this tool."
+	if page.RowsWithoutAttributes > 0 {
+		page.NextAction += " For rows with attributes_captured false, missing tags are unknown, not evidence of no tags. If tags are needed for selection, ask before running a new query with generate_config_out true; this creates a new QueryRun and new markers."
 	}
 	data, err := json.Marshal(page)
 	if err != nil || len(data) > maxQueryPageBytes {
