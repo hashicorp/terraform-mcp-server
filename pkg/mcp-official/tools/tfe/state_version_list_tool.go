@@ -66,7 +66,7 @@ func ListStateVersionsTool() *mcp.Tool {
 						Type: "object",
 						Properties: map[string]*jsonschema.Schema{
 							"id":                {Type: "string"},
-							"created_at":        {Type: "string"},
+							"created_at":        {Type: "string", Format: "date-time"},
 							"serial":            {Type: "integer"},
 							"terraform_version": {Type: "string"},
 							"vcs_commit_sha":    {Type: "string"},
