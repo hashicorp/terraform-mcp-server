@@ -101,6 +101,22 @@ func getQueryStatusHandlerWithConfig(ctx context.Context, request mcp.CallToolRe
 	if err != nil {
 		return toolErrorf(logger, "get_query_status", "failed to get Terraform client: %v", err)
 	}
+	return getQueryStatusWithClient(ctx, pollCtx, tfeClient, queryRunID, logger, config)
+}
+
+// GetQueryStatusWithClient shares bounded polling and wire response behavior across transports.
+func GetQueryStatusWithClient(ctx context.Context, tfeClient *tfe.Client, queryRunID string, logger *log.Logger) (*mcp.CallToolResult, error) {
+	config := defaultQueryStatusPollConfig()
+	pollCtx, cancel := context.WithTimeoutCause(ctx, config.waitBudget, errQueryStatusWaitBudgetExceeded)
+	defer cancel()
+	return getQueryStatusWithClient(ctx, pollCtx, tfeClient, queryRunID, logger, config)
+}
+
+func getQueryStatusWithClient(ctx, pollCtx context.Context, tfeClient *tfe.Client, queryRunID string, logger *log.Logger, config queryStatusPollConfig) (*mcp.CallToolResult, error) {
+	queryRunID = strings.TrimSpace(queryRunID)
+	if queryRunID == "" {
+		return toolErrorf(logger, "get_query_status", "missing required input: query_run_id")
+	}
 	if err := callerCancellation(ctx); err != nil {
 		return toolErrorf(logger, "get_query_status", "failed to get query run %q: %v", queryRunID, err)
 	}
