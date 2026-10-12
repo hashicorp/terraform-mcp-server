@@ -90,6 +90,18 @@ func providerListSchemaListHandler(ctx context.Context, request mcp.CallToolRequ
 	if err != nil {
 		return toolErrorf(logger, "provider_list_schema_list", "failed to get Terraform client — ensure TFE_TOKEN and TFE_ADDRESS are configured: %v", err)
 	}
+	return ProviderListSchemaListWithClient(ctx, tfeClient, orgName, workspaceName, providerNamespace, providerName, logger)
+}
+
+// ProviderListSchemaListWithClient keeps both MCP transports on the same authorized catalog path.
+func ProviderListSchemaListWithClient(ctx context.Context, tfeClient *tfe.Client, orgName, workspaceName, providerNamespace, providerName string, logger *log.Logger) (*mcp.CallToolResult, error) {
+	orgName = strings.TrimSpace(orgName)
+	workspaceName = strings.TrimSpace(workspaceName)
+	providerNamespace = strings.TrimSpace(providerNamespace)
+	providerName = strings.TrimSpace(strings.ToLower(providerName))
+	if orgName == "" || workspaceName == "" {
+		return toolErrorf(logger, "provider_list_schema_list", "organization_name and workspace_name are required; ask the user to provide both before fetching provider schemas")
+	}
 	if _, err := tfeClient.Workspaces.Read(ctx, orgName, workspaceName); err != nil {
 		return toolErrorf(logger, "provider_list_schema_list", "failed to read workspace %q in organization %q: %v", workspaceName, orgName, err)
 	}

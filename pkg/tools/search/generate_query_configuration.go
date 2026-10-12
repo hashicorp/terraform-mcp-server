@@ -141,23 +141,35 @@ func generateQueryConfigurationHandler(_ context.Context, request mcp.CallToolRe
 	}
 
 	resourceTypesFlag := request.GetString("resource_types", "")
+	result, err := GenerateQueryConfigurationText(rawSchema, providerName, providerNamespace, providerVersion, resourceTypesFlag)
+	if err != nil {
+		return toolErrorf(logger, "generate_query_configuration", "%v", err)
+	}
+	return mcp.NewToolResultText(result), nil
+}
 
+// GenerateQueryConfigurationText builds the same guide for both MCP transports.
+func GenerateQueryConfigurationText(rawSchema, providerName, providerNamespace, providerVersion, resourceTypesFlag string) (string, error) {
+	if rawSchema == "" || providerName == "" || providerNamespace == "" || providerVersion == "" {
+		return "", fmt.Errorf("list_resource_schemas, provider_name, provider_namespace and provider_version are required")
+	}
+	providerName = strings.ToLower(providerName)
 	// ── 2. Unmarshal the schema ───────────────────────────────────────────────
 	//
 	// Accept both the raw map form {"aws_instance": {...}, ...} and the
 	// wrapped file form {"list_resource_schemas": {"aws_instance": {...}, ...}}.
 	schemas, err := parseListResourceSchemas(rawSchema)
 	if err != nil {
-		return toolErrorf(logger, "generate_query_configuration", "failed to parse list_resource_schemas: %v", err)
+		return "", fmt.Errorf("failed to parse list_resource_schemas: %w", err)
 	}
 	if len(schemas) == 0 {
-		return toolErrorf(logger, "generate_query_configuration", "list_resource_schemas contains no resource types")
+		return "", fmt.Errorf("list_resource_schemas contains no resource types")
 	}
 
 	// ── 3. Filter to requested resource types ─────────────────────────────────
 	resourceTypes := filterResourceTypes(schemas, resourceTypesFlag)
 	if len(resourceTypes) == 0 {
-		return toolErrorf(logger, "generate_query_configuration", "none of the requested resource types were found in the schema")
+		return "", fmt.Errorf("none of the requested resource types were found in the schema")
 	}
 
 	// ── 4. Build the output ───────────────────────────────────────────────────
@@ -167,7 +179,7 @@ func generateQueryConfigurationHandler(_ context.Context, request mcp.CallToolRe
 	writeExamplePayload(&b, schemas, resourceTypes, providerName, providerNamespace, providerVersion)
 	writeVariableNotes(&b)
 
-	return mcp.NewToolResultText(b.String()), nil
+	return b.String(), nil
 }
 
 // parseListResourceSchemas accepts either the wrapped file format or the bare
