@@ -4,13 +4,13 @@ The Terraform MCP server provides tools for generating better Terraform code thr
 
 ## Tool Usage Guidelines
 
-**BEFORE generating any Terraform code**: Query registries for latest provider/module versions and styling guidelines. When enterprise tools are enabled AND a Terraform token is provided, search private registries first, then fall back to public.
+**Before generating new Terraform code**: Consult relevant provider/module documentation. For an existing configuration, preserve its constraints and locked provider versions; do not silently select the latest version or substitute a public source for a private one.
 
 **Provider Consistency**: All modules in a project must use compatible provider versions. Verify with get_provider_details before generating code.
 
-**Validation Flow**: Run terraform validate immediately after generation, then terraform plan only if validation passes. Use terraform fmt to format code as needed.
+**Validation Flow**: Use terraform fmt and, when appropriate tooling is available, terraform validate on authored code. Do not treat local validation as an HCP Terraform plan. Obtain approval before a plan that may start a remote Run.
 
-**User Confirmation Required**: ALWAYS get explicit yes/no confirmation before: `create_run`, `apply_run`, `discard_run`, `cancel_run`.
+**User Confirmation Required**: Get explicit approval before `create_run`, `apply_run`, `discard_run`, `cancel_run`, or a CLI plan that may create an HCP Terraform Run. Approval for a plan is not approval to apply.
 
 ## Always Available Tools
 
@@ -23,7 +23,7 @@ The Terraform MCP server provides tools for generating better Terraform code thr
 
 - **Policy Discovery**: `search_policies` → `get_policy_details`
 
-- Use these to ensure generated code uses current versions and follows best practices
+- Use these to choose compatible versions for new code; preserve existing lock selections.
 
 ## HCP Terraform/TFE Tools (When enterprise tools are enabled AND a Terraform token is provided)
 
@@ -57,20 +57,28 @@ The Terraform MCP server provides tools for generating better Terraform code thr
 ## Workflow Patterns
 
 **Query and Import Context**:
-1. Use server-configured environment values by default. Omit scope arguments unless the user explicitly specifies an organization or workspace; pass those values as arguments to override the corresponding defaults. Do not invent scope arguments or ask the user to select defaults again.
-2. Without an explicit workspace override, use MCP-specific workspace configuration first: `TF_MCP_QUERY_WORKSPACE` for discovery queries and `TF_MCP_IMPORT_WORKSPACE` for the import destination. These are independent; never use one as the other's default.
-3. If the relevant MCP variable is unset, use `TF_WORKSPACE`. Without an explicit organization override, use `TF_CLOUD_ORGANIZATION`; there is no MCP-specific organization variable. Overrides are per field: changing the organization does not discard the workspace default, or vice versa.
-4. Use configured environment values directly without asking the user to confirm. Ask only for missing inputs, preserving context already resolved rather than asking for both values again.
-5. Search tools return `input_required` as a normal, non-error response with resolved values, sources, and missing inputs when context is incomplete, without making scoped API requests. Treat this as a clarification request, not a failure: ask the user only for the missing inputs rather than presenting an error or raw JSON. Pass those values as explicit `organization_name` or `workspace_name` arguments and reuse resolved context throughout the query workflow.
-6. Resolve the import destination separately before any import workflow. Generated importable configuration does not itself import resources, and this server has no dedicated import tool. Do not treat the query workspace as the import destination or create an import run without the required operation approval.
+1. Resolve a proposed Search source from explicit arguments first, then server-configured query defaults. Without an explicit workspace override, use `TF_MCP_QUERY_WORKSPACE`, then `TF_WORKSPACE`. Without an explicit organization override, use `TF_CLOUD_ORGANIZATION`; there is no MCP-specific organization variable. Overrides are per field.
+2. Before the first workspace-scoped call for a new query, show the resolved organization and source workspace and ask the user to confirm them. Pass explicit corrections as `organization_name` or `workspace_name` overrides and reuse the confirmed source throughout the query workflow.
+3. Search tools return `input_required` as a normal, non-error response with resolved values, sources, and missing inputs when query context is incomplete, without making scoped API requests. Treat this as a clarification request, not a failure: ask only for the missing inputs rather than presenting an error or raw JSON.
+4. Always prompt for and confirm the import destination separately when import is requested, even when `TF_MCP_IMPORT_WORKSPACE` or `TF_WORKSPACE` is configured or the intended target is the Search source. Never treat a query workspace default as import authorization. Pass the confirmed target explicitly to import tools.
+5. `prepare_import` and `verify_import_plan` are read-only preparation and verification tools. They do not upload configuration, create a speculative Run, apply an import, or modify infrastructure.
 
 Environment variables must be passed to the MCP server process by the client configuration (for example, its environment settings) or deployment. Do not assume the server can read the agent's local shell environment or client configuration files. Never read or expose tokens while resolving context.
 
 **Query Execution Approval**:
-- Resolve configured scope automatically and perform provider discovery and query configuration generation without asking for scope confirmation. Ask only for missing scope values reported by `input_required`.
+- Confirm the resolved query source before provider discovery. Source confirmation is distinct from approval to execute a query.
 - Before calling `execute_query`, show the resolved organization, workspace, and query selections (provider, resource types, and filters, if any). Explain that this starts a query run but does not create or modify infrastructure.
 - Ask the user to approve execution and wait for their approval. Do not execute if approval is declined or absent. If the target scope or query selections change, summarize the changes and obtain approval again.
-- This approval is agent-driven guidance, not a server-enforced parameter or status. It does not reintroduce confirmation of configured environment values.
+- This approval is agent-driven guidance, not a server-enforced parameter or status.
+
+**Terraform Search (when Search tools are available)**:
+1. Before a new workspace-scoped query, confirm its organization and source workspace (A). Use `provider_list_schema_list` → `generate_query_configuration` → `execute_query`; retain the returned `query_run_id` and reviewed creation-time inputs separately. An existing QueryRun ID can be used to review the same result without starting another query.
+2. Call `get_query_status` with that ID until terminal, then `get_query_summary`. Follow any paging and selectability guidance it provides; do not assume the first response contains every result. Search-only requests end here—do not ask for an import target or local path.
+
+**Search-to-import (only when `prepare_import` and `verify_import_plan` are available and import is requested)**:
+1. Confirm whether the target is A or another workspace B in the same organization. Obtain the user's existing local configuration path, review its configuration and exact locked provider versions, and explicitly select candidates before `prepare_import`. The server cannot inspect a client-local path. Treat drafts and identity/schema evidence as guidance, not proof of a matching cloud object.
+2. Author and review changes in that existing configuration. After explicit approval, run a plain CLI `terraform plan` for the confirmed HCP destination; do not use Search tools to upload configuration or create a Run. If the CLI Run outcome or destination is uncertain, stop and reconcile—do not guess or blindly retry.
+3. Give `verify_import_plan` the exact Run ID from the checked CLI Run URL. Follow its polling and carry/binding guidance, review the full HCP Plan separately, and report plan actions and identity uncertainty separately. Hand off the configuration for normal review; do not apply or claim an import persisted.
 
 **Code Generation**:
 1. `search_modules`/`search_providers` for available resources
