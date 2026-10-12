@@ -179,6 +179,15 @@ func TestPrepareImportKeepsSameNameSearchListAndManagedType(t *testing.T) {
 	require.Equal(t, "6.18.0", prepared.Types[0].LockedProviderVersion)
 	require.Equal(t, "unknown", prepared.Types[0].ManagedTypeSupport, "no historical target schema was read")
 	require.Contains(t, prepared.NextAction, "proposed managed type is not proved")
+	for _, hint := range []string{"TF_CLOUD_HOSTNAME", "TF_CLOUD_ORGANIZATION", "TF_CLOUD_PROJECT", "TF_WORKSPACE", "Explicit cloud block values take precedence", "credentials for that host", "terraform plan -no-color -input=false", "plan_only=true"} {
+		require.Contains(t, prepared.NextAction, hint)
+	}
+	for _, hint := range []string{"TFE_ADDRESS", "TFE_HOSTNAME", "TFE_TOKEN", "do not establish CLI cloud routing or authentication"} {
+		require.Contains(t, prepared.NextAction, hint)
+	}
+	require.NotContains(t, prepared.NextAction, ".envrc")
+	require.Contains(t, PrepareImportDescription, "cloud block values take precedence")
+	require.Contains(t, PrepareImportDescription, "TFE_TOKEN may configure terraform-mcp-server")
 
 	input.Selections[0].ManagedType = "google_sqs_queue"
 	blocked, err := ReadPrepareImport(context.Background(), c, input)
