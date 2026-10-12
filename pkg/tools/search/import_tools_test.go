@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strconv"
 	"strings"
 	"testing"
@@ -22,6 +23,17 @@ import (
 )
 
 type importTestSession struct{}
+
+type importRewriteTransport struct {
+	backend *url.URL
+	next    http.RoundTripper
+}
+
+func (tr importRewriteTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	copy := req.Clone(req.Context())
+	copy.URL.Scheme, copy.URL.Host, copy.Host = tr.backend.Scheme, tr.backend.Host, tr.backend.Host
+	return tr.next.RoundTrip(copy)
+}
 
 func (importTestSession) Initialize()                                         {}
 func (importTestSession) Initialized() bool                                   { return true }
@@ -123,10 +135,16 @@ func TestImportToolsEndToEndLocalHTTPAndLegacyWire(t *testing.T) {
 	require.Equal(t, "plan_available", result.Status)
 	require.Equal(t, 1, result.Changes["none"])
 	require.Equal(t, 1, result.ObjectIdentity["matched"])
+	require.Empty(t, result.Attention, "matched no-op imports do not need selected-result attention")
+	require.Empty(t, result.RunUIURL, "do not advertise a browser link for an HTTP-only mock API")
+	require.Contains(t, result.NextAction, "get_plan_json_output")
+	require.Contains(t, result.NextAction, "raw Plan JSON may contain sensitive values")
+	require.Contains(t, result.NextAction, "outside this session")
 	require.Equal(t, 1, *reads)
 	require.Len(t, result.Detail, 1)
 	encoded, err := json.Marshal(result)
 	require.NoError(t, err)
+	require.NotContains(t, string(encoded), `"attention"`)
 	require.NotContains(t, string(encoded), "private-import-id-sentinel")
 	require.NotContains(t, string(encoded), "overall")
 	// A real mark3labs CallToolRequest must preserve the same structured/text
@@ -140,6 +158,7 @@ func TestImportToolsEndToEndLocalHTTPAndLegacyWire(t *testing.T) {
 	text, ok := mcp.AsTextContent(wire.Content[0])
 	require.True(t, ok)
 	require.Contains(t, text.Text, `"plan_available"`)
+	require.NotContains(t, text.Text, `"attention"`)
 	require.NotContains(t, text.Text, "private-import-id-sentinel")
 	prepareArgs := map[string]any{"organization_name": "org", "workspace_name": "target", "query_run_id": "qry-example", "locked_providers": prep.Carry.LockedProviders, "selections": []ImportSelection{{QueryResultMarker: bindings[0].QueryResultMarker, ManagedType: "aws_s3_bucket"}}}
 	var logged bytes.Buffer
@@ -152,6 +171,50 @@ func TestImportToolsEndToEndLocalHTTPAndLegacyWire(t *testing.T) {
 	require.Contains(t, fmt.Sprint(wire.Content), "selection_digest")
 	require.NotContains(t, logged.String(), "signed-secret-sentinel")
 	require.NotContains(t, fmt.Sprint(wire.Content), "signed-secret-sentinel")
+}
+
+func TestImportRunUIURLOnlyForKnownHTTPSBrowserHosts(t *testing.T) {
+	for _, tc := range []struct {
+		base, org, workspace, runID, want string
+	}{
+		{"https://app.terraform.io/api/v2/", "my-org", "my_workspace", "run-example", "https://app.terraform.io/app/my-org/my_workspace/runs/run-example"},
+		{"https://app.staging.terraform.io/api/v2/", "my-org", "my_workspace", "run-example", "https://app.staging.terraform.io/app/my-org/my_workspace/runs/run-example"},
+		{"http://app.terraform.io/api/v2/", "my-org", "my_workspace", "run-example", ""},
+		{"https://user:secret@app.terraform.io/api/v2/", "my-org", "my_workspace", "run-example", ""},
+		{"https://app.terraform.io/api/v2/?token=secret", "my-org", "my_workspace", "run-example", ""},
+		{"https://app.terraform.io/api/v2/#secret", "my-org", "my_workspace", "run-example", ""},
+		{"https://app.terraform.io:8443/api/v2/", "my-org", "my_workspace", "run-example", ""},
+		{"https://api.internal.example/api/v2/", "my-org", "my_workspace", "run-example", ""},
+		{"https://app.terraform.io.evil.example/api/v2/", "my-org", "my_workspace", "run-example", ""},
+		{"https://app.terraform.io/api/v2/", "bad/org", "my_workspace", "run-example", ""},
+		{"https://app.terraform.io/api/v2/", "my-org", "my_workspace", "run-bad?token=secret", ""},
+	} {
+		t.Run(tc.base+"/"+tc.org+"/"+tc.runID, func(t *testing.T) {
+			base, err := url.Parse(tc.base)
+			require.NoError(t, err)
+			require.Equal(t, tc.want, importRunUIURL(*base, tc.org, tc.workspace, tc.runID))
+		})
+	}
+}
+
+func TestVerifyImportPlanReturnsKnownHostRunUIURLAfterAssociationCheck(t *testing.T) {
+	backend, _ := importWireBackend(t, "planned_and_finished", "finished")
+	backendURL, err := url.Parse(backend.URL)
+	require.NoError(t, err)
+	t.Setenv("MCP_ORGANIZATION_ALLOWLIST", "org")
+	// Keep all API reads inside the mock while exercising the trusted staging
+	// HCP address from which a browser Run URL can be constructed.
+	c, err := tfe.NewClient(&tfe.Config{Address: "https://app.staging.terraform.io", Token: "test-token", HTTPClient: &http.Client{Transport: importRewriteTransport{backend: backendURL, next: http.DefaultTransport}}})
+	require.NoError(t, err)
+	carry, bindings, _ := importTestCarry(t)
+	result, err := ReadVerifyImportPlan(context.Background(), c, VerifyImportInput{OrganizationName: "org", WorkspaceName: "target", RunID: "run-example", Carry: carry, Bindings: bindings})
+	require.NoError(t, err)
+	require.Equal(t, "plan_available", result.Status)
+	require.Equal(t, "plan-example", result.PlanID)
+	require.Equal(t, "https://app.staging.terraform.io/app/org/target/runs/run-example", result.RunUIURL)
+	encoded, err := json.Marshal(result)
+	require.NoError(t, err)
+	require.Contains(t, string(encoded), `"run_ui_url":"https://app.staging.terraform.io/app/org/target/runs/run-example"`)
 }
 
 func TestPrepareImportKeepsSameNameSearchListAndManagedType(t *testing.T) {
@@ -202,6 +265,82 @@ func TestPrepareImportKeepsSameNameSearchListAndManagedType(t *testing.T) {
 	require.EqualError(t, err, "selection_invalid", "unknown QueryRun marker still fails")
 }
 
+func TestVerifyImportPlanAttentionOnlyIncludesSelectedExceptions(t *testing.T) {
+	base := `{"format_version":"1.2","terraform_version":"1.14.0","complete":true,"errored":false,"planned_values":{"root_module":{"resources":[{"address":"aws_s3_bucket.sample","identity_schema_version":0}]}},"resource_changes":[{"address":"aws_s3_bucket.sample","mode":"managed","type":"aws_s3_bucket","provider_name":"registry.terraform.io/hashicorp/aws","change":{"actions":["no-op"],"importing":{"id":"private-import-id-sentinel"},"after_identity":{"bucket":"sample"}}}],"output_changes":{},"deferred_changes":[],"resource_drift":[]}`
+	for _, tc := range []struct {
+		name, planJSON, change, identity string
+	}{
+		{"identity mismatch", strings.Replace(base, `"after_identity":{"bucket":"sample"}`, `"after_identity":{"bucket":"different"}`, 1), "none", "mismatched"},
+		{"identity version unknown", strings.Replace(base, `"identity_schema_version":0`, `"identity_schema_version":1`, 1), "none", "unverified"},
+		{"import marker missing", strings.Replace(base, `"importing":{"id":"private-import-id-sentinel"},`, "", 1), "import_missing", "unverified"},
+		{"selected address missing", strings.Replace(base, `"address":"aws_s3_bucket.sample","mode"`, `"address":"aws_s3_bucket.other","mode"`, 1), "not_in_plan", "unverified"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			backend, _ := importWireBackendWithPlan(t, "planned_and_finished", "finished", "aws_s3_buckets", tc.planJSON)
+			c, err := tfe.NewClient(&tfe.Config{Address: backend.URL, Token: "test-token", HTTPClient: backend.Client()})
+			require.NoError(t, err)
+			t.Setenv("MCP_ORGANIZATION_ALLOWLIST", "org")
+			carry, bindings, _ := importTestCarry(t)
+			result, err := ReadVerifyImportPlan(context.Background(), c, VerifyImportInput{OrganizationName: "org", WorkspaceName: "target", RunID: "run-example", Carry: carry, Bindings: bindings})
+			require.NoError(t, err)
+			require.Equal(t, "plan_available", result.Status)
+			require.Equal(t, 1, result.Changes[tc.change])
+			require.Equal(t, 1, result.ObjectIdentity[tc.identity])
+			require.Len(t, result.Attention, 1)
+			require.Equal(t, tc.change, result.Attention[0].Change)
+			require.Equal(t, tc.identity, result.Attention[0].ObjectIdentity)
+		})
+	}
+}
+
+func TestVerifyImportPlanEightCleanImportsHaveNoAttention(t *testing.T) {
+	carry, _, _ := importTestCarry(t)
+	carry.SelectedResults = nil
+	provider := carry.Providers["aws_s3_buckets"]
+	var bindings []ImportBinding
+	var resources, changes []string
+	for i := range 8 {
+		name := fmt.Sprintf("sample_%d", i)
+		addr := "aws_s3_bucket." + name
+		identity := map[string]any{"bucket": name}
+		marker, err := queryResultMarker("qry-example", provider, "aws_s3_buckets", identity)
+		require.NoError(t, err)
+		carry.SelectedResults = append(carry.SelectedResults, ImportCarrySelection{QueryResultMarker: marker, ListType: "aws_s3_buckets", ManagedType: "aws_s3_bucket", Identity: identity, SearchIdentityVersion: 0})
+		bindings = append(bindings, ImportBinding{QueryResultMarker: marker, TargetAddress: addr})
+		resources = append(resources, fmt.Sprintf(`{"address":%q,"identity_schema_version":0}`, addr))
+		changes = append(changes, fmt.Sprintf(`{"address":%q,"mode":"managed","type":"aws_s3_bucket","provider_name":"registry.terraform.io/hashicorp/aws","change":{"actions":["no-op"],"importing":{"identity":{"bucket":%q}},"after_identity":{"bucket":%q}}}`, addr, name, name))
+	}
+	var err error
+	carry.SelectionDigest, err = importDigest(*carry)
+	require.NoError(t, err)
+	planJSON := fmt.Sprintf(`{"format_version":"1.2","terraform_version":"1.14.0","complete":true,"errored":false,"planned_values":{"root_module":{"resources":[%s]}},"resource_changes":[%s],"output_changes":{},"deferred_changes":[],"resource_drift":[]}`, strings.Join(resources, ","), strings.Join(changes, ","))
+	backend, _ := importWireBackendWithPlan(t, "planned_and_finished", "finished", "aws_s3_buckets", planJSON)
+	c, err := tfe.NewClient(&tfe.Config{Address: backend.URL, Token: "test-token", HTTPClient: backend.Client()})
+	require.NoError(t, err)
+	t.Setenv("MCP_ORGANIZATION_ALLOWLIST", "org")
+	result, err := ReadVerifyImportPlan(context.Background(), c, VerifyImportInput{OrganizationName: "org", WorkspaceName: "target", RunID: "run-example", Carry: carry, Bindings: bindings, DetailAddresses: []string{bindings[0].TargetAddress}})
+	require.NoError(t, err)
+	require.Equal(t, "plan_available", result.Status)
+	require.Equal(t, 8, result.Changes["none"])
+	require.Equal(t, 8, result.ObjectIdentity["matched"])
+	require.Empty(t, result.Attention)
+	require.Len(t, result.Detail, 1, "requested detail remains available for a clean import")
+	encoded, err := json.Marshal(result)
+	require.NoError(t, err)
+	require.NotContains(t, string(encoded), `"attention"`)
+
+	// Selected imports can all be clean while the rest of the Plan needs review.
+	withOutputChange := strings.Replace(planJSON, `"output_changes":{}`, `"output_changes":{"other":{"actions":["update"]}}`, 1)
+	backendWithOutput, _ := importWireBackendWithPlan(t, "planned_and_finished", "finished", "aws_s3_buckets", withOutputChange)
+	cWithOutput, err := tfe.NewClient(&tfe.Config{Address: backendWithOutput.URL, Token: "test-token", HTTPClient: backendWithOutput.Client()})
+	require.NoError(t, err)
+	result, err = ReadVerifyImportPlan(context.Background(), cWithOutput, VerifyImportInput{OrganizationName: "org", WorkspaceName: "target", RunID: "run-example", Carry: carry, Bindings: bindings})
+	require.NoError(t, err)
+	require.Empty(t, result.Attention)
+	require.Equal(t, 1, result.Plan.OutputChanges)
+	require.Contains(t, result.Diagnostics, "plan_actions_require_review")
+}
+
 // A finished speculative Run may import and also update cloud settings. The
 // import marker and update action are independent of object identity and
 // neither makes the Plan safe to apply.
@@ -229,6 +368,9 @@ func TestVerifyImportPlanSQSImportWithUpdate(t *testing.T) {
 	require.Equal(t, "1.17.0-dev.1", result.Plan.TerraformVersion)
 	require.Equal(t, 1, result.Changes["update"])
 	require.Equal(t, 1, result.ObjectIdentity["matched"], "identity classification must not mask the update")
+	require.Len(t, result.Attention, 1)
+	require.Equal(t, "update", result.Attention[0].Change)
+	require.Equal(t, "matched", result.Attention[0].ObjectIdentity)
 	require.Equal(t, []string{"update"}, result.Detail[0].Actions)
 	require.Contains(t, result.Diagnostics, "plan_actions_require_review")
 	require.Contains(t, result.NextAction, "not safe to apply")

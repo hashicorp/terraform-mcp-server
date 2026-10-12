@@ -86,6 +86,7 @@ type VerifyImportResult struct {
 	WorkspaceName          string                `json:"workspace_name,omitempty"`
 	WorkspaceID            string                `json:"workspace_id,omitempty"`
 	RunID                  string                `json:"run_id,omitempty"`
+	RunUIURL               string                `json:"run_ui_url,omitempty"`
 	PlanID                 string                `json:"plan_id,omitempty"`
 	ConfigurationVersionID string                `json:"configuration_version_id,omitempty"`
 	RunStatus              string                `json:"run_status,omitempty"`
@@ -117,6 +118,18 @@ type importRunEvidence struct {
 			ConfigurationVersion queryWireRelation `json:"configuration-version"`
 		} `json:"relationships"`
 	} `json:"data"`
+}
+
+// Only construct a browser navigation link for known HCP hosts. API addresses
+// for private/Enterprise deployments are not necessarily browser addresses.
+// Never reflect an API URL's userinfo, query, fragment, or arbitrary host.
+func importRunUIURL(base url.URL, org, workspace, runID string) string {
+	if base.Scheme != "https" || base.User != nil || base.RawQuery != "" || base.Fragment != "" || base.Port() != "" ||
+		(base.Hostname() != "app.terraform.io" && base.Hostname() != "app.staging.terraform.io") ||
+		!validImportWorkspaceName(org) || !validImportWorkspaceName(workspace) || !importRunPattern.MatchString(runID) {
+		return ""
+	}
+	return (&url.URL{Scheme: "https", Host: base.Hostname(), Path: "/app/" + org + "/" + workspace + "/runs/" + runID}).String()
 }
 
 func validateImportCarry(c *ImportCarry, bindings []ImportBinding, target *tfe.Workspace) (map[string]ImportCarrySelection, map[string]string, error) {
@@ -203,6 +216,7 @@ func ReadVerifyImportPlan(ctx context.Context, c *tfe.Client, input VerifyImport
 		if input.Carry != nil && input.Carry.Target.WorkspaceID != w.ID {
 			return stop("blocked", "carry_target_mismatch", "The carried target differs from the Run's workspace. Confirm target and repeat preparation before any new plan.")
 		}
+		out.RunUIURL = importRunUIURL(c.BaseURL(), w.Organization.Name, w.Name, run.Data.ID)
 		cv := run.Data.Relationships.ConfigurationVersion.Data
 		if cv != nil && cv.Type == "configuration-versions" {
 			out.ConfigurationVersionID = cv.ID
@@ -507,13 +521,15 @@ func classifyImportPlan(ctx context.Context, c *tfe.Client, out *VerifyImportRes
 		}
 		out.Changes[item.Change]++
 		out.ObjectIdentity[item.ObjectIdentity]++
-		out.Attention = append(out.Attention, item)
+		if item.Change != "none" || item.ObjectIdentity != "matched" {
+			out.Attention = append(out.Attention, item)
+		}
 	}
 	out.Status, out.Diagnostics = "plan_available", []string{}
-	out.NextAction = "Report identity uncertainty and mismatches separately from Plan actions. Review the full HCP Plan, other managed actions, outputs, drift and provider scope with the user. This bounded result does not attest the uploaded bytes or authorize apply."
+	out.NextAction = "Attention lists only selected results with a non-no-op change or identity needing review; an empty list does not clear other Plan actions, outputs or drift. Report identity uncertainty and mismatches separately from Plan actions. Ask the user whether to review the full Plan outside this session via run_ui_url (or the confirmed CLI browser Run URL if absent), or to preview it here. Only if the user chooses in-session review and get_plan_json_output is available, call it with this result's plan_id; raw Plan JSON may contain sensitive values visible to the agent, so summarize actions without reproducing secrets or sensitive attributes. Review other managed actions, outputs, drift and provider scope; this bounded result does not attest the uploaded bytes or authorize apply."
 	if out.ObjectIdentity["unverified"]+out.ObjectIdentity["mismatched"]+out.ObjectIdentity["unsupported"] > 0 {
 		out.Diagnostics = append(out.Diagnostics, "identity_requires_review")
-		out.NextAction = "Identity is unverified, mismatched or unsupported for some selections; report this before plan-action findings. Confirm documented import form, provider scope and full HCP Plan with the user. A clean import action does not prove the selected cloud object; no apply was authorized."
+		out.NextAction = "Attention lists only selected results with a non-no-op change or identity needing review; inspect it alongside the separate count maps and whole-Plan findings. Identity is unverified, mismatched or unsupported for some selections; report this before plan-action findings. Confirm documented import form and provider scope with the user. Ask whether the user prefers full Plan review outside this session via run_ui_url (or the confirmed CLI browser Run URL if absent), or an in-session preview. Only with the user's choice and an available get_plan_json_output tool, use this result's plan_id; raw Plan JSON may contain sensitive values visible to the agent, so summarize without reproducing secrets or sensitive attributes. A clean import action does not prove the selected cloud object; no apply was authorized."
 	}
 	if out.Changes["update"]+out.Changes["create"]+out.Changes["replace_or_destroy"]+out.Plan.ExtraImports+out.Plan.OtherManagedActions+out.Plan.OutputChanges+out.Plan.DeferredChanges+out.Plan.ResourceDrift > 0 {
 		out.Diagnostics = append(out.Diagnostics, "plan_actions_require_review")
