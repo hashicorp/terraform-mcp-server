@@ -304,7 +304,7 @@ func TestWriteInstructions_ContainsPreConditions(t *testing.T) {
 	checks := []string{
 		"Pre-conditions",
 		"1.14.0",
-		"latest-query-run",
+		"query_run_id",
 		"execute_query",
 		"get_query_status",
 		"get_query_summary",
@@ -324,6 +324,9 @@ func TestWriteInstructions_ContainsPreConditions(t *testing.T) {
 	}
 	if strings.Contains(out, `"relationships"`) {
 		t.Error("instructions should not require callers to construct JSON:API relationships")
+	}
+	if strings.Contains(out, "latest-query-run") {
+		t.Error("instructions must use the projected execute_query response field")
 	}
 	if strings.Contains(out, "/api/v2/queries") {
 		t.Error("instructions should use get_query_status rather than the raw query API")

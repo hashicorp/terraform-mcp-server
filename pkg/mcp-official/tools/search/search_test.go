@@ -14,6 +14,8 @@ import (
 )
 
 func TestOfficialSearchArgumentsAndValidation(t *testing.T) {
+	require.Contains(t, GetQueryStatusTool().Description, "query_run_id returned by execute_query")
+	require.NotContains(t, GetQueryStatusTool().Description, "latest-query-run")
 	schema, err := jsonschema.For[QueryRunArguments](nil)
 	require.NoError(t, err)
 	require.Equal(t, []string{"query_run_id"}, schema.Required)

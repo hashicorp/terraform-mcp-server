@@ -4,13 +4,13 @@ The Terraform MCP server provides tools for generating better Terraform code thr
 
 ## Tool Usage Guidelines
 
-**BEFORE generating any Terraform code**: Query registries for latest provider/module versions and styling guidelines. When enterprise tools are enabled AND a Terraform token is provided, search private registries first, then fall back to public.
+**Before generating new Terraform code**: Consult relevant provider/module documentation. For an existing configuration, preserve its constraints and locked provider versions; do not silently select the latest version or substitute a public source for a private one.
 
 **Provider Consistency**: All modules in a project must use compatible provider versions. Verify with get_provider_details before generating code.
 
-**Validation Flow**: Run terraform validate immediately after generation, then terraform plan only if validation passes. Use terraform fmt to format code as needed.
+**Validation Flow**: Use terraform fmt and, when appropriate tooling is available, terraform validate on authored code. Do not treat local validation as an HCP Terraform plan. Obtain approval before a plan that may start a remote Run.
 
-**User Confirmation Required**: ALWAYS get explicit yes/no confirmation before: `create_run`, `apply_run`, `discard_run`, `cancel_run`.
+**User Confirmation Required**: Get explicit approval before `create_run`, `apply_run`, `discard_run`, `cancel_run`, or a CLI plan that may create an HCP Terraform Run. Approval for a plan is not approval to apply.
 
 ## Always Available Tools
 
@@ -23,7 +23,7 @@ The Terraform MCP server provides tools for generating better Terraform code thr
 
 - **Policy Discovery**: `search_policies` → `get_policy_details`
 
-- Use these to ensure generated code uses current versions and follows best practices
+- Use these to choose compatible versions for new code; preserve existing lock selections.
 
 ## HCP Terraform/TFE Tools (When enterprise tools are enabled AND a Terraform token is provided)
 
@@ -55,6 +55,15 @@ The Terraform MCP server provides tools for generating better Terraform code thr
 - `attach/detach_variable_set_to_workspaces`, `attach/detach_variable_set_to_projects`
 
 ## Workflow Patterns
+
+**Terraform Search (when Search tools are available)**:
+1. Before a new workspace-scoped query, confirm its organization and source workspace (A). Use `provider_list_schema_list` → `generate_query_configuration` → `execute_query`; retain the returned `query_run_id` and reviewed creation-time inputs separately. An existing QueryRun ID can be used to review the same result without starting another query.
+2. Call `get_query_status` with that ID until terminal, then `get_query_summary`. Follow any paging and selectability guidance it provides; do not assume the first response contains every result. Search-only requests end here—do not ask for an import target or local path.
+
+**Search-to-import (only when `prepare_import` and `verify_import_plan` are available and import is requested)**:
+1. Confirm whether the target is A or another workspace B in the same organization. Obtain the user's existing local configuration path, review its configuration and exact locked provider versions, and explicitly select candidates before `prepare_import`. The server cannot inspect a client-local path. Treat drafts and identity/schema evidence as guidance, not proof of a matching cloud object.
+2. Author and review changes in that existing configuration. After explicit approval, run a plain CLI `terraform plan` for the confirmed HCP destination; do not use Search tools to upload configuration or create a Run. If the CLI Run outcome or destination is uncertain, stop and reconcile—do not guess or blindly retry.
+3. Give `verify_import_plan` the exact Run ID from the checked CLI Run URL. Follow its polling and carry/binding guidance, review the full HCP Plan separately, and report plan actions and identity uncertainty separately. Hand off the configuration for normal review; do not apply or claim an import persisted.
 
 **Code Generation**:
 1. `search_modules`/`search_providers` for available resources

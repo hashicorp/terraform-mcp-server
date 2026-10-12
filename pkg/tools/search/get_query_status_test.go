@@ -65,6 +65,8 @@ func TestGetQueryStatusDefinition(t *testing.T) {
 	assert.Contains(t, tool.Tool.Description, "pending")
 	assert.Contains(t, tool.Tool.Description, "finished, errored, or canceled")
 	assert.Contains(t, tool.Tool.Description, "same query_run_id")
+	assert.Contains(t, tool.Tool.Description, "existing authorized QueryRun ID")
+	assert.NotContains(t, tool.Tool.Description, "latest-query-run")
 	assert.Contains(t, tool.Tool.Description, "get_query_summary")
 	assert.Contains(t, tool.Tool.Description, "every three seconds")
 	assert.Contains(t, tool.Tool.Description, "at most 40 seconds")

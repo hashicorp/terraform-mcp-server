@@ -295,8 +295,8 @@ func queryStatusTimestamps(timestamps *tfe.QueryRunStatusTimestamps) *queryStatu
 
 const getQueryStatusDescription = `Fetches an HCP Terraform query run using go-tfe.
 
-Pass the query run ID from data.relationships.latest-query-run.data.id in the
-execute_query response. This tool checks every three seconds while status is pending,
+Pass the query_run_id returned by execute_query, or an existing authorized QueryRun ID.
+This tool checks every three seconds while status is pending,
 queued, or running and returns once status is finished, errored, or canceled. One call
 waits for at most 40 seconds. If the run is still active, the tool returns its current
 status and instructs you to call this tool again with the same query_run_id after
