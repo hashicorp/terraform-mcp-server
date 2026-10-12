@@ -4,29 +4,31 @@
 package search
 
 import (
+	"context"
+	"log/slog"
 	"testing"
 
-	oldmcp "github.com/mark3labs/mcp-go/mcp"
+	"github.com/google/jsonschema-go/jsonschema"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/require"
 )
 
-func TestConvertResultPreservesStatusAndErrors(t *testing.T) {
-	status := map[string]any{"query_run_id": "qr-1", "status": "finished", "terminal": true}
-	old := oldmcp.NewToolResultStructured(status, "Query run finished\n\nstatus JSON")
-	result, output, err := convertResult(old, nil)
+func TestOfficialSearchArgumentsAndValidation(t *testing.T) {
+	schema, err := jsonschema.For[QueryRunArguments](nil)
 	require.NoError(t, err)
-	require.Nil(t, output)
-	require.False(t, result.IsError)
-	require.Equal(t, status, result.StructuredContent)
-	require.Equal(t, "Query run finished\n\nstatus JSON", result.Content[0].(*mcp.TextContent).Text)
+	require.Equal(t, []string{"query_run_id"}, schema.Required)
+	statusSchema, ok := GetQueryStatusTool().OutputSchema.(*jsonschema.Schema)
+	require.True(t, ok)
+	require.Contains(t, statusSchema.Required, "terminal")
+	require.Contains(t, statusSchema.Properties, "status_timestamps")
+	require.Contains(t, statusSchema.Properties, "retry_after_seconds")
 
-	old = oldmcp.NewToolResultError("read failed")
-	result, output, err = convertResult(old, nil)
-	require.NoError(t, err)
-	require.Nil(t, output)
-	require.True(t, result.IsError)
-	require.Equal(t, "read failed", result.Content[0].(*mcp.TextContent).Text)
+	_, _, err = GetQueryStatusFunc(slog.Default())(context.Background(), nil, QueryRunArguments{QueryRunID: " "})
+	require.ErrorContains(t, err, "missing required input: query_run_id")
+	_, _, err = ExecuteQueryFunc(context.Background(), nil, ExecuteQueryArguments{
+		OrganizationName: "org", WorkspaceName: "ws", QueryConfiguration: `{`,
+	})
+	require.ErrorContains(t, err, "invalid query_configuration")
 }
 
 func TestOfficialSearchToolAnnotations(t *testing.T) {

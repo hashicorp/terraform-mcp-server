@@ -81,21 +81,25 @@ func getQuerySummaryHandler(ctx context.Context, request mcp.CallToolRequest, lo
 	if err != nil {
 		return toolErrorf(logger, "get_query_summary", "failed to get Terraform client: %v", err)
 	}
-	return GetQuerySummaryWithClient(ctx, tfeClient, queryRunID, logger)
+	return getQuerySummaryWithClient(ctx, tfeClient, queryRunID, logger)
 }
 
-// GetQuerySummaryWithClient reuses the same log parser for both MCP transports.
-func GetQuerySummaryWithClient(ctx context.Context, tfeClient *tfe.Client, queryRunID string, logger *log.Logger) (*mcp.CallToolResult, error) {
+func getQuerySummaryWithClient(ctx context.Context, tfeClient *tfe.Client, queryRunID string, logger *log.Logger) (*mcp.CallToolResult, error) {
 	queryRunID = strings.TrimSpace(queryRunID)
 	if queryRunID == "" {
 		return toolErrorf(logger, "get_query_summary", "missing required input: query_run_id")
 	}
-	summary, err := readQuerySummary(ctx, tfeClient, strings.TrimSpace(queryRunID))
+	summary, err := ReadQuerySummary(ctx, tfeClient, queryRunID)
 	if err != nil {
 		return toolErrorf(logger, "get_query_summary", "failed to get query summary for %q: %v", queryRunID, err)
 	}
 
 	return mcp.NewToolResultText(summary), nil
+}
+
+// ReadQuerySummary parses the backend QueryRun log without MCP transport types.
+func ReadQuerySummary(ctx context.Context, tfeClient *tfe.Client, queryRunID string) (string, error) {
+	return readQuerySummary(ctx, tfeClient, strings.TrimSpace(queryRunID))
 }
 
 func readQuerySummary(ctx context.Context, tfeClient *tfe.Client, queryRunID string) (string, error) {
