@@ -6,14 +6,14 @@ package search
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"strings"
 
 	"github.com/google/jsonschema-go/jsonschema"
+	"github.com/hashicorp/terraform-mcp-server/pkg/logging"
 	"github.com/hashicorp/terraform-mcp-server/pkg/mcp-official/client"
-	legacy "github.com/hashicorp/terraform-mcp-server/pkg/tools/search"
-	oldmcp "github.com/mark3labs/mcp-go/mcp"
+	searchlogic "github.com/hashicorp/terraform-mcp-server/pkg/tools/search"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
-	log "github.com/sirupsen/logrus"
 )
 
 type GenerateQueryConfigurationArguments struct {
@@ -52,7 +52,7 @@ func tool(name, description, title string, readOnly, openWorld bool) *mcp.Tool {
 }
 
 func GenerateQueryConfigurationTool() *mcp.Tool {
-	return tool("generate_query_configuration", legacy.GenerateQueryConfiguration(log.StandardLogger()).Tool.Description,
+	return tool("generate_query_configuration", searchlogic.GenerateQueryConfigurationDescription,
 		"Generate a No-Code Query Configuration from a list_resource_schemas schema", true, false)
 }
 
@@ -62,124 +62,113 @@ func GenerateQueryConfigurationFunc(_ context.Context, _ *mcp.CallToolRequest, i
 		{"provider_namespace", input.ProviderNamespace}, {"provider_version", input.ProviderVersion},
 	} {
 		if field.value == "" {
-			return toolError(fmt.Sprintf("missing required input: %s", field.name)), nil, nil
+			return nil, nil, fmt.Errorf("missing required input: %s", field.name)
 		}
 	}
-	text, err := legacy.GenerateQueryConfigurationText(input.ListResourceSchemas, input.ProviderName, input.ProviderNamespace, input.ProviderVersion, input.ResourceTypes)
+	text, err := searchlogic.GenerateQueryConfigurationText(input.ListResourceSchemas, input.ProviderName, input.ProviderNamespace, input.ProviderVersion, input.ResourceTypes)
 	if err != nil {
-		return toolError(err.Error()), nil, nil
+		return nil, nil, err
 	}
 	return textResult(text), nil, nil
 }
 
 func ProviderListSchemaListTool() *mcp.Tool {
-	return tool("provider_list_schema_list", legacy.ProviderListSchemaList(log.StandardLogger()).Tool.Description,
+	return tool("provider_list_schema_list", searchlogic.ProviderListSchemaListDescription,
 		"Fetch list_resource_schemas for a search-compatible provider", true, true)
 }
 
 func ProviderListSchemaListFunc(ctx context.Context, req *mcp.CallToolRequest, input ProviderListSchemaListArguments) (*mcp.CallToolResult, any, error) {
 	if strings.TrimSpace(input.OrganizationName) == "" || strings.TrimSpace(input.WorkspaceName) == "" {
-		return toolError("organization_name and workspace_name are required; ask the user to provide both before fetching provider schemas"), nil, nil
+		return nil, nil, fmt.Errorf("organization_name and workspace_name are required; ask the user to provide both before fetching provider schemas")
 	}
 	tfeClient, err := client.GetTfeClient(ctx, client.SessionIDFromRequest(req))
 	if err != nil {
-		return toolError(fmt.Sprintf("failed to get Terraform client: %v", err)), nil, nil
+		return nil, nil, fmt.Errorf("failed to get Terraform client: %w", err)
 	}
-	result, err := legacy.ProviderListSchemaListWithClient(ctx, tfeClient, input.OrganizationName, input.WorkspaceName, input.ProviderNamespace, input.ProviderName, log.StandardLogger())
-	return convertResult(result, err)
+	text, err := searchlogic.ProviderListSchemaListText(ctx, tfeClient, input.OrganizationName, input.WorkspaceName, input.ProviderNamespace, input.ProviderName)
+	if err != nil {
+		return nil, nil, err
+	}
+	return textResult(text), nil, nil
 }
 
 func ExecuteQueryTool() *mcp.Tool {
-	return tool("execute_query", legacy.ExecuteQuery(log.StandardLogger()).Tool.Description,
+	return tool("execute_query", searchlogic.ExecuteQueryDescription,
 		"Create and execute an HCP Terraform no-code query", false, true)
 }
 
 func ExecuteQueryFunc(ctx context.Context, req *mcp.CallToolRequest, input ExecuteQueryArguments) (*mcp.CallToolResult, any, error) {
 	if strings.TrimSpace(input.OrganizationName) == "" || strings.TrimSpace(input.WorkspaceName) == "" || strings.TrimSpace(input.QueryConfiguration) == "" {
-		return toolError("organization_name, workspace_name and query_configuration are required"), nil, nil
+		return nil, nil, fmt.Errorf("organization_name, workspace_name and query_configuration are required")
+	}
+	if err := searchlogic.ValidateQueryConfiguration(input.QueryConfiguration); err != nil {
+		return nil, nil, fmt.Errorf("invalid query_configuration: %w", err)
 	}
 	tfeClient, err := client.GetTfeClient(ctx, client.SessionIDFromRequest(req))
 	if err != nil {
-		return toolError(fmt.Sprintf("failed to get Terraform client: %v", err)), nil, nil
+		return nil, nil, fmt.Errorf("failed to get Terraform client: %w", err)
 	}
-	result, err := legacy.ExecuteQueryWithClient(ctx, tfeClient, input.OrganizationName, input.WorkspaceName, input.QueryConfiguration, log.StandardLogger())
-	return convertResult(result, err)
+	text, err := searchlogic.ExecuteQueryText(ctx, tfeClient, input.OrganizationName, input.WorkspaceName, input.QueryConfiguration)
+	if err != nil {
+		return nil, nil, err
+	}
+	return textResult(text), nil, nil
 }
 
 func GetQueryStatusTool() *mcp.Tool {
-	statusTool := tool("get_query_status", legacy.GetQueryStatus(log.StandardLogger()).Tool.Description,
+	statusTool := tool("get_query_status", searchlogic.GetQueryStatusDescription,
 		"Get HCP Terraform query run status", true, true)
-	statusTool.OutputSchema = &jsonschema.Schema{
-		Type: "object",
-		Properties: map[string]*jsonschema.Schema{
-			"query_run_id":        {Type: "string"},
-			"status":              {Type: "string"},
-			"terminal":            {Type: "boolean"},
-			"retry_after_seconds": {Type: "integer"},
-			"message":             {Type: "string"},
-			"status_timestamps":   {Type: "object"},
-		},
-		Required: []string{"query_run_id", "status", "terminal", "message"},
+	schema, err := jsonschema.For[searchlogic.QueryStatusResponse](nil)
+	if err != nil {
+		panic(err)
 	}
+	statusTool.OutputSchema = schema
 	return statusTool
 }
 
-func GetQueryStatusFunc(ctx context.Context, req *mcp.CallToolRequest, input QueryRunArguments) (*mcp.CallToolResult, any, error) {
-	if strings.TrimSpace(input.QueryRunID) == "" {
-		return toolError("missing required input: query_run_id"), nil, nil
+func GetQueryStatusFunc(logger *slog.Logger) mcp.ToolHandlerFor[QueryRunArguments, *searchlogic.QueryStatusResponse] {
+	searchLogger := logging.WrapSlog(logger)
+	return func(ctx context.Context, req *mcp.CallToolRequest, input QueryRunArguments) (*mcp.CallToolResult, *searchlogic.QueryStatusResponse, error) {
+		queryRunID := strings.TrimSpace(input.QueryRunID)
+		if queryRunID == "" {
+			return nil, nil, fmt.Errorf("missing required input: query_run_id")
+		}
+		tfeClient, err := client.GetTfeClient(ctx, client.SessionIDFromRequest(req))
+		if err != nil {
+			return nil, nil, fmt.Errorf("failed to get Terraform client: %w", err)
+		}
+		response, err := searchlogic.PollQueryStatus(ctx, tfeClient, queryRunID, searchLogger)
+		if err != nil {
+			return nil, nil, fmt.Errorf("failed to get query run %q: %w", queryRunID, err)
+		}
+		text, err := searchlogic.FormatQueryStatus(response)
+		if err != nil {
+			return nil, nil, fmt.Errorf("failed to marshal query run %q: %w", queryRunID, err)
+		}
+		return textResult(text), response, nil
 	}
-	tfeClient, err := client.GetTfeClient(ctx, client.SessionIDFromRequest(req))
-	if err != nil {
-		return toolError(fmt.Sprintf("failed to get Terraform client: %v", err)), nil, nil
-	}
-	result, err := legacy.GetQueryStatusWithClient(ctx, tfeClient, input.QueryRunID, log.StandardLogger())
-	return convertResult(result, err)
 }
 
 func GetQuerySummaryTool() *mcp.Tool {
-	return tool("get_query_summary", legacy.GetQuerySummary(log.StandardLogger()).Tool.Description,
+	return tool("get_query_summary", searchlogic.GetQuerySummaryDescription,
 		"Get HCP Terraform query summary", true, true)
 }
 
 func GetQuerySummaryFunc(ctx context.Context, req *mcp.CallToolRequest, input QueryRunArguments) (*mcp.CallToolResult, any, error) {
 	if strings.TrimSpace(input.QueryRunID) == "" {
-		return toolError("missing required input: query_run_id"), nil, nil
+		return nil, nil, fmt.Errorf("missing required input: query_run_id")
 	}
 	tfeClient, err := client.GetTfeClient(ctx, client.SessionIDFromRequest(req))
 	if err != nil {
-		return toolError(fmt.Sprintf("failed to get Terraform client: %v", err)), nil, nil
+		return nil, nil, fmt.Errorf("failed to get Terraform client: %w", err)
 	}
-	result, err := legacy.GetQuerySummaryWithClient(ctx, tfeClient, input.QueryRunID, log.StandardLogger())
-	return convertResult(result, err)
+	text, err := searchlogic.ReadQuerySummary(ctx, tfeClient, input.QueryRunID)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to get query summary for %q: %w", input.QueryRunID, err)
+	}
+	return textResult(text), nil, nil
 }
 
 func textResult(text string) *mcp.CallToolResult {
 	return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: text}}}
-}
-
-func toolError(message string) *mcp.CallToolResult {
-	result := textResult(message)
-	result.IsError = true
-	return result
-}
-
-// convertResult copies the existing Search text/structured response onto the official wire.
-// Do not synthesize a new client session or forward credentials through legacy SDK context.
-func convertResult(result *oldmcp.CallToolResult, err error) (*mcp.CallToolResult, any, error) {
-	if err != nil {
-		return toolError(err.Error()), nil, nil
-	}
-	if result == nil {
-		return toolError("Search returned no result"), nil, nil
-	}
-	converted := &mcp.CallToolResult{IsError: result.IsError, StructuredContent: result.StructuredContent}
-	for _, content := range result.Content {
-		switch value := content.(type) {
-		case oldmcp.TextContent:
-			converted.Content = append(converted.Content, &mcp.TextContent{Text: value.Text})
-		default:
-			return toolError("Search returned unsupported content"), nil, nil
-		}
-	}
-	return converted, nil, nil
 }

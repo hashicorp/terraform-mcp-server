@@ -127,11 +127,15 @@ func TestOfficialSearchRegistrationAndConfigurationCall(t *testing.T) {
 			w.WriteHeader(http.StatusOK)
 			return
 		}
-		if r.URL.Path != "/api/v2/queries/qry-test" {
+		if r.URL.Path != "/api/v2/queries/qry-test" && r.URL.Path != "/api/v2/queries/qry-errored" {
 			http.Error(w, "unexpected backend path", http.StatusNotFound)
 			return
 		}
 		w.Header().Set("Content-Type", "application/vnd.api+json")
+		if r.URL.Path == "/api/v2/queries/qry-errored" {
+			_, _ = fmt.Fprint(w, `{"data":{"type":"queries","id":"qry-errored","attributes":{"status":"errored","terraform-version":"1.14.0","generate-config-out":false}}}`)
+			return
+		}
 		_, _ = fmt.Fprint(w, `{"data":{"type":"queries","id":"qry-test","attributes":{"status":"finished","terraform-version":"1.14.0","generate-config-out":false}}}`)
 	}))
 	t.Cleanup(backend.Close)
@@ -143,6 +147,13 @@ func TestOfficialSearchRegistrationAndConfigurationCall(t *testing.T) {
 	require.Equal(t, "qry-test", statusResult.StructuredContent.(map[string]any)["query_run_id"])
 	require.Equal(t, true, statusResult.StructuredContent.(map[string]any)["terminal"])
 	require.Contains(t, statusResult.Content[0].(*mcp.TextContent).Text, "get_query_summary")
+	failedRun, err := session.CallTool(ctx, &mcp.CallToolParams{Name: "get_query_status", Arguments: map[string]string{"query_run_id": "qry-errored"}})
+	require.NoError(t, err)
+	require.False(t, failedRun.IsError, "observed Terraform failures are factual status results")
+	require.Equal(t, "errored", failedRun.StructuredContent.(map[string]any)["status"])
+	missingRun, err := session.CallTool(ctx, &mcp.CallToolParams{Name: "get_query_status", Arguments: map[string]string{"query_run_id": "qry-missing"}})
+	require.NoError(t, err)
+	require.True(t, missingRun.IsError, "unreadable backend QueryRun must not be pending")
 }
 
 func TestOfficialSearchScopedCatalogAndQuerySubmission(t *testing.T) {

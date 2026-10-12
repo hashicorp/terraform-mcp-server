@@ -26,7 +26,8 @@ const (
 
 var errQueryStatusWaitBudgetExceeded = errors.New("query status wait budget exceeded")
 
-type queryStatusResponse struct {
+// QueryStatusResponse is the bounded QueryRun status returned by both MCP transports.
+type QueryStatusResponse struct {
 	ID                string                         `json:"query_run_id"`
 	Status            tfe.QueryRunStatus             `json:"status"`
 	Terminal          bool                           `json:"terminal"`
@@ -34,6 +35,8 @@ type queryStatusResponse struct {
 	Message           string                         `json:"message"`
 	StatusTimestamps  *queryStatusTimestampsResponse `json:"status_timestamps,omitempty"`
 }
+
+type queryStatusResponse = QueryStatusResponse
 
 type queryStatusTimestampsResponse struct {
 	CanceledAt      *time.Time `json:"canceled_at,omitempty"`
@@ -104,12 +107,16 @@ func getQueryStatusHandlerWithConfig(ctx context.Context, request mcp.CallToolRe
 	return getQueryStatusWithClient(ctx, pollCtx, tfeClient, queryRunID, logger, config)
 }
 
-// GetQueryStatusWithClient shares bounded polling and wire response behavior across transports.
-func GetQueryStatusWithClient(ctx context.Context, tfeClient *tfe.Client, queryRunID string, logger *log.Logger) (*mcp.CallToolResult, error) {
+// PollQueryStatus shares bounded polling without coupling the result to either MCP SDK.
+func PollQueryStatus(ctx context.Context, tfeClient *tfe.Client, queryRunID string, logger *log.Logger) (*QueryStatusResponse, error) {
+	queryRunID = strings.TrimSpace(queryRunID)
+	if queryRunID == "" {
+		return nil, fmt.Errorf("missing required input: query_run_id")
+	}
 	config := defaultQueryStatusPollConfig()
 	pollCtx, cancel := context.WithTimeoutCause(ctx, config.waitBudget, errQueryStatusWaitBudgetExceeded)
 	defer cancel()
-	return getQueryStatusWithClient(ctx, pollCtx, tfeClient, queryRunID, logger, config)
+	return waitForQueryStatus(ctx, pollCtx, tfeClient, queryRunID, config.pollInterval, logger)
 }
 
 func getQueryStatusWithClient(ctx, pollCtx context.Context, tfeClient *tfe.Client, queryRunID string, logger *log.Logger, config queryStatusPollConfig) (*mcp.CallToolResult, error) {
@@ -126,11 +133,20 @@ func getQueryStatusWithClient(ctx, pollCtx context.Context, tfeClient *tfe.Clien
 		return toolErrorf(logger, "get_query_status", "failed to get query run %q: %v", queryRunID, err)
 	}
 
-	text, err := json.Marshal(response)
+	formatted, err := FormatQueryStatus(response)
 	if err != nil {
 		return toolErrorf(logger, "get_query_status", "failed to marshal query run %q: %v", queryRunID, err)
 	}
-	return mcp.NewToolResultStructured(response, fmt.Sprintf("%s\n\n%s", response.Message, text)), nil
+	return mcp.NewToolResultStructured(response, formatted), nil
+}
+
+// FormatQueryStatus preserves the human-readable instruction plus exact JSON fallback.
+func FormatQueryStatus(response *QueryStatusResponse) (string, error) {
+	text, err := json.Marshal(response)
+	if err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("%s\n\n%s", response.Message, text), nil
 }
 
 func readQueryStatus(ctx context.Context, tfeClient *tfe.Client, queryRunID string) (string, error) {
