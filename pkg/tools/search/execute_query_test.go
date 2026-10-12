@@ -4,13 +4,18 @@
 package search
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/hashicorp/go-tfe"
+	"github.com/mark3labs/mcp-go/mcp"
+	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -51,6 +56,7 @@ func TestExecuteQueryDefinition(t *testing.T) {
 	assert.Contains(t, tool.Tool.Description, "exact key")
 	assert.Contains(t, tool.Tool.Description, "ordinary managed resource name")
 	assert.Contains(t, tool.Tool.Description, "MANDATORY WORKFLOW")
+	assert.Contains(t, tool.Tool.OutputSchema.Required, "query_run_id")
 }
 
 func TestParseExecuteQueryConfiguration(t *testing.T) {
@@ -118,7 +124,7 @@ func TestSubmitExecuteQuery(t *testing.T) {
 	response, err := submitExecuteQuery(context.Background(), tfeClient, "ws-test", configuration)
 
 	require.NoError(t, err)
-	assert.JSONEq(t, `{"data":{"type":"no-code-queries","id":"ncqry-test","relationships":{"latest-query-run":{"data":{"type":"queries","id":"qry-test"}}}}}`, response)
+	assert.Equal(t, &ExecuteQueryResponse{QueryRunID: "qry-test"}, response)
 	assert.Equal(t, "no-code-queries", received["data"].(map[string]any)["type"])
 	attributes := received["data"].(map[string]any)["attributes"].(map[string]any)
 	assert.Equal(t, "terraform-mcp", attributes["source"])
@@ -150,4 +156,102 @@ func TestSubmitExecuteQueryReturnsAPIError(t *testing.T) {
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "Limit must be a positive integer")
+}
+
+func TestSubmitQueryProjectsIDAndDoesNotExposeBackendCapabilities(t *testing.T) {
+	const secret = "https://archivist.example/signed?token=secret"
+	for _, tc := range []struct {
+		name, status, body string
+		wantErr            bool
+	}{
+		{"created", "201", `{"data":{"id":"ncqry-test","download_url":"` + secret + `","relationships":{"latest-query-run":{"data":{"id":"qry-test"}}}}}`, false},
+		{"missing relationship", "201", `{"data":{"id":"ncqry-test","url":"` + secret + `"}}`, true},
+		{"malformed ID", "201", `{"data":{"relationships":{"latest-query-run":{"data":{"id":"qry-https://archivist.example"}}}}}}`, true},
+		{"malformed body", "201", `{"data":`, true},
+		{"oversized valid body", "201", `{"data":{"relationships":{"latest-query-run":{"data":{"id":"qry-test"}}}}}` + strings.Repeat(" ", maxQueryCreateResponseBytes), true},
+		{"rejected POST", "422", `{"errors":[{"detail":"` + secret + `"}]}`, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.URL.Path == "/api/v2/ping" {
+					w.WriteHeader(http.StatusOK)
+					return
+				}
+				w.Header().Set("Content-Type", "application/vnd.api+json")
+				if r.URL.Path == "/api/v2/organizations/org/workspaces/ws" {
+					_, _ = w.Write([]byte(`{"data":{"type":"workspaces","id":"ws-test","attributes":{"name":"ws"}}}`))
+					return
+				}
+				if tc.status == "422" {
+					w.WriteHeader(http.StatusUnprocessableEntity)
+				} else {
+					w.WriteHeader(http.StatusCreated)
+				}
+				_, _ = fmt.Fprint(w, tc.body)
+			}))
+			t.Cleanup(backend.Close)
+			client, err := tfe.NewClient(&tfe.Config{Address: backend.URL, Token: "test-token", HTTPClient: backend.Client()})
+			require.NoError(t, err)
+			text, err := ExecuteQueryText(context.Background(), client, "org", "ws", validExecuteQueryConfiguration)
+			if tc.wantErr {
+				require.ErrorContains(t, err, "outcome unknown")
+				assert.NotContains(t, err.Error(), secret)
+				assert.Empty(t, text)
+				return
+			}
+			require.NoError(t, err)
+			assert.JSONEq(t, `{"query_run_id":"qry-test"}`, text)
+			assert.False(t, strings.Contains(text, secret))
+		})
+	}
+}
+
+func TestSubmitQueryWorkspaceErrorDoesNotExposeBackendBody(t *testing.T) {
+	const sentinel = "https://archivist.example/signed?secret=sentinel"
+	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/v2/ping" {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+		assert.Equal(t, "/api/v2/organizations/org/workspaces/ws", r.URL.Path)
+		w.WriteHeader(http.StatusForbidden)
+		_, _ = fmt.Fprint(w, `{"errors":[{"detail":"`+sentinel+`"}]}`)
+	}))
+	defer backend.Close()
+	client, err := tfe.NewClient(&tfe.Config{Address: backend.URL, Token: "test-token", HTTPClient: backend.Client()})
+	require.NoError(t, err)
+	_, err = SubmitQuery(context.Background(), client, "org", "ws", validExecuteQueryConfiguration)
+	require.ErrorContains(t, err, "unable to read source workspace")
+	assert.NotContains(t, err.Error(), sentinel)
+}
+
+func TestLegacyExecuteQueryStructuredProjection(t *testing.T) {
+	const sentinel = "https://archivist.example/signed?secret=sentinel"
+	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/vnd.api+json")
+		switch r.URL.Path {
+		case "/api/v2/ping":
+			w.WriteHeader(http.StatusOK)
+		case "/api/v2/organizations/org/workspaces/ws":
+			_, _ = w.Write([]byte(`{"data":{"type":"workspaces","id":"ws-test","attributes":{"name":"ws"}}}`))
+		default:
+			w.WriteHeader(http.StatusCreated)
+			_, _ = fmt.Fprint(w, `{"data":{"url":"`+sentinel+`","relationships":{"latest-query-run":{"data":{"id":"qry-test"}}}}}`)
+		}
+	}))
+	defer backend.Close()
+	client, err := tfe.NewClient(&tfe.Config{Address: backend.URL, Token: "test-token", HTTPClient: backend.Client()})
+	require.NoError(t, err)
+	var logged bytes.Buffer
+	logger := log.New()
+	logger.SetOutput(&logged)
+	result, err := executeQueryWithClient(context.Background(), client, "org", "ws", validExecuteQueryConfiguration, logger)
+	require.NoError(t, err)
+	require.False(t, result.IsError)
+	text, ok := mcp.AsTextContent(result.Content[0])
+	require.True(t, ok)
+	assert.JSONEq(t, `{"query_run_id":"qry-test"}`, text.Text)
+	assert.Equal(t, "qry-test", result.StructuredContent.(*ExecuteQueryResponse).QueryRunID)
+	assert.NotContains(t, fmt.Sprint(result), sentinel)
+	assert.NotContains(t, logged.String(), sentinel)
 }
