@@ -304,6 +304,11 @@ func classifyImportPlan(ctx context.Context, c *tfe.Client, out *VerifyImportRes
 	}
 	buf := &queryBoundedWriter{limit: 32 << 20}
 	if err := req.Do(ctx, buf); err != nil {
+		if buf.overLimit {
+			out.Status, out.Diagnostics = "blocked", []string{"plan_json_size_limit"}
+			out.NextAction = "The associated Plan JSON exceeds the 32 MiB verifier limit. Inspect the exact Run and full Plan in HCP Terraform; do not apply or start another Run to diagnose this response."
+			return out, checkImportResultBudget(out)
+		}
 		return nil, queryEvidenceError("plan_read_unavailable")
 	}
 	var plan struct {
@@ -335,11 +340,41 @@ func classifyImportPlan(ctx context.Context, c *tfe.Client, out *VerifyImportRes
 			} `json:"change"`
 		} `json:"resource_drift"`
 	}
-	if len(buf.buffer.Bytes()) == 0 || decodeQueryEvidenceLimit(buf.buffer.Bytes(), &plan, 32<<20, 64) != nil || !regexp.MustCompile(`^1\.[0-9]+$`).MatchString(plan.FormatVersion) || plan.Complete == nil || !*plan.Complete || plan.Errored {
-		return nil, queryEvidenceError("plan_incomplete_or_unsupported")
+	// Only publish fixed, value-free reasons. Plan JSON can contain credentials,
+	// importing IDs and provider values; do not echo it or decoder errors.
+	unsupported := func(code, guidance string) (*VerifyImportResult, error) {
+		out.Status, out.Diagnostics, out.NextAction = "blocked", []string{code}, guidance+" Review the exact Run and full Plan in HCP Terraform; do not apply or start another Run to diagnose this response."
+		return out, checkImportResultBudget(out)
 	}
-	if old, known := terraformImportSyntaxVersion(plan.TerraformVersion); !known || old || len(plan.ResourceChanges) > 10000 || len(plan.ResourceDrift) > 100 || len(plan.DeferredChanges) > 10000 {
-		return nil, queryEvidenceError("plan_incomplete_or_unsupported")
+	if len(buf.buffer.Bytes()) == 0 {
+		return unsupported("plan_json_empty", "The associated Plan JSON response was empty.")
+	}
+	if err := decodeQueryEvidenceLimit(buf.buffer.Bytes(), &plan, 32<<20, 64); err != nil {
+		code := "plan_json_invalid"
+		switch err.Error() {
+		case "query_evidence_size_limit":
+			code = "plan_json_size_limit"
+		case "query_evidence_depth_limit":
+			code = "plan_json_depth_limit"
+		}
+		return unsupported(code, "The associated Plan JSON could not be safely decoded within verification limits.")
+	}
+	if !regexp.MustCompile(`^1\.[0-9]+$`).MatchString(plan.FormatVersion) {
+		return unsupported("plan_format_unsupported", "The Plan JSON format is missing or is not a supported 1.x format.")
+	}
+	if plan.Complete == nil || !*plan.Complete {
+		return unsupported("plan_json_incomplete", "The Plan JSON does not report complete=true, even if the Run and Plan statuses are finished.")
+	}
+	if plan.Errored {
+		return unsupported("plan_json_errored", "The Plan JSON reports errored=true despite the finished Plan status.")
+	}
+	if old, known := terraformImportSyntaxVersion(plan.TerraformVersion); !known {
+		return unsupported("plan_terraform_version_unavailable", "The Plan JSON lacks a recognized Terraform release or prerelease version; import-block support cannot be checked from this evidence.")
+	} else if old {
+		return unsupported("plan_terraform_version_unsupported", "The Plan JSON reports a Terraform release before 1.5, which cannot support import blocks.")
+	}
+	if len(plan.ResourceChanges) > 10000 || len(plan.ResourceDrift) > 100 || len(plan.DeferredChanges) > 10000 {
+		return unsupported("plan_change_limit", "The Plan exceeds verification's resource, drift or deferred-change limits.")
 	}
 	out.Plan = &ImportPlanFacts{TerraformVersion: plan.TerraformVersion, FormatVersion: plan.FormatVersion, ResourceChanges: len(plan.ResourceChanges), DeferredChanges: len(plan.DeferredChanges), ResourceDrift: len(plan.ResourceDrift)}
 	out.Unselected = &ImportUnselected{Addresses: []ImportUnselectedAddress{}}
@@ -479,6 +514,10 @@ func classifyImportPlan(ctx context.Context, c *tfe.Client, out *VerifyImportRes
 	if out.ObjectIdentity["unverified"]+out.ObjectIdentity["mismatched"]+out.ObjectIdentity["unsupported"] > 0 {
 		out.Diagnostics = append(out.Diagnostics, "identity_requires_review")
 		out.NextAction = "Identity is unverified, mismatched or unsupported for some selections; report this before plan-action findings. Confirm documented import form, provider scope and full HCP Plan with the user. A clean import action does not prove the selected cloud object; no apply was authorized."
+	}
+	if out.Changes["update"]+out.Changes["create"]+out.Changes["replace_or_destroy"]+out.Plan.ExtraImports+out.Plan.OtherManagedActions+out.Plan.OutputChanges+out.Plan.DeferredChanges+out.Plan.ResourceDrift > 0 {
+		out.Diagnostics = append(out.Diagnostics, "plan_actions_require_review")
+		out.NextAction += " The Plan contains changes beyond a no-op import (or other changes/drift). Review the full attribute-level diff and reconcile the existing local configuration with the user; this Plan is not safe to apply as an import-only change. If configuration is revised, a separately approved new speculative plan must be verified under its own Run ID."
 	}
 	if err := checkImportResultBudget(out); err != nil {
 		return nil, err

@@ -183,18 +183,23 @@ func allowedImportOrganization(org string) bool {
 }
 
 func terraformImportSyntaxVersion(setting string) (old, known bool) {
-	parts := strings.Split(strings.TrimPrefix(setting, "v"), ".")
-	if len(parts) != 3 {
+	// HCP plans may report a prerelease Terraform build. Do not mistake a
+	// well-formed suffix for an unknown version, but never accept arbitrary
+	// trailing text as proof of import-block support.
+	parts := terraformImportVersionPattern.FindStringSubmatch(setting)
+	if parts == nil {
 		return false, false
 	}
-	major, e1 := strconv.Atoi(parts[0])
-	minor, e2 := strconv.Atoi(parts[1])
-	patch, e3 := strconv.Atoi(parts[2])
+	major, e1 := strconv.Atoi(parts[1])
+	minor, e2 := strconv.Atoi(parts[2])
+	patch, e3 := strconv.Atoi(parts[3])
 	if e1 != nil || e2 != nil || e3 != nil || major < 0 || minor < 0 || patch < 0 {
 		return false, false
 	}
 	return major < 1 || major == 1 && minor < 5, true
 }
+
+var terraformImportVersionPattern = regexp.MustCompile(`^v?([0-9]+)\.([0-9]+)\.([0-9]+)(?:-[0-9A-Za-z]+(?:[.-][0-9A-Za-z]+)*)?(?:\+[0-9A-Za-z]+(?:[.-][0-9A-Za-z]+)*)?$`)
 
 // Historical state/plan data is optional context: inaccessible state does not
 // prove an empty target. Never use the most recent Run as a substitute.
