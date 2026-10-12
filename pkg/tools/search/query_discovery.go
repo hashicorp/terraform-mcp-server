@@ -79,12 +79,14 @@ type queryDiscoveryProvenance struct {
 }
 
 type queryBoundedWriter struct {
-	buffer bytes.Buffer
-	limit  int
+	buffer    bytes.Buffer
+	limit     int
+	overLimit bool
 }
 
 func (b *queryBoundedWriter) Write(p []byte) (int, error) {
 	if len(p) > b.limit-b.buffer.Len() {
+		b.overLimit = true
 		return 0, queryEvidenceError("query_evidence_size_limit")
 	}
 	return b.buffer.Write(p)

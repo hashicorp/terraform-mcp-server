@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/hashicorp/go-tfe"
@@ -34,6 +35,10 @@ func importWireBackend(t *testing.T, status, planStatus string) (*httptest.Serve
 }
 
 func importWireBackendForListType(t *testing.T, status, planStatus, listType string) (*httptest.Server, *int) {
+	return importWireBackendWithPlan(t, status, planStatus, listType, "")
+}
+
+func importWireBackendWithPlan(t *testing.T, status, planStatus, listType, planJSON string) (*httptest.Server, *int) {
 	t.Helper()
 	planJSONReads := new(int)
 	var backend *httptest.Server
@@ -81,7 +86,10 @@ func importWireBackendForListType(t *testing.T, status, planStatus, listType str
 			_, _ = fmt.Fprintf(w, `{"data":{"type":"plans","id":"plan-example","attributes":{"status":%q}}}`, planStatus)
 		case "/api/v2/plans/plan-example/json-output":
 			*planJSONReads++
-			_, _ = fmt.Fprint(w, `{"format_version":"1.2","terraform_version":"1.14.0","complete":true,"errored":false,"planned_values":{"root_module":{"resources":[{"address":"aws_s3_bucket.sample","identity_schema_version":0}]}},"resource_changes":[{"address":"aws_s3_bucket.sample","mode":"managed","type":"aws_s3_bucket","provider_name":"registry.terraform.io/hashicorp/aws","change":{"actions":["no-op"],"importing":{"id":"private-import-id-sentinel"},"after_identity":{"bucket":"sample"}}}],"output_changes":{"stable":{"actions":["no-op"]}},"deferred_changes":[],"resource_drift":[]}`)
+			if planJSON == "" {
+				planJSON = `{"format_version":"1.2","terraform_version":"1.14.0","complete":true,"errored":false,"planned_values":{"root_module":{"resources":[{"address":"aws_s3_bucket.sample","identity_schema_version":0}]}},"resource_changes":[{"address":"aws_s3_bucket.sample","mode":"managed","type":"aws_s3_bucket","provider_name":"registry.terraform.io/hashicorp/aws","change":{"actions":["no-op"],"importing":{"id":"private-import-id-sentinel"},"after_identity":{"bucket":"sample"}}}],"output_changes":{"stable":{"actions":["no-op"]}},"deferred_changes":[],"resource_drift":[]}`
+			}
+			_, _ = fmt.Fprint(w, planJSON)
 		default:
 			w.WriteHeader(http.StatusNotFound)
 		}
@@ -183,6 +191,110 @@ func TestPrepareImportKeepsSameNameSearchListAndManagedType(t *testing.T) {
 	blocked, err = ReadPrepareImport(context.Background(), c, input)
 	require.Nil(t, blocked)
 	require.EqualError(t, err, "selection_invalid", "unknown QueryRun marker still fails")
+}
+
+// A finished speculative Run may import and also update cloud settings. The
+// import marker and update action are independent of object identity and
+// neither makes the Plan safe to apply.
+func TestVerifyImportPlanSQSImportWithUpdate(t *testing.T) {
+	planJSON := `{"format_version":"1.2","terraform_version":"1.17.0-dev.1","complete":true,"errored":false,"planned_values":{"root_module":{"resources":[{"address":"aws_sqs_queue.unmanaged","identity_schema_version":0}]}},"resource_changes":[{"address":"aws_sqs_queue.unmanaged","mode":"managed","type":"aws_sqs_queue","provider_name":"registry.terraform.io/hashicorp/aws","change":{"actions":["update"],"importing":{"id":"private-queue-url-sentinel"},"before":{"max_message_size":100,"tags":{"private":"secret-sentinel"}},"after":{"max_message_size":200,"tags":{}},"after_identity":{"url":"https://example.invalid/queue"}}}],"output_changes":{},"deferred_changes":[],"resource_drift":[]}`
+	backend, reads := importWireBackendWithPlan(t, "planned_and_finished", "finished", "aws_sqs_queue", planJSON)
+	c, err := tfe.NewClient(&tfe.Config{Address: backend.URL, Token: "test-token", HTTPClient: backend.Client()})
+	require.NoError(t, err)
+	t.Setenv("MCP_ORGANIZATION_ALLOWLIST", "org")
+	provider := queryResultProvider{Source: "registry.terraform.io/hashicorp/aws", Version: "6.66.0"}
+	marker, err := queryResultMarker("qry-example", provider, "aws_sqs_queue", map[string]any{"url": "https://example.invalid/queue"})
+	require.NoError(t, err)
+	prep, err := ReadPrepareImport(context.Background(), c, PrepareImportInput{
+		OrganizationName: "org", WorkspaceName: "target", QueryRunID: "qry-example",
+		Selections:      []ImportSelection{{QueryResultMarker: marker, ManagedType: "aws_sqs_queue"}},
+		LockedProviders: map[string]string{provider.Source: "6.18.0"},
+	})
+	require.NoError(t, err)
+	input := VerifyImportInput{OrganizationName: "org", WorkspaceName: "target", RunID: "run-example", Carry: prep.Carry,
+		Bindings: []ImportBinding{{QueryResultMarker: marker, TargetAddress: "aws_sqs_queue.unmanaged"}}, DetailAddresses: []string{"aws_sqs_queue.unmanaged"}}
+	result, err := ReadVerifyImportPlan(context.Background(), c, input)
+	require.NoError(t, err)
+	require.Equal(t, "plan_available", result.Status)
+	require.Equal(t, "1.2", result.Plan.FormatVersion)
+	require.Equal(t, "1.17.0-dev.1", result.Plan.TerraformVersion)
+	require.Equal(t, 1, result.Changes["update"])
+	require.Equal(t, 1, result.ObjectIdentity["matched"], "identity classification must not mask the update")
+	require.Equal(t, []string{"update"}, result.Detail[0].Actions)
+	require.Contains(t, result.Diagnostics, "plan_actions_require_review")
+	require.Contains(t, result.NextAction, "not safe to apply")
+	require.Equal(t, 1, *reads)
+	encoded, err := json.Marshal(result)
+	require.NoError(t, err)
+	for _, secret := range []string{"private-queue-url-sentinel", "secret-sentinel", "https://example.invalid/queue"} {
+		require.NotContains(t, string(encoded), secret)
+	}
+
+	// The same Run cannot be classified when a preflight field is absent or
+	// contradictory. Expose only a static reason, never raw Plan values.
+	for _, tt := range []struct{ name, payload, reason string }{
+		{"missing Terraform version", strings.Replace(planJSON, `"terraform_version":"1.17.0-dev.1",`, "", 1), "plan_terraform_version_unavailable"},
+		{"incomplete JSON", strings.Replace(planJSON, `"complete":true`, `"complete":false`, 1), "plan_json_incomplete"},
+		{"errored JSON", strings.Replace(planJSON, `"errored":false`, `"errored":true`, 1), "plan_json_errored"},
+		{"unsupported format", strings.Replace(planJSON, `"format_version":"1.2"`, `"format_version":"2.0"`, 1), "plan_format_unsupported"},
+		{"old Terraform", strings.Replace(planJSON, `"terraform_version":"1.17.0-dev.1"`, `"terraform_version":"1.4.9-dev.1"`, 1), "plan_terraform_version_unsupported"},
+		{"malformed Terraform version", strings.Replace(planJSON, `"terraform_version":"1.17.0-dev.1"`, `"terraform_version":"1.17.0 arbitrary-private-sentinel"`, 1), "plan_terraform_version_unavailable"},
+		{"invalid JSON", planJSON + `invalid-private-sentinel`, "plan_json_invalid"},
+		{"deep JSON", `{"nested":` + strings.Repeat("[", 65) + `"private-sentinel"` + strings.Repeat("]", 65) + `}`, "plan_json_depth_limit"},
+		{"oversized JSON", `{"padding":"` + strings.Repeat("x", 32<<20) + `"}`, "plan_json_size_limit"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			fixtureServer, _ := importWireBackendWithPlan(t, "planned_and_finished", "finished", "aws_sqs_queue", tt.payload)
+			client, err := tfe.NewClient(&tfe.Config{Address: fixtureServer.URL, Token: "test-token", HTTPClient: fixtureServer.Client()})
+			require.NoError(t, err)
+			blocked, err := ReadVerifyImportPlan(context.Background(), client, input)
+			require.NoError(t, err)
+			require.Equal(t, "blocked", blocked.Status)
+			require.Equal(t, []string{tt.reason}, blocked.Diagnostics)
+			require.Equal(t, "run-example", blocked.RunID)
+			require.Equal(t, "plan-example", blocked.PlanID)
+			require.Nil(t, blocked.Plan)
+			resultJSON, err := json.Marshal(blocked)
+			require.NoError(t, err)
+			require.NotContains(t, string(resultJSON), "private-queue-url-sentinel")
+			require.NotContains(t, string(resultJSON), "secret-sentinel")
+			if tt.reason == "plan_terraform_version_unavailable" {
+				t.Setenv("TFE_ADDRESS", fixtureServer.URL)
+				t.Setenv("TFE_TOKEN", "test-token")
+				ctx := server.NewMCPServer("test", "0").WithContext(context.Background(), importTestSession{})
+				wire, err := VerifyImportPlan(silentLogger()).Handler(ctx, mcp.CallToolRequest{Params: mcp.CallToolParams{Arguments: input}})
+				require.NoError(t, err)
+				require.False(t, wire.IsError)
+				require.Contains(t, fmt.Sprint(wire.StructuredContent), tt.reason)
+				text, ok := mcp.AsTextContent(wire.Content[0])
+				require.True(t, ok)
+				require.Contains(t, text.Text, tt.reason)
+				require.NotContains(t, text.Text, "private-queue-url-sentinel")
+			}
+		})
+	}
+}
+
+func TestTerraformImportSyntaxVersionPrereleaseAndMalformed(t *testing.T) {
+	for _, tt := range []struct {
+		version    string
+		old, known bool
+	}{
+		{"1.14.0", false, true},
+		{"v1.17.0-dev.20261012+build.1", false, true},
+		{"1.4.9-dev.1", true, true},
+		{"1.5.0", false, true},
+		{"1.17.0 arbitrary", false, false},
+		{"1.17.0-", false, false},
+		{"1.17.0/secret", false, false},
+		{"1.999999999999999999999999999.0", false, false},
+	} {
+		t.Run(tt.version, func(t *testing.T) {
+			old, known := terraformImportSyntaxVersion(tt.version)
+			require.Equal(t, tt.old, old)
+			require.Equal(t, tt.known, known)
+		})
+	}
 }
 
 func TestPrepareImportAllowsCallerProposedDifferentNameWithoutClaimingSupport(t *testing.T) {

@@ -232,6 +232,7 @@ func TestOfficialImportVerifyObservedFailureAndNoPlanJSON(t *testing.T) {
 
 func TestOfficialImportPrepareAndFinishedPlan(t *testing.T) {
 	ctx := context.Background()
+	var omitPlanTerraformVersion atomic.Bool
 	var backend *httptest.Server
 	backend = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/vnd.api+json")
@@ -265,6 +266,10 @@ func TestOfficialImportPrepareAndFinishedPlan(t *testing.T) {
 		case "/api/v2/plans/plan-test":
 			_, _ = fmt.Fprint(w, `{"data":{"type":"plans","id":"plan-test","attributes":{"status":"finished"}}}`)
 		case "/api/v2/plans/plan-test/json-output":
+			if omitPlanTerraformVersion.Load() {
+				_, _ = fmt.Fprint(w, `{"format_version":"1.2","complete":true,"errored":false,"private":"secret-id-sentinel"}`)
+				return
+			}
 			_, _ = fmt.Fprint(w, `{"format_version":"1.2","terraform_version":"1.14.0","complete":true,"errored":false,"planned_values":{"root_module":{"resources":[{"address":"aws_s3_bucket.sample","identity_schema_version":0}]}},"resource_changes":[{"address":"aws_s3_bucket.sample","mode":"managed","type":"aws_s3_bucket","provider_name":"registry.terraform.io/hashicorp/aws","change":{"actions":["no-op"],"importing":{"id":"secret-id-sentinel"},"after_identity":{"bucket":"sample"}}}],"resource_drift":[]}`)
 		default:
 			http.NotFound(w, r)
@@ -304,6 +309,16 @@ func TestOfficialImportPrepareAndFinishedPlan(t *testing.T) {
 	require.Equal(t, float64(1), facts["object_identity"].(map[string]any)["matched"])
 	require.NotContains(t, fmt.Sprint(verify.Content), "secret-id-sentinel")
 	require.NotContains(t, fmt.Sprint(verify.StructuredContent), "secret-id-sentinel")
+	omitPlanTerraformVersion.Store(true)
+	blocked, err := session.CallTool(ctx, &mcp.CallToolParams{Name: "verify_import_plan", Arguments: map[string]any{"organization_name": "org", "workspace_name": "target", "run_id": "run-example", "carry": prepared["carry"], "bindings": []any{map[string]any{"query_result_marker": marker, "target_address": "aws_s3_bucket.sample"}}}})
+	require.NoError(t, err)
+	require.False(t, blocked.IsError)
+	data := blocked.StructuredContent.(map[string]any)
+	require.Equal(t, "blocked", data["status"])
+	require.Equal(t, "plan_terraform_version_unavailable", data["diagnostics"].([]any)[0])
+	require.Contains(t, blocked.Content[0].(*mcp.TextContent).Text, `"plan_terraform_version_unavailable"`)
+	require.NotContains(t, fmt.Sprint(blocked.Content), "secret-id-sentinel")
+	require.NotContains(t, fmt.Sprint(blocked.StructuredContent), "secret-id-sentinel")
 }
 
 func TestOfficialSearchQuerySummarySelectableAndNonselectable(t *testing.T) {
