@@ -116,7 +116,7 @@ func TestOfficialSearchScopedCatalogAndQuerySubmission(t *testing.T) {
 			posted.Store(true)
 			w.Header().Set("Content-Type", "application/vnd.api+json")
 			w.WriteHeader(http.StatusCreated)
-			_, _ = fmt.Fprint(w, `{"data":{"type":"no-code-queries","id":"ncqry-test","relationships":{"latest-query-run":{"data":{"type":"queries","id":"qry-test"}}}}}`)
+			_, _ = fmt.Fprint(w, `{"data":{"type":"no-code-queries","id":"ncqry-test","artifact_url":"https://archivist.example/signed?secret=sentinel","relationships":{"latest-query-run":{"data":{"type":"queries","id":"qry-test"}}}}}`)
 		default:
 			http.Error(w, "unexpected backend path", http.StatusNotFound)
 		}
@@ -151,4 +151,7 @@ func TestOfficialSearchScopedCatalogAndQuerySubmission(t *testing.T) {
 	require.False(t, result.IsError, "execute result: %#v", result.Content)
 	require.True(t, posted.Load())
 	require.Contains(t, result.Content[0].(*mcp.TextContent).Text, "qry-test")
+	require.Equal(t, "qry-test", result.StructuredContent.(map[string]any)["query_run_id"])
+	require.JSONEq(t, `{"query_run_id":"qry-test"}`, result.Content[0].(*mcp.TextContent).Text)
+	require.NotContains(t, fmt.Sprint(result.StructuredContent), "sentinel")
 }

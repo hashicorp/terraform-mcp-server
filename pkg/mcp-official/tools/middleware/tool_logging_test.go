@@ -50,6 +50,22 @@ func TestToolLoggingMiddleware(t *testing.T) {
 	assert.Contains(t, logOutput, "my-org")
 }
 
+func TestToolLoggingMiddleware_SearchOmitsArgumentsAndErrorDetail(t *testing.T) {
+	var buf bytes.Buffer
+	logger := slog.New(slog.NewTextHandler(&buf, nil))
+	const sentinel = "https://archivist.example/signed?secret=sentinel"
+	next := func(_ context.Context, _ string, _ mcp.Request) (mcp.Result, error) {
+		return nil, errors.New(sentinel)
+	}
+	request := &mcp.CallToolRequest{Params: &mcp.CallToolParamsRaw{
+		Name: "execute_query", Arguments: json.RawMessage(`{"query_configuration":"` + sentinel + `"}`),
+	}}
+	_, err := ToolLogging(logger)(next)(context.Background(), "tools/call", request)
+	require.Error(t, err)
+	assert.Contains(t, buf.String(), "execute_query")
+	assert.NotContains(t, buf.String(), sentinel)
+}
+
 func TestToolLoggingMiddleware_ToolError(t *testing.T) {
 	var buf bytes.Buffer
 	logger := slog.New(slog.NewTextHandler(&buf, nil))

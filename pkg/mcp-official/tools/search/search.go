@@ -38,7 +38,7 @@ type ExecuteQueryArguments struct {
 }
 
 type QueryRunArguments struct {
-	QueryRunID string `json:"query_run_id" jsonschema:"Exact query run ID returned by execute_query"`
+	QueryRunID string `json:"query_run_id" jsonschema:"Exact query_run_id returned by execute_query or an existing authorized QueryRun ID"`
 }
 
 func tool(name, description, title string, readOnly, openWorld bool) *mcp.Tool {
@@ -110,10 +110,15 @@ func ExecuteQueryTool() *mcp.Tool {
 	queryTool := tool("execute_query", searchlogic.ExecuteQueryDescription,
 		"Create and execute an HCP Terraform no-code query", false, true)
 	queryTool.InputSchema = searchScopeInputSchema[ExecuteQueryArguments]()
+	schema, err := jsonschema.For[searchlogic.ExecuteQueryResponse](nil)
+	if err != nil {
+		panic(err)
+	}
+	queryTool.OutputSchema = schema
 	return queryTool
 }
 
-func ExecuteQueryFunc(ctx context.Context, req *mcp.CallToolRequest, input ExecuteQueryArguments) (*mcp.CallToolResult, any, error) {
+func ExecuteQueryFunc(ctx context.Context, req *mcp.CallToolRequest, input ExecuteQueryArguments) (*mcp.CallToolResult, *searchlogic.ExecuteQueryResponse, error) {
 	scope := searchlogic.ResolveSearchScope(input.OrganizationName, input.WorkspaceName)
 	if !scope.Ready() {
 		return textResult(scope.InputRequest()), nil, nil
@@ -126,13 +131,13 @@ func ExecuteQueryFunc(ctx context.Context, req *mcp.CallToolRequest, input Execu
 	}
 	tfeClient, err := client.GetTfeClient(ctx, client.SessionIDFromRequest(req))
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to get Terraform client: %w", err)
+		return nil, nil, fmt.Errorf("failed to get Terraform client; check session configuration")
 	}
-	text, err := searchlogic.ExecuteQueryText(ctx, tfeClient, scope.Organization.Value, scope.Workspace.Value, input.QueryConfiguration)
+	response, err := searchlogic.SubmitQuery(ctx, tfeClient, scope.Organization.Value, scope.Workspace.Value, input.QueryConfiguration)
 	if err != nil {
 		return nil, nil, err
 	}
-	return textResult(text), nil, nil
+	return textResult(fmt.Sprintf(`{"query_run_id":%q}`, response.QueryRunID)), response, nil
 }
 
 func GetQueryStatusTool() *mcp.Tool {

@@ -70,7 +70,7 @@ func GetQueryStatus(logger *log.Logger) server.ServerTool {
 			mcp.WithDestructiveHintAnnotation(false),
 			mcp.WithString("query_run_id",
 				mcp.Required(),
-				mcp.Description("Query run ID returned in the execute_query response as data.relationships.latest-query-run.data.id."),
+				mcp.Description("Query run ID returned by execute_query as query_run_id (or an existing authorized QueryRun ID)."),
 			),
 			mcp.WithOutputSchema[queryStatusResponse](),
 		),
