@@ -98,7 +98,7 @@ func executeQueryHandler(ctx context.Context, request mcp.CallToolRequest, logge
 		return toolErrorf(logger, "execute_query", "missing required input: query_configuration")
 	}
 
-	configuration, err := parseExecuteQueryConfiguration(rawConfiguration)
+	_, err = parseExecuteQueryConfiguration(rawConfiguration)
 	if err != nil {
 		return toolErrorf(logger, "execute_query", "invalid query_configuration: %v", err)
 	}
@@ -106,6 +106,24 @@ func executeQueryHandler(ctx context.Context, request mcp.CallToolRequest, logge
 	tfeClient, err := client.GetTfeClientFromContext(ctx, logger)
 	if err != nil {
 		return toolErrorf(logger, "execute_query", "failed to get Terraform client: %v", err)
+	}
+	return ExecuteQueryWithClient(ctx, tfeClient, organizationName, workspaceName, rawConfiguration, logger)
+}
+
+// ExecuteQueryWithClient shares validation and submission between MCP transports.
+func ExecuteQueryWithClient(ctx context.Context, tfeClient *tfe.Client, organizationName, workspaceName, rawConfiguration string, logger *log.Logger) (*mcp.CallToolResult, error) {
+	if organizationName = strings.TrimSpace(organizationName); organizationName == "" {
+		return toolErrorf(logger, "execute_query", "missing required input: organization_name")
+	}
+	if workspaceName = strings.TrimSpace(workspaceName); workspaceName == "" {
+		return toolErrorf(logger, "execute_query", "missing required input: workspace_name")
+	}
+	if strings.TrimSpace(rawConfiguration) == "" {
+		return toolErrorf(logger, "execute_query", "missing required input: query_configuration")
+	}
+	configuration, err := parseExecuteQueryConfiguration(rawConfiguration)
+	if err != nil {
+		return toolErrorf(logger, "execute_query", "invalid query_configuration: %v", err)
 	}
 	workspace, err := tfeClient.Workspaces.Read(ctx, organizationName, workspaceName)
 	if err != nil {

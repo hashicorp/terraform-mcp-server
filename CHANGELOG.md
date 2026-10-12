@@ -12,6 +12,10 @@ BREAKING CHANGES
 
 * `search_providers` is renamed to `search_provider_docs`. The tool searches documentation within a provider rather than for providers, and the old name was misleading. Update any toolset configuration or client that references the old name.
 
+FEATURES
+
+* [New Tools] Terraform Search adds `provider_list_schema_list`, `generate_query_configuration`, `execute_query`, `get_query_status`, and `get_query_summary` on both the legacy and official MCP servers. Query status polling is bounded per call.
+
 IMPROVEMENTS
 
 * Bump Go to 1.26.9 and `golang.org/x/net` to v0.61.0, `golang.org/x/crypto` to v0.58.0 and `golang.org/x/text` to v0.43.0 to address known CVEs in the HTTP/2 stack, net/http, crypto/tls and html/template. [571](https://github.com/hashicorp/terraform-mcp-server/pull/571)
