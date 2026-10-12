@@ -149,9 +149,6 @@ func ListRunsFunc(ctx context.Context, request *mcp.CallToolRequest, input ListR
 		if err != nil {
 			return nil, nil, fmt.Errorf("listing runs in workspace %q: %w", workspaceName, err)
 		}
-		if runs == nil {
-			return nil, nil, fmt.Errorf("listing runs in workspace %q: Terraform returned an empty response", workspaceName)
-		}
 
 		return nil, &RunSummaryList{
 			Items:             runSummaries(runs.Items),
@@ -167,9 +164,6 @@ func ListRunsFunc(ctx context.Context, request *mcp.CallToolRequest, input ListR
 	})
 	if err != nil {
 		return nil, nil, fmt.Errorf("listing runs in organization %q: %w", terraformOrgName, err)
-	}
-	if runs == nil {
-		return nil, nil, fmt.Errorf("listing runs in organization %q: Terraform returned an empty response", terraformOrgName)
 	}
 
 	return nil, &RunSummaryList{

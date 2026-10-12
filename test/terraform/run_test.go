@@ -234,7 +234,7 @@ func TestRunLifecycle(t *testing.T) {
 		require.NoError(t, err, "failed to download the plan export directly from TFE")
 		assert.Equal(t, directArchiveData, archiveData)
 	})
-
+	// TODO: add coverage for the "discard" and "cancel" actions.
 	t.Run("Action run", func(t *testing.T) {
 		result, resultText := callTool(t, s, "action_run", map[string]any{
 			"run_id":     runID,

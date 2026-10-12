@@ -131,9 +131,6 @@ func GetRunDetailsFunc(ctx context.Context, request *mcp.CallToolRequest, input 
 	if err != nil {
 		return nil, nil, fmt.Errorf("reading run %q: %w", runID, err)
 	}
-	if run == nil {
-		return nil, nil, fmt.Errorf("reading run %q: Terraform returned an empty response", runID)
-	}
 
 	details := runToDetails(run)
 	return nil, &details, nil
