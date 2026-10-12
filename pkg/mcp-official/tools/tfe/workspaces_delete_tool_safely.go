@@ -29,7 +29,7 @@ type DeleteWorkspaceSafelyResponse struct {
 func DeleteWorkspaceSafelyTool() *mcp.Tool {
 	return &mcp.Tool{
 		Name:        "delete_workspace_safely",
-		Description: "Safely deletes a Terraform workspace by ID only if it is not managing any resources.",
+		Description: "Safely deletes a Terraform workspace by ID only if it is not managing any resources. This prevents accidental deletion of workspaces that still have active infrastructure. This is a destructive operation.",
 		Annotations: &mcp.ToolAnnotations{
 			Title:           "Safely delete a Terraform workspace by ID",
 			OpenWorldHint:   jsonschema.Ptr(true),
