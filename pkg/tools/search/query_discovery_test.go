@@ -11,9 +11,11 @@ import (
 	"net/http/httptest"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/hashicorp/go-tfe"
+	mcpclient "github.com/hashicorp/terraform-mcp-server/pkg/client"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/stretchr/testify/require"
 )
@@ -187,4 +189,93 @@ func TestLegacyQuerySummaryProjectsBoundedSelectableResults(t *testing.T) {
 	require.Contains(t, text.Text, `"query_result_marker"`)
 	require.Contains(t, text.Text, `"tags":{"team":"search"}`)
 	require.NotContains(t, text.Text, "/logs")
+}
+
+func TestQuerySummaryReadsLargeLogInFewRequestsWithoutReturningSignedURL(t *testing.T) {
+	t.Setenv("MCP_ORGANIZATION_ALLOWLIST", "org")
+	var lines []string
+	for i := 0; i < 3000; i++ {
+		lines = append(lines, fmt.Sprintf(`{"type":"list_resource_found","list_resource_found":{"address":"list.aws_s3_buckets.all","resource_type":"aws_s3_buckets","display_name":"bucket-%d","identity":{"bucket":"bucket-%d"},"identity_version":0}}`, i, i))
+	}
+	lines = append(lines, `{"type":"list_complete","list_complete":{"address":"list.aws_s3_buckets.all","total":3000}}`)
+	logData := []byte("\x02" + strings.Join(lines, "\n") + "\n\x03")
+	require.Greater(t, len(logData), 400<<10)
+	const signedQuery = "X-Amz-Signature=secret-sentinel"
+	var requests int
+	var denyLog atomic.Bool
+	var capLog atomic.Bool
+	var leakedHeader atomic.Bool
+	var missingSignature atomic.Bool
+	var backend *httptest.Server
+	backend = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/vnd.api+json")
+		switch r.URL.Path {
+		case "/api/v2/ping":
+			w.WriteHeader(http.StatusOK)
+		case "/api/v2/queries/qry-test":
+			_, _ = fmt.Fprintf(w, `{"data":{"type":"queries","id":"qry-test","attributes":{"status":"finished","log-read-url":%q},"relationships":{"workspace":{"data":{"type":"workspaces","id":"ws-test"}},"no-code-query":{"data":{"type":"no-code-queries","id":"ncqry-test"}}}}}`, backend.URL+"/logs?"+signedQuery)
+		case "/api/v2/workspaces/ws-test":
+			_, _ = fmt.Fprint(w, `{"data":{"type":"workspaces","id":"ws-test","attributes":{"name":"ws"},"relationships":{"organization":{"data":{"type":"organizations","id":"org"}}}}}`)
+		case "/api/v2/search/no-code-query/ncqry-test":
+			_, _ = fmt.Fprint(w, `{"data":{"id":"ncqry-test","attributes":{"no-code-query-providers":[{"namespace":"hashicorp","name":"aws","version":"6.66.0","no-code-query-resources":[{"body":{"resource_type":"aws_s3_buckets"}}]}]},"relationships":{"workspace":{"data":{"id":"ws-test"}}}}}`)
+		case "/logs":
+			requests++
+			for _, name := range []string{"Authorization", "X-Forwarded-For", "X-Test-Secret", mcpclient.SharedSecretHeader} {
+				if r.Header.Get(name) != "" {
+					leakedHeader.Store(true)
+				}
+			}
+			if r.URL.Query().Get("X-Amz-Signature") != "secret-sentinel" {
+				missingSignature.Store(true)
+			}
+			if denyLog.Load() {
+				http.Error(w, "log unavailable: "+backend.URL+"/logs?"+signedQuery, http.StatusForbidden)
+				return
+			}
+			offset, _ := strconv.Atoi(r.URL.Query().Get("offset"))
+			limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
+			if offset < len(logData) {
+				end := min(len(logData), offset+limit)
+				if capLog.Load() {
+					end = min(end, offset+(64<<10))
+				}
+				// Force many small network body reads per request. The fast path
+				// must drain the response, not treat each read as a new range.
+				for start := offset; start < end; start += 4096 {
+					_, _ = w.Write(logData[start:min(end, start+4096)])
+					w.(http.Flusher).Flush()
+				}
+			}
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer backend.Close()
+	client, err := tfe.NewClient(&tfe.Config{Address: backend.URL, Token: "test-token", HTTPClient: backend.Client(), Headers: http.Header{"X-Test-Secret": {"private-header-sentinel"}, "X-Forwarded-For": {"127.0.0.1"}, mcpclient.SharedSecretHeader: {"shared-secret-sentinel"}}})
+	require.NoError(t, err)
+	result, err := getQuerySummaryWithClient(context.Background(), client, "qry-test", QueryDiscoveryFilter{Limit: 2}, silentLogger())
+	require.NoError(t, err)
+	require.False(t, result.IsError)
+	page := result.StructuredContent.(*QueryDiscoveryPage)
+	require.Equal(t, 3000, page.ResourcesDiscovered)
+	require.True(t, page.HasMore)
+	require.NotEmpty(t, page.NextCursor)
+	t.Logf("log bytes: %d; log GETs: %d", len(logData), requests)
+	require.Equal(t, 1, requests, "a large streamed response must be fully consumed in one GET")
+	require.False(t, leakedHeader.Load(), "API bearer and custom headers must not go to the signed log host")
+	require.False(t, missingSignature.Load(), "preserve the backend's signed query parameters")
+	require.NotContains(t, fmt.Sprint(result), signedQuery)
+	require.NotContains(t, fmt.Sprint(result), "/logs")
+	capLog.Store(true)
+	second, err := getQuerySummaryWithClient(context.Background(), client, "qry-test", QueryDiscoveryFilter{Limit: 2, After: page.NextCursor}, silentLogger())
+	require.NoError(t, err)
+	require.False(t, second.IsError)
+	require.Equal(t, 3000, second.StructuredContent.(*QueryDiscoveryPage).ResourcesDiscovered)
+	require.Less(t, requests, 16, "capped responses should need a few large ranged GETs")
+	denyLog.Store(true)
+	blocked, err := getQuerySummaryWithClient(context.Background(), client, "qry-test", QueryDiscoveryFilter{}, silentLogger())
+	require.NoError(t, err)
+	require.True(t, blocked.IsError)
+	require.NotContains(t, fmt.Sprint(blocked), signedQuery)
+	require.NotContains(t, fmt.Sprint(blocked), "/logs")
 }

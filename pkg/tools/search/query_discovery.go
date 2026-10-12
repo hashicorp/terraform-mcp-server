@@ -9,7 +9,6 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"net/url"
 	"os"
@@ -77,6 +76,7 @@ type queryDiscoveryCursor struct {
 // queryDiscoveryProvenance is backend-derived, never supplied by the caller.
 type queryDiscoveryProvenance struct {
 	QueryRunID, Organization, WorkspaceName, WorkspaceID string
+	LogReadURL                                           string
 	Providers                                            map[string]queryResultProvider
 }
 
@@ -140,7 +140,7 @@ func readQueryDiscoveryProvenance(ctx context.Context, c *tfe.Client, queryID st
 			return nil, queryEvidenceError("query_organization_not_allowed")
 		}
 	}
-	prov := &queryDiscoveryProvenance{QueryRunID: queryID, Organization: w.Organization.Name, WorkspaceName: w.Name, WorkspaceID: w.ID}
+	prov := &queryDiscoveryProvenance{QueryRunID: queryID, Organization: w.Organization.Name, WorkspaceName: w.Name, WorkspaceID: w.ID, LogReadURL: run.LogReadURL}
 	if run.Status == tfe.QueryRunErrored || run.Status == tfe.QueryRunCanceled {
 		return prov, queryEvidenceError("query_not_selectable")
 	}
@@ -218,7 +218,8 @@ func readQueryDiscoveryProvenance(ctx context.Context, c *tfe.Client, queryID st
 	if len(providers) == 0 {
 		return nil, queryEvidenceError("query_provider_source_unresolved")
 	}
-	return &queryDiscoveryProvenance{QueryRunID: queryID, Organization: w.Organization.Name, WorkspaceName: w.Name, WorkspaceID: w.ID, Providers: providers}, nil
+	prov.Providers = providers
+	return prov, nil
 }
 
 func readQueryDiscovery(ctx context.Context, c *tfe.Client, queryID string) (*queryDiscoveryProvenance, *queryEvidence, error) {
@@ -226,13 +227,9 @@ func readQueryDiscovery(ctx context.Context, c *tfe.Client, queryID string) (*qu
 	if err != nil {
 		return prov, nil, err
 	}
-	reader, err := c.QueryRuns.Logs(ctx, queryID)
+	data, err := readFastQueryLog(ctx, c, prov.LogReadURL)
 	if err != nil {
-		return nil, nil, queryEvidenceError("query_log_unavailable")
-	}
-	data, err := io.ReadAll(io.LimitReader(reader, maxQueryEvidenceBytes+1))
-	if err != nil {
-		return nil, nil, queryEvidenceError("query_log_unavailable")
+		return prov, nil, err
 	}
 	evidence, err := parseQueryEvidence(queryID, data, prov.Providers)
 	if err != nil {
