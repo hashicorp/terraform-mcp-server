@@ -1,5 +1,9 @@
 # 1.3.1
 
+FEATURES
+
+* [New Tools] Terraform Search adds `provider_list_schema_list`, `generate_query_configuration`, `execute_query`, `get_query_status`, and `get_query_summary` on both the legacy and official MCP servers. Query status polling is bounded per call.
+
 IMPROVEMENTS
 
 * `get_private_module_details` now reports every submodule published with a private module, each with its own inputs, outputs, dependencies, provider dependencies, resources, and README, matching the detail already provided for the root module. The root module section is now labelled and its README is reported alongside its own inputs and outputs.
