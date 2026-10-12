@@ -22,18 +22,12 @@ import (
 )
 
 type GetProviderCapabilitiesArguments struct {
-	Namespace string `json:"namespace" jsonschema:"The namespace of the Terraform provider, typically the company or GitHub organization that created it, e.g. hashicorp. If you are not certain of the namespace, do not guess, ask the user. Most HashiCorp-maintained providers are in the hashicorp namespace"`
-	Name      string `json:"name" jsonschema:"The name of the Terraform provider, e.g. aws, azurerm, or google"`
-	Version   string `json:"version,omitempty" jsonschema:"The version of the provider to analyze (defaults to latest)"`
+	Namespace string `json:"namespace"`
+	Name      string `json:"name"`
+	Version   string `json:"version,omitempty"`
 }
 
 func GetProviderCapabilitiesTool() *mcp.Tool {
-	input, err := jsonschema.For[GetProviderCapabilitiesArguments](nil)
-	if err != nil {
-		panic(err)
-	}
-	input.Properties["version"].Default = json.RawMessage(`"latest"`)
-
 	return &mcp.Tool{
 		Name: "get_provider_capabilities",
 		Description: `Get the capabilities of a Terraform provider including the types of resources, data sources, functions, guides, and other features it supports.
@@ -53,7 +47,27 @@ Returns a summary with counts and examples for each capability type.`,
 			ReadOnlyHint:    true,
 			DestructiveHint: jsonschema.Ptr(false),
 		},
-		InputSchema: input,
+		InputSchema: &jsonschema.Schema{
+			Type: "object",
+			Properties: map[string]*jsonschema.Schema{
+				"namespace": {
+					Type:        "string",
+					Description: "The namespace of the Terraform provider, typically the company or GitHub organization that created it, e.g. hashicorp. If you are not certain of the namespace, do not guess, ask the user. Most HashiCorp-maintained providers are in the hashicorp namespace",
+				},
+				"name": {
+					Type:        "string",
+					Description: "The name of the Terraform provider, e.g. aws, azurerm, or google",
+				},
+				"version": {
+					Type:        "string",
+					Description: "The version of the provider to analyze (defaults to latest)",
+					Default:     json.RawMessage(`"latest"`),
+				},
+			},
+			PropertyOrder:        []string{"namespace", "name", "version"},
+			Required:             []string{"namespace", "name"},
+			AdditionalProperties: &jsonschema.Schema{Not: &jsonschema.Schema{}},
+		},
 	}
 }
 

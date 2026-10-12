@@ -26,11 +26,6 @@ type GetLatestModuleVersionArguments struct {
 }
 
 func GetLatestModuleVersionTool() *mcp.Tool {
-	input, err := jsonschema.For[GetLatestModuleVersionArguments](nil)
-	if err != nil {
-		panic(err)
-	}
-
 	return &mcp.Tool{
 		Name:        "get_latest_module_version",
 		Description: "Fetches the latest version of a Terraform module from the public registry",
@@ -40,7 +35,6 @@ func GetLatestModuleVersionTool() *mcp.Tool {
 			ReadOnlyHint:    true,
 			DestructiveHint: jsonschema.Ptr(false),
 		},
-		InputSchema: input,
 	}
 }
 

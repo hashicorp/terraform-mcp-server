@@ -20,15 +20,12 @@ func TestGetModuleDetailsTool(t *testing.T) {
 	assert.True(t, tool.Annotations.ReadOnlyHint)
 	require.NotNil(t, tool.Annotations.DestructiveHint)
 	assert.False(t, *tool.Annotations.DestructiveHint)
-
-	schema, _ := tool.InputSchema.(*jsonschema.Schema)
-	assert.Contains(t, schema.Required, "module_id")
+	assert.Nil(t, tool.InputSchema, "get_module_details relies on the SDK deriving its input schema")
 }
 
 func TestGetModuleDetailsParameterValidation(t *testing.T) {
-	tool := GetModuleDetailsTool()
-	schema, ok := tool.InputSchema.(*jsonschema.Schema)
-	require.True(t, ok)
+	schema, err := jsonschema.For[GetModuleDetailsArguments](nil)
+	require.NoError(t, err)
 	resolved, err := schema.Resolve(nil)
 	require.NoError(t, err)
 

@@ -22,18 +22,11 @@ import (
 )
 
 type SearchModulesArguments struct {
-	ModuleQuery   string `json:"module_query" jsonschema:"The query to search for Terraform modules"`
-	CurrentOffset int    `json:"current_offset,omitempty" jsonschema:"Current offset for pagination"`
+	ModuleQuery   string `json:"module_query"`
+	CurrentOffset int    `json:"current_offset,omitempty"`
 }
 
 func SearchModulesTool() *mcp.Tool {
-	input, err := jsonschema.For[SearchModulesArguments](nil)
-	if err != nil {
-		panic(err)
-	}
-	input.Properties["current_offset"].Minimum = jsonschema.Ptr(0.0)
-	input.Properties["current_offset"].Default = json.RawMessage(`0`)
-
 	return &mcp.Tool{
 		Name: "search_modules",
 		Description: `Resolves a Terraform module name to obtain a compatible module_id for the get_module_details tool and returns a list of matching Terraform modules.
@@ -51,7 +44,24 @@ If no modules were found, reattempt the search with a new moduleName query.`,
 			ReadOnlyHint:    true,
 			DestructiveHint: jsonschema.Ptr(false),
 		},
-		InputSchema: input,
+		InputSchema: &jsonschema.Schema{
+			Type: "object",
+			Properties: map[string]*jsonschema.Schema{
+				"module_query": {
+					Type:        "string",
+					Description: "The query to search for Terraform modules",
+				},
+				"current_offset": {
+					Type:        "integer",
+					Description: "Current offset for pagination",
+					Minimum:     jsonschema.Ptr(0.0),
+					Default:     json.RawMessage(`0`),
+				},
+			},
+			PropertyOrder:        []string{"module_query", "current_offset"},
+			Required:             []string{"module_query"},
+			AdditionalProperties: &jsonschema.Schema{Not: &jsonschema.Schema{}},
+		},
 	}
 }
 

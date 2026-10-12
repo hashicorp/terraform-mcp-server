@@ -20,17 +20,12 @@ func TestGetLatestProviderVersionTool(t *testing.T) {
 	assert.True(t, tool.Annotations.ReadOnlyHint)
 	require.NotNil(t, tool.Annotations.DestructiveHint)
 	assert.False(t, *tool.Annotations.DestructiveHint)
-
-	schema, ok := tool.InputSchema.(*jsonschema.Schema)
-	require.True(t, ok)
-	assert.Contains(t, schema.Required, "namespace")
-	assert.Contains(t, schema.Required, "name")
+	assert.Nil(t, tool.InputSchema, "get_latest_provider_version relies on the SDK deriving its input schema")
 }
 
 func TestGetLatestProviderVersionParameterValidation(t *testing.T) {
-	tool := GetLatestProviderVersionTool()
-	schema, ok := tool.InputSchema.(*jsonschema.Schema)
-	require.True(t, ok)
+	schema, err := jsonschema.For[GetLatestProviderVersionArguments](nil)
+	require.NoError(t, err)
 	resolved, err := schema.Resolve(nil)
 	require.NoError(t, err)
 

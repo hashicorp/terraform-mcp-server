@@ -46,6 +46,8 @@ func TestSearchModulesParameterValidation(t *testing.T) {
 		{name: "empty query present", params: map[string]any{"module_query": ""}},
 		{name: "query and offset present", params: map[string]any{"module_query": "aws", "current_offset": 15}},
 		{name: "query missing", params: map[string]any{}, expectError: true},
+		{name: "negative offset", params: map[string]any{"module_query": "aws", "current_offset": -1}, expectError: true},
+		{name: "unknown parameter", params: map[string]any{"module_query": "aws", "unknown": true}, expectError: true},
 	}
 
 	for _, tt := range tests {

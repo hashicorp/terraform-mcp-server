@@ -26,11 +26,6 @@ type GetModuleDetailsArguments struct {
 }
 
 func GetModuleDetailsTool() *mcp.Tool {
-	input, err := jsonschema.For[GetModuleDetailsArguments](nil)
-	if err != nil {
-		panic(err)
-	}
-
 	return &mcp.Tool{
 		Name:        "get_module_details",
 		Description: "Fetches up-to-date documentation on how to use a Terraform module. You must call 'search_modules' first to obtain the exact valid and compatible module_id required to use this tool.",
@@ -40,7 +35,6 @@ func GetModuleDetailsTool() *mcp.Tool {
 			ReadOnlyHint:    true,
 			DestructiveHint: jsonschema.Ptr(false),
 		},
-		InputSchema: input,
 	}
 }
 

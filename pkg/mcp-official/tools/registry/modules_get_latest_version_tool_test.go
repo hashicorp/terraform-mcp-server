@@ -20,17 +20,12 @@ func TestGetLatestModuleVersionTool(t *testing.T) {
 	assert.True(t, tool.Annotations.ReadOnlyHint)
 	require.NotNil(t, tool.Annotations.DestructiveHint)
 	assert.False(t, *tool.Annotations.DestructiveHint)
-
-	schema, _ := tool.InputSchema.(*jsonschema.Schema)
-	assert.Contains(t, schema.Required, "module_publisher")
-	assert.Contains(t, schema.Required, "module_name")
-	assert.Contains(t, schema.Required, "module_provider")
+	assert.Nil(t, tool.InputSchema, "get_latest_module_version relies on the SDK deriving its input schema")
 }
 
 func TestGetLatestModuleVersionParameterValidation(t *testing.T) {
-	tool := GetLatestModuleVersionTool()
-	schema, ok := tool.InputSchema.(*jsonschema.Schema)
-	require.True(t, ok)
+	schema, err := jsonschema.For[GetLatestModuleVersionArguments](nil)
+	require.NoError(t, err)
 	resolved, err := schema.Resolve(nil)
 	require.NoError(t, err)
 
