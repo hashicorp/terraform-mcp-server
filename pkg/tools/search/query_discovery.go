@@ -418,13 +418,13 @@ func pageQueryDiscovery(prov *queryDiscoveryProvenance, evidence *queryEvidence,
 	page.HasMore = page.Remaining > 0
 	if page.HasMore {
 		page.NextCursor = encodeQueryCursor(queryDiscoveryCursor{QueryRunID: prov.QueryRunID, Digest: evidence.LogDigest, Marker: lastMarker, Filter: filterKey})
-		page.NextAction = "Continue with next_cursor as after; keep every query_result_marker shown. This page is not the full QueryRun."
+		page.NextAction = "This is a partial page. Continue with next_cursor as after and the same filters until has_more is false."
 	} else {
-		page.NextAction = "These are all results of this query (not all cloud resources). Select results explicitly using query_result_marker only when import is requested."
+		page.NextAction = "These are all results of this query, not all cloud resources. Choose query_result_marker values with the user only if import is requested."
 	}
-	page.NextAction += " Keep the query_result_marker, display_name and any tags for each result you present to the user; tags can help choose resources, but cannot be filtered by this tool."
+	page.NextAction += " Keep each shown result's query_result_marker, display_name and any tags, including in script output; tag filtering is not supported. Missing tags do not prove a resource is untagged."
 	if page.RowsWithoutAttributes > 0 {
-		page.NextAction += " For rows with attributes_captured false, missing tags are unknown, not evidence of no tags. If tags are needed for selection, ask before running a new query with generate_config_out true; this creates a new QueryRun and new markers."
+		page.NextAction += " For rows with attributes_captured false, tags are unknown. If tags matter, ask before a new query (for example with generate_config_out true); it creates new markers and may still lack tags."
 	}
 	data, err := json.Marshal(page)
 	if err != nil || len(data) > maxQueryPageBytes {

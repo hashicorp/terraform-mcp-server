@@ -83,15 +83,15 @@ func ReadQuerySummary(ctx context.Context, tfeClient *tfe.Client, queryRunID str
 
 const getQuerySummaryDescription = `Returns bounded, backend-scoped Search results from a finished QueryRun.
 
-Call get_query_status first. Pass the same query_run_id; an existing authorized
-QueryRun ID can also be used without rerunning Search. A selectable response
-includes source workspace provenance and lists[].results[] with per-result
-query_result_marker, identity, identity_version, attributes_captured and scalar
-tags when present in the captured resource object. Keep tags with markers and
-display names when presenting choices. If attributes_captured is false, missing
-tags are unknown; if tags are needed, ask before rerunning with
-generate_config_out true. Results are not selected until the user chooses them.
-Follow next_cursor as after with unchanged filters to browse the same snapshot.
-A nonselectable response has no result markers;
-do not attempt import preparation. A marker is selection continuity, not an
-import ID, authorization or proof of the correct cloud object.`
+Call get_query_status first, then use the same query_run_id; an existing
+authorized QueryRun ID can also be used. Selectable lists[].results[] include
+query_result_marker, identity, identity_version, attributes_captured and any
+scalar tags from the captured resource object. Keep the marker, display_name
+and any tags for each result shown to the user, including in script output.
+There is no tag filter; choose from the returned rows with the user. Missing
+tags do not prove a resource is untagged. If attributes_captured is false and
+tags matter, ask before a new query (for example with generate_config_out true).
+It has new markers and may still lack tags. Follow next_cursor as after with
+the same filters until has_more is false; a page is not the entire query. Nonselectable results
+have no markers and cannot be prepared for import. A marker is continuity,
+not an import ID, authorization or proof of object identity.`
