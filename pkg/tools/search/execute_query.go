@@ -98,7 +98,7 @@ func executeQueryHandler(ctx context.Context, request mcp.CallToolRequest, logge
 		return toolErrorf(logger, "execute_query", "missing required input: query_configuration")
 	}
 
-	_, err = parseExecuteQueryConfiguration(rawConfiguration)
+	err = ValidateQueryConfiguration(rawConfiguration)
 	if err != nil {
 		return toolErrorf(logger, "execute_query", "invalid query_configuration: %v", err)
 	}
@@ -107,35 +107,50 @@ func executeQueryHandler(ctx context.Context, request mcp.CallToolRequest, logge
 	if err != nil {
 		return toolErrorf(logger, "execute_query", "failed to get Terraform client: %v", err)
 	}
-	return ExecuteQueryWithClient(ctx, tfeClient, organizationName, workspaceName, rawConfiguration, logger)
+	return executeQueryWithClient(ctx, tfeClient, organizationName, workspaceName, rawConfiguration, logger)
 }
 
-// ExecuteQueryWithClient shares validation and submission between MCP transports.
-func ExecuteQueryWithClient(ctx context.Context, tfeClient *tfe.Client, organizationName, workspaceName, rawConfiguration string, logger *log.Logger) (*mcp.CallToolResult, error) {
+func executeQueryWithClient(ctx context.Context, tfeClient *tfe.Client, organizationName, workspaceName, rawConfiguration string, logger *log.Logger) (*mcp.CallToolResult, error) {
+	text, err := ExecuteQueryText(ctx, tfeClient, organizationName, workspaceName, rawConfiguration)
+	if err != nil {
+		return toolErrorf(logger, "execute_query", "%v", err)
+	}
+	return mcp.NewToolResultText(text), nil
+}
+
+// ValidateQueryConfiguration rejects malformed no-code query inputs before any API call.
+func ValidateQueryConfiguration(rawConfiguration string) error {
+	_, err := parseExecuteQueryConfiguration(rawConfiguration)
+	return err
+}
+
+// ExecuteQueryText validates the input and submits one no-code query to an existing workspace.
+// The caller supplies its transport's authenticated go-tfe client.
+func ExecuteQueryText(ctx context.Context, tfeClient *tfe.Client, organizationName, workspaceName, rawConfiguration string) (string, error) {
 	if organizationName = strings.TrimSpace(organizationName); organizationName == "" {
-		return toolErrorf(logger, "execute_query", "missing required input: organization_name")
+		return "", fmt.Errorf("missing required input: organization_name")
 	}
 	if workspaceName = strings.TrimSpace(workspaceName); workspaceName == "" {
-		return toolErrorf(logger, "execute_query", "missing required input: workspace_name")
+		return "", fmt.Errorf("missing required input: workspace_name")
 	}
 	if strings.TrimSpace(rawConfiguration) == "" {
-		return toolErrorf(logger, "execute_query", "missing required input: query_configuration")
+		return "", fmt.Errorf("missing required input: query_configuration")
 	}
 	configuration, err := parseExecuteQueryConfiguration(rawConfiguration)
 	if err != nil {
-		return toolErrorf(logger, "execute_query", "invalid query_configuration: %v", err)
+		return "", fmt.Errorf("invalid query_configuration: %w", err)
 	}
 	workspace, err := tfeClient.Workspaces.Read(ctx, organizationName, workspaceName)
 	if err != nil {
-		return toolErrorf(logger, "execute_query", "workspace %q not found in organization %q: %v", workspaceName, organizationName, err)
+		return "", fmt.Errorf("workspace %q not found in organization %q: %w", workspaceName, organizationName, err)
 	}
 
 	response, err := submitExecuteQuery(ctx, tfeClient, workspace.ID, configuration)
 	if err != nil {
-		return toolErrorf(logger, "execute_query", "failed to create no-code query: %v", err)
+		return "", fmt.Errorf("failed to create no-code query: %w", err)
 	}
 
-	return mcp.NewToolResultText(response), nil
+	return response, nil
 }
 
 func parseExecuteQueryConfiguration(raw string) (*executeQueryConfiguration, error) {

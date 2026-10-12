@@ -90,25 +90,34 @@ func providerListSchemaListHandler(ctx context.Context, request mcp.CallToolRequ
 	if err != nil {
 		return toolErrorf(logger, "provider_list_schema_list", "failed to get Terraform client — ensure TFE_TOKEN and TFE_ADDRESS are configured: %v", err)
 	}
-	return ProviderListSchemaListWithClient(ctx, tfeClient, orgName, workspaceName, providerNamespace, providerName, logger)
+	return providerListSchemaListWithClient(ctx, tfeClient, orgName, workspaceName, providerNamespace, providerName, logger)
 }
 
-// ProviderListSchemaListWithClient keeps both MCP transports on the same authorized catalog path.
-func ProviderListSchemaListWithClient(ctx context.Context, tfeClient *tfe.Client, orgName, workspaceName, providerNamespace, providerName string, logger *log.Logger) (*mcp.CallToolResult, error) {
+func providerListSchemaListWithClient(ctx context.Context, tfeClient *tfe.Client, orgName, workspaceName, providerNamespace, providerName string, logger *log.Logger) (*mcp.CallToolResult, error) {
+	text, err := ProviderListSchemaListText(ctx, tfeClient, orgName, workspaceName, providerNamespace, providerName)
+	if err != nil {
+		return toolErrorf(logger, "provider_list_schema_list", "%v", err)
+	}
+	return mcp.NewToolResultText(text), nil
+}
+
+// ProviderListSchemaListText checks the workspace and reads an organization-scoped catalog.
+// It returns plain text/error so neither MCP transport needs to translate the other's result type.
+func ProviderListSchemaListText(ctx context.Context, tfeClient *tfe.Client, orgName, workspaceName, providerNamespace, providerName string) (string, error) {
 	orgName = strings.TrimSpace(orgName)
 	workspaceName = strings.TrimSpace(workspaceName)
 	providerNamespace = strings.TrimSpace(providerNamespace)
 	providerName = strings.TrimSpace(strings.ToLower(providerName))
 	if orgName == "" || workspaceName == "" {
-		return toolErrorf(logger, "provider_list_schema_list", "organization_name and workspace_name are required; ask the user to provide both before fetching provider schemas")
+		return "", fmt.Errorf("organization_name and workspace_name are required; ask the user to provide both before fetching provider schemas")
 	}
 	if _, err := tfeClient.Workspaces.Read(ctx, orgName, workspaceName); err != nil {
-		return toolErrorf(logger, "provider_list_schema_list", "failed to read workspace %q in organization %q: %v", workspaceName, orgName, err)
+		return "", fmt.Errorf("failed to read workspace %q in organization %q: %w", workspaceName, orgName, err)
 	}
 
 	// ── Branch: list all providers ────────────────────────────────────────────
 	if providerNamespace == "" || providerName == "" {
-		return listSupportedProviders(ctx, tfeClient, orgName, logger)
+		return listSupportedProvidersText(ctx, tfeClient, orgName)
 	}
 
 	// ── Branch: fetch schema for a specific provider ──────────────────────────
@@ -117,10 +126,10 @@ func ProviderListSchemaListWithClient(ctx context.Context, tfeClient *tfe.Client
 	// model-supplied version because it may not have list-resource schemas.
 	providerVersion, err := discoverProviderVersion(ctx, tfeClient, orgName, providerNamespace, providerName)
 	if err != nil {
-		return toolErrorf(logger, "provider_list_schema_list", "%v", err)
+		return "", err
 	}
 
-	return fetchProviderSchema(ctx, tfeClient, orgName, providerNamespace, providerName, providerVersion, logger)
+	return fetchProviderSchemaText(ctx, tfeClient, orgName, providerNamespace, providerName, providerVersion)
 }
 
 // ── list all supported providers ─────────────────────────────────────────────
@@ -155,13 +164,21 @@ type noCodeProviderSchemaResponse struct {
 }
 
 func listSupportedProviders(ctx context.Context, tfeClient *tfe.Client, orgName string, logger *log.Logger) (*mcp.CallToolResult, error) {
+	text, err := listSupportedProvidersText(ctx, tfeClient, orgName)
+	if err != nil {
+		return toolErrorf(logger, "provider_list_schema_list", "%v", err)
+	}
+	return mcp.NewToolResultText(text), nil
+}
+
+func listSupportedProvidersText(ctx context.Context, tfeClient *tfe.Client, orgName string) (string, error) {
 	resp, err := readProviderVersions(ctx, tfeClient, orgName)
 	if err != nil {
-		return toolErrorf(logger, "provider_list_schema_list", "failed to fetch supported providers: %v", err)
+		return "", fmt.Errorf("failed to fetch supported providers: %w", err)
 	}
 
 	if len(resp.Data) == 0 {
-		return toolErrorf(logger, "provider_list_schema_list", "no search-compatible providers are available for this organization")
+		return "", fmt.Errorf("no search-compatible providers are available for this organization")
 	}
 
 	type providerSummary struct {
@@ -184,10 +201,10 @@ func listSupportedProviders(ctx context.Context, tfeClient *tfe.Client, orgName 
 		"note":                "Call provider_list_schema_list again with the same organization_name and workspace_name, plus provider_namespace and provider_name (and optionally provider_version), to fetch the full list_resource_schemas for a specific provider.",
 	}, "", "  ")
 	if err != nil {
-		return toolErrorf(logger, "provider_list_schema_list", "failed to marshal provider list: %v", err)
+		return "", fmt.Errorf("failed to marshal provider list: %w", err)
 	}
 
-	return mcp.NewToolResultText(string(out)), nil
+	return string(out), nil
 }
 
 // ── discover version from index ───────────────────────────────────────────────
@@ -215,6 +232,14 @@ func discoverProviderVersion(ctx context.Context, tfeClient *tfe.Client, orgName
 // ── fetch schema for a specific provider ──────────────────────────────────────
 
 func fetchProviderSchema(ctx context.Context, tfeClient *tfe.Client, orgName, namespace, name, version string, logger *log.Logger) (*mcp.CallToolResult, error) {
+	text, err := fetchProviderSchemaText(ctx, tfeClient, orgName, namespace, name, version)
+	if err != nil {
+		return toolErrorf(logger, "provider_list_schema_list", "%v", err)
+	}
+	return mcp.NewToolResultText(text), nil
+}
+
+func fetchProviderSchemaText(ctx context.Context, tfeClient *tfe.Client, orgName, namespace, name, version string) (string, error) {
 	requestPath := fmt.Sprintf("search/provider-versions/%s/%s/%s",
 		url.PathEscape(namespace),
 		url.PathEscape(name),
@@ -228,17 +253,17 @@ func fetchProviderSchema(ctx context.Context, tfeClient *tfe.Client, orgName, na
 
 	request, err := tfeClient.NewRequest(http.MethodGet, requestPath, nil)
 	if err != nil {
-		return toolErrorf(logger, "provider_list_schema_list", "failed to build schema request for %s/%s@%s: %v", namespace, name, version, err)
+		return "", fmt.Errorf("failed to build schema request for %s/%s@%s: %w", namespace, name, version, err)
 	}
 
 	var resp noCodeProviderSchemaResponse
 	if err := doProviderRequest(ctx, request, &resp); err != nil {
-		return toolErrorf(logger, "provider_list_schema_list", "failed to fetch schema for %s/%s@%s: %v", namespace, name, version, err)
+		return "", fmt.Errorf("failed to fetch schema for %s/%s@%s: %w", namespace, name, version, err)
 	}
 
 	lrs := resp.Data.Attributes.ListResourceSchemas
 	if lrs == nil || string(lrs) == "null" {
-		return toolErrorf(logger, "provider_list_schema_list",
+		return "", fmt.Errorf(
 			"provider %s/%s@%s exists in the catalog but has no list_resource_schemas — "+
 				"schema generation may not have run for this version yet",
 			namespace, name, version,
@@ -261,10 +286,10 @@ func fetchProviderSchema(ctx context.Context, tfeClient *tfe.Client, orgName, na
 		),
 	}, "", "  ")
 	if err != nil {
-		return toolErrorf(logger, "provider_list_schema_list", "failed to marshal schema response: %v", err)
+		return "", fmt.Errorf("failed to marshal schema response: %w", err)
 	}
 
-	return mcp.NewToolResultText(string(out)), nil
+	return string(out), nil
 }
 
 func readProviderVersions(ctx context.Context, tfeClient *tfe.Client, orgName string) (*noCodeProviderVersionsResponse, error) {
