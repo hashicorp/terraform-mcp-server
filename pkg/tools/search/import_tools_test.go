@@ -1,0 +1,169 @@
+// Copyright IBM Corp. 2026
+// SPDX-License-Identifier: MPL-2.0
+
+package search
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
+	"strconv"
+	"testing"
+
+	"github.com/hashicorp/go-tfe"
+	"github.com/mark3labs/mcp-go/mcp"
+	"github.com/mark3labs/mcp-go/server"
+	log "github.com/sirupsen/logrus"
+	"github.com/stretchr/testify/require"
+)
+
+type importTestSession struct{}
+
+func (importTestSession) Initialize()                                         {}
+func (importTestSession) Initialized() bool                                   { return true }
+func (importTestSession) NotificationChannel() chan<- mcp.JSONRPCNotification { return nil }
+func (importTestSession) SessionID() string                                   { return "" }
+
+// All requests are GETs against a synthetic backend; no CLI or HCP Run is
+// started. The Plan JSON contains values that must never be copied into MCP.
+func importWireBackend(t *testing.T, status, planStatus string) (*httptest.Server, *int) {
+	t.Helper()
+	planJSONReads := new(int)
+	var backend *httptest.Server
+	backend = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/vnd.api+json")
+		if r.Method != http.MethodGet {
+			t.Errorf("unexpected mutation: %s", r.Method)
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+		switch r.URL.Path {
+		case "/api/v2/ping":
+			w.WriteHeader(http.StatusOK)
+		case "/api/v2/queries/qry-example":
+			_, _ = fmt.Fprintf(w, `{"data":{"type":"queries","id":"qry-example","attributes":{"status":"finished","log-read-url":%q},"relationships":{"workspace":{"data":{"type":"workspaces","id":"ws-source"}},"no-code-query":{"data":{"type":"no-code-queries","id":"ncqry-test"}}}}}`, backend.URL+"/logs?X-Amz-Signature=signed-secret-sentinel")
+		case "/api/v2/workspaces/ws-source":
+			_, _ = fmt.Fprint(w, `{"data":{"type":"workspaces","id":"ws-source","attributes":{"name":"source"},"relationships":{"organization":{"data":{"type":"organizations","id":"org"}}}}}`)
+		case "/api/v2/search/no-code-query/ncqry-test":
+			_, _ = fmt.Fprint(w, `{"data":{"id":"ncqry-test","attributes":{"no-code-query-providers":[{"namespace":"hashicorp","name":"aws","version":"6.66.0","no-code-query-resources":[{"body":{"resource_type":"aws_s3_buckets"}}]}]},"relationships":{"workspace":{"data":{"id":"ws-source"}}}}}`)
+		case "/logs":
+			body := []byte("\x02" + `{"type":"list_resource_found","list_resource_found":{"address":"list.aws_s3_buckets.all","resource_type":"aws_s3_buckets","display_name":"sample","identity":{"bucket":"sample"},"identity_version":0,"config":"resource \\\"aws_s3_bucket\\\" \\\"sample\\\" {}"}}` + "\n" + `{"type":"list_complete","list_complete":{"address":"list.aws_s3_buckets.all","resource_type":"aws_s3_buckets","total":1}}` + "\n\x03")
+			offset, _ := strconv.Atoi(r.URL.Query().Get("offset"))
+			limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
+			if offset < len(body) {
+				_, _ = w.Write(body[offset:min(len(body), offset+limit)])
+			}
+		case "/api/v2/organizations/org/workspaces/target":
+			_, _ = fmt.Fprint(w, `{"data":{"type":"workspaces","id":"ws-example","attributes":{"name":"target","execution-mode":"remote","terraform-version":"1.14.0"},"relationships":{"organization":{"data":{"type":"organizations","id":"org"}}}}}`)
+		case "/api/v2/workspaces/ws-example/current-state-version":
+			w.WriteHeader(http.StatusNotFound)
+		case "/api/v2/runs/run-example":
+			_, _ = fmt.Fprintf(w, `{"data":{"type":"runs","id":"run-example","attributes":{"status":%q,"plan-only":true,"auto-apply":false},"relationships":{"workspace":{"data":{"type":"workspaces","id":"ws-example"}},"plan":{"data":{"type":"plans","id":"plan-example"}},"configuration-version":{"data":{"type":"configuration-versions","id":"cv-example"}}}}}`, status)
+		case "/api/v2/plans/plan-example":
+			_, _ = fmt.Fprintf(w, `{"data":{"type":"plans","id":"plan-example","attributes":{"status":%q}}}`, planStatus)
+		case "/api/v2/plans/plan-example/json-output":
+			*planJSONReads++
+			_, _ = fmt.Fprint(w, `{"format_version":"1.2","terraform_version":"1.14.0","complete":true,"errored":false,"planned_values":{"root_module":{"resources":[{"address":"aws_s3_bucket.sample","identity_schema_version":0}]}},"resource_changes":[{"address":"aws_s3_bucket.sample","mode":"managed","type":"aws_s3_bucket","provider_name":"registry.terraform.io/hashicorp/aws","change":{"actions":["no-op"],"importing":{"id":"private-import-id-sentinel"},"after_identity":{"bucket":"sample"}}}],"output_changes":{"stable":{"actions":["no-op"]}},"deferred_changes":[],"resource_drift":[]}`)
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	t.Cleanup(backend.Close)
+	return backend, planJSONReads
+}
+
+func TestImportToolsEndToEndLocalHTTPAndLegacyWire(t *testing.T) {
+	backend, reads := importWireBackend(t, "planned_and_finished", "finished")
+	t.Setenv("TFE_ADDRESS", backend.URL)
+	t.Setenv("TFE_TOKEN", "test-token")
+	t.Setenv("MCP_ORGANIZATION_ALLOWLIST", "org")
+	carry, bindings, _ := importTestCarry(t)
+	c, err := tfe.NewClient(&tfe.Config{Address: backend.URL, Token: "test-token", HTTPClient: backend.Client()})
+	require.NoError(t, err)
+	prep, err := ReadPrepareImport(context.Background(), c, PrepareImportInput{OrganizationName: "org", WorkspaceName: "target", QueryRunID: "qry-example", Selections: []ImportSelection{{QueryResultMarker: bindings[0].QueryResultMarker, ManagedType: "aws_s3_bucket"}}, LockedProviders: carry.LockedProviders})
+	require.NoError(t, err)
+	require.Equal(t, "prepared", prep.Status)
+	require.Equal(t, "source", prep.SourceWorkspaceName)
+	require.NotEmpty(t, prep.Carry.SelectionDigest)
+	require.Equal(t, "unknown", prep.Types[0].SchemaStatus)
+	require.Equal(t, "6.66.0", prep.Types[0].LockedProviderVersion)
+	require.Equal(t, "6.66.0", prep.Types[0].SearchProviderVersion)
+	result, err := ReadVerifyImportPlan(context.Background(), c, VerifyImportInput{OrganizationName: "org", WorkspaceName: "target", RunID: "run-example"})
+	require.NoError(t, err)
+	require.Equal(t, "carry_required", result.Status)
+	require.Zero(t, *reads)
+	result, err = ReadVerifyImportPlan(context.Background(), c, VerifyImportInput{OrganizationName: "org", WorkspaceName: "target", RunID: "run-example", Carry: prep.Carry, Bindings: bindings, DetailAddresses: []string{"aws_s3_bucket.sample"}})
+	require.NoError(t, err)
+	require.Equal(t, "plan_available", result.Status)
+	require.Equal(t, 1, result.Changes["none"])
+	require.Equal(t, 1, result.ObjectIdentity["matched"])
+	require.Equal(t, 1, *reads)
+	require.Len(t, result.Detail, 1)
+	encoded, err := json.Marshal(result)
+	require.NoError(t, err)
+	require.NotContains(t, string(encoded), "private-import-id-sentinel")
+	require.NotContains(t, string(encoded), "overall")
+	// A real mark3labs CallToolRequest must preserve the same structured/text
+	// response, not merely the plain-Go helper's result.
+	args := map[string]any{"organization_name": "org", "workspace_name": "target", "run_id": "run-example", "carry": prep.Carry, "bindings": bindings}
+	ctx := server.NewMCPServer("test", "0").WithContext(context.Background(), importTestSession{})
+	wire, err := VerifyImportPlan(silentLogger()).Handler(ctx, mcp.CallToolRequest{Params: mcp.CallToolParams{Arguments: args}})
+	require.NoError(t, err)
+	require.False(t, wire.IsError, "tool content: %#v", wire.Content)
+	require.Contains(t, fmt.Sprint(wire.StructuredContent), "plan_available")
+	text, ok := mcp.AsTextContent(wire.Content[0])
+	require.True(t, ok)
+	require.Contains(t, text.Text, `"plan_available"`)
+	require.NotContains(t, text.Text, "private-import-id-sentinel")
+	prepareArgs := map[string]any{"organization_name": "org", "workspace_name": "target", "query_run_id": "qry-example", "locked_providers": prep.Carry.LockedProviders, "selections": []ImportSelection{{QueryResultMarker: bindings[0].QueryResultMarker, ManagedType: "aws_s3_bucket"}}}
+	var logged bytes.Buffer
+	logger := log.New()
+	logger.SetOutput(&logged)
+	wire, err = PrepareImport(logger).Handler(ctx, mcp.CallToolRequest{Params: mcp.CallToolParams{Arguments: prepareArgs}})
+	require.NoError(t, err)
+	require.False(t, wire.IsError, "tool content: %#v", wire.Content)
+	require.Contains(t, fmt.Sprint(wire.StructuredContent), "prepared")
+	require.Contains(t, fmt.Sprint(wire.Content), "selection_digest")
+	require.NotContains(t, logged.String(), "signed-secret-sentinel")
+	require.NotContains(t, fmt.Sprint(wire.Content), "signed-secret-sentinel")
+}
+
+func TestImportToolUnknownArgumentFailsWithoutBackend(t *testing.T) {
+	request := mcp.CallToolRequest{Params: mcp.CallToolParams{Arguments: map[string]any{"run_id": "run-example", "configuration_version_id": "cv-forbidden"}}}
+	result, err := VerifyImportPlan(silentLogger()).Handler(context.Background(), request)
+	require.NoError(t, err)
+	require.True(t, result.IsError)
+}
+
+func TestVerifyImportStopsOnFailedPlanWhileRunLags(t *testing.T) {
+	backend, reads := importWireBackend(t, "planning", "errored")
+	c, err := tfe.NewClient(&tfe.Config{Address: backend.URL, Token: "test-token", HTTPClient: backend.Client()})
+	require.NoError(t, err)
+	t.Setenv("MCP_ORGANIZATION_ALLOWLIST", "org")
+	result, err := ReadVerifyImportPlan(context.Background(), c, VerifyImportInput{OrganizationName: "org", WorkspaceName: "target", RunID: "run-example"})
+	require.NoError(t, err)
+	require.Equal(t, "failed", result.Status)
+	require.Equal(t, []string{"plan_failed"}, result.Diagnostics)
+	require.Equal(t, "errored", result.PlanStatus)
+	require.Zero(t, *reads)
+}
+
+func TestImportToolDescriptionsAndSchemas(t *testing.T) {
+	for _, tool := range []mcp.Tool{PrepareImport(silentLogger()).Tool, VerifyImportPlan(silentLogger()).Tool} {
+		require.True(t, *tool.Annotations.ReadOnlyHint)
+		require.False(t, *tool.Annotations.DestructiveHint)
+		require.NotNil(t, tool.OutputSchema)
+		require.Contains(t, tool.Description, "CLI")
+	}
+	prepare := PrepareImport(silentLogger()).Tool
+	require.Contains(t, prepare.InputSchema.Required, "selections")
+	require.Contains(t, prepare.InputSchema.Required, "locked_providers")
+	require.Contains(t, prepare.OutputSchema.Properties, "carry")
+	verify := VerifyImportPlan(silentLogger()).Tool
+	require.Contains(t, verify.InputSchema.Required, "run_id")
+	require.NotContains(t, verify.InputSchema.Required, "carry")
+	require.Contains(t, verify.OutputSchema.Properties, "object_identity")
+}

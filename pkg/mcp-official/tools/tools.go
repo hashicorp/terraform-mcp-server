@@ -38,6 +38,12 @@ var officialFactories = map[string]func(svr *mcp.Server, logger *slog.Logger){
 	"get_query_summary": func(svr *mcp.Server, _ *slog.Logger) {
 		mcp.AddTool(svr, searchTools.GetQuerySummaryTool(), searchTools.GetQuerySummaryFunc)
 	},
+	"prepare_import": func(svr *mcp.Server, _ *slog.Logger) {
+		mcp.AddTool(svr, searchTools.PrepareImportTool(), searchTools.PrepareImportFunc)
+	},
+	"verify_import_plan": func(svr *mcp.Server, _ *slog.Logger) {
+		mcp.AddTool(svr, searchTools.VerifyImportPlanTool(), searchTools.VerifyImportPlanFunc)
+	},
 	"list_workspaces": func(svr *mcp.Server, _ *slog.Logger) {
 		mcp.AddTool(svr, tfeTools.ListWorkspacesTool(), tfeTools.ListWorkspacesFunc)
 	},

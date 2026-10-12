@@ -41,6 +41,15 @@ type QueryRunArguments struct {
 	QueryRunID string `json:"query_run_id" jsonschema:"Exact query_run_id returned by execute_query or an existing authorized QueryRun ID"`
 }
 
+type QuerySummaryArguments struct {
+	QueryRunID   string `json:"query_run_id" jsonschema:"Exact QueryRun ID returned by execute_query or an existing authorized QueryRun ID"`
+	ResourceType string `json:"resource_type,omitempty" jsonschema:"Optional exact Search list-resource type filter"`
+	Address      string `json:"address,omitempty" jsonschema:"Optional exact list block address filter"`
+	NameContains string `json:"name_contains,omitempty" jsonschema:"Optional case-insensitive display-name substring"`
+	Limit        int    `json:"limit,omitempty" jsonschema:"Optional page size; default 100, maximum 200"`
+	After        string `json:"after,omitempty" jsonschema:"Cursor returned as next_cursor for the same QueryRun and filters"`
+}
+
 func tool(name, description, title string, readOnly, openWorld bool) *mcp.Tool {
 	return &mcp.Tool{
 		Name: name, Description: description,
@@ -175,23 +184,89 @@ func GetQueryStatusFunc(logger *slog.Logger) mcp.ToolHandlerFor[QueryRunArgument
 }
 
 func GetQuerySummaryTool() *mcp.Tool {
-	return tool("get_query_summary", searchlogic.GetQuerySummaryDescription,
+	summaryTool := tool("get_query_summary", searchlogic.GetQuerySummaryDescription,
 		"Get HCP Terraform query summary", true, true)
+	schema, err := jsonschema.For[searchlogic.QueryDiscoveryPage](nil)
+	if err != nil {
+		panic(err)
+	}
+	summaryTool.OutputSchema = schema
+	return summaryTool
 }
 
-func GetQuerySummaryFunc(ctx context.Context, req *mcp.CallToolRequest, input QueryRunArguments) (*mcp.CallToolResult, any, error) {
+func GetQuerySummaryFunc(ctx context.Context, req *mcp.CallToolRequest, input QuerySummaryArguments) (*mcp.CallToolResult, *searchlogic.QueryDiscoveryPage, error) {
 	if strings.TrimSpace(input.QueryRunID) == "" {
 		return nil, nil, fmt.Errorf("missing required input: query_run_id")
 	}
+	if input.Limit < 0 || input.Limit > 200 {
+		return nil, nil, fmt.Errorf("limit must be between 1 and 200 when supplied")
+	}
 	tfeClient, err := client.GetTfeClient(ctx, client.SessionIDFromRequest(req))
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to get Terraform client: %w", err)
+		return nil, nil, fmt.Errorf("failed to get Terraform client; check session configuration")
 	}
-	text, err := searchlogic.ReadQuerySummary(ctx, tfeClient, input.QueryRunID)
+	filter := searchlogic.QueryDiscoveryFilter{ResourceType: input.ResourceType, Address: input.Address, NameContains: input.NameContains, Limit: input.Limit, After: input.After}
+	page, err := searchlogic.ReadQueryDiscoveryPage(ctx, tfeClient, input.QueryRunID, filter)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to get query summary for %q: %w", input.QueryRunID, err)
+		return nil, nil, fmt.Errorf("query summary unavailable: %w", err)
 	}
-	return textResult(text), nil, nil
+	text, err := searchlogic.FormatQueryDiscoveryPage(page)
+	if err != nil {
+		return nil, nil, fmt.Errorf("query summary unavailable: %w", err)
+	}
+	return textResult(text), page, nil
+}
+
+func PrepareImportTool() *mcp.Tool {
+	t := tool("prepare_import", searchlogic.PrepareImportDescription, "Prepare explicit Search import selection", true, true)
+	schema, err := jsonschema.For[searchlogic.PrepareImportResult](nil)
+	if err != nil {
+		panic(err)
+	}
+	t.OutputSchema = schema
+	return t
+}
+
+func PrepareImportFunc(ctx context.Context, req *mcp.CallToolRequest, input searchlogic.PrepareImportInput) (*mcp.CallToolResult, *searchlogic.PrepareImportResult, error) {
+	c, err := client.GetTfeClient(ctx, client.SessionIDFromRequest(req))
+	if err != nil {
+		return nil, nil, fmt.Errorf("client_unavailable")
+	}
+	result, err := searchlogic.ReadPrepareImport(ctx, c, input)
+	if err != nil {
+		return nil, nil, err
+	}
+	text, err := searchlogic.FormatImportResult(result)
+	if err != nil {
+		return nil, nil, err
+	}
+	return textResult(text), result, nil
+}
+
+func VerifyImportPlanTool() *mcp.Tool {
+	t := tool("verify_import_plan", searchlogic.VerifyImportPlanDescription, "Inspect exact CLI speculative Run and Plan", true, true)
+	schema, err := jsonschema.For[searchlogic.VerifyImportResult](nil)
+	if err != nil {
+		panic(err)
+	}
+	t.OutputSchema = schema
+	return t
+}
+
+func VerifyImportPlanFunc(ctx context.Context, req *mcp.CallToolRequest, input searchlogic.VerifyImportInput) (*mcp.CallToolResult, *searchlogic.VerifyImportResult, error) {
+	c, err := client.GetTfeClient(ctx, client.SessionIDFromRequest(req))
+	if err != nil {
+		return nil, nil, fmt.Errorf("client_unavailable")
+	}
+	result, err := searchlogic.ReadVerifyImportPlan(ctx, c, input)
+	if err != nil {
+		return nil, nil, err
+	}
+	text, err := searchlogic.FormatImportResult(result)
+	if err != nil {
+		return nil, nil, err
+	}
+	return textResult(text), result, nil
 }
 
 func textResult(text string) *mcp.CallToolResult {

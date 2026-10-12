@@ -26,7 +26,13 @@ const DefaultPublicRegistryURL = "https://registry.terraform.io"
 // CreateHTTPClient initializes a retryable HTTP client
 func CreateHTTPClient(insecureSkipVerify bool, logger *log.Logger) *http.Client {
 	retryClient := retryablehttp.NewClient()
-	retryClient.Logger = logger
+	if logger == nil {
+		// Assign an untyped nil interface: a typed nil *logrus.Logger would
+		// still satisfy retryablehttp.Logger and panic on the first request.
+		retryClient.Logger = nil
+	} else {
+		retryClient.Logger = logger
+	}
 
 	transport := &http.Transport{
 		TLSClientConfig: &tls.Config{InsecureSkipVerify: insecureSkipVerify},

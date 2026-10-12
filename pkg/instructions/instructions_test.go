@@ -14,8 +14,10 @@ func TestSearchWorkflowInstructions(t *testing.T) {
 		"provider_list_schema_list", "generate_query_configuration", "execute_query",
 		"get_query_status", "get_query_summary", "query_run_id",
 		"Search-only requests end here", "existing local configuration path",
+		"query_result_marker", "neither import IDs nor proof",
 		"only when `prepare_import` and `verify_import_plan` are available",
-		"plain CLI `terraform plan`", "full HCP Plan separately",
+		"speculative `terraform plan`", "full HCP Plan separately",
+		"no `-out` or apply", "CLI Run URL", "Follow `prepare_import`'s description",
 		"Approval for a plan is not approval to apply",
 	} {
 		if !strings.Contains(Text, required) {

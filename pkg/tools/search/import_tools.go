@@ -1,0 +1,103 @@
+// Copyright IBM Corp. 2026
+// SPDX-License-Identifier: MPL-2.0
+
+package search
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"io"
+
+	"github.com/hashicorp/terraform-mcp-server/pkg/client"
+	"github.com/mark3labs/mcp-go/mcp"
+	"github.com/mark3labs/mcp-go/server"
+	log "github.com/sirupsen/logrus"
+)
+
+const PrepareImportDescription = `Read-only preparation for explicitly chosen Search results, not a configuration upload or a Terraform plan.
+
+Before calling: ask whether the import target is the Search workspace or another workspace in the same organization. Confirm the user-designated existing local directory; the MCP server cannot read it. Inspect its .terraform.lock.hcl and pass exact versions by provider source. Select 1–100 query_result_marker values from get_query_summary and propose each managed_type. No V0 candidate_id alias. This call checks full QueryRun evidence, target execution mode and optional historical schema (which never attests the locked release). A prepared result contains selected observations/HCL drafts for agent review and an unchanged carry for finished-plan verification. No archive, CV, Run or local path is accepted; the separately approved Terraform CLI plan belongs to the agent after authoring. Follow next_action; a marker is continuity, not authorization or an import ID.`
+
+const VerifyImportPlanDescription = `Read-only check of the exact CLI-originated HCP Terraform speculative Run, not a way to start a Plan.
+
+After preparing/authoring in the existing user-designated tree, review changed files, known upload scope, provider aliases/import forms and CLI/HCP version >=1.5 with the user. Confirm CLI host/organization/workspace against the intended target (CLI and MCP tokens need not match); Terraform init can create workspaces or migrate state and must not do so without separate approval. After explicit approval for one speculative plan, run plain terraform plan from that directory (cd or terraform -chdir=<path>), without -out; never run apply or terraform import. The CLI handles upload/Run creation, not Search MCP. Compare the CLI's human Run URL host/org/workspace with the confirmed target and pass only its unambiguous run-… ID here. Missing URL or uncertain command outcome requires reconciliation, not latest-Run guessing or blind retry. Poll pending with the same ID; supply unchanged prepare_import carry and every query_result_marker-to-target_address binding for finished classification. Review the full HCP Plan separately; change and object_identity are independent and neither authorizes apply.`
+
+func decodeImportArguments(raw any, target any, limit int) error {
+	data, err := json.Marshal(raw)
+	if err != nil || len(data) > limit {
+		return queryEvidenceError("import_arguments_invalid")
+	}
+	if err := decodeQueryEvidenceLimit(data, target, limit, 64); err != nil {
+		return err
+	}
+	dec := json.NewDecoder(bytes.NewReader(data))
+	dec.DisallowUnknownFields()
+	dec.UseNumber()
+	if dec.Decode(target) != nil {
+		return queryEvidenceError("import_arguments_invalid")
+	}
+	if _, err := dec.Token(); err != io.EOF {
+		return queryEvidenceError("import_arguments_invalid")
+	}
+	return nil
+}
+
+func PrepareImport(logger *log.Logger) server.ServerTool {
+	return server.ServerTool{Tool: mcp.NewTool("prepare_import", mcp.WithDescription(PrepareImportDescription),
+		mcp.WithTitleAnnotation("Prepare explicit Search import selection"), mcp.WithReadOnlyHintAnnotation(true), mcp.WithDestructiveHintAnnotation(false), mcp.WithOpenWorldHintAnnotation(true),
+		mcp.WithString("organization_name", mcp.Required()), mcp.WithString("workspace_name", mcp.Required()), mcp.WithString("workspace_id", mcp.Description("Optional mismatch check only.")), mcp.WithString("query_run_id", mcp.Required()),
+		mcp.WithArray("selections", mcp.Required(), mcp.MinItems(1), mcp.MaxItems(100), mcp.Items(map[string]any{"type": "object", "required": []string{"query_result_marker", "managed_type"}, "properties": map[string]any{"query_result_marker": map[string]any{"type": "string"}, "managed_type": map[string]any{"type": "string"}}, "additionalProperties": false})),
+		mcp.WithObject("locked_providers", mcp.Required(), mcp.Description("Exact local .terraform.lock.hcl versions by provider source; agent-reported, not server-attested.")),
+		mcp.WithSchemaAdditionalProperties(false), mcp.WithOutputSchema[PrepareImportResult]()),
+		Handler: func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			var input PrepareImportInput
+			if err := decodeImportArguments(request.GetRawArguments(), &input, 64<<10); err != nil {
+				return toolErrorf(logger, "prepare_import", "%v", err)
+			}
+			c, err := client.GetTfeClientFromContext(ctx, logger)
+			if err != nil {
+				return toolErrorf(logger, "prepare_import", "client_unavailable")
+			}
+			result, err := ReadPrepareImport(ctx, c, input)
+			if err != nil {
+				return toolErrorf(logger, "prepare_import", "%v", err)
+			}
+			text, err := FormatImportResult(result)
+			if err != nil {
+				return toolErrorf(logger, "prepare_import", "%v", err)
+			}
+			return mcp.NewToolResultStructured(result, text), nil
+		},
+	}
+}
+
+func VerifyImportPlan(logger *log.Logger) server.ServerTool {
+	return server.ServerTool{Tool: mcp.NewTool("verify_import_plan", mcp.WithDescription(VerifyImportPlanDescription),
+		mcp.WithTitleAnnotation("Inspect exact CLI speculative Run and Plan"), mcp.WithReadOnlyHintAnnotation(true), mcp.WithDestructiveHintAnnotation(false), mcp.WithOpenWorldHintAnnotation(true),
+		mcp.WithString("organization_name", mcp.Required()), mcp.WithString("workspace_name", mcp.Required()), mcp.WithString("run_id", mcp.Required()),
+		mcp.WithObject("carry", mcp.Description("Unchanged prepare_import carry, required for finished Plan classification.")),
+		mcp.WithArray("bindings", mcp.Description("One query_result_marker and exact target_address per selection, required for finished Plan classification."), mcp.MaxItems(100), mcp.Items(map[string]any{"type": "object", "required": []string{"query_result_marker", "target_address"}, "properties": map[string]any{"query_result_marker": map[string]any{"type": "string"}, "target_address": map[string]any{"type": "string"}}, "additionalProperties": false})),
+		mcp.WithArray("detail_addresses", mcp.Description("Optional selected target addresses to inspect without values (maximum 20)."), mcp.MaxItems(20), mcp.Items(map[string]any{"type": "string"})),
+		mcp.WithSchemaAdditionalProperties(false), mcp.WithOutputSchema[VerifyImportResult]()),
+		Handler: func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			var input VerifyImportInput
+			if err := decodeImportArguments(request.GetRawArguments(), &input, 512<<10); err != nil {
+				return toolErrorf(logger, "verify_import_plan", "%v", err)
+			}
+			c, err := client.GetTfeClientFromContext(ctx, logger)
+			if err != nil {
+				return toolErrorf(logger, "verify_import_plan", "client_unavailable")
+			}
+			result, err := ReadVerifyImportPlan(ctx, c, input)
+			if err != nil {
+				return toolErrorf(logger, "verify_import_plan", "%v", err)
+			}
+			text, err := FormatImportResult(result)
+			if err != nil {
+				return toolErrorf(logger, "verify_import_plan", "%v", err)
+			}
+			return mcp.NewToolResultStructured(result, text), nil
+		},
+	}
+}
