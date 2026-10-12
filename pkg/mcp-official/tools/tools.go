@@ -32,8 +32,8 @@ var officialFactories = map[string]func(svr *mcp.Server, logger *slog.Logger){
 	"execute_query": func(svr *mcp.Server, _ *slog.Logger) {
 		mcp.AddTool(svr, searchTools.ExecuteQueryTool(), searchTools.ExecuteQueryFunc)
 	},
-	"get_query_status": func(svr *mcp.Server, _ *slog.Logger) {
-		mcp.AddTool(svr, searchTools.GetQueryStatusTool(), searchTools.GetQueryStatusFunc)
+	"get_query_status": func(svr *mcp.Server, logger *slog.Logger) {
+		mcp.AddTool(svr, searchTools.GetQueryStatusTool(), searchTools.GetQueryStatusFunc(logger))
 	},
 	"get_query_summary": func(svr *mcp.Server, _ *slog.Logger) {
 		mcp.AddTool(svr, searchTools.GetQuerySummaryTool(), searchTools.GetQuerySummaryFunc)
