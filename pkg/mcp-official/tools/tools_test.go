@@ -345,7 +345,7 @@ func TestOfficialSearchQuerySummarySelectableAndNonselectable(t *testing.T) {
 				case "/api/v2/search/no-code-query/ncqry-test":
 					_, _ = fmt.Fprint(w, `{"data":{"id":"ncqry-test","attributes":{"no-code-query-providers":[{"namespace":"hashicorp","name":"aws","version":"6.66.0","no-code-query-resources":[{"body":{"resource_type":"aws_s3_buckets"}}]}]},"relationships":{"workspace":{"data":{"id":"ws-test"}}}}}`)
 				case "/logs":
-					body := []byte("\x02Starting query\n" + `{"type":"provider_installation_start","provider":"aws"}` + "\n" + `{"type":"list_resource_found","list_resource_found":{"address":"list.aws_s3_buckets.all","resource_type":"aws_s3_buckets","display_name":"first","identity":{"bucket":"first"},"identity_version":` + tc.version + "}}\n" + `{"type":"list_complete","list_complete":{"address":"list.aws_s3_buckets.all","total":1}}` + "\n\x03")
+					body := []byte("\x02Starting query\n" + `{"type":"provider_installation_start","provider":"aws"}` + "\n" + `{"type":"list_resource_found","list_resource_found":{"address":"list.aws_s3_buckets.all","resource_type":"aws_s3_buckets","display_name":"first","identity":{"bucket":"first"},"identity_version":` + tc.version + `,"resource_object":{"tags":{"team":"search"}}}}` + "\n" + `{"type":"list_complete","list_complete":{"address":"list.aws_s3_buckets.all","total":1}}` + "\n\x03")
 					offset, _ := strconv.Atoi(r.URL.Query().Get("offset"))
 					limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
 					if offset < len(body) {
@@ -378,6 +378,10 @@ func TestOfficialSearchQuerySummarySelectableAndNonselectable(t *testing.T) {
 			if tc.selectable {
 				require.Contains(t, text, `"query_result_marker":"qrm1-`)
 				require.Equal(t, "org", structured["source_organization_name"])
+				rows := structured["lists"].([]any)[0].(map[string]any)["results"].([]any)
+				require.Equal(t, "search", rows[0].(map[string]any)["tags"].(map[string]any)["team"])
+				require.Equal(t, true, rows[0].(map[string]any)["attributes_captured"])
+				require.Contains(t, text, `"tags":{"team":"search"}`)
 			} else {
 				require.Equal(t, "nonselectable", structured["status"])
 				require.NotContains(t, text, "query_result_marker")

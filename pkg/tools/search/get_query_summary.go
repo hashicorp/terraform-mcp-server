@@ -86,8 +86,12 @@ const getQuerySummaryDescription = `Returns bounded, backend-scoped Search resul
 Call get_query_status first. Pass the same query_run_id; an existing authorized
 QueryRun ID can also be used without rerunning Search. A selectable response
 includes source workspace provenance and lists[].results[] with per-result
-query_result_marker, identity and identity_version. Results are not selected
-until the user chooses them. Follow next_cursor as after with unchanged filters
-to browse the same snapshot. A nonselectable response has no result markers;
+query_result_marker, identity, identity_version, attributes_captured and scalar
+tags when present in the captured resource object. Keep tags with markers and
+display names when presenting choices. If attributes_captured is false, missing
+tags are unknown; if tags are needed, ask before rerunning with
+generate_config_out true. Results are not selected until the user chooses them.
+Follow next_cursor as after with unchanged filters to browse the same snapshot.
+A nonselectable response has no result markers;
 do not attempt import preparation. A marker is selection continuity, not an
 import ID, authorization or proof of the correct cloud object.`
