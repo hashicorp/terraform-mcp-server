@@ -30,6 +30,10 @@ func (importTestSession) SessionID() string                                   { 
 // All requests are GETs against a synthetic backend; no CLI or HCP Run is
 // started. The Plan JSON contains values that must never be copied into MCP.
 func importWireBackend(t *testing.T, status, planStatus string) (*httptest.Server, *int) {
+	return importWireBackendForListType(t, status, planStatus, "aws_s3_buckets")
+}
+
+func importWireBackendForListType(t *testing.T, status, planStatus, listType string) (*httptest.Server, *int) {
 	t.Helper()
 	planJSONReads := new(int)
 	var backend *httptest.Server
@@ -48,9 +52,20 @@ func importWireBackend(t *testing.T, status, planStatus string) (*httptest.Serve
 		case "/api/v2/workspaces/ws-source":
 			_, _ = fmt.Fprint(w, `{"data":{"type":"workspaces","id":"ws-source","attributes":{"name":"source"},"relationships":{"organization":{"data":{"type":"organizations","id":"org"}}}}}`)
 		case "/api/v2/search/no-code-query/ncqry-test":
-			_, _ = fmt.Fprint(w, `{"data":{"id":"ncqry-test","attributes":{"no-code-query-providers":[{"namespace":"hashicorp","name":"aws","version":"6.66.0","no-code-query-resources":[{"body":{"resource_type":"aws_s3_buckets"}}]}]},"relationships":{"workspace":{"data":{"id":"ws-source"}}}}}`)
+			_, _ = fmt.Fprintf(w, `{"data":{"id":"ncqry-test","attributes":{"no-code-query-providers":[{"namespace":"hashicorp","name":"aws","version":"6.66.0","no-code-query-resources":[{"body":{"resource_type":%q}}]}]},"relationships":{"workspace":{"data":{"id":"ws-source"}}}}}`, listType)
 		case "/logs":
-			body := []byte("\x02Starting query\n" + `{"type":"provider_installation_start","provider":"aws"}` + "\n" + `{"type":"list_resource_found","list_resource_found":{"address":"list.aws_s3_buckets.all","resource_type":"aws_s3_buckets","display_name":"sample","identity":{"bucket":"sample"},"identity_version":0,"config":"resource \\\"aws_s3_bucket\\\" \\\"sample\\\" {}"}}` + "\n" + `{"type":"list_complete","list_complete":{"address":"list.aws_s3_buckets.all","resource_type":"aws_s3_buckets","total":1}}` + "\n\x03")
+			address := "list." + listType + ".all"
+			identity := map[string]any{"bucket": "sample"}
+			if listType == "aws_sqs_queue" {
+				identity = map[string]any{"url": "https://example.invalid/queue"}
+			}
+			found := map[string]any{"address": address, "resource_type": listType, "display_name": "sample", "identity": identity, "identity_version": 0}
+			if listType == "aws_s3_buckets" {
+				found["config"] = `resource "aws_s3_bucket" "sample" {}`
+			}
+			foundJSON, _ := json.Marshal(map[string]any{"type": "list_resource_found", "list_resource_found": found})
+			completeJSON, _ := json.Marshal(map[string]any{"type": "list_complete", "list_complete": map[string]any{"address": address, "resource_type": listType, "total": 1}})
+			body := []byte("\x02Starting query\n" + `{"type":"provider_installation_start","provider":"aws"}` + "\n" + string(foundJSON) + "\n" + string(completeJSON) + "\n\x03")
 			offset, _ := strconv.Atoi(r.URL.Query().Get("offset"))
 			limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
 			if offset < len(body) {
@@ -129,6 +144,65 @@ func TestImportToolsEndToEndLocalHTTPAndLegacyWire(t *testing.T) {
 	require.Contains(t, fmt.Sprint(wire.Content), "selection_digest")
 	require.NotContains(t, logged.String(), "signed-secret-sentinel")
 	require.NotContains(t, fmt.Sprint(wire.Content), "signed-secret-sentinel")
+}
+
+func TestPrepareImportKeepsSameNameSearchListAndManagedType(t *testing.T) {
+	backend, _ := importWireBackendForListType(t, "planned_and_finished", "finished", "aws_sqs_queue")
+	c, err := tfe.NewClient(&tfe.Config{Address: backend.URL, Token: "test-token", HTTPClient: backend.Client()})
+	require.NoError(t, err)
+	t.Setenv("MCP_ORGANIZATION_ALLOWLIST", "org")
+	provider := queryResultProvider{Source: "registry.terraform.io/hashicorp/aws", Version: "6.66.0"}
+	identity := map[string]any{"url": "https://example.invalid/queue"}
+	marker, err := queryResultMarker("qry-example", provider, "aws_sqs_queue", identity)
+	require.NoError(t, err)
+	input := PrepareImportInput{
+		OrganizationName: "org", WorkspaceName: "target", QueryRunID: "qry-example",
+		Selections:      []ImportSelection{{QueryResultMarker: marker, ManagedType: "aws_sqs_queue"}},
+		LockedProviders: map[string]string{provider.Source: "6.18.0"},
+	}
+	prepared, err := ReadPrepareImport(context.Background(), c, input)
+	require.NoError(t, err)
+	require.Equal(t, "prepared", prepared.Status)
+	require.Len(t, prepared.SelectedResults, 1)
+	require.Equal(t, "aws_sqs_queue", prepared.SelectedResults[0].ResourceType)
+	require.Equal(t, "aws_sqs_queue", prepared.Carry.SelectedResults[0].ListType)
+	require.Equal(t, "aws_sqs_queue", prepared.Carry.SelectedResults[0].ManagedType)
+	require.Equal(t, "6.66.0", prepared.Types[0].SearchProviderVersion)
+	require.Equal(t, "6.18.0", prepared.Types[0].LockedProviderVersion)
+	require.Equal(t, "unknown", prepared.Types[0].ManagedTypeSupport, "no historical target schema was read")
+	require.Contains(t, prepared.NextAction, "proposed managed type is not proved")
+
+	input.Selections[0].ManagedType = "google_sqs_queue"
+	blocked, err := ReadPrepareImport(context.Background(), c, input)
+	require.Nil(t, blocked)
+	require.EqualError(t, err, "selection_invalid", "provider-source mismatch still fails")
+
+	input.Selections[0].ManagedType = "aws_sqs_queue"
+	input.Selections[0].QueryResultMarker, err = queryResultMarker("qry-other", provider, "aws_sqs_queue", identity)
+	require.NoError(t, err)
+	blocked, err = ReadPrepareImport(context.Background(), c, input)
+	require.Nil(t, blocked)
+	require.EqualError(t, err, "selection_invalid", "unknown QueryRun marker still fails")
+}
+
+func TestPrepareImportAllowsCallerProposedDifferentNameWithoutClaimingSupport(t *testing.T) {
+	backend, _ := importWireBackend(t, "planned_and_finished", "finished")
+	c, err := tfe.NewClient(&tfe.Config{Address: backend.URL, Token: "test-token", HTTPClient: backend.Client()})
+	require.NoError(t, err)
+	t.Setenv("MCP_ORGANIZATION_ALLOWLIST", "org")
+	provider := queryResultProvider{Source: "registry.terraform.io/hashicorp/aws", Version: "6.66.0"}
+	marker, err := queryResultMarker("qry-example", provider, "aws_s3_buckets", map[string]any{"bucket": "sample"})
+	require.NoError(t, err)
+	prepared, err := ReadPrepareImport(context.Background(), c, PrepareImportInput{
+		OrganizationName: "org", WorkspaceName: "target", QueryRunID: "qry-example",
+		Selections:      []ImportSelection{{QueryResultMarker: marker, ManagedType: "aws_s3_bucket_logging"}},
+		LockedProviders: map[string]string{provider.Source: "6.18.0"},
+	})
+	require.NoError(t, err)
+	require.Equal(t, "prepared", prepared.Status)
+	require.Equal(t, "aws_s3_buckets", prepared.Carry.SelectedResults[0].ListType)
+	require.Equal(t, "aws_s3_bucket_logging", prepared.Carry.SelectedResults[0].ManagedType)
+	require.Equal(t, "unknown", prepared.Types[0].ManagedTypeSupport, "different-name pairing is not proof of target support")
 }
 
 func TestImportToolUnknownArgumentFailsWithoutBackend(t *testing.T) {

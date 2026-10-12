@@ -313,7 +313,10 @@ func ReadPrepareImport(ctx context.Context, c *tfe.Client, input PrepareImportIn
 	seenTypes := map[string]bool{}
 	for _, selection := range input.Selections {
 		found, ok := byMarker[selection.QueryResultMarker]
-		if !ok || !providerSourcePattern.MatchString(found.Provider.Source) || !exactLockedVersion.MatchString(found.Provider.Version) || !strings.HasSuffix(found.ResourceType, "s") || strings.TrimSuffix(found.ResourceType, "s") != selection.ManagedType || !strings.HasPrefix(selection.ManagedType, strings.Split(found.Provider.Source, "/")[2]+"_") {
+		// The list type is not necessarily a plural of the managed type.
+		// Keep the caller-proposed managed type and Search list type separate;
+		// the optional target schema and finished Plan supply target-side checks.
+		if !ok || !providerSourcePattern.MatchString(found.Provider.Source) || !exactLockedVersion.MatchString(found.Provider.Version) || !strings.HasPrefix(selection.ManagedType, strings.Split(found.Provider.Source, "/")[2]+"_") {
 			return nil, queryEvidenceError("selection_invalid")
 		}
 		if _, ok := input.LockedProviders[found.Provider.Source]; !ok {
@@ -376,7 +379,7 @@ func ReadPrepareImport(ctx context.Context, c *tfe.Client, input PrepareImportIn
 	}
 	out.Carry = carry
 	out.Status = "prepared"
-	out.NextAction = "Inspect the existing user-designated local tree, exact lock releases, selected observations and versioned resource/import docs; historical schema does not attest the lock, a proposed import block, or provider scope. Author one reviewed resource and import block per result at distinct addresses. Review changed files and sensitive upload scope, confirm the effective CLI host/org/workspace mapping and both initiating CLI and HCP execution support for import blocks (>=1.5). An init that creates a workspace/project or migrates state needs separate permission. After explicit approval for one speculative plan, use plain terraform plan from the confirmed directory (or terraform -chdir=<directory> plan), without -out or apply. The CLI, not Search MCP, uploads the configuration and creates the Run. If its Run URL or outcome is uncertain, reconcile before retrying; keep carry unchanged for verification."
+	out.NextAction = "Inspect the existing user-designated local tree, exact lock releases, selected observations and versioned resource/import docs; the proposed managed type is not proved by the Search list type, and historical schema does not attest the lock, a proposed import block, or provider scope. Author one reviewed resource and import block per result at distinct addresses. Review changed files and sensitive upload scope, confirm the effective CLI host/org/workspace mapping and both initiating CLI and HCP execution support for import blocks (>=1.5). An init that creates a workspace/project or migrates state needs separate permission. After explicit approval for one speculative plan, use plain terraform plan from the confirmed directory (or terraform -chdir=<directory> plan), without -out or apply. The CLI, not Search MCP, uploads the configuration and creates the Run. If its Run URL or outcome is uncertain, reconcile before retrying; keep carry unchanged for verification."
 	if err := checkImportResultBudget(out); err != nil {
 		return nil, err
 	}
