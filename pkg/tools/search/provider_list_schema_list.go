@@ -112,12 +112,12 @@ func ProviderListSchemaListText(ctx context.Context, tfeClient *tfe.Client, orgN
 
 	// The catalog is authoritative for the version. Do not accept a caller- or
 	// model-supplied version because it may not have list-resource schemas.
-	providerVersion, err := discoverProviderVersion(ctx, tfeClient, orgName, providerNamespace, providerName)
+	selection, err := discoverProviderSelection(ctx, tfeClient, orgName, providerNamespace, providerName)
 	if err != nil {
 		return "", err
 	}
 
-	return fetchProviderSchemaText(ctx, tfeClient, orgName, providerNamespace, providerName, providerVersion)
+	return fetchProviderSchemaText(ctx, tfeClient, orgName, selection.Namespace, selection.Name, selection.Version)
 }
 
 // ── list all supported providers ─────────────────────────────────────────────
@@ -177,6 +177,9 @@ func listSupportedProvidersText(ctx context.Context, tfeClient *tfe.Client, orgN
 
 	summaries := make([]providerSummary, 0, len(resp.Data))
 	for _, d := range resp.Data {
+		if d.Attributes.Namespace == "" || d.Attributes.Name == "" || d.Attributes.Version == "" {
+			return "", fmt.Errorf("provider catalog returned incomplete metadata; retry provider discovery later")
+		}
 		summaries = append(summaries, providerSummary{
 			Namespace: d.Attributes.Namespace,
 			Name:      d.Attributes.Name,
@@ -186,7 +189,7 @@ func listSupportedProvidersText(ctx context.Context, tfeClient *tfe.Client, orgN
 
 	out, err := json.MarshalIndent(map[string]any{
 		"supported_providers": summaries,
-		"note":                "Call provider_list_schema_list again with the same organization_name and workspace_name, plus provider_namespace and provider_name (and optionally provider_version), to fetch the full list_resource_schemas for a specific provider.",
+		"note":                "Call provider_list_schema_list again with the same organization_name and workspace_name, plus provider_namespace and provider_name, to fetch the full list_resource_schemas for a specific provider. FETCH uses the catalog-selected version.",
 	}, "", "  ")
 	if err != nil {
 		return "", fmt.Errorf("failed to marshal provider list: %w", err)
@@ -195,21 +198,30 @@ func listSupportedProvidersText(ctx context.Context, tfeClient *tfe.Client, orgN
 	return string(out), nil
 }
 
-// ── discover version from index ───────────────────────────────────────────────
+// ── select provider metadata from the catalog ────────────────────────────────
 
-func discoverProviderVersion(ctx context.Context, tfeClient *tfe.Client, orgName, namespace, name string) (string, error) {
+type noCodeProviderSelection struct {
+	Namespace string
+	Name      string
+	Version   string
+}
+
+func discoverProviderSelection(ctx context.Context, tfeClient *tfe.Client, orgName, namespace, name string) (noCodeProviderSelection, error) {
 	resp, err := readProviderVersions(ctx, tfeClient, orgName)
 	if err != nil {
-		return "", fmt.Errorf("failed to fetch provider list to discover version: %w", err)
+		return noCodeProviderSelection{}, fmt.Errorf("failed to fetch provider list to discover version: %w", err)
 	}
 
 	for _, d := range resp.Data {
 		if strings.EqualFold(d.Attributes.Namespace, namespace) && strings.EqualFold(d.Attributes.Name, name) {
-			return d.Attributes.Version, nil
+			if d.Attributes.Namespace == "" || d.Attributes.Name == "" || d.Attributes.Version == "" {
+				return noCodeProviderSelection{}, fmt.Errorf("provider catalog returned incomplete metadata; retry provider discovery later")
+			}
+			return noCodeProviderSelection{Namespace: d.Attributes.Namespace, Name: d.Attributes.Name, Version: d.Attributes.Version}, nil
 		}
 	}
 
-	return "", fmt.Errorf(
+	return noCodeProviderSelection{}, fmt.Errorf(
 		"provider %s/%s is not in the search-compatible catalog — "+
 			"call provider_list_schema_list with organization_name and workspace_name to see supported providers, "+
 			"or use search_providers to find a provider in the public Terraform Registry",
@@ -248,8 +260,17 @@ func fetchProviderSchemaText(ctx context.Context, tfeClient *tfe.Client, orgName
 	if err := doProviderRequest(ctx, request, &resp); err != nil {
 		return "", fmt.Errorf("failed to fetch schema for %s/%s@%s: %w", namespace, name, version, err)
 	}
+	// Atlas's schema-detail serializer exposes schemas, not provider metadata.
+	// The catalog selection supplied these values; a detail response that does
+	// include metadata must not silently contradict the selected provider.
+	attrs := resp.Data.Attributes
+	if attrs.Namespace != "" && !strings.EqualFold(attrs.Namespace, namespace) ||
+		attrs.Name != "" && !strings.EqualFold(attrs.Name, name) ||
+		attrs.Version != "" && attrs.Version != version {
+		return "", fmt.Errorf("provider schema metadata conflicts with catalog selection; retry provider discovery")
+	}
 
-	lrs := resp.Data.Attributes.ListResourceSchemas
+	lrs := attrs.ListResourceSchemas
 	if lrs == nil || string(lrs) == "null" {
 		return "", fmt.Errorf(
 			"provider %s/%s@%s exists in the catalog but has no list_resource_schemas — "+
@@ -259,18 +280,18 @@ func fetchProviderSchemaText(ctx context.Context, tfeClient *tfe.Client, orgName
 	}
 
 	out, err := json.MarshalIndent(map[string]any{
-		"namespace":             resp.Data.Attributes.Namespace,
-		"name":                  resp.Data.Attributes.Name,
-		"version":               resp.Data.Attributes.Version,
+		"namespace":             namespace,
+		"name":                  name,
+		"version":               version,
 		"list_resource_schemas": lrs,
 		"note": fmt.Sprintf(
 			"Pass list_resource_schemas to generate_query_configuration "+
 				"(with provider_namespace=%q, provider_name=%q, provider_version=%q) "+
 				"to get a full schema guide and example configuration. Use only exact resource type keys present in list_resource_schemas; "+
 				"ordinary managed resource names are not automatically supported list resources. Then pass the configuration with organization_name and workspace_name to execute_query.",
-			resp.Data.Attributes.Namespace,
-			resp.Data.Attributes.Name,
-			resp.Data.Attributes.Version,
+			namespace,
+			name,
+			version,
 		),
 	}, "", "  ")
 	if err != nil {

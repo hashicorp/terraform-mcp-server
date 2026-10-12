@@ -35,6 +35,25 @@ func TestQueryResultMarkerIsScopedDeterministicAndNotAV0ID(t *testing.T) {
 	require.NotEqual(t, evidence.Results[0].Marker, other.Results[0].Marker)
 }
 
+func TestQueryEvidenceIgnoresHarmlessTextAndJSONProgressWithoutSkippingResults(t *testing.T) {
+	log := strings.Join([]string{
+		"Starting Terraform query...",
+		"https://archivist.example/log?X-Amz-Signature=secret-sentinel",
+		`{"type":"version","terraform":"1.14.0"}`,
+		`{"type":"provider_installation_start","provider":"registry.terraform.io/hashicorp/aws"}`,
+		`{"type":"list_start","list_start":{"address":"list.aws_s3_buckets.all"}}`,
+		strings.TrimSpace(string(queryEvidenceFixture("0"))),
+		`{"type":"policy_query_summary","policy_query_summary":{"address":"list.aws_s3_buckets.all"}}`,
+		"Query finished.",
+	}, "\n")
+	evidence, err := parseQueryEvidence("qry-one", []byte(log), testQueryProviders())
+	require.NoError(t, err)
+	require.Len(t, evidence.Results, 1)
+	require.Equal(t, 1, evidence.ByType["aws_s3_buckets"])
+	require.Regexp(t, `^qrm1-[a-f0-9]{64}$`, evidence.Results[0].Marker)
+	require.NotContains(t, fmt.Sprint(evidence.Results), "secret-sentinel")
+}
+
 func TestQueryEvidenceRejectsEntireResultOnInvalidInput(t *testing.T) {
 	for _, tc := range []struct {
 		name, data, code string
@@ -48,6 +67,12 @@ func TestQueryEvidenceRejectsEntireResultOnInvalidInput(t *testing.T) {
 		{"wrong total", strings.Replace(string(queryEvidenceFixture("0")), `"total":1`, `"total":2`, 1), "query_evidence_incomplete"},
 		{"no completion", strings.Split(string(queryEvidenceFixture("0")), "\n")[0], "query_evidence_incomplete"},
 		{"unknown found record", strings.Replace(string(queryEvidenceFixture("0")), `"type":"list_resource_found"`, `"type":"new_resource_found"`, 1), "query_evidence_invalid"},
+		{"damaged found text", "list_resource_found: not JSON\n" + string(queryEvidenceFixture("0")), "query_evidence_invalid"},
+		{"damaged completion text", string(queryEvidenceFixture("0")) + "list_complete: not JSON\n", "query_evidence_invalid"},
+		{"damaged diagnostic text", string(queryEvidenceFixture("0")) + "diagnostic: not JSON\n", "query_evidence_invalid"},
+		{"array record", string(queryEvidenceFixture("0")) + `[{"type":"list_resource_found"}]`, "query_evidence_invalid"},
+		{"unknown result payload", string(queryEvidenceFixture("0")) + `{"type":"log","list_resource_found":{"identity":{"bucket":"hidden"}}}`, "query_evidence_invalid"},
+		{"malformed JSON progress", string(queryEvidenceFixture("0")) + `{"type":"provider_installation_start",`, "query_evidence_invalid"},
 		{"error diagnostic", string(queryEvidenceFixture("0")) + `{"type":"diagnostic","diagnostic":{"severity":"error","detail":"https://signed.example/token"}}`, "query_reported_error"},
 		{"oversized log", strings.Repeat("x", maxQueryEvidenceBytes+1), "query_evidence_size_limit"},
 	} {

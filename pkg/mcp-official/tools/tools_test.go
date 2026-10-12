@@ -5,6 +5,7 @@ package tools
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -116,6 +117,9 @@ func TestOfficialSearchScopedCatalogAndQuerySubmission(t *testing.T) {
 			}
 			w.Header().Set("Content-Type", "application/vnd.api+json")
 			_, _ = fmt.Fprint(w, `{"data":[{"type":"provider-versions","id":"hashicorp/example/1.0.0","attributes":{"namespace":"hashicorp","name":"example","version":"1.0.0"}}]}`)
+		case "/api/v2/search/provider-versions/hashicorp/example/1.0.0":
+			w.Header().Set("Content-Type", "application/vnd.api+json")
+			_, _ = fmt.Fprint(w, `{"data":{"type":"search-compatible-provider-versions","id":"hashicorp/example/1.0.0","attributes":{"list-resource-schemas":{"example_list":{"block":{"attributes":{}}}}}}}`)
 		case "/api/v2/search/no-code-query":
 			if r.Method != http.MethodPost {
 				http.Error(w, "expected POST", http.StatusMethodNotAllowed)
@@ -147,6 +151,23 @@ func TestOfficialSearchScopedCatalogAndQuerySubmission(t *testing.T) {
 	require.NoError(t, err)
 	require.False(t, result.IsError, "catalog result: %#v", result.Content)
 	require.Contains(t, result.Content[0].(*mcp.TextContent).Text, "supported_providers")
+	result, err = session.CallTool(ctx, &mcp.CallToolParams{Name: "provider_list_schema_list", Arguments: map[string]any{"organization_name": "org", "workspace_name": "ws", "provider_namespace": "hashicorp", "provider_name": "example"}})
+	require.NoError(t, err)
+	require.False(t, result.IsError, "schema detail without provider metadata: %#v", result.Content)
+	var fetched struct {
+		Namespace string          `json:"namespace"`
+		Name      string          `json:"name"`
+		Version   string          `json:"version"`
+		Schemas   json.RawMessage `json:"list_resource_schemas"`
+	}
+	require.NoError(t, json.Unmarshal([]byte(result.Content[0].(*mcp.TextContent).Text), &fetched))
+	require.Equal(t, "hashicorp", fetched.Namespace)
+	require.Equal(t, "example", fetched.Name)
+	require.Equal(t, "1.0.0", fetched.Version)
+	result, err = session.CallTool(ctx, &mcp.CallToolParams{Name: "generate_query_configuration", Arguments: map[string]any{"provider_namespace": fetched.Namespace, "provider_name": fetched.Name, "provider_version": fetched.Version, "list_resource_schemas": string(fetched.Schemas), "resource_types": "example_list"}})
+	require.NoError(t, err)
+	require.False(t, result.IsError, "FETCH metadata must generate a guide: %#v", result.Content)
+	require.Contains(t, result.Content[0].(*mcp.TextContent).Text, "example_list")
 	result, err = session.CallTool(ctx, &mcp.CallToolParams{Name: "provider_list_schema_list", Arguments: map[string]any{"organization_name": "org", "workspace_name": "not-found"}})
 	require.NoError(t, err)
 	require.True(t, result.IsError, "missing workspace must not be treated as authorized")
@@ -229,7 +250,7 @@ func TestOfficialImportPrepareAndFinishedPlan(t *testing.T) {
 		case "/api/v2/search/no-code-query/ncqry-test":
 			_, _ = fmt.Fprint(w, `{"data":{"id":"ncqry-test","attributes":{"no-code-query-providers":[{"namespace":"hashicorp","name":"aws","version":"6.66.0","no-code-query-resources":[{"body":{"resource_type":"aws_s3_buckets"}}]}]},"relationships":{"workspace":{"data":{"id":"ws-source"}}}}}`)
 		case "/logs":
-			body := []byte("\x02" + `{"type":"list_resource_found","list_resource_found":{"address":"list.aws_s3_buckets.all","resource_type":"aws_s3_buckets","identity":{"bucket":"sample"},"identity_version":0}}` + "\n" + `{"type":"list_complete","list_complete":{"address":"list.aws_s3_buckets.all","total":1}}` + "\n\x03")
+			body := []byte("\x02Starting query\n" + `{"type":"provider_installation_start","provider":"aws"}` + "\n" + `{"type":"list_resource_found","list_resource_found":{"address":"list.aws_s3_buckets.all","resource_type":"aws_s3_buckets","identity":{"bucket":"sample"},"identity_version":0}}` + "\n" + `{"type":"list_complete","list_complete":{"address":"list.aws_s3_buckets.all","total":1}}` + "\n\x03")
 			offset, _ := strconv.Atoi(r.URL.Query().Get("offset"))
 			limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
 			if offset < len(body) {
@@ -309,7 +330,7 @@ func TestOfficialSearchQuerySummarySelectableAndNonselectable(t *testing.T) {
 				case "/api/v2/search/no-code-query/ncqry-test":
 					_, _ = fmt.Fprint(w, `{"data":{"id":"ncqry-test","attributes":{"no-code-query-providers":[{"namespace":"hashicorp","name":"aws","version":"6.66.0","no-code-query-resources":[{"body":{"resource_type":"aws_s3_buckets"}}]}]},"relationships":{"workspace":{"data":{"id":"ws-test"}}}}}`)
 				case "/logs":
-					body := []byte("\x02" + `{"type":"list_resource_found","list_resource_found":{"address":"list.aws_s3_buckets.all","resource_type":"aws_s3_buckets","display_name":"first","identity":{"bucket":"first"},"identity_version":` + tc.version + "}}\n" + `{"type":"list_complete","list_complete":{"address":"list.aws_s3_buckets.all","total":1}}` + "\n\x03")
+					body := []byte("\x02Starting query\n" + `{"type":"provider_installation_start","provider":"aws"}` + "\n" + `{"type":"list_resource_found","list_resource_found":{"address":"list.aws_s3_buckets.all","resource_type":"aws_s3_buckets","display_name":"first","identity":{"bucket":"first"},"identity_version":` + tc.version + "}}\n" + `{"type":"list_complete","list_complete":{"address":"list.aws_s3_buckets.all","total":1}}` + "\n\x03")
 					offset, _ := strconv.Atoi(r.URL.Query().Get("offset"))
 					limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
 					if offset < len(body) {

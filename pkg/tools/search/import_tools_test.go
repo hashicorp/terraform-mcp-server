@@ -50,7 +50,7 @@ func importWireBackend(t *testing.T, status, planStatus string) (*httptest.Serve
 		case "/api/v2/search/no-code-query/ncqry-test":
 			_, _ = fmt.Fprint(w, `{"data":{"id":"ncqry-test","attributes":{"no-code-query-providers":[{"namespace":"hashicorp","name":"aws","version":"6.66.0","no-code-query-resources":[{"body":{"resource_type":"aws_s3_buckets"}}]}]},"relationships":{"workspace":{"data":{"id":"ws-source"}}}}}`)
 		case "/logs":
-			body := []byte("\x02" + `{"type":"list_resource_found","list_resource_found":{"address":"list.aws_s3_buckets.all","resource_type":"aws_s3_buckets","display_name":"sample","identity":{"bucket":"sample"},"identity_version":0,"config":"resource \\\"aws_s3_bucket\\\" \\\"sample\\\" {}"}}` + "\n" + `{"type":"list_complete","list_complete":{"address":"list.aws_s3_buckets.all","resource_type":"aws_s3_buckets","total":1}}` + "\n\x03")
+			body := []byte("\x02Starting query\n" + `{"type":"provider_installation_start","provider":"aws"}` + "\n" + `{"type":"list_resource_found","list_resource_found":{"address":"list.aws_s3_buckets.all","resource_type":"aws_s3_buckets","display_name":"sample","identity":{"bucket":"sample"},"identity_version":0,"config":"resource \\\"aws_s3_bucket\\\" \\\"sample\\\" {}"}}` + "\n" + `{"type":"list_complete","list_complete":{"address":"list.aws_s3_buckets.all","resource_type":"aws_s3_buckets","total":1}}` + "\n\x03")
 			offset, _ := strconv.Atoi(r.URL.Query().Get("offset"))
 			limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
 			if offset < len(body) {

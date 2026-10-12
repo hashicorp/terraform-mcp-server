@@ -154,6 +154,16 @@ func parseQueryEvidence(queryID string, data []byte, providers map[string]queryR
 		if len(line) == 0 {
 			continue
 		}
+		// QueryRun logs also contain ordinary text and JSON progress events.
+		// Like the V0 reader, ignore text that cannot carry a result, but never
+		// silently skip a damaged found/completion/diagnostic record or an
+		// unexpected JSON array. The complete log is still checked below.
+		if !bytes.HasPrefix(line, []byte{'{'}) {
+			if bytes.HasPrefix(line, []byte{'['}) || bytes.Contains(line, []byte("list_resource_found")) || bytes.Contains(line, []byte("list_complete")) || bytes.Contains(line, []byte("diagnostic")) {
+				return nil, queryEvidenceError("query_evidence_invalid")
+			}
+			continue
+		}
 		var record struct {
 			Type  string `json:"type"`
 			Found *struct {
@@ -177,7 +187,7 @@ func parseQueryEvidence(queryID string, data []byte, providers map[string]queryR
 				Severity string `json:"severity"`
 			} `json:"diagnostic"`
 		}
-		if !bytes.HasPrefix(line, []byte{'{'}) || decodeQueryEvidence(line, &record) != nil {
+		if decodeQueryEvidence(line, &record) != nil {
 			return nil, queryEvidenceError("query_evidence_invalid")
 		}
 		switch record.Type {
@@ -237,9 +247,12 @@ func parseQueryEvidence(queryID string, data []byte, providers map[string]queryR
 				return nil, queryEvidenceError("query_evidence_invalid")
 			}
 		default:
-			// An unknown record might represent an undiscovered result. Never
-			// produce a selectable partial view of a log we cannot interpret.
-			return nil, queryEvidenceError("query_evidence_invalid")
+			// Progress and policy messages do not contribute result rows. Keep
+			// unknown result-bearing records nonselectable rather than mistaking
+			// them for benign progress messages.
+			if record.Found != nil || record.Complete != nil || record.Diagnostic != nil || strings.Contains(record.Type, "resource_found") || strings.HasPrefix(record.Type, "list_") || strings.Contains(record.Type, "diagnostic") {
+				return nil, queryEvidenceError("query_evidence_invalid")
+			}
 		}
 	}
 	if len(totals) == 0 {
