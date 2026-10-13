@@ -233,6 +233,8 @@ func TestOfficialImportVerifyObservedFailureAndNoPlanJSON(t *testing.T) {
 func TestOfficialImportPrepareAndFinishedPlan(t *testing.T) {
 	ctx := context.Background()
 	var omitPlanTerraformVersion atomic.Bool
+	var planIdentityVersion atomic.Int32
+	planIdentityVersion.Store(1)
 	var backend *httptest.Server
 	backend = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/vnd.api+json")
@@ -251,7 +253,7 @@ func TestOfficialImportPrepareAndFinishedPlan(t *testing.T) {
 		case "/api/v2/search/no-code-query/ncqry-test":
 			_, _ = fmt.Fprint(w, `{"data":{"id":"ncqry-test","attributes":{"no-code-query-providers":[{"namespace":"hashicorp","name":"aws","version":"6.66.0","no-code-query-resources":[{"body":{"resource_type":"aws_s3_buckets"}}]}]},"relationships":{"workspace":{"data":{"id":"ws-source"}}}}}`)
 		case "/logs":
-			body := []byte("\x02Starting query\n" + `{"type":"provider_installation_start","provider":"aws"}` + "\n" + `{"type":"list_resource_found","list_resource_found":{"address":"list.aws_s3_buckets.all","resource_type":"aws_s3_buckets","identity":{"bucket":"sample"},"identity_version":0}}` + "\n" + `{"type":"list_complete","list_complete":{"address":"list.aws_s3_buckets.all","total":1}}` + "\n\x03")
+			body := []byte("\x02Starting query\n" + `{"type":"provider_installation_start","provider":"aws"}` + "\n" + `{"type":"list_resource_found","list_resource_found":{"address":"list.aws_s3_buckets.all","resource_type":"aws_s3_buckets","identity":{"bucket":"sample"},"identity_version":1}}` + "\n" + `{"type":"list_complete","list_complete":{"address":"list.aws_s3_buckets.all","total":1}}` + "\n\x03")
 			offset, _ := strconv.Atoi(r.URL.Query().Get("offset"))
 			limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
 			if offset < len(body) {
@@ -270,7 +272,7 @@ func TestOfficialImportPrepareAndFinishedPlan(t *testing.T) {
 				_, _ = fmt.Fprint(w, `{"format_version":"1.2","complete":true,"errored":false,"private":"secret-id-sentinel"}`)
 				return
 			}
-			_, _ = fmt.Fprint(w, `{"format_version":"1.2","terraform_version":"1.14.0","complete":true,"errored":false,"planned_values":{"root_module":{"resources":[{"address":"aws_s3_bucket.sample","identity_schema_version":0}]}},"resource_changes":[{"address":"aws_s3_bucket.sample","mode":"managed","type":"aws_s3_bucket","provider_name":"registry.terraform.io/hashicorp/aws","change":{"actions":["no-op"],"importing":{"id":"secret-id-sentinel"},"after_identity":{"bucket":"sample"}}}],"resource_drift":[]}`)
+			_, _ = fmt.Fprintf(w, `{"format_version":"1.2","terraform_version":"1.14.0","complete":true,"errored":false,"planned_values":{"root_module":{"resources":[{"address":"aws_s3_bucket.sample","identity_schema_version":%d}]}},"resource_changes":[{"address":"aws_s3_bucket.sample","mode":"managed","type":"aws_s3_bucket","provider_name":"registry.terraform.io/hashicorp/aws","change":{"actions":["no-op"],"importing":{"id":"secret-id-sentinel"},"after_identity":{"bucket":"sample"}}}],"resource_drift":[]}`, planIdentityVersion.Load())
 		default:
 			http.NotFound(w, r)
 		}
@@ -309,6 +311,20 @@ func TestOfficialImportPrepareAndFinishedPlan(t *testing.T) {
 	require.Equal(t, float64(1), facts["object_identity"].(map[string]any)["matched"])
 	require.NotContains(t, fmt.Sprint(verify.Content), "secret-id-sentinel")
 	require.NotContains(t, fmt.Sprint(verify.StructuredContent), "secret-id-sentinel")
+	planIdentityVersion.Store(0)
+	differentVersion, err := session.CallTool(ctx, &mcp.CallToolParams{Name: "verify_import_plan", Arguments: map[string]any{"organization_name": "org", "workspace_name": "target", "run_id": "run-example", "carry": prepared["carry"], "bindings": []any{map[string]any{"query_result_marker": marker, "target_address": "aws_s3_bucket.sample"}}}})
+	require.NoError(t, err)
+	require.False(t, differentVersion.IsError)
+	diff := differentVersion.StructuredContent.(map[string]any)
+	require.Equal(t, float64(1), diff["changes"].(map[string]any)["none"])
+	require.Equal(t, float64(1), diff["object_identity"].(map[string]any)["unverified"])
+	entry := diff["attention"].([]any)[0].(map[string]any)
+	require.Equal(t, "none", entry["change"])
+	require.Equal(t, "identity_schema_version_differs", entry["identity_reason"])
+	require.Contains(t, diff["next_action"], "Search 1, Plan 0")
+	require.Contains(t, diff["next_action"], "If the user asks to investigate")
+	require.Contains(t, differentVersion.Content[0].(*mcp.TextContent).Text, `"identity_schema_version_differs"`)
+	require.NotContains(t, fmt.Sprint(differentVersion), "secret-id-sentinel")
 	omitPlanTerraformVersion.Store(true)
 	blocked, err := session.CallTool(ctx, &mcp.CallToolParams{Name: "verify_import_plan", Arguments: map[string]any{"organization_name": "org", "workspace_name": "target", "run_id": "run-example", "carry": prepared["carry"], "bindings": []any{map[string]any{"query_result_marker": marker, "target_address": "aws_s3_bucket.sample"}}}})
 	require.NoError(t, err)
