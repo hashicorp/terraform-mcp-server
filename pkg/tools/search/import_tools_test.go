@@ -140,6 +140,9 @@ func TestImportToolsEndToEndLocalHTTPAndLegacyWire(t *testing.T) {
 	require.Contains(t, result.NextAction, "get_plan_json_output")
 	require.Contains(t, result.NextAction, "raw Plan JSON may contain sensitive values")
 	require.Contains(t, result.NextAction, "outside this session")
+	for _, hint := range []string{"An import-only Plan or N-to-import summary is not identity proof", "necessary editable local-module interfaces", "existing workspace's variables, references and coding practices", "separate approval for a new speculative plan", "A satisfactory first Plan requires no second Plan"} {
+		require.Contains(t, result.NextAction, hint)
+	}
 	require.Contains(t, result.NextAction, "After full-Plan review, report the separate action and identity findings and hand off the proposed HCL")
 	require.Contains(t, result.NextAction, "Do not run terraform apply, terraform import or apply_run as a continuation of this Search-to-import workflow")
 	require.Equal(t, 1, *reads)
@@ -244,6 +247,9 @@ func TestPrepareImportKeepsSameNameSearchListAndManagedType(t *testing.T) {
 	require.Equal(t, "6.18.0", prepared.Types[0].LockedProviderVersion)
 	require.Equal(t, "unknown", prepared.Types[0].ManagedTypeSupport, "no historical target schema was read")
 	require.Contains(t, prepared.NextAction, "proposed managed type is not proved")
+	for _, hint := range []string{"relevant module calls and instances", "target locked provider's managed/identity schema", "search_providers with the locked provider_version followed by get_provider_details", "sibling effects; do not edit remote-source modules"} {
+		require.Contains(t, prepared.NextAction, hint)
+	}
 	require.Contains(t, prepared.NextAction, "Approval is for one speculative plan only")
 	require.Contains(t, prepared.NextAction, "ends after Plan review and handoff of the proposed HCL and findings; do not apply or run terraform import")
 	for _, hint := range []string{"user-approved cloud or remote-backend configuration", "effective CLI host, organization, project", "Explicit cloud settings take precedence over their fallbacks", "CLI fallbacks and workspace-selection overrides without dumping environment contents", "if the mapping is ambiguous", "authentication for the intended host is available", "Do not read, print, request, copy or set credential values", "MCP server configuration and authentication are separate", "terraform plan -no-color -input=false", "plan_only=true"} {
@@ -258,6 +264,8 @@ func TestPrepareImportKeepsSameNameSearchListAndManagedType(t *testing.T) {
 	require.Contains(t, PrepareImportDescription, "respecting explicit cloud settings, applicable CLI fallbacks and workspace-selection overrides without dumping the environment")
 	require.Contains(t, PrepareImportDescription, "without reading or printing credentials")
 	require.Contains(t, PrepareImportDescription, "Approval in this Search-to-import workflow is for one speculative plan only; preparation does not authorize apply")
+	require.Contains(t, PrepareImportDescription, "target Terraform version's official import and module documentation")
+	require.Contains(t, PrepareImportDescription, "Do not substitute a Search list schema for the target managed schema or guess an identity mapping")
 	require.Contains(t, VerifyImportPlanDescription, "CLI and MCP authentication are separate")
 	require.Contains(t, VerifyImportPlanDescription, "Do not run terraform apply, terraform import or apply_run as a continuation of this Search-to-import workflow")
 
@@ -379,6 +387,7 @@ func TestVerifyImportPlanVersionDifferenceKeepsPlanAndIdentitySeparateOnMark3lab
 	require.Contains(t, result.NextAction, "Identity needs review: 2 selected object identities are unverified")
 	require.Contains(t, result.NextAction, "Search 1, Plan 0")
 	require.Contains(t, result.NextAction, "Plan actions, separately: all 2 selected imports have no-op actions")
+	require.Contains(t, result.NextAction, "A satisfactory first Plan requires no second Plan; identity uncertainty alone does not require changing HCL or starting another Run")
 	require.Contains(t, result.NextAction, "After full-Plan review, report the separate action and identity findings and hand off the proposed HCL")
 	require.Contains(t, result.NextAction, "Do not run terraform apply, terraform import or apply_run as a continuation of this Search-to-import workflow")
 	require.Less(t, strings.Index(result.NextAction, "Identity needs review"), strings.Index(result.NextAction, "Plan actions, separately"))
