@@ -8,10 +8,10 @@ import (
 	_ "embed"
 	"fmt"
 	"io"
+	"log/slog"
 	"strings"
 
 	"github.com/google/jsonschema-go/jsonschema"
-	"github.com/hashicorp/go-tfe"
 	"github.com/hashicorp/terraform-mcp-server/pkg/mcp-official/client"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
@@ -53,7 +53,13 @@ func GetWorkspaceDetailsTool() *mcp.Tool {
 	}
 }
 
-func GetWorkspaceDetailsFunc(ctx context.Context, request *mcp.CallToolRequest, input GetWorkspaceDetailsArguments) (*mcp.CallToolResult, *GetWorkspaceDetailsResponse, error) {
+func GetWorkspaceDetailsFunc(logger *slog.Logger) mcp.ToolHandlerFor[GetWorkspaceDetailsArguments, *GetWorkspaceDetailsResponse] {
+	return func(ctx context.Context, request *mcp.CallToolRequest, input GetWorkspaceDetailsArguments) (*mcp.CallToolResult, *GetWorkspaceDetailsResponse, error) {
+		return getWorkspaceDetails(ctx, request, input, logger)
+	}
+}
+
+func getWorkspaceDetails(ctx context.Context, request *mcp.CallToolRequest, input GetWorkspaceDetailsArguments, logger *slog.Logger) (*mcp.CallToolResult, *GetWorkspaceDetailsResponse, error) {
 	terraformOrgName := strings.TrimSpace(input.TerraformOrgName)
 	if terraformOrgName == "" {
 		return nil, nil, fmt.Errorf("terraform_org_name must not be blank")
@@ -75,8 +81,15 @@ func GetWorkspaceDetailsFunc(ctx context.Context, request *mcp.CallToolRequest, 
 	}
 
 	variables := []VariableSummary{}
-	variableList, err := tfeClient.Variables.List(ctx, workspace.ID, &tfe.VariableListOptions{})
-	if err == nil && variableList != nil {
+	variableList, err := tfeClient.Variables.ListAll(ctx, workspace.ID, nil)
+	if err != nil {
+		logger.WarnContext(ctx, "failed to fetch workspace variables",
+			"organization", terraformOrgName,
+			"workspace", workspaceName,
+			"workspace_id", workspace.ID,
+			"error", err,
+		)
+	} else if variableList != nil {
 		variables = make([]VariableSummary, 0, len(variableList.Items))
 		for _, variable := range variableList.Items {
 			if variable != nil {

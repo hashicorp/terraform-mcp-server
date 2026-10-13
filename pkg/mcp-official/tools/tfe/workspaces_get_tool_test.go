@@ -5,6 +5,8 @@ package tools
 
 import (
 	"encoding/json"
+	"io"
+	"log/slog"
 	"testing"
 
 	"github.com/google/jsonschema-go/jsonschema"
@@ -55,6 +57,7 @@ func TestGetWorkspaceDetailsToolOutputSchema(t *testing.T) {
 }
 
 func TestGetWorkspaceDetailsFuncRejectsBlankArguments(t *testing.T) {
+	handler := GetWorkspaceDetailsFunc(slog.New(slog.NewTextHandler(io.Discard, nil)))
 	tests := []struct {
 		input   GetWorkspaceDetailsArguments
 		wantErr string
@@ -64,7 +67,7 @@ func TestGetWorkspaceDetailsFuncRejectsBlankArguments(t *testing.T) {
 	}
 
 	for _, test := range tests {
-		_, _, err := GetWorkspaceDetailsFunc(t.Context(), nil, test.input)
+		_, _, err := handler(t.Context(), nil, test.input)
 		require.EqualError(t, err, test.wantErr)
 	}
 }

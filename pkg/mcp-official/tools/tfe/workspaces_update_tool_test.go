@@ -28,7 +28,8 @@ func TestUpdateWorkspaceToolInputSchema(t *testing.T) {
 	assert.Equal(t, []string{
 		"terraform_org_name", "workspace_name", "new_name", "description",
 		"terraform_version", "working_directory", "auto_apply", "execution_mode",
-		"queue_all_runs", "speculative_enabled", "trigger_prefixes", "file_triggers_enabled",
+		"queue_all_runs", "speculative_enabled", "trigger_prefixes", "trigger_patterns",
+		"file_triggers_enabled",
 	}, schema.PropertyOrder)
 	assert.Equal(t, []string{"terraform_org_name", "workspace_name"}, schema.Required)
 	assert.Equal(t, "boolean", schema.Properties["auto_apply"].Type)
@@ -38,6 +39,8 @@ func TestUpdateWorkspaceToolInputSchema(t *testing.T) {
 	assert.Equal(t, enumOf(validExecutionModes...), schema.Properties["execution_mode"].Enum)
 	assert.Equal(t, "array", schema.Properties["trigger_prefixes"].Type)
 	assert.Equal(t, "string", schema.Properties["trigger_prefixes"].Items.Type)
+	assert.Equal(t, "array", schema.Properties["trigger_patterns"].Type)
+	assert.Equal(t, "string", schema.Properties["trigger_patterns"].Items.Type)
 	assert.NotContains(t, schema.Properties, "tags")
 	require.NotNil(t, schema.AdditionalProperties)
 	assert.NotNil(t, schema.AdditionalProperties.Not)
@@ -53,6 +56,15 @@ func TestUpdateWorkspaceFuncRejectsInvalidArguments(t *testing.T) {
 		{input: UpdateWorkspaceArguments{TerraformOrgName: "organization", WorkspaceName: "workspace"}, wantErr: "at least one workspace setting must be provided"},
 		{input: UpdateWorkspaceArguments{TerraformOrgName: "organization", WorkspaceName: "workspace", ExecutionMode: "invalid"}, wantErr: `execution_mode "invalid" must be one of: local, remote`},
 		{input: UpdateWorkspaceArguments{TerraformOrgName: "organization", WorkspaceName: "workspace", ExecutionMode: "agent"}, wantErr: `execution_mode "agent" must be one of: local, remote`},
+		{
+			input: UpdateWorkspaceArguments{
+				TerraformOrgName: "organization",
+				WorkspaceName:    "workspace",
+				TriggerPrefixes:  []string{"modules/"},
+				TriggerPatterns:  []string{"modules/**"},
+			},
+			wantErr: "trigger_prefixes and trigger_patterns cannot both contain values",
+		},
 	}
 
 	for _, test := range tests {
@@ -73,6 +85,7 @@ func TestWorkspaceUpdateOptions(t *testing.T) {
 		FileTriggersEnabled: &fileTriggersEnabled,
 		ExecutionMode:       executionModeRemote,
 		TriggerPrefixes:     []string{"modules/", "environments/"},
+		TriggerPatterns:     []string{},
 	})
 	require.NoError(t, err)
 
@@ -82,15 +95,19 @@ func TestWorkspaceUpdateOptions(t *testing.T) {
 	assert.True(t, *options.FileTriggersEnabled)
 	assert.Equal(t, executionModeRemote, *options.ExecutionMode)
 	assert.Equal(t, []string{"modules/", "environments/"}, options.TriggerPrefixes)
+	assert.NotNil(t, options.TriggerPatterns)
+	assert.Empty(t, options.TriggerPatterns)
 }
 
 func TestWorkspaceUpdateOptionsClearsFields(t *testing.T) {
 	empty := ""
 	prefixes := []string{}
+	patterns := []string{}
 	options, err := workspaceUpdateOptions(UpdateWorkspaceArguments{
 		Description:      &empty,
 		WorkingDirectory: &empty,
 		TriggerPrefixes:  prefixes,
+		TriggerPatterns:  patterns,
 	})
 	require.NoError(t, err)
 
@@ -100,4 +117,18 @@ func TestWorkspaceUpdateOptionsClearsFields(t *testing.T) {
 	assert.Empty(t, *options.WorkingDirectory)
 	assert.NotNil(t, options.TriggerPrefixes)
 	assert.Empty(t, options.TriggerPrefixes)
+	assert.NotNil(t, options.TriggerPatterns)
+	assert.Empty(t, options.TriggerPatterns)
+}
+
+func TestWorkspaceUpdateOptionsTriggerPatterns(t *testing.T) {
+	options, err := workspaceUpdateOptions(UpdateWorkspaceArguments{
+		TriggerPrefixes: []string{},
+		TriggerPatterns: []string{"modules/**", "environments/**/*.tf"},
+	})
+	require.NoError(t, err)
+
+	assert.NotNil(t, options.TriggerPrefixes)
+	assert.Empty(t, options.TriggerPrefixes)
+	assert.Equal(t, []string{"modules/**", "environments/**/*.tf"}, options.TriggerPatterns)
 }

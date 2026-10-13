@@ -51,8 +51,8 @@ var officialFactories = map[string]func(svr *mcp.Server, logger *slog.Logger){
 	"create_workspace": func(svr *mcp.Server, _ *slog.Logger) {
 		mcp.AddTool(svr, tfeTools.CreateWorkspaceTool(), tfeTools.CreateWorkspaceFunc)
 	},
-	"get_workspace_details": func(svr *mcp.Server, _ *slog.Logger) {
-		mcp.AddTool(svr, tfeTools.GetWorkspaceDetailsTool(), tfeTools.GetWorkspaceDetailsFunc)
+	"get_workspace_details": func(svr *mcp.Server, logger *slog.Logger) {
+		mcp.AddTool(svr, tfeTools.GetWorkspaceDetailsTool(), tfeTools.GetWorkspaceDetailsFunc(logger))
 	},
 	"update_workspace": func(svr *mcp.Server, _ *slog.Logger) {
 		mcp.AddTool(svr, tfeTools.UpdateWorkspaceTool(), tfeTools.UpdateWorkspaceFunc)

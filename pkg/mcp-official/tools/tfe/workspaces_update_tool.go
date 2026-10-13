@@ -27,6 +27,7 @@ type UpdateWorkspaceArguments struct {
 	QueueAllRuns        *bool    `json:"queue_all_runs,omitempty"`
 	SpeculativeEnabled  *bool    `json:"speculative_enabled,omitempty"`
 	TriggerPrefixes     []string `json:"trigger_prefixes,omitempty"`
+	TriggerPatterns     []string `json:"trigger_patterns,omitempty"`
 	FileTriggersEnabled *bool    `json:"file_triggers_enabled,omitempty"`
 }
 
@@ -81,7 +82,12 @@ func UpdateWorkspaceTool() *mcp.Tool {
 				},
 				"trigger_prefixes": {
 					Type:        "array",
-					Description: "Optional trigger prefixes; use an empty array to clear them",
+					Description: "Optional trigger prefixes; use an empty array to clear them; cannot contain values together with trigger_patterns",
+					Items:       &jsonschema.Schema{Type: "string"},
+				},
+				"trigger_patterns": {
+					Type:        "array",
+					Description: "Optional trigger patterns; use an empty array to clear them; cannot contain values together with trigger_prefixes",
 					Items:       &jsonschema.Schema{Type: "string"},
 				},
 				"file_triggers_enabled": {
@@ -92,7 +98,8 @@ func UpdateWorkspaceTool() *mcp.Tool {
 			PropertyOrder: []string{
 				"terraform_org_name", "workspace_name", "new_name", "description",
 				"terraform_version", "working_directory", "auto_apply", "execution_mode",
-				"queue_all_runs", "speculative_enabled", "trigger_prefixes", "file_triggers_enabled",
+				"queue_all_runs", "speculative_enabled", "trigger_prefixes", "trigger_patterns",
+				"file_triggers_enabled",
 			},
 			Required:             []string{"terraform_org_name", "workspace_name"},
 			AdditionalProperties: &jsonschema.Schema{Not: &jsonschema.Schema{}},
@@ -138,6 +145,10 @@ func UpdateWorkspaceFunc(ctx context.Context, request *mcp.CallToolRequest, inpu
 }
 
 func workspaceUpdateOptions(input UpdateWorkspaceArguments) (tfe.WorkspaceUpdateOptions, error) {
+	if len(input.TriggerPrefixes) > 0 && len(input.TriggerPatterns) > 0 {
+		return tfe.WorkspaceUpdateOptions{}, fmt.Errorf("trigger_prefixes and trigger_patterns cannot both contain values")
+	}
+
 	options := tfe.WorkspaceUpdateOptions{}
 	changed := false
 
@@ -186,6 +197,10 @@ func workspaceUpdateOptions(input UpdateWorkspaceArguments) (tfe.WorkspaceUpdate
 
 	if input.TriggerPrefixes != nil {
 		options.TriggerPrefixes = append([]string{}, input.TriggerPrefixes...)
+		changed = true
+	}
+	if input.TriggerPatterns != nil {
+		options.TriggerPatterns = append([]string{}, input.TriggerPatterns...)
 		changed = true
 	}
 
