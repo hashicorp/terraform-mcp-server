@@ -17,6 +17,7 @@ import (
 )
 
 const (
+	// TODO: Remove `defaultRunMessage` const once runs_action.go is merged, as it defines the same const.
 	defaultRunMessage       = "Triggered via Terraform MCP Server"
 	runTypePlanAndApply     = "plan_and_apply"
 	runTypeRefreshState     = "refresh_state"
@@ -82,12 +83,12 @@ func createRunTool(runTypes []string, destructive bool) *mcp.Tool {
 					Type:        "string",
 					Description: "The type of run to create",
 					Enum:        enumOf(runTypes...),
-					Default:     json.RawMessage(`"plan_and_apply"`),
+					Default:     json.RawMessage(`"` + runTypePlanAndApply + `"`),
 				},
 				"message": {
 					Type:        "string",
 					Description: "Optional message for the run; use an empty string to omit the message",
-					Default:     json.RawMessage(`"Triggered via Terraform MCP Server"`),
+					Default:     json.RawMessage(`"` + defaultRunMessage + `"`),
 				},
 			},
 			PropertyOrder:        []string{"terraform_org_name", "workspace_name", "run_type", "message"},
