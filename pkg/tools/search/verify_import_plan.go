@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -529,7 +530,7 @@ func classifyImportPlan(ctx context.Context, c *tfe.Client, out *VerifyImportRes
 	out.NextAction = "Attention lists only selected results with a non-no-op change or identity needing review; an empty list does not clear other Plan actions, outputs or drift. Report identity uncertainty and mismatches separately from Plan actions. Ask the user whether to review the full Plan outside this session via run_ui_url (or the confirmed CLI browser Run URL if absent), or to preview it here. Only if the user chooses in-session review and get_plan_json_output is available, call it with this result's plan_id; raw Plan JSON may contain sensitive values visible to the agent, so summarize actions without reproducing secrets or sensitive attributes. Review other managed actions, outputs, drift and provider scope; this bounded result does not attest the uploaded bytes or authorize apply."
 	if out.ObjectIdentity["unverified"]+out.ObjectIdentity["mismatched"]+out.ObjectIdentity["unsupported"] > 0 {
 		out.Diagnostics = append(out.Diagnostics, "identity_requires_review")
-		out.NextAction = "Attention lists only selected results with a non-no-op change or identity needing review; inspect it alongside the separate count maps and whole-Plan findings. Identity is unverified, mismatched or unsupported for some selections; report this before plan-action findings. Confirm documented import form and provider scope with the user. Ask whether the user prefers full Plan review outside this session via run_ui_url (or the confirmed CLI browser Run URL if absent), or an in-session preview. Only with the user's choice and an available get_plan_json_output tool, use this result's plan_id; raw Plan JSON may contain sensitive values visible to the agent, so summarize without reproducing secrets or sensitive attributes. A clean import action does not prove the selected cloud object; no apply was authorized."
+		out.NextAction = importIdentityReviewAction(out, len(selected))
 	}
 	if out.Changes["update"]+out.Changes["create"]+out.Changes["replace_or_destroy"]+out.Plan.ExtraImports+out.Plan.OtherManagedActions+out.Plan.OutputChanges+out.Plan.DeferredChanges+out.Plan.ResourceDrift > 0 {
 		out.Diagnostics = append(out.Diagnostics, "plan_actions_require_review")
@@ -539,6 +540,64 @@ func classifyImportPlan(ctx context.Context, c *tfe.Client, out *VerifyImportRes
 		return nil, err
 	}
 	return out, nil
+}
+
+// Keep the two axes distinct and describe only bounded, value-free evidence.
+// Attention contains every non-matched selection, even when its Plan action is
+// a no-op; version pairs come only from these already-classified entries.
+func importIdentityReviewAction(out *VerifyImportResult, selected int) string {
+	var versionDiffers, versionMissing int
+	var searchVersion int
+	var planVersion uint64
+	onePair := true
+	for _, item := range out.Attention {
+		switch item.IdentityReason {
+		case "identity_schema_version_differs":
+			versionDiffers++
+			if item.PlanIdentityVersion == nil {
+				onePair = false
+			} else if versionDiffers == 1 {
+				searchVersion, planVersion = item.SearchIdentityVersion, *item.PlanIdentityVersion
+			} else if searchVersion != item.SearchIdentityVersion || planVersion != *item.PlanIdentityVersion {
+				onePair = false
+			}
+		case "identity_schema_version_not_compared":
+			versionMissing++
+		}
+	}
+	var identity []string
+	if versionDiffers > 0 {
+		reason := fmt.Sprintf("%d selected object identities are unverified because Search and Plan identity schema versions differ", versionDiffers)
+		if onePair {
+			reason += fmt.Sprintf(" (Search %d, Plan %d)", searchVersion, planVersion)
+		} else {
+			reason += " (see attention for each version pair)"
+		}
+		identity = append(identity, reason+"; equal-looking values or no-op imports do not establish an identity match.")
+	}
+	if versionMissing > 0 {
+		identity = append(identity, fmt.Sprintf("%d selected object identities are unverified because the Plan identity schema version was not reported for their addresses; values cannot be confirmed comparable.", versionMissing))
+	}
+	if other := out.ObjectIdentity["unverified"] - versionDiffers - versionMissing; other > 0 {
+		identity = append(identity, fmt.Sprintf("%d other selected object identities are unverified (see identity_reason in attention).", other))
+	}
+	if count := out.ObjectIdentity["mismatched"]; count > 0 {
+		identity = append(identity, fmt.Sprintf("Identity mismatches: %d; stop and review the affected selections with the user.", count))
+	}
+	if count := out.ObjectIdentity["unsupported"]; count > 0 {
+		identity = append(identity, fmt.Sprintf("%d selected object identities could not be checked with the available target evidence.", count))
+	}
+	parts := []string{"Identity needs review: " + strings.Join(identity, " ")}
+	if out.Changes["none"] == selected {
+		parts = append(parts, fmt.Sprintf("Plan actions, separately: all %d selected imports have no-op actions; this does not prove the selected cloud objects.", selected))
+	} else {
+		parts = append(parts, fmt.Sprintf("Plan actions, separately: %d of %d selected imports have no-op actions; inspect changes and attention for the others.", out.Changes["none"], selected))
+	}
+	parts = append(parts, "Review unselected actions, outputs, deferred changes, drift and provider scope independently; this bounded result does not attest uploaded bytes or authorize apply. Ask whether the user prefers full Plan review via run_ui_url (or the confirmed CLI browser Run URL if absent), or an in-session preview. Only with the user's choice and an available get_plan_json_output tool, use this result's plan_id; raw Plan JSON may contain sensitive values visible to the agent, so summarize without reproducing secrets or sensitive attributes.")
+	if versionDiffers+versionMissing > 0 {
+		parts = append(parts, "If the user asks to investigate identity uncertainty, consult the target's locked provider-release documentation and effective provider configuration, including aliases and module mappings. With the user's chosen Plan review route, compare documented identity and scope meanings with provider-returned Plan identity, relevant resource attributes and available Search observations. Report corroboration, unknowns and conflicts without reproducing sensitive values; stop for user review on a conflict. Keep object_identity unverified even if evidence increases confidence; identity uncertainty alone does not require changing configuration or starting another Run.")
+	}
+	return strings.Join(parts, " ")
 }
 
 type importPlanModule struct {

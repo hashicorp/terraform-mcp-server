@@ -242,15 +242,18 @@ func TestPrepareImportKeepsSameNameSearchListAndManagedType(t *testing.T) {
 	require.Equal(t, "6.18.0", prepared.Types[0].LockedProviderVersion)
 	require.Equal(t, "unknown", prepared.Types[0].ManagedTypeSupport, "no historical target schema was read")
 	require.Contains(t, prepared.NextAction, "proposed managed type is not proved")
-	for _, hint := range []string{"TF_CLOUD_HOSTNAME", "TF_CLOUD_ORGANIZATION", "TF_CLOUD_PROJECT", "TF_WORKSPACE", "Explicit cloud block values take precedence", "credentials for that host", "terraform plan -no-color -input=false", "plan_only=true"} {
+	for _, hint := range []string{"user-approved cloud or remote-backend configuration", "effective CLI host, organization, project", "Explicit cloud settings take precedence over their fallbacks", "CLI fallbacks and workspace-selection overrides without dumping environment contents", "if the mapping is ambiguous", "authentication for the intended host is available", "Do not read, print, request, copy or set credential values", "MCP server configuration and authentication are separate", "terraform plan -no-color -input=false", "plan_only=true"} {
 		require.Contains(t, prepared.NextAction, hint)
 	}
-	for _, hint := range []string{"TFE_ADDRESS", "TFE_HOSTNAME", "TFE_TOKEN", "do not establish CLI cloud routing or authentication"} {
-		require.Contains(t, prepared.NextAction, hint)
+	for _, guidance := range []string{prepared.NextAction, PrepareImportDescription, VerifyImportPlanDescription} {
+		for _, name := range []string{"TF_CLOUD_", "TF_WORKSPACE", "TF_TOKEN_", "TFE_ADDRESS", "TFE_HOSTNAME", "TFE_TOKEN"} {
+			require.NotContains(t, guidance, name)
+		}
 	}
 	require.NotContains(t, prepared.NextAction, ".envrc")
-	require.Contains(t, PrepareImportDescription, "cloud block values take precedence")
-	require.Contains(t, PrepareImportDescription, "TFE_TOKEN may configure terraform-mcp-server")
+	require.Contains(t, PrepareImportDescription, "respecting explicit cloud settings, applicable CLI fallbacks and workspace-selection overrides without dumping the environment")
+	require.Contains(t, PrepareImportDescription, "without reading or printing credentials")
+	require.Contains(t, VerifyImportPlanDescription, "CLI and MCP authentication are separate")
 
 	input.Selections[0].ManagedType = "google_sqs_queue"
 	blocked, err := ReadPrepareImport(context.Background(), c, input)
@@ -271,7 +274,8 @@ func TestVerifyImportPlanAttentionOnlyIncludesSelectedExceptions(t *testing.T) {
 		name, planJSON, change, identity string
 	}{
 		{"identity mismatch", strings.Replace(base, `"after_identity":{"bucket":"sample"}`, `"after_identity":{"bucket":"different"}`, 1), "none", "mismatched"},
-		{"identity version unknown", strings.Replace(base, `"identity_schema_version":0`, `"identity_schema_version":1`, 1), "none", "unverified"},
+		{"identity version differs", strings.Replace(base, `"identity_schema_version":0`, `"identity_schema_version":1`, 1), "none", "unverified"},
+		{"identity version absent", strings.Replace(base, `"identity_schema_version":0`, `"identity_schema_version":null`, 1), "none", "unverified"},
 		{"import marker missing", strings.Replace(base, `"importing":{"id":"private-import-id-sentinel"},`, "", 1), "import_missing", "unverified"},
 		{"selected address missing", strings.Replace(base, `"address":"aws_s3_bucket.sample","mode"`, `"address":"aws_s3_bucket.other","mode"`, 1), "not_in_plan", "unverified"},
 	} {
@@ -289,7 +293,96 @@ func TestVerifyImportPlanAttentionOnlyIncludesSelectedExceptions(t *testing.T) {
 			require.Len(t, result.Attention, 1)
 			require.Equal(t, tc.change, result.Attention[0].Change)
 			require.Equal(t, tc.identity, result.Attention[0].ObjectIdentity)
+			if tc.name == "identity version differs" {
+				require.Equal(t, "identity_schema_version_differs", result.Attention[0].IdentityReason)
+				require.Contains(t, result.NextAction, "Search 0, Plan 1")
+				require.Contains(t, result.NextAction, "If the user asks to investigate")
+			}
+			if tc.name == "identity version absent" {
+				require.Equal(t, "identity_schema_version_not_compared", result.Attention[0].IdentityReason)
+				require.Contains(t, result.NextAction, "Plan identity schema version was not reported")
+				require.Contains(t, result.NextAction, "Keep object_identity unverified")
+			}
 		})
+	}
+}
+
+func TestImportIdentityReviewActionDoesNotConflateMixedFindings(t *testing.T) {
+	zero, one := uint64(0), uint64(1)
+	result := &VerifyImportResult{
+		Changes:        map[string]int{"none": 1, "update": 2},
+		ObjectIdentity: map[string]int{"unverified": 2, "mismatched": 1},
+		Attention: []ImportPlanAttention{
+			{Change: "none", ObjectIdentity: "unverified", IdentityReason: "identity_schema_version_differs", SearchIdentityVersion: 1, PlanIdentityVersion: &zero},
+			{Change: "update", ObjectIdentity: "unverified", IdentityReason: "identity_schema_version_differs", SearchIdentityVersion: 2, PlanIdentityVersion: &one},
+			{Change: "update", ObjectIdentity: "mismatched", IdentityReason: "after_identity_differs"},
+		},
+	}
+	action := importIdentityReviewAction(result, 3)
+	require.Contains(t, action, "2 selected object identities are unverified")
+	require.Contains(t, action, "see attention for each version pair")
+	require.NotContains(t, action, "(Search 1, Plan 0)")
+	require.Contains(t, action, "Identity mismatches: 1")
+	require.Contains(t, action, "1 of 3 selected imports have no-op actions")
+	require.NotContains(t, action, "all 3 selected imports have no-op actions")
+}
+
+func TestVerifyImportPlanVersionDifferenceKeepsPlanAndIdentitySeparateOnMark3labsWire(t *testing.T) {
+	provider := queryResultProvider{Source: "registry.terraform.io/hashicorp/aws", Version: "6.66.0"}
+	carry := &ImportCarry{QueryRunID: "qry-example", Providers: map[string]queryResultProvider{"aws_sqs_queue": provider}, Target: ImportCarryTarget{WorkspaceID: "ws-example", OrganizationName: "org", IdentitySupport: map[string]string{"aws_sqs_queue": "unknown"}}, LockedProviders: map[string]string{provider.Source: "6.18.0"}}
+	var bindings []ImportBinding
+	var resources, changes []string
+	for _, name := range []string{"unmanaged", "modtest_jobs"} {
+		identity := map[string]any{"url": "https://example.invalid/" + name}
+		marker, err := queryResultMarker("qry-example", provider, "aws_sqs_queue", identity)
+		require.NoError(t, err)
+		addr := "aws_sqs_queue." + name
+		carry.SelectedResults = append(carry.SelectedResults, ImportCarrySelection{QueryResultMarker: marker, ListType: "aws_sqs_queue", ManagedType: "aws_sqs_queue", Identity: identity, SearchIdentityVersion: 1})
+		bindings = append(bindings, ImportBinding{QueryResultMarker: marker, TargetAddress: addr})
+		resources = append(resources, fmt.Sprintf(`{"address":%q,"identity_schema_version":0}`, addr))
+		changes = append(changes, fmt.Sprintf(`{"address":%q,"mode":"managed","type":"aws_sqs_queue","provider_name":"registry.terraform.io/hashicorp/aws","change":{"actions":["no-op"],"importing":{"id":"private-id-sentinel"},"after_identity":{"url":%q,"account_id":"private-account-sentinel","region":"private-region-sentinel"}}}`, addr, identity["url"]))
+	}
+	var err error
+	carry.SelectionDigest, err = importDigest(*carry)
+	require.NoError(t, err)
+	planJSON := fmt.Sprintf(`{"format_version":"1.2","terraform_version":"1.14.0","complete":true,"errored":false,"planned_values":{"root_module":{"resources":[%s]}},"resource_changes":[%s],"output_changes":{},"deferred_changes":[],"resource_drift":[]}`, strings.Join(resources, ","), strings.Join(changes, ","))
+	backend, _ := importWireBackendWithPlan(t, "planned_and_finished", "finished", "aws_sqs_queue", planJSON)
+	t.Setenv("TFE_ADDRESS", backend.URL)
+	t.Setenv("TFE_TOKEN", "test-token")
+	t.Setenv("MCP_ORGANIZATION_ALLOWLIST", "org")
+	ctx := server.NewMCPServer("test", "0").WithContext(context.Background(), importTestSession{})
+	wire, err := VerifyImportPlan(silentLogger()).Handler(ctx, mcp.CallToolRequest{Params: mcp.CallToolParams{Arguments: map[string]any{"organization_name": "org", "workspace_name": "target", "run_id": "run-example", "carry": carry, "bindings": bindings}}})
+	require.NoError(t, err)
+	require.False(t, wire.IsError)
+	data, err := json.Marshal(wire.StructuredContent)
+	require.NoError(t, err)
+	var result VerifyImportResult
+	require.NoError(t, json.Unmarshal(data, &result))
+	require.Equal(t, "plan_available", result.Status)
+	require.Equal(t, 2, result.Changes["none"])
+	require.Equal(t, 2, result.ObjectIdentity["unverified"])
+	require.Len(t, result.Attention, 2)
+	for _, item := range result.Attention {
+		require.Equal(t, "none", item.Change)
+		require.Equal(t, "unverified", item.ObjectIdentity)
+		require.Equal(t, "identity_schema_version_differs", item.IdentityReason)
+		require.Equal(t, 1, item.SearchIdentityVersion)
+		require.Equal(t, uint64(0), *item.PlanIdentityVersion)
+	}
+	require.Equal(t, []string{"identity_requires_review"}, result.Diagnostics)
+	require.Contains(t, result.NextAction, "Identity needs review: 2 selected object identities are unverified")
+	require.Contains(t, result.NextAction, "Search 1, Plan 0")
+	require.Contains(t, result.NextAction, "Plan actions, separately: all 2 selected imports have no-op actions")
+	require.Less(t, strings.Index(result.NextAction, "Identity needs review"), strings.Index(result.NextAction, "Plan actions, separately"))
+	for _, hint := range []string{"If the user asks to investigate", "locked provider-release documentation", "aliases and module mappings", "corroboration, unknowns and conflicts", "Keep object_identity unverified", "identity uncertainty alone does not require changing configuration or starting another Run"} {
+		require.Contains(t, result.NextAction, hint)
+	}
+	text, ok := mcp.AsTextContent(wire.Content[0])
+	require.True(t, ok)
+	require.Contains(t, text.Text, `"identity_schema_version_differs"`)
+	for _, secret := range []string{"private-id-sentinel", "private-account-sentinel", "private-region-sentinel", "https://example.invalid/"} {
+		require.NotContains(t, string(data), secret)
+		require.NotContains(t, text.Text, secret)
 	}
 }
 
