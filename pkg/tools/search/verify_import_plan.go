@@ -536,6 +536,7 @@ func classifyImportPlan(ctx context.Context, c *tfe.Client, out *VerifyImportRes
 		out.Diagnostics = append(out.Diagnostics, "plan_actions_require_review")
 		out.NextAction += " The Plan contains changes beyond a no-op import (or other changes/drift). Review the full attribute-level diff and reconcile the existing local configuration with the user; this Plan is not safe to apply as an import-only change. If configuration is revised, a separately approved new speculative plan must be verified under its own Run ID."
 	}
+	out.NextAction += " After full-Plan review, report the separate action and identity findings and hand off the proposed HCL. Do not run terraform apply, terraform import or apply_run as a continuation of this Search-to-import workflow; any eventual apply belongs to a separate, independently reviewed and authorized workflow."
 	if err := checkImportResultBudget(out); err != nil {
 		return nil, err
 	}

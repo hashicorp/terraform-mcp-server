@@ -19,6 +19,9 @@ func TestSearchWorkflowInstructions(t *testing.T) {
 		"speculative `terraform plan`", "full HCP Plan separately",
 		"no `-out` or apply", "CLI Run URL", "Follow `prepare_import`'s description",
 		"Approval for a plan is not approval to apply",
+		"This Search-to-import workflow ends with full-Plan review and handoff",
+		"Do not run `terraform apply`, `terraform import`, or `apply_run` as its continuation",
+		"any eventual apply belongs to a separate, independently reviewed and authorized workflow",
 	} {
 		if !strings.Contains(Text, required) {
 			t.Errorf("missing workflow guidance %q", required)
