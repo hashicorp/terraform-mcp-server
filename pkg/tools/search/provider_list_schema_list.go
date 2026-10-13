@@ -37,27 +37,6 @@ import (
 // When neither is supplied, it lists all supported providers for the required
 // organization context so the agent can pick one and call the tool again.
 func ProviderListSchemaList(logger *log.Logger) server.ServerTool {
-	organizationName := strings.TrimSpace(os.Getenv("TF_CLOUD_ORGANIZATION"))
-	workspaceName := strings.TrimSpace(os.Getenv("TF_WORKSPACE"))
-	organizationOptions := []mcp.PropertyOption{
-		mcp.Description(
-			"HCP Terraform organization name used to scope every provider catalog request. " +
-				"Uses TF_CLOUD_ORGANIZATION when set; otherwise ask the user for it before calling this tool.",
-		),
-	}
-	if organizationName != "" {
-		organizationOptions = append(organizationOptions, mcp.DefaultString(organizationName))
-	}
-	workspaceOptions := []mcp.PropertyOption{
-		mcp.Description(
-			"HCP Terraform workspace name that will execute the query. " +
-				"Uses TF_WORKSPACE when set; otherwise ask the user for it before calling this tool.",
-		),
-	}
-	if workspaceName != "" {
-		workspaceOptions = append(workspaceOptions, mcp.DefaultString(workspaceName))
-	}
-
 	return server.ServerTool{
 		Tool: mcp.NewTool("provider_list_schema_list",
 			mcp.WithDescription(providerListSchemaListDescription),
@@ -78,8 +57,8 @@ func ProviderListSchemaList(logger *log.Logger) server.ServerTool {
 						"Required together with provider_namespace to fetch a schema directly.",
 				),
 			),
-			mcp.WithString("organization_name", organizationOptions...),
-			mcp.WithString("workspace_name", workspaceOptions...),
+			mcp.WithString("organization_name", mcp.Description(queryOrganizationDescription)),
+			mcp.WithString("workspace_name", mcp.Description(queryWorkspaceDescription)),
 		),
 		Handler: func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			return providerListSchemaListHandler(ctx, request, logger)
@@ -90,10 +69,11 @@ func ProviderListSchemaList(logger *log.Logger) server.ServerTool {
 func providerListSchemaListHandler(ctx context.Context, request mcp.CallToolRequest, logger *log.Logger) (*mcp.CallToolResult, error) {
 	providerNamespace := strings.TrimSpace(request.GetString("provider_namespace", ""))
 	providerName := strings.TrimSpace(strings.ToLower(request.GetString("provider_name", "")))
-	orgName, workspaceName := resolveSearchScope(request)
-	if orgName == "" || workspaceName == "" {
-		return toolErrorf(logger, "provider_list_schema_list", "organization_name and workspace_name are required; after checking TF_CLOUD_ORGANIZATION and TF_WORKSPACE, ask the user to provide both before fetching provider schemas")
+	queryScope := resolveSearchScope(request)
+	if !queryScope.Ready() {
+		return mcp.NewToolResultError(queryScope.InputRequest()), nil
 	}
+	orgName, workspaceName := queryScope.Organization.Value, queryScope.Workspace.Value
 
 	tfeClient, err := client.GetTfeClientFromContext(ctx, logger)
 	if err != nil {
@@ -120,17 +100,73 @@ func providerListSchemaListHandler(ctx context.Context, request mcp.CallToolRequ
 	return fetchProviderSchema(ctx, tfeClient, orgName, providerNamespace, providerName, providerVersion, logger)
 }
 
-func resolveSearchScope(request mcp.CallToolRequest) (string, string) {
-	orgName := strings.TrimSpace(os.Getenv("TF_CLOUD_ORGANIZATION"))
-	if orgName == "" {
-		orgName = strings.TrimSpace(request.GetString("organization_name", ""))
-	}
-	workspaceName := strings.TrimSpace(os.Getenv("TF_WORKSPACE"))
-	if workspaceName == "" {
-		workspaceName = strings.TrimSpace(request.GetString("workspace_name", ""))
-	}
-	return orgName, workspaceName
+type searchScopeValue struct {
+	Value                string `json:"value"`
+	Source               string `json:"source,omitempty"`
+	RequiresConfirmation bool   `json:"requires_confirmation"`
 }
+
+type searchScope struct {
+	Organization searchScopeValue `json:"organization_name"`
+	Workspace    searchScopeValue `json:"workspace_name"`
+}
+
+func resolveSearchScope(request mcp.CallToolRequest) searchScope {
+	return searchScope{
+		Organization: resolveSearchScopeValue(request.GetString("organization_name", ""), "", "TF_CLOUD_ORGANIZATION", "TFC_ORGANIZATION"),
+		Workspace:    resolveSearchScopeValue(request.GetString("workspace_name", ""), "TF_MCP_QUERY_WORKSPACE", "TF_WORKSPACE"),
+	}
+}
+
+func resolveSearchScopeValue(explicit, mcpEnv string, defaults ...string) searchScopeValue {
+	if value := strings.TrimSpace(explicit); value != "" {
+		return searchScopeValue{Value: value, Source: "argument"}
+	}
+	if mcpEnv != "" {
+		if value := strings.TrimSpace(os.Getenv(mcpEnv)); value != "" {
+			return searchScopeValue{Value: value, Source: mcpEnv}
+		}
+	}
+	for _, name := range defaults {
+		if value := strings.TrimSpace(os.Getenv(name)); value != "" {
+			return searchScopeValue{Value: value, Source: name, RequiresConfirmation: true}
+		}
+	}
+	return searchScopeValue{}
+}
+
+func (s searchScope) Ready() bool {
+	return s.Organization.Value != "" && s.Workspace.Value != "" &&
+		!s.Organization.RequiresConfirmation && !s.Workspace.RequiresConfirmation
+}
+
+// InputRequest exposes only organization/workspace identifiers, never credentials.
+func (s searchScope) InputRequest() string {
+	missing := []string{}
+	if s.Organization.Value == "" {
+		missing = append(missing, "organization_name")
+	}
+	if s.Workspace.Value == "" {
+		missing = append(missing, "workspace_name")
+	}
+	status := "input_required"
+	message := "organization_name and workspace_name are required; ask the user for the missing inputs, then retry with explicit arguments."
+	if s.Organization.RequiresConfirmation || s.Workspace.RequiresConfirmation {
+		status = "confirmation_required"
+		message = "Terraform defaults are candidates only; ask the user whether to use these defaults or supply their own. Ask for any missing inputs too. Wait for their response, then retry with accepted or replacement values as explicit arguments. Do not make scoped API requests before confirmation."
+	}
+	payload, _ := json.Marshal(struct {
+		Status  string      `json:"status"`
+		Message string      `json:"message"`
+		Scope   searchScope `json:"scope"`
+		Missing []string    `json:"missing_inputs"`
+	}{status, message, s, missing})
+	return string(payload)
+}
+
+const queryOrganizationDescription = "HCP Terraform organization containing the query workspace. Explicit input overrides environment values. TF_CLOUD_ORGANIZATION, then TFC_ORGANIZATION, are candidates only: ask the user to confirm or replace them before passing the value. If absent, ask the user for organization_name."
+
+const queryWorkspaceDescription = "HCP Terraform workspace for queries. Explicit input overrides TF_MCP_QUERY_WORKSPACE. If neither is set, TF_WORKSPACE is a candidate only: ask the user to confirm or replace it before passing the value. If absent, ask the user for workspace_name. TF_MCP_IMPORT_WORKSPACE is a separate import target, not a query default."
 
 // ── list all supported providers ─────────────────────────────────────────────
 
@@ -307,10 +343,15 @@ func doProviderRequest(ctx context.Context, request *tfe.ClientRequest, response
 const providerListSchemaListDescription = `Fetches list_resource_schemas for a search-compatible Terraform provider from the
 HCP Terraform no-code stub endpoint (GET /api/v2/search/provider-versions).
 
-Every call requires organization_name and workspace_name. First use TF_CLOUD_ORGANIZATION and
-TF_WORKSPACE and tell the user which values are being used. If either environment variable is
-unset or empty, ask the user for both values before fetching provider schemas. Never make an
-unscoped request.
+Every call requires a resolved organization_name and workspace_name. Explicit user inputs override
+environment values. Otherwise use TF_MCP_QUERY_WORKSPACE for queries; TF_MCP_IMPORT_WORKSPACE is
+a separate import target. If the query variable is absent, TF_WORKSPACE is a candidate only.
+For organization, check TF_CLOUD_ORGANIZATION, then TFC_ORGANIZATION. Before using Terraform
+defaults, show their values and sources and ask the user to confirm them or supply their own.
+If inputs are missing, ask only for those inputs. Never make an unscoped request or silently
+accept Terraform defaults. A confirmation_required or input_required result contains the context
+and guidance; wait for the user's response and retry with accepted or replacement values as
+explicit arguments. Confirmation is handled by the agent, not an interactive server terminal.
 
 The tool has two modes:
 
@@ -327,8 +368,8 @@ LIST mode (organization_name and workspace_name supplied; no provider identifier
     to use search_providers to find the provider in the public Terraform Registry.
 
 Typical agent workflow:
-  1. Use TF_CLOUD_ORGANIZATION and TF_WORKSPACE first and tell the user which organization and
-     workspace are being used. If either is unset or empty, ask the user to provide both and wait.
+	1. Resolve the context using explicit inputs, then TF_MCP_QUERY_WORKSPACE. For Terraform
+		 defaults, ask the user to confirm or replace the values; ask for missing inputs and wait.
   2. Call provider_list_schema_list(organization_name, workspace_name) to discover available providers.
   3. Call provider_list_schema_list(organization_name, workspace_name, provider_namespace,
      provider_name) to fetch the catalog-selected version and its schema.

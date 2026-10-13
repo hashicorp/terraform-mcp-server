@@ -56,6 +56,16 @@ The Terraform MCP server provides tools for generating better Terraform code thr
 
 ## Workflow Patterns
 
+**Query and Import Context**:
+1. Preserve explicit organization/workspace inputs from the user; they override environment values.
+2. Otherwise check MCP-specific workspace configuration: `TF_MCP_QUERY_WORKSPACE` for discovery queries and `TF_MCP_IMPORT_WORKSPACE` for the import destination. These are independent; never use one as the other's default.
+3. If the relevant MCP variable is unset, use `TF_WORKSPACE` only as a candidate. For organization, check `TF_CLOUD_ORGANIZATION`, then `TFC_ORGANIZATION`; there is no MCP-specific organization variable.
+4. Show any Terraform default candidates with their environment-variable sources and ask whether to use them or supply different values. Wait for the response. If there are no defaults, ask for the missing inputs. Preserve context already resolved rather than asking for both values again.
+5. Search tools return `confirmation_required` or `input_required` with candidate values and missing inputs when context is unresolved, without making scoped API requests. After user confirmation, pass accepted or replacement values as explicit `organization_name` and `workspace_name` arguments. Reuse that context throughout the query workflow; do not repeatedly ask for confirmation.
+6. Resolve the import destination separately before any import workflow. Generated importable configuration does not itself import resources, and this server has no dedicated import tool. Do not treat the query workspace as the import destination or create an import run without the required operation approval.
+
+Environment variables must be passed to the MCP server process by the client configuration (for example, its environment settings) or deployment. Do not assume the server can read the agent's local shell environment or client configuration files. Never read or expose tokens while resolving context.
+
 **Code Generation**:
 1. `search_modules`/`search_providers` for available resources
 2. `get_latest_provider_version` if no version available in existing code

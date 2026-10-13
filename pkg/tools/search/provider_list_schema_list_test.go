@@ -423,13 +423,17 @@ func TestProviderListSchemaList_ToolDefinition(t *testing.T) {
 	assert.Contains(t, props, "workspace_name")
 	assert.NotContains(t, tool.Tool.InputSchema.Required, "organization_name")
 	assert.NotContains(t, tool.Tool.InputSchema.Required, "workspace_name")
-	assert.Contains(t, tool.Tool.Description, "First use TF_CLOUD_ORGANIZATION")
-	assert.Contains(t, tool.Tool.Description, "tell the user")
+	assert.Contains(t, tool.Tool.Description, "TF_MCP_QUERY_WORKSPACE")
+	assert.Contains(t, tool.Tool.Description, "ask the user to confirm")
+	assert.NotContains(t, props["organization_name"].(map[string]any), "default")
+	assert.NotContains(t, props["workspace_name"].(map[string]any), "default")
 	assert.Contains(t, tool.Tool.Description, "always read from the provider catalog response")
 }
 
 func TestProviderListSchemaList_RejectsMissingScopeBeforeRequest(t *testing.T) {
 	t.Setenv("TF_CLOUD_ORGANIZATION", "")
+	t.Setenv("TFC_ORGANIZATION", "")
+	t.Setenv("TF_MCP_QUERY_WORKSPACE", "")
 	t.Setenv("TF_WORKSPACE", "")
 	result, err := providerListSchemaListHandler(context.Background(), mcp.CallToolRequest{}, silentLogger())
 
@@ -439,33 +443,6 @@ func TestProviderListSchemaList_RejectsMissingScopeBeforeRequest(t *testing.T) {
 	require.True(t, ok, "expected TextContent")
 	assert.Contains(t, tc.Text, "organization_name and workspace_name are required")
 	assert.Contains(t, tc.Text, "ask the user")
-}
-
-func TestResolveSearchScope(t *testing.T) {
-	request := mcp.CallToolRequest{Params: mcp.CallToolParams{Arguments: map[string]any{
-		"organization_name": "user-org",
-		"workspace_name":    "user-workspace",
-	}}}
-
-	t.Run("environment values take precedence", func(t *testing.T) {
-		t.Setenv("TF_CLOUD_ORGANIZATION", "env-org")
-		t.Setenv("TF_WORKSPACE", "env-workspace")
-
-		organizationName, workspaceName := resolveSearchScope(request)
-
-		assert.Equal(t, "env-org", organizationName)
-		assert.Equal(t, "env-workspace", workspaceName)
-	})
-
-	t.Run("arguments are used when environment values are empty", func(t *testing.T) {
-		t.Setenv("TF_CLOUD_ORGANIZATION", "")
-		t.Setenv("TF_WORKSPACE", "")
-
-		organizationName, workspaceName := resolveSearchScope(request)
-
-		assert.Equal(t, "user-org", organizationName)
-		assert.Equal(t, "user-workspace", workspaceName)
-	})
 }
 
 func TestProviderListSchemaList_ValidatesWorkspaceBeforeProviderRequest(t *testing.T) {

@@ -10,7 +10,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"os"
 	"strconv"
 	"strings"
 
@@ -49,21 +48,6 @@ const executeQuerySource = "terraform-mcp"
 
 // ExecuteQuery creates and immediately executes an HCP Terraform no-code query.
 func ExecuteQuery(logger *log.Logger) server.ServerTool {
-	organizationName := strings.TrimSpace(os.Getenv("TF_CLOUD_ORGANIZATION"))
-	workspaceName := strings.TrimSpace(os.Getenv("TF_WORKSPACE"))
-	organizationOptions := []mcp.PropertyOption{
-		mcp.Description("Organization containing the workspace. Uses TF_CLOUD_ORGANIZATION when set; otherwise ask the user for it."),
-	}
-	if organizationName != "" {
-		organizationOptions = append(organizationOptions, mcp.DefaultString(organizationName))
-	}
-	workspaceOptions := []mcp.PropertyOption{
-		mcp.Description("Workspace in which to execute the query. Uses TF_WORKSPACE when set; otherwise ask the user for it."),
-	}
-	if workspaceName != "" {
-		workspaceOptions = append(workspaceOptions, mcp.DefaultString(workspaceName))
-	}
-
 	return server.ServerTool{
 		Tool: mcp.NewTool("execute_query",
 			mcp.WithDescription(executeQueryDescription),
@@ -71,8 +55,8 @@ func ExecuteQuery(logger *log.Logger) server.ServerTool {
 			mcp.WithOpenWorldHintAnnotation(true),
 			mcp.WithReadOnlyHintAnnotation(false),
 			mcp.WithDestructiveHintAnnotation(false),
-			mcp.WithString("organization_name", organizationOptions...),
-			mcp.WithString("workspace_name", workspaceOptions...),
+			mcp.WithString("organization_name", mcp.Description(queryOrganizationDescription)),
+			mcp.WithString("workspace_name", mcp.Description(queryWorkspaceDescription)),
 			mcp.WithString("query_configuration",
 				mcp.Required(),
 				mcp.Description(
@@ -91,10 +75,11 @@ func ExecuteQuery(logger *log.Logger) server.ServerTool {
 }
 
 func executeQueryHandler(ctx context.Context, request mcp.CallToolRequest, logger *log.Logger) (*mcp.CallToolResult, error) {
-	organizationName, workspaceName := resolveSearchScope(request)
-	if organizationName == "" || workspaceName == "" {
-		return toolErrorf(logger, "execute_query", "organization_name and workspace_name are required; after checking TF_CLOUD_ORGANIZATION and TF_WORKSPACE, ask the user to provide both before executing the query")
+	queryScope := resolveSearchScope(request)
+	if !queryScope.Ready() {
+		return mcp.NewToolResultError(queryScope.InputRequest()), nil
 	}
+	organizationName, workspaceName := queryScope.Organization.Value, queryScope.Workspace.Value
 
 	rawConfiguration, err := request.RequireString("query_configuration")
 	if err != nil || strings.TrimSpace(rawConfiguration) == "" {
@@ -220,10 +205,14 @@ const executeQueryDescription = `Creates and immediately executes an HCP Terrafo
 
 MANDATORY WORKFLOW: Before calling this tool, call provider_list_schema_list and then
 generate_query_configuration. Do not skip generate_query_configuration or construct the payload
-directly. Use TF_CLOUD_ORGANIZATION and TF_WORKSPACE first and tell the user which organization
-and workspace are being used. If either is unset or empty, ask the user to provide both before
-calling this tool. Pass those values with the provider/resource configuration produced from the
-schema guidance.
+directly. Explicit user inputs override environment values. Otherwise use TF_MCP_QUERY_WORKSPACE
+for queries, not TF_MCP_IMPORT_WORKSPACE (the separate import target). If the query variable is
+absent, TF_WORKSPACE is a candidate only. For organization, check TF_CLOUD_ORGANIZATION, then
+TFC_ORGANIZATION. Before using Terraform defaults, show their values and sources and ask the user to confirm
+or replace them. Ask for any missing inputs and wait. A confirmation_required or input_required
+result blocks execution; retry with accepted or replacement values as explicit arguments after
+the user's response. Reuse the resolved context from provider_list_schema_list with the
+provider/resource configuration produced from the schema guidance.
 Never construct resource_type from an ordinary managed resource name: it must be an exact key
 in list_resource_schemas for the selected provider version. If no matching key exists, do not
 call this tool. The tool resolves the workspace

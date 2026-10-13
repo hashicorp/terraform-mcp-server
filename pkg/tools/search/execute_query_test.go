@@ -53,8 +53,10 @@ func TestExecuteQueryDefinition(t *testing.T) {
 	assert.Contains(t, tool.Tool.Description, "exact key")
 	assert.Contains(t, tool.Tool.Description, "ordinary managed resource name")
 	assert.Contains(t, tool.Tool.Description, "MANDATORY WORKFLOW")
-	assert.Contains(t, tool.Tool.Description, "Use TF_CLOUD_ORGANIZATION and TF_WORKSPACE first")
-	assert.Contains(t, tool.Tool.Description, "tell the user")
+	assert.Contains(t, tool.Tool.Description, "TF_MCP_QUERY_WORKSPACE")
+	assert.Contains(t, tool.Tool.Description, "ask the user to confirm")
+	assert.NotContains(t, tool.Tool.InputSchema.Properties["organization_name"].(map[string]any), "default")
+	assert.NotContains(t, tool.Tool.InputSchema.Properties["workspace_name"].(map[string]any), "default")
 }
 
 func TestParseExecuteQueryConfiguration(t *testing.T) {
