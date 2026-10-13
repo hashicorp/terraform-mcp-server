@@ -5,11 +5,14 @@ package mcpofficial
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"testing"
 	"time"
 
+	officialclient "github.com/hashicorp/terraform-mcp-server/pkg/mcp-official/client"
 	"github.com/hashicorp/terraform-mcp-server/pkg/toolsets"
+	"github.com/modelcontextprotocol/go-sdk/jsonrpc"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
@@ -19,22 +22,11 @@ func TestStdioServerListsRegistryTools(t *testing.T) {
 	logger := log.New()
 	logger.SetOutput(io.Discard)
 
-	srv := newStdioServer(logger, toolsets.NewToolsetFilter([]string{toolsets.Registry}))
+	ss, cs := connectStdioServer(t)
+	defer ss.Close()
+	defer cs.Close()
+	res, err := cs.ListTools(context.Background(), nil)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-
-	serverT, clientT := mcp.NewInMemoryTransports()
-	serverSession, err := srv.Connect(ctx, serverT, nil)
-	require.NoError(t, err)
-	defer serverSession.Close()
-
-	c := mcp.NewClient(&mcp.Implementation{Name: "test-client", Version: "0"}, nil)
-	clientSession, err := c.Connect(ctx, clientT, nil)
-	require.NoError(t, err)
-	defer clientSession.Close()
-
-	res, err := clientSession.ListTools(ctx, nil)
 	require.NoError(t, err)
 
 	names := map[string]bool{}
@@ -45,31 +37,42 @@ func TestStdioServerListsRegistryTools(t *testing.T) {
 	require.False(t, names["list_workspaces"], "TFE tool must not be registered for the registry toolset")
 }
 
-func TestStdioServerSessionEndsOnClientClose(t *testing.T) {
+func TestStdioSessionIDFallback(t *testing.T) {
+	officialclient.SetFallbackSessionID(stdioSessionID)
+	t.Cleanup(func() { officialclient.SetFallbackSessionID("") })
+
+	ss, cs := connectStdioServer(t)
+	defer ss.Close()
+	defer cs.Close()
+
+	require.Empty(t, ss.ID(), "the SDK gives stdio sessions no ID")
+	require.Equal(t, stdioSessionID, officialclient.SessionID(ss))
+}
+
+// connectStdioServer connects a client to a stdio-style server over the
+// in-memory transport and returns both sessions
+func connectStdioServer(t *testing.T) (*mcp.ServerSession, *mcp.ClientSession) {
+	t.Helper()
 	logger := log.New()
 	logger.SetOutput(io.Discard)
-
 	srv := newStdioServer(logger, toolsets.NewToolsetFilter([]string{toolsets.Registry}))
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
+	t.Cleanup(cancel)
 
 	serverT, clientT := mcp.NewInMemoryTransports()
-	serverSession, err := srv.Connect(ctx, serverT, nil)
+	ss, err := srv.Connect(ctx, serverT, nil)
 	require.NoError(t, err)
-
 	c := mcp.NewClient(&mcp.Implementation{Name: "test-client", Version: "0"}, nil)
-	clientSession, err := c.Connect(ctx, clientT, nil)
+	cs, err := c.Connect(ctx, clientT, nil)
 	require.NoError(t, err)
+	return ss, cs
+}
 
-	require.NoError(t, clientSession.Close())
-
-	// Wait must return once the client is gone, proving the cleanup goroutine can fire
-	done := make(chan struct{})
-	go func() { _ = serverSession.Wait(); close(done) }()
-	select {
-	case <-done:
-	case <-time.After(5 * time.Second):
-		t.Fatal("server session did not end after client closed")
-	}
+func TestIsCleanShutdown(t *testing.T) {
+	require.True(t, isCleanShutdown(io.EOF))
+	require.True(t, isCleanShutdown(fmt.Errorf("wrapped: %w", io.EOF)))
+	require.True(t, isCleanShutdown(fmt.Errorf("server is closing: %w", &jsonrpc.Error{Code: codeServerClosing})))
+	require.False(t, isCleanShutdown(&jsonrpc.Error{Code: jsonrpc.CodeInternalError}))
+	require.False(t, isCleanShutdown(fmt.Errorf("boom")))
 }

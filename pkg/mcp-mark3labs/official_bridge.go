@@ -41,23 +41,9 @@ func getOfficialStreamableServer(ctx context.Context, heartbeatInterval time.Dur
 	}
 	serverOpts := []mcpofficial.Option{
 		mcpofficial.WithMiddlewares(middlewares...),
-		// Runs once per session: creates the session's TFE/HTTP clients right
-		// away, then waits in the background for the client to disconnect so we
-		// can clean up (cached clients, rate-limit state, dynamic tool registry).
-		// This replaces the old session-registration/cleanup hooks so its basically
-		// the go-sdk equivalent of AddOnRegisterSession + AddOnUnregisterSession
-		// (and the BeforeListTools/BeforeCallTool safety net)
-		mcpofficial.WithOnSession(func(ctx context.Context, session *mcp.ServerSession) {
-			if session == nil {
-				return
-			}
-			sessionID := session.ID()
-			client.NewSessionHandler(ctx, sessionID, logger)
-			go func() {
-				_ = session.Wait()
-				client.EndSessionHandler(context.Background(), sessionID, rateLimiter, logger)
-			}()
-		}),
+		// Creates each session's clients on start and cleans them up when the
+		// client disconnects (shared with the stdio runner)
+		mcpofficial.WithSessionLifecycle(rateLimiter, logger),
 	}
 	hcServer := mcpofficial.NewServer(version.Version, instructions.Text, heartbeatInterval, officialLogger, filter, serverOpts...)
 
