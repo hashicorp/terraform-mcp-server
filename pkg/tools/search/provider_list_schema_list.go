@@ -71,7 +71,7 @@ func providerListSchemaListHandler(ctx context.Context, request mcp.CallToolRequ
 	providerName := strings.TrimSpace(strings.ToLower(request.GetString("provider_name", "")))
 	queryScope := resolveSearchScope(request)
 	if !queryScope.Ready() {
-		return mcp.NewToolResultError(queryScope.InputRequest()), nil
+		return mcp.NewToolResultText(queryScope.InputRequest()), nil
 	}
 	orgName, workspaceName := queryScope.Organization.Value, queryScope.Workspace.Value
 
@@ -349,8 +349,9 @@ a separate import target. If the query variable is absent, TF_WORKSPACE is a can
 For organization, check TF_CLOUD_ORGANIZATION, then TFC_ORGANIZATION. Before using Terraform
 defaults, show their values and sources and ask the user to confirm them or supply their own.
 If inputs are missing, ask only for those inputs. Never make an unscoped request or silently
-accept Terraform defaults. A confirmation_required or input_required result contains the context
-and guidance; wait for the user's response and retry with accepted or replacement values as
+accept Terraform defaults. A confirmation_required or input_required result is a normal response,
+not a tool failure. Use its context and guidance to ask the user a concise question, then wait
+for the user's response and retry with accepted or replacement values as
 explicit arguments. Confirmation is handled by the agent, not an interactive server terminal.
 
 The tool has two modes:

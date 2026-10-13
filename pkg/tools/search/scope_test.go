@@ -24,7 +24,7 @@ func TestResolveSearchScope(t *testing.T) {
 		ready        bool
 	}{
 		{
-			name: "explicit arguments override environment and are trimmed",
+			name:         "explicit arguments override environment and are trimmed",
 			organization: " user-org ", workspace: " user-workspace ",
 			configure: func(t *testing.T) {
 				t.Setenv("TF_CLOUD_ORGANIZATION", "env-org")
@@ -33,7 +33,7 @@ func TestResolveSearchScope(t *testing.T) {
 			want: searchScope{searchScopeValue{"user-org", "argument", false}, searchScopeValue{"user-workspace", "argument", false}}, ready: true,
 		},
 		{
-			name: "MCP workspace is accepted",
+			name:         "MCP workspace is accepted",
 			organization: "org",
 			configure: func(t *testing.T) {
 				t.Setenv("TF_MCP_QUERY_WORKSPACE", " query ")
@@ -50,7 +50,7 @@ func TestResolveSearchScope(t *testing.T) {
 			want: searchScope{searchScopeValue{"org", "TF_CLOUD_ORGANIZATION", true}, searchScopeValue{"workspace", "TF_WORKSPACE", true}},
 		},
 		{
-			name: "organization alias is fallback",
+			name:      "organization alias is fallback",
 			workspace: "workspace",
 			configure: func(t *testing.T) {
 				t.Setenv("TF_CLOUD_ORGANIZATION", " ")
@@ -59,7 +59,7 @@ func TestResolveSearchScope(t *testing.T) {
 			want: searchScope{searchScopeValue{"alias-org", "TFC_ORGANIZATION", true}, searchScopeValue{"workspace", "argument", false}},
 		},
 		{
-			name: "whitespace values are missing",
+			name:         "whitespace values are missing",
 			organization: " \t", workspace: "\n",
 			configure: func(t *testing.T) {
 				t.Setenv("TF_CLOUD_ORGANIZATION", " ")
@@ -97,22 +97,26 @@ func TestSearchToolsRequireResolvedScopeBeforeAPIRequests(t *testing.T) {
 				name   string
 				org    string
 				ws     string
+				mcpWS  string
 				status string
 			}{
-				{"missing context", "", "", "input_required"},
-				{"Terraform candidates", "default-org", "default-workspace", "confirmation_required"},
-				{"partial Terraform context", "", "default-workspace", "confirmation_required"},
+				{"missing context", "", "", "", "input_required"},
+				{"Terraform candidates", "default-org", "default-workspace", "", "confirmation_required"},
+				{"partial Terraform context", "", "default-workspace", "", "confirmation_required"},
+				{"partial missing context", "default-org", "", "", "confirmation_required"},
+				{"Terraform organization with MCP workspace", "default-org", "", "query-workspace", "confirmation_required"},
 			} {
 				t.Run(test.name, func(t *testing.T) {
 					t.Setenv("TF_CLOUD_ORGANIZATION", test.org)
 					t.Setenv("TFC_ORGANIZATION", "")
 					t.Setenv("TF_WORKSPACE", test.ws)
-					t.Setenv("TF_MCP_QUERY_WORKSPACE", "")
+					t.Setenv("TF_MCP_QUERY_WORKSPACE", test.mcpWS)
 					// No session/client is supplied. Scope must be checked before
 					// even attempting to acquire a client or submit a query.
 					result, err := tool.Handler(context.Background(), mcp.CallToolRequest{})
 					require.NoError(t, err)
-					require.True(t, result.IsError)
+					require.NotNil(t, result)
+					require.False(t, result.IsError, "scope clarification is a normal response, not a tool failure")
 					text, ok := mcp.AsTextContent(result.Content[0])
 					require.True(t, ok)
 					var payload map[string]any

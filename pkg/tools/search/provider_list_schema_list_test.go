@@ -430,7 +430,7 @@ func TestProviderListSchemaList_ToolDefinition(t *testing.T) {
 	assert.Contains(t, tool.Tool.Description, "always read from the provider catalog response")
 }
 
-func TestProviderListSchemaList_RejectsMissingScopeBeforeRequest(t *testing.T) {
+func TestProviderListSchemaList_RequestsMissingScopeBeforeRequest(t *testing.T) {
 	t.Setenv("TF_CLOUD_ORGANIZATION", "")
 	t.Setenv("TFC_ORGANIZATION", "")
 	t.Setenv("TF_MCP_QUERY_WORKSPACE", "")
@@ -438,7 +438,7 @@ func TestProviderListSchemaList_RejectsMissingScopeBeforeRequest(t *testing.T) {
 	result, err := providerListSchemaListHandler(context.Background(), mcp.CallToolRequest{}, silentLogger())
 
 	require.NoError(t, err)
-	require.True(t, result.IsError)
+	require.False(t, result.IsError)
 	tc, ok := mcp.AsTextContent(result.Content[0])
 	require.True(t, ok, "expected TextContent")
 	assert.Contains(t, tc.Text, "organization_name and workspace_name are required")

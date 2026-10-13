@@ -77,7 +77,7 @@ func ExecuteQuery(logger *log.Logger) server.ServerTool {
 func executeQueryHandler(ctx context.Context, request mcp.CallToolRequest, logger *log.Logger) (*mcp.CallToolResult, error) {
 	queryScope := resolveSearchScope(request)
 	if !queryScope.Ready() {
-		return mcp.NewToolResultError(queryScope.InputRequest()), nil
+		return mcp.NewToolResultText(queryScope.InputRequest()), nil
 	}
 	organizationName, workspaceName := queryScope.Organization.Value, queryScope.Workspace.Value
 
@@ -210,7 +210,8 @@ for queries, not TF_MCP_IMPORT_WORKSPACE (the separate import target). If the qu
 absent, TF_WORKSPACE is a candidate only. For organization, check TF_CLOUD_ORGANIZATION, then
 TFC_ORGANIZATION. Before using Terraform defaults, show their values and sources and ask the user to confirm
 or replace them. Ask for any missing inputs and wait. A confirmation_required or input_required
-result blocks execution; retry with accepted or replacement values as explicit arguments after
+result is a normal response, not a tool failure, but still blocks execution. Ask the user a concise
+question and retry with accepted or replacement values as explicit arguments after
 the user's response. Reuse the resolved context from provider_list_schema_list with the
 provider/resource configuration produced from the schema guidance.
 Never construct resource_type from an ordinary managed resource name: it must be an exact key
