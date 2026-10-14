@@ -49,7 +49,7 @@ If no modules were found, reattempt the search with a new moduleName query.`,
 			Properties: map[string]*jsonschema.Schema{
 				"module_query": {
 					Type:        "string",
-					Description: "The query to search for Terraform modules",
+					Description: "The query to search for Terraform modules. Use an empty string to list all modules",
 				},
 				"current_offset": {
 					Type:        "integer",
@@ -74,9 +74,6 @@ func SearchModulesFunc(logger *slog.Logger) mcp.ToolHandlerFor[SearchModulesArgu
 
 func searchModules(ctx context.Context, request *mcp.CallToolRequest, input SearchModulesArguments, logger *log.Logger) (*mcp.CallToolResult, any, error) {
 	moduleQuery := strings.ToLower(strings.TrimSpace(input.ModuleQuery))
-	if moduleQuery == "" {
-		return nil, nil, fmt.Errorf("missing required input: module_query")
-	}
 
 	httpClient, err := client.GetHttpClient(ctx, client.SessionIDFromRequest(request))
 	if err != nil {

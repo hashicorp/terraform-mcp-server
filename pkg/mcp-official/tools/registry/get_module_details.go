@@ -78,12 +78,7 @@ func getModuleDetailsHandler(ctx context.Context, request *mcp.CallToolRequest, 
 }
 
 func getModuleDetails(ctx context.Context, httpClient *http.Client, moduleID string, currentOffset int, logger *log.Logger) ([]byte, error) {
-	uri := "modules"
-	if moduleID != "" {
-		uri = fmt.Sprintf("modules/%s", moduleID)
-	}
-
-	uri = fmt.Sprintf("%s?offset=%v", uri, currentOffset)
+	uri := fmt.Sprintf("modules/%s?offset=%v", moduleID, currentOffset)
 	response, err := registryapi.SendRegistryCall(ctx, httpClient, http.MethodGet, uri, logger)
 	if err != nil {
 		return nil, fmt.Errorf("getting module(s) for: %v, please provide a different provider name like aws, azurerm or google etc", moduleID)
