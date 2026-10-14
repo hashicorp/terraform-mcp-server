@@ -15,6 +15,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/google/jsonschema-go/jsonschema"
 	"github.com/hashicorp/go-tfe"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
@@ -23,6 +24,55 @@ import (
 )
 
 type importTestSession struct{}
+
+func normalizeImportSchema(t *testing.T, schema any) any {
+	t.Helper()
+	data, err := json.Marshal(schema)
+	require.NoError(t, err)
+	var value any
+	require.NoError(t, json.Unmarshal(data, &value))
+	var normalize func(any) any
+	normalize = func(value any) any {
+		switch typed := value.(type) {
+		case map[string]any:
+			delete(typed, "description")
+			for key, child := range typed {
+				if key == "type" {
+					if choices, ok := child.([]any); ok {
+						var concrete []any
+						for _, choice := range choices {
+							if choice != "null" {
+								concrete = append(concrete, choice)
+							}
+						}
+						if len(concrete) == 1 {
+							typed[key] = concrete[0]
+							continue
+						}
+					}
+				}
+				typed[key] = normalize(child)
+			}
+		case []any:
+			for index, child := range typed {
+				typed[index] = normalize(child)
+			}
+		}
+		return value
+	}
+	return normalize(value)
+}
+
+func TestVerifyImportPlanImportContextSchemaMatchesOfficialSDK(t *testing.T) {
+	legacy := VerifyImportPlan(silentLogger())
+	legacyContext, ok := legacy.Tool.InputSchema.Properties["import_context"]
+	require.True(t, ok)
+	official, err := jsonschema.For[VerifyImportInput](nil)
+	require.NoError(t, err)
+	officialContext, ok := official.Properties["import_context"]
+	require.True(t, ok)
+	require.Equal(t, normalizeImportSchema(t, officialContext), normalizeImportSchema(t, legacyContext))
+}
 
 type importRewriteTransport struct {
 	backend *url.URL
