@@ -99,14 +99,9 @@ func buildTFEConfig(terraformAddress string, terraformSkipTLSVerify bool, terraf
 	}
 
 	// QueryRun/Plan log and artifact locations can be bearer-capability URLs.
-	// retryablehttp logs the full request URL (including its query string) on
-	// success, retry and failure. Never attach the server logger to outbound
-	// TFE requests; tool handlers report sanitized failures separately.
-	// TODO: Restore useful outbound request logging with a logger that redacts
-	// the entire Archivist (or equivalent signed artifact) URL, including its
-	// path and query. Cover success, retry and error logs with signed-URL
-	// sentinels before enabling it; redacting credentials alone is insufficient.
-	config.HTTPClient = CreateHTTPClient(terraformSkipTLSVerify, nil)
+	// CreateHTTPClient preserves retry diagnostics while replacing every
+	// absolute URL, including its path and query, before logging.
+	config.HTTPClient = CreateHTTPClient(terraformSkipTLSVerify, logger)
 	return config
 }
 
