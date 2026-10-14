@@ -26,6 +26,7 @@ var exactLockedVersion = regexp.MustCompile(`^[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za
 var providerSourcePattern = regexp.MustCompile(`^[a-zA-Z0-9.-]+/[a-zA-Z0-9_-]+/[a-zA-Z0-9_-]+$`)
 var importMarkerPattern = regexp.MustCompile(`^qrm1-[a-f0-9]{64}$`)
 var importTypePattern = regexp.MustCompile(`^[a-zA-Z][a-zA-Z0-9_]*$`)
+var terraformPlanFormatVersionPattern = regexp.MustCompile(`^1\.[0-9]+$`)
 
 type ImportSelection struct {
 	QueryResultMarker string `json:"query_result_marker"`
@@ -238,7 +239,7 @@ func readHistoricalSchema(ctx context.Context, c *tfe.Client, workspaceID string
 	}
 	// The historical schema is not required for preparation. Reject malformed
 	// or unsupported artifacts without treating them as evidence of absence.
-	if len(buf.buffer.Bytes()) == 0 || decodeQueryEvidenceLimit(buf.buffer.Bytes(), &artifact, 32<<20, 64) != nil || !regexp.MustCompile(`^1\.[0-9]+$`).MatchString(artifact.FormatVersion) {
+	if len(buf.buffer.Bytes()) == 0 || decodeQueryEvidenceLimit(buf.buffer.Bytes(), &artifact, 32<<20, 64) != nil || !terraformPlanFormatVersionPattern.MatchString(artifact.FormatVersion) {
 		return source, nil, nil
 	}
 	resources, identities := map[string]json.RawMessage{}, map[string]json.RawMessage{}

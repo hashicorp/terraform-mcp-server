@@ -392,7 +392,7 @@ func classifyImportPlan(ctx context.Context, c *tfe.Client, out *VerifyImportRes
 		}
 		return unsupported(code, "The associated Plan JSON could not be safely decoded within verification limits.")
 	}
-	if !regexp.MustCompile(`^1\.[0-9]+$`).MatchString(plan.FormatVersion) {
+	if !terraformPlanFormatVersionPattern.MatchString(plan.FormatVersion) {
 		return unsupported("plan_format_unsupported", "The Plan JSON format is missing or is not a supported 1.x format.")
 	}
 	if plan.Complete == nil || !*plan.Complete {
