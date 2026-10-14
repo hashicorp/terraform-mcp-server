@@ -167,7 +167,10 @@ func GenerateQueryConfigurationText(rawSchema, providerName, providerNamespace, 
 	}
 
 	// ── 3. Filter to requested resource types ─────────────────────────────────
-	resourceTypes := filterResourceTypes(schemas, resourceTypesFlag)
+	resourceTypes, err := filterResourceTypes(schemas, resourceTypesFlag)
+	if err != nil {
+		return "", err
+	}
 	if len(resourceTypes) == 0 {
 		return "", fmt.Errorf("none of the requested resource types were found in the schema")
 	}
@@ -209,26 +212,33 @@ func parseListResourceSchemas(raw string) (map[string]listResourceEntry, error) 
 
 // filterResourceTypes returns the sorted slice of resource type keys to
 // include, optionally narrowed by the comma-separated resourceTypesFlag.
-func filterResourceTypes(schemas map[string]listResourceEntry, resourceTypesFlag string) []string {
+func filterResourceTypes(schemas map[string]listResourceEntry, resourceTypesFlag string) ([]string, error) {
 	if resourceTypesFlag == "" {
 		keys := make([]string, 0, len(schemas))
 		for k := range schemas {
 			keys = append(keys, k)
 		}
 		sort.Strings(keys)
-		return keys
+		return keys, nil
 	}
 
 	requested := strings.Split(resourceTypesFlag, ",")
 	var result []string
+	var missing []string
 	for _, rt := range requested {
 		rt = strings.TrimSpace(rt)
 		if _, ok := schemas[rt]; ok {
 			result = append(result, rt)
+		} else {
+			missing = append(missing, rt)
 		}
 	}
+	if len(missing) > 0 {
+		sort.Strings(missing)
+		return nil, fmt.Errorf("requested resource types not found in the schema: %s", strings.Join(missing, ", "))
+	}
 	sort.Strings(result)
-	return result
+	return result, nil
 }
 
 // humanType converts a raw Terraform type value (string, bool, number, or a

@@ -156,7 +156,10 @@ func TestFilterResourceTypes_AllWhenEmpty(t *testing.T) {
 		"aws_instance":  {},
 		"aws_s3_bucket": {},
 	}
-	got := filterResourceTypes(schemas, "")
+	got, err := filterResourceTypes(schemas, "")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 	if len(got) != 2 {
 		t.Errorf("expected 2 resource types, got %d", len(got))
 	}
@@ -172,7 +175,10 @@ func TestFilterResourceTypes_Filtered(t *testing.T) {
 		"aws_s3_bucket": {},
 		"aws_vpc":       {},
 	}
-	got := filterResourceTypes(schemas, "aws_vpc, aws_instance")
+	got, err := filterResourceTypes(schemas, "aws_vpc, aws_instance")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 	if len(got) != 2 {
 		t.Errorf("expected 2, got %d: %v", len(got), got)
 	}
@@ -180,9 +186,23 @@ func TestFilterResourceTypes_Filtered(t *testing.T) {
 
 func TestFilterResourceTypes_NoneFound(t *testing.T) {
 	schemas := map[string]listResourceEntry{"aws_instance": {}}
-	got := filterResourceTypes(schemas, "nonexistent_type")
-	if len(got) != 0 {
-		t.Errorf("expected empty, got %v", got)
+	got, err := filterResourceTypes(schemas, "nonexistent_type")
+	if err == nil || !strings.Contains(err.Error(), "nonexistent_type") {
+		t.Fatalf("expected missing resource type error, got %v", err)
+	}
+	if got != nil {
+		t.Errorf("expected nil result, got %v", got)
+	}
+}
+
+func TestFilterResourceTypes_RejectsMixedValidAndUnknown(t *testing.T) {
+	schemas := map[string]listResourceEntry{"aws_instance": {}}
+	got, err := filterResourceTypes(schemas, "aws_instance, aws_typo")
+	if err == nil || !strings.Contains(err.Error(), "aws_typo") {
+		t.Fatalf("expected unknown resource type error, got %v", err)
+	}
+	if got != nil {
+		t.Errorf("expected the complete request to be rejected, got %v", got)
 	}
 }
 
