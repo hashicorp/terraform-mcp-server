@@ -110,6 +110,23 @@ func importWireBackendWithPlan(t *testing.T, status, planStatus, listType, planJ
 	return backend, planJSONReads
 }
 
+func requireImportReportGuidance(t *testing.T, next string) {
+	t.Helper()
+	for _, hint := range []string{
+		"first summarize selected imports with both change=none and object_identity=matched; group them if numerous",
+		"Then report selected Plan changes by action",
+		"Separately group identities that are not matched by status and identity_reason",
+		"A selection can appear in both exception sections",
+		"not an inferred overlap between the independent changes and object_identity count maps",
+		"Unverified is neither a match nor proof of a mismatch",
+		"Keep unselected actions, outputs and drift separate",
+	} {
+		require.Contains(t, next, hint)
+	}
+	require.Less(t, strings.Index(next, "first summarize selected imports"), strings.Index(next, "Then report selected Plan changes"))
+	require.Less(t, strings.Index(next, "Then report selected Plan changes"), strings.Index(next, "Separately group identities"))
+}
+
 func TestImportToolsEndToEndLocalHTTPAndLegacyWire(t *testing.T) {
 	backend, reads := importWireBackend(t, "planned_and_finished", "finished")
 	t.Setenv("TFE_ADDRESS", backend.URL)
@@ -140,6 +157,7 @@ func TestImportToolsEndToEndLocalHTTPAndLegacyWire(t *testing.T) {
 	require.Contains(t, result.NextAction, "get_plan_json_output")
 	require.Contains(t, result.NextAction, "raw Plan JSON may contain sensitive values")
 	require.Contains(t, result.NextAction, "outside this session")
+	requireImportReportGuidance(t, result.NextAction)
 	for _, hint := range []string{"An import-only Plan or N-to-import summary is not identity proof", "necessary editable local-module interfaces", "existing workspace's variables, references and coding practices", "separate approval for a new speculative plan", "A satisfactory first Plan requires no second Plan"} {
 		require.Contains(t, result.NextAction, hint)
 	}
@@ -387,6 +405,7 @@ func TestVerifyImportPlanVersionDifferenceKeepsPlanAndIdentitySeparateOnMark3lab
 	require.Contains(t, result.NextAction, "Identity needs review: 2 selected object identities are unverified")
 	require.Contains(t, result.NextAction, "Search 1, Plan 0")
 	require.Contains(t, result.NextAction, "Plan actions, separately: all 2 selected imports have no-op actions")
+	requireImportReportGuidance(t, result.NextAction)
 	require.Contains(t, result.NextAction, "A satisfactory first Plan requires no second Plan; identity uncertainty alone does not require changing HCL or starting another Run")
 	require.Contains(t, result.NextAction, "After full-Plan review, report the separate action and identity findings and hand off the proposed HCL")
 	require.Contains(t, result.NextAction, "Do not run terraform apply, terraform import or apply_run as a continuation of this Search-to-import workflow")
@@ -434,6 +453,7 @@ func TestVerifyImportPlanEightCleanImportsHaveNoAttention(t *testing.T) {
 	require.Equal(t, 8, result.Changes["none"])
 	require.Equal(t, 8, result.ObjectIdentity["matched"])
 	require.Empty(t, result.Attention)
+	requireImportReportGuidance(t, result.NextAction)
 	require.Len(t, result.Detail, 1, "requested detail remains available for a clean import")
 	encoded, err := json.Marshal(result)
 	require.NoError(t, err)
@@ -484,6 +504,7 @@ func TestVerifyImportPlanSQSImportWithUpdate(t *testing.T) {
 	require.Equal(t, []string{"update"}, result.Detail[0].Actions)
 	require.Contains(t, result.Diagnostics, "plan_actions_require_review")
 	require.Contains(t, result.NextAction, "not safe to apply")
+	requireImportReportGuidance(t, result.NextAction)
 	require.Equal(t, 1, *reads)
 	encoded, err := json.Marshal(result)
 	require.NoError(t, err)
