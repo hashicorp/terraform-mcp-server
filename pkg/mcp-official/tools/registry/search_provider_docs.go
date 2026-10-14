@@ -21,7 +21,7 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-type SearchProvidersArguments struct {
+type SearchProviderDocsArguments struct {
 	ProviderName         string `json:"provider_name" jsonschema:"The name of the Terraform provider to perform the read or deployment operation"`
 	ProviderNamespace    string `json:"provider_namespace,omitempty" jsonschema:"The publisher of the Terraform provider, typically the name of the company, or their GitHub organization name that created the provider (defaults to hashicorp). If you are not certain of the namespace, do not guess, ask the user. Most HashiCorp-maintained providers are in the hashicorp namespace"`
 	ServiceSlug          string `json:"service_slug" jsonschema:"The slug of the service you want to deploy or read using the Terraform provider, prefer using a single word, use underscores for multiple words and if unsure about the service_slug, use the provider_name for its value"`
@@ -29,8 +29,8 @@ type SearchProvidersArguments struct {
 	ProviderVersion      string `json:"provider_version,omitempty" jsonschema:"Provider version in x.y.z format, or latest (default)"`
 }
 
-func SearchProvidersTool() *mcp.Tool {
-	input, err := jsonschema.For[SearchProvidersArguments](nil)
+func SearchProviderDocsTool() *mcp.Tool {
+	input, err := jsonschema.For[SearchProviderDocsArguments](nil)
 	if err != nil {
 		panic(err)
 	}
@@ -40,7 +40,7 @@ func SearchProvidersTool() *mcp.Tool {
 	input.Properties["provider_version"].Default = json.RawMessage(`"latest"`)
 
 	return &mcp.Tool{
-		Name: "search_providers",
+		Name: "search_provider_docs",
 		Description: `This tool retrieves a list of potential documents based on the 'service_slug' and 'provider_document_type' provided.
 You MUST call this function before 'get_provider_details' to obtain a valid tfprovider-compatible 'provider_doc_id'.
 Use the most relevant single word as the search query for 'service_slug', if unsure about the 'service_slug', use the 'provider_name' for its value.
@@ -59,16 +59,16 @@ If there are multiple good matches, mention this but proceed with the most relev
 	}
 }
 
-// SearchProvidersFunc returns the search_providers handler.
+// SearchProviderDocsFunc returns the search_provider_docs handler.
 // Logs from the shared registry client are forwarded to logger.
-func SearchProvidersFunc(logger *slog.Logger) mcp.ToolHandlerFor[SearchProvidersArguments, any] {
+func SearchProviderDocsFunc(logger *slog.Logger) mcp.ToolHandlerFor[SearchProviderDocsArguments, any] {
 	logrusLogger := logging.WrapSlog(logger)
-	return func(ctx context.Context, request *mcp.CallToolRequest, input SearchProvidersArguments) (*mcp.CallToolResult, any, error) {
+	return func(ctx context.Context, request *mcp.CallToolRequest, input SearchProviderDocsArguments) (*mcp.CallToolResult, any, error) {
 		return searchProviders(ctx, request, input, logrusLogger)
 	}
 }
 
-func searchProviders(ctx context.Context, request *mcp.CallToolRequest, input SearchProvidersArguments, logger *log.Logger) (*mcp.CallToolResult, any, error) {
+func searchProviders(ctx context.Context, request *mcp.CallToolRequest, input SearchProviderDocsArguments, logger *log.Logger) (*mcp.CallToolResult, any, error) {
 	defaultErrorGuide := "please check the provider name, provider namespace or the provider version you're looking for, perhaps the provider is published under a different namespace or company name"
 
 	input.ProviderName = strings.ToLower(strings.TrimSpace(input.ProviderName))
@@ -152,7 +152,7 @@ func searchProviders(ctx context.Context, request *mcp.CallToolRequest, input Se
 	return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: builder.String()}}}, nil, nil
 }
 
-func resolveProviderDetails(ctx context.Context, input SearchProvidersArguments, httpClient *http.Client, logger *log.Logger) (client.ProviderDetail, error) {
+func resolveProviderDetails(ctx context.Context, input SearchProviderDocsArguments, httpClient *http.Client, logger *log.Logger) (client.ProviderDetail, error) {
 	providerDetail := client.ProviderDetail{}
 	providerName := input.ProviderName
 	providerNamespace := input.ProviderNamespace

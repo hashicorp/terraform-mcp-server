@@ -33,7 +33,7 @@ func (t *authTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 
 var (
 	duration = flag.Duration("duration", 1*time.Minute, "duration of the load test")
-	tool     = flag.String("tool", "search_providers", "tool to call")
+	tool     = flag.String("tool", "search_provider_docs", "tool to call")
 	jsonArgs = flag.String("args", `{"query": "aws"}`, "JSON arguments to pass")
 	workers  = flag.Int("workers", 10, "number of concurrent workers")
 	timeout  = flag.Duration("timeout", 10*time.Second, "request timeout")

@@ -22,7 +22,7 @@ import (
 // ResolveProviderDocID creates a tool to get provider details from registry.
 func ResolveProviderDocID(logger *log.Logger) server.ServerTool {
 	return server.ServerTool{
-		Tool: mcp.NewTool("search_providers",
+		Tool: mcp.NewTool("search_provider_docs",
 			mcp.WithDescription(`This tool retrieves a list of potential documents based on the 'service_slug' and 'provider_document_type' provided.
 You MUST call this function before 'get_provider_details' to obtain a valid tfprovider-compatible 'provider_doc_id'.
 Use the most relevant single word as the search query for 'service_slug', if unsure about the 'service_slug', use the 'provider_name' for its value.

@@ -20,14 +20,14 @@ func GetProviderDocs(logger *log.Logger) server.ServerTool {
 	return server.ServerTool{
 		Tool: mcp.NewTool("get_provider_details",
 			mcp.WithDescription(`Fetches up-to-date documentation for a specific service from a Terraform provider. 
-You must call 'search_providers' tool first to obtain the exact tfprovider-compatible provider_doc_id required to use this tool.`),
+You must call 'search_provider_docs' tool first to obtain the exact tfprovider-compatible provider_doc_id required to use this tool.`),
 			mcp.WithTitleAnnotation("Fetch detailed Terraform provider documentation using a document ID"),
 			mcp.WithOpenWorldHintAnnotation(true),
 			mcp.WithReadOnlyHintAnnotation(true),
 			mcp.WithDestructiveHintAnnotation(false),
 			mcp.WithString("provider_doc_id",
 				mcp.Required(),
-				mcp.Description("Exact tfprovider-compatible provider_doc_id, (e.g., '8894603', '8906901') retrieved from 'search_providers'")),
+				mcp.Description("Exact tfprovider-compatible provider_doc_id, (e.g., '8894603', '8906901') retrieved from 'search_provider_docs'")),
 		),
 		Handler: func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			return getProviderDocsHandler(ctx, req, logger)
@@ -44,7 +44,7 @@ func getProviderDocsHandler(ctx context.Context, request mcp.CallToolRequest, lo
 		return ToolError(logger, "provider_doc_id cannot be empty", nil)
 	}
 	if _, err := strconv.Atoi(providerDocID); err != nil {
-		return ToolError(logger, "provider_doc_id must be a valid number - use search_providers first to find valid IDs", err)
+		return ToolError(logger, "provider_doc_id must be a valid number - use search_provider_docs first to find valid IDs", err)
 	}
 
 	httpClient, err := client.GetHttpClientFromContext(ctx, logger)
@@ -54,7 +54,7 @@ func getProviderDocsHandler(ctx context.Context, request mcp.CallToolRequest, lo
 
 	detailResp, err := client.SendRegistryCall(ctx, httpClient, "GET", path.Join("provider-docs", providerDocID), logger, "v2")
 	if err != nil {
-		return ToolErrorf(logger, "provider doc not found: %s - use search_providers first to find valid provider_doc_id values", providerDocID)
+		return ToolErrorf(logger, "provider doc not found: %s - use search_provider_docs first to find valid provider_doc_id values", providerDocID)
 	}
 
 	var details client.ProviderResourceDetails

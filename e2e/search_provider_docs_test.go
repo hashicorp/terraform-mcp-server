@@ -8,11 +8,11 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestSearchProvidersRequiredValuesResource verifies that the tool finds a resource
+// TestSearchProviderDocsRequiredValuesResource verifies that the tool finds a resource
 // when the provider name, namespace, and service slug are supplied.
-func TestSearchProvidersRequiredValuesResource(t *testing.T) {
+func TestSearchProviderDocsRequiredValuesResource(t *testing.T) {
 	runForEachTransport(t, func(t *testing.T, session *mcp.ClientSession) {
-		result, text := callTool(t, session, "search_providers", map[string]any{
+		result, text := callTool(t, session, "search_provider_docs", map[string]any{
 			"provider_name":      "dns",
 			"provider_namespace": "hashicorp",
 			"service_slug":       "ns_record_set",
@@ -24,11 +24,11 @@ func TestSearchProvidersRequiredValuesResource(t *testing.T) {
 	})
 }
 
-// TestSearchProvidersDataSourceWithProviderNamePrefix verifies that a prefixed
+// TestSearchProviderDocsDataSourceWithProviderNamePrefix verifies that a prefixed
 // data-source query returns a data-source document rather than a resource.
-func TestSearchProvidersDataSourceWithProviderNamePrefix(t *testing.T) {
+func TestSearchProviderDocsDataSourceWithProviderNamePrefix(t *testing.T) {
 	runForEachTransport(t, func(t *testing.T, session *mcp.ClientSession) {
-		result, text := callTool(t, session, "search_providers", map[string]any{
+		result, text := callTool(t, session, "search_provider_docs", map[string]any{
 			"provider_name":          "dns",
 			"provider_namespace":     "hashicorp",
 			"provider_document_type": "data-sources",
@@ -41,12 +41,12 @@ func TestSearchProvidersDataSourceWithProviderNamePrefix(t *testing.T) {
 	})
 }
 
-// TestSearchProvidersDefaultsHashicorpNamespaceAndLatestVersion verifies that
+// TestSearchProviderDocsDefaultsHashicorpNamespaceAndLatestVersion verifies that
 // HashiCorp providers work when namespace and version are omitted, and that the
 // server resolves latest to a concrete version.
-func TestSearchProvidersDefaultsHashicorpNamespaceAndLatestVersion(t *testing.T) {
+func TestSearchProviderDocsDefaultsHashicorpNamespaceAndLatestVersion(t *testing.T) {
 	runForEachTransport(t, func(t *testing.T, session *mcp.ClientSession) {
-		result, text := callTool(t, session, "search_providers", map[string]any{
+		result, text := callTool(t, session, "search_provider_docs", map[string]any{
 			"provider_name": "aws",
 			"service_slug":  "aws_s3_bucket",
 		})
@@ -59,11 +59,11 @@ func TestSearchProvidersDefaultsHashicorpNamespaceAndLatestVersion(t *testing.T)
 	})
 }
 
-// TestSearchProvidersRejectsMissingServiceSlug verifies that the tool reports
+// TestSearchProviderDocsRejectsMissingServiceSlug verifies that the tool reports
 // a useful error when the required search query is missing.
-func TestSearchProvidersRejectsMissingServiceSlug(t *testing.T) {
+func TestSearchProviderDocsRejectsMissingServiceSlug(t *testing.T) {
 	runForEachTransport(t, func(t *testing.T, session *mcp.ClientSession) {
-		result, text := callTool(t, session, "search_providers", map[string]any{
+		result, text := callTool(t, session, "search_provider_docs", map[string]any{
 			"provider_name":      "google",
 			"provider_namespace": "hashicorp",
 		})
@@ -73,11 +73,11 @@ func TestSearchProvidersRejectsMissingServiceSlug(t *testing.T) {
 	})
 }
 
-// TestSearchProvidersRejectsUnknownProvider verifies that an unknown provider
+// TestSearchProviderDocsRejectsUnknownProvider verifies that an unknown provider
 // produces a tool error that identifies the failed provider lookup.
-func TestSearchProvidersRejectsUnknownProvider(t *testing.T) {
+func TestSearchProviderDocsRejectsUnknownProvider(t *testing.T) {
 	runForEachTransport(t, func(t *testing.T, session *mcp.ClientSession) {
-		result, text := callTool(t, session, "search_providers", map[string]any{
+		result, text := callTool(t, session, "search_provider_docs", map[string]any{
 			"provider_name":      "vaults",
 			"provider_namespace": "hashicorp",
 			"provider_version":   "latest",
@@ -90,11 +90,11 @@ func TestSearchProvidersRejectsUnknownProvider(t *testing.T) {
 	})
 }
 
-// TestSearchProvidersThirdPartyProvider verifies that provider resolution also
+// TestSearchProviderDocsThirdPartyProvider verifies that provider resolution also
 // works for a provider published outside the HashiCorp namespace.
-func TestSearchProvidersThirdPartyProvider(t *testing.T) {
+func TestSearchProviderDocsThirdPartyProvider(t *testing.T) {
 	runForEachTransport(t, func(t *testing.T, session *mcp.ClientSession) {
-		result, text := callTool(t, session, "search_providers", map[string]any{
+		result, text := callTool(t, session, "search_provider_docs", map[string]any{
 			"provider_name":          "pinecone",
 			"provider_namespace":     "pinecone-io",
 			"provider_version":       "latest",
@@ -108,11 +108,11 @@ func TestSearchProvidersThirdPartyProvider(t *testing.T) {
 	})
 }
 
-// TestSearchProvidersThirdPartyDataSource verifies data-source lookup for a
+// TestSearchProviderDocsThirdPartyDataSource verifies data-source lookup for a
 // provider outside the HashiCorp namespace.
-func TestSearchProvidersThirdPartyDataSource(t *testing.T) {
+func TestSearchProviderDocsThirdPartyDataSource(t *testing.T) {
 	runForEachTransport(t, func(t *testing.T, session *mcp.ClientSession) {
-		result, text := callTool(t, session, "search_providers", map[string]any{
+		result, text := callTool(t, session, "search_provider_docs", map[string]any{
 			"provider_name":          "terracurl",
 			"provider_namespace":     "devops-rob",
 			"provider_document_type": "data-sources",
@@ -125,10 +125,10 @@ func TestSearchProvidersThirdPartyDataSource(t *testing.T) {
 	})
 }
 
-// TestSearchProvidersGuidesDocumentation verifies the v2 provider guides path.
-func TestSearchProvidersGuidesDocumentation(t *testing.T) {
+// TestSearchProviderDocsGuidesDocumentation verifies the v2 provider guides path.
+func TestSearchProviderDocsGuidesDocumentation(t *testing.T) {
 	runForEachTransport(t, func(t *testing.T, session *mcp.ClientSession) {
-		result, text := callTool(t, session, "search_providers", map[string]any{
+		result, text := callTool(t, session, "search_provider_docs", map[string]any{
 			"provider_name":          "aws",
 			"provider_namespace":     "hashicorp",
 			"provider_version":       "latest",
@@ -143,10 +143,10 @@ func TestSearchProvidersGuidesDocumentation(t *testing.T) {
 	})
 }
 
-// TestSearchProvidersFunctionsDocumentation verifies the v2 provider functions path.
-func TestSearchProvidersFunctionsDocumentation(t *testing.T) {
+// TestSearchProviderDocsFunctionsDocumentation verifies the v2 provider functions path.
+func TestSearchProviderDocsFunctionsDocumentation(t *testing.T) {
 	runForEachTransport(t, func(t *testing.T, session *mcp.ClientSession) {
-		result, text := callTool(t, session, "search_providers", map[string]any{
+		result, text := callTool(t, session, "search_provider_docs", map[string]any{
 			"provider_name":          "google",
 			"provider_namespace":     "hashicorp",
 			"provider_version":       "latest",
@@ -161,10 +161,10 @@ func TestSearchProvidersFunctionsDocumentation(t *testing.T) {
 	})
 }
 
-// TestSearchProvidersOverviewDocumentation verifies the v2 provider overview path.
-func TestSearchProvidersOverviewDocumentation(t *testing.T) {
+// TestSearchProviderDocsOverviewDocumentation verifies the v2 provider overview path.
+func TestSearchProviderDocsOverviewDocumentation(t *testing.T) {
 	runForEachTransport(t, func(t *testing.T, session *mcp.ClientSession) {
-		result, text := callTool(t, session, "search_providers", map[string]any{
+		result, text := callTool(t, session, "search_provider_docs", map[string]any{
 			"provider_name":          "google",
 			"provider_namespace":     "hashicorp",
 			"provider_version":       "latest",
@@ -178,10 +178,10 @@ func TestSearchProvidersOverviewDocumentation(t *testing.T) {
 	})
 }
 
-// TestSearchProvidersActionsDocumentation verifies the v2 provider actions path.
-func TestSearchProvidersActionsDocumentation(t *testing.T) {
+// TestSearchProviderDocsActionsDocumentation verifies the v2 provider actions path.
+func TestSearchProviderDocsActionsDocumentation(t *testing.T) {
 	runForEachTransport(t, func(t *testing.T, session *mcp.ClientSession) {
-		result, text := callTool(t, session, "search_providers", map[string]any{
+		result, text := callTool(t, session, "search_provider_docs", map[string]any{
 			"provider_name":          "aws",
 			"provider_namespace":     "hashicorp",
 			"provider_version":       "latest",
@@ -196,10 +196,10 @@ func TestSearchProvidersActionsDocumentation(t *testing.T) {
 	})
 }
 
-// TestSearchProvidersListResourcesDocumentation verifies the v2 list-resources path.
-func TestSearchProvidersListResourcesDocumentation(t *testing.T) {
+// TestSearchProviderDocsListResourcesDocumentation verifies the v2 list-resources path.
+func TestSearchProviderDocsListResourcesDocumentation(t *testing.T) {
 	runForEachTransport(t, func(t *testing.T, session *mcp.ClientSession) {
-		result, text := callTool(t, session, "search_providers", map[string]any{
+		result, text := callTool(t, session, "search_provider_docs", map[string]any{
 			"provider_name":          "aws",
 			"provider_namespace":     "hashicorp",
 			"provider_version":       "latest",
@@ -214,12 +214,12 @@ func TestSearchProvidersListResourcesDocumentation(t *testing.T) {
 	})
 }
 
-// TestSearchProvidersFallsBackFromMalformedNamespace verifies that a failed
+// TestSearchProviderDocsFallsBackFromMalformedNamespace verifies that a failed
 // namespace lookup falls back to the HashiCorp namespace when the provider is
 // available there.
-func TestSearchProvidersFallsBackFromMalformedNamespace(t *testing.T) {
+func TestSearchProviderDocsFallsBackFromMalformedNamespace(t *testing.T) {
 	runForEachTransport(t, func(t *testing.T, session *mcp.ClientSession) {
-		result, text := callTool(t, session, "search_providers", map[string]any{
+		result, text := callTool(t, session, "search_provider_docs", map[string]any{
 			"provider_name":      "vault",
 			"provider_namespace": "hashicorp-malformed",
 			"provider_version":   "latest",

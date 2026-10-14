@@ -11,10 +11,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestSearchProvidersTool(t *testing.T) {
-	tool := SearchProvidersTool()
+func TestSearchProviderDocsTool(t *testing.T) {
+	tool := SearchProviderDocsTool()
 
-	assert.Equal(t, "search_providers", tool.Name)
+	assert.Equal(t, "search_provider_docs", tool.Name)
 	require.NotNil(t, tool.Annotations)
 	assert.Equal(t, "Identify the most relevant provider document ID for a Terraform service", tool.Annotations.Title)
 
@@ -44,8 +44,8 @@ func TestSearchProvidersTool(t *testing.T) {
 	assert.JSONEq(t, `"latest"`, string(providerVersionSchema.Default))
 }
 
-func TestSearchProvidersParameterValidation(t *testing.T) {
-	tool := SearchProvidersTool()
+func TestSearchProviderDocsParameterValidation(t *testing.T) {
+	tool := SearchProviderDocsTool()
 	schema, ok := tool.InputSchema.(*jsonschema.Schema)
 	require.True(t, ok)
 	resolved, err := schema.Resolve(nil)

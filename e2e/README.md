@@ -12,7 +12,7 @@ The tests use the official MCP Go SDK and call the real registry-backed tools.
 
 The E2E tests are organized by tool:
 
-- `search_providers_test.go`
+- `search_provider_docs_test.go`
 - `provider_details_test.go`
 - `search_modules_test.go`
 - `module_details_test.go`

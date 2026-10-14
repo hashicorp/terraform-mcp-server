@@ -19,7 +19,7 @@ type toolFactory func(logger *log.Logger) server.ServerTool
 // (create_no_code_workspace, create_run) live in specialFactories below
 var toolFactories = map[string]toolFactory{
 	// Public Registry tools
-	"search_providers":            registryTools.ResolveProviderDocID,
+	"search_provider_docs":            registryTools.ResolveProviderDocID,
 	"get_provider_details":        registryTools.GetProviderDocs,
 	"get_latest_provider_version": registryTools.GetLatestProviderVersion,
 	"get_provider_capabilities":   registryTools.GetProviderCapabilities,

@@ -1,5 +1,9 @@
 # 1.3.1
 
+BREAKING CHANGES
+
+* `search_providers` is renamed to `search_provider_docs`. The tool searches documentation within a provider rather than for providers, and the old name was misleading. Update any toolset configuration or client that references the old name.
+
 IMPROVEMENTS
 
 * `get_latest_provider_version`, `get_provider_capabilities` and `search_providers` now tell the agent not to guess the provider namespace when unsure.
