@@ -41,14 +41,14 @@ type PrepareImportInput struct {
 	LockedProviders  map[string]string `json:"locked_providers"`
 }
 
-type ImportCarryTarget struct {
+type ImportContextTarget struct {
 	WorkspaceID      string            `json:"workspace_id"`
 	OrganizationName string            `json:"organization_name"`
 	TerraformVersion string            `json:"terraform_version,omitempty"`
 	IdentitySupport  map[string]string `json:"identity_support"`
 }
 
-type ImportCarrySelection struct {
+type ImportContextSelection struct {
 	QueryResultMarker     string         `json:"query_result_marker"`
 	ListType              string         `json:"list_type"`
 	ManagedType           string         `json:"managed_type"`
@@ -56,12 +56,12 @@ type ImportCarrySelection struct {
 	SearchIdentityVersion int            `json:"search_identity_version"`
 }
 
-type ImportCarry struct {
+type ImportContext struct {
 	QueryRunID      string                         `json:"query_run_id"`
 	Providers       map[string]queryResultProvider `json:"providers"`
-	Target          ImportCarryTarget              `json:"target"`
+	Target          ImportContextTarget            `json:"target"`
 	LockedProviders map[string]string              `json:"locked_providers"`
-	SelectedResults []ImportCarrySelection         `json:"selected_results"`
+	SelectedResults []ImportContextSelection       `json:"selected_results"`
 	SelectionDigest string                         `json:"selection_digest"`
 }
 
@@ -104,19 +104,19 @@ type PrepareImportResult struct {
 	VCSLinked                         bool                    `json:"vcs_linked"`
 	Types                             []PreparedImportType    `json:"types,omitempty"`
 	SelectedResults                   []queryResultEvidence   `json:"selected_results,omitempty"`
-	Carry                             *ImportCarry            `json:"carry,omitempty"`
+	ImportContext                     *ImportContext          `json:"import_context,omitempty"`
 }
 
-func importDigest(c ImportCarry) (string, error) {
+func importDigest(c ImportContext) (string, error) {
 	data, err := json.Marshal(struct {
 		QueryRunID      string                         `json:"query_run_id"`
 		Providers       map[string]queryResultProvider `json:"providers"`
-		Target          ImportCarryTarget              `json:"target"`
+		Target          ImportContextTarget            `json:"target"`
 		LockedProviders map[string]string              `json:"locked_providers"`
-		SelectedResults []ImportCarrySelection         `json:"selected_results"`
+		SelectedResults []ImportContextSelection       `json:"selected_results"`
 	}{c.QueryRunID, c.Providers, c.Target, c.LockedProviders, c.SelectedResults})
 	if err != nil {
-		return "", queryEvidenceError("carry_invalid")
+		return "", queryEvidenceError("import_context_invalid")
 	}
 	return fmt.Sprintf("sha256:%x", sha256.Sum256(data)), nil
 }
@@ -314,7 +314,7 @@ func ReadPrepareImport(ctx context.Context, c *tfe.Client, input PrepareImportIn
 	for _, result := range evidence.Results {
 		byMarker[result.Marker] = result
 	}
-	carry := &ImportCarry{QueryRunID: input.QueryRunID, Providers: map[string]queryResultProvider{}, Target: ImportCarryTarget{WorkspaceID: w.ID, OrganizationName: w.Organization.Name, TerraformVersion: w.TerraformVersion, IdentitySupport: map[string]string{}}, LockedProviders: input.LockedProviders, SelectedResults: []ImportCarrySelection{}}
+	importContext := &ImportContext{QueryRunID: input.QueryRunID, Providers: map[string]queryResultProvider{}, Target: ImportContextTarget{WorkspaceID: w.ID, OrganizationName: w.Organization.Name, TerraformVersion: w.TerraformVersion, IdentitySupport: map[string]string{}}, LockedProviders: input.LockedProviders, SelectedResults: []ImportContextSelection{}}
 	seenTypes := map[string]bool{}
 	for _, selection := range input.Selections {
 		found, ok := byMarker[selection.QueryResultMarker]
@@ -331,11 +331,11 @@ func ReadPrepareImport(ctx context.Context, c *tfe.Client, input PrepareImportIn
 			return nil, queryEvidenceError("query_sensitive_result")
 		}
 		out.SelectedResults = append(out.SelectedResults, found)
-		carry.Providers[found.ResourceType] = found.Provider
-		carry.SelectedResults = append(carry.SelectedResults, ImportCarrySelection{QueryResultMarker: found.Marker, ListType: found.ResourceType, ManagedType: selection.ManagedType, Identity: found.Identity, SearchIdentityVersion: found.IdentityVersion})
+		importContext.Providers[found.ResourceType] = found.Provider
+		importContext.SelectedResults = append(importContext.SelectedResults, ImportContextSelection{QueryResultMarker: found.Marker, ListType: found.ResourceType, ManagedType: selection.ManagedType, Identity: found.Identity, SearchIdentityVersion: found.IdentityVersion})
 		if !seenTypes[selection.ManagedType] {
 			seenTypes[selection.ManagedType] = true
-			carry.Target.IdentitySupport[selection.ManagedType] = "unknown"
+			importContext.Target.IdentitySupport[selection.ManagedType] = "unknown"
 			out.Types = append(out.Types, PreparedImportType{ProviderSource: found.Provider.Source, SearchProviderVersion: found.Provider.Version, LockedProviderVersion: input.LockedProviders[found.Provider.Source], ManagedType: selection.ManagedType, ManagedTypeSupport: "unknown", IdentitySupport: "unknown", SchemaStatus: "unknown", IdentityCompatibility: "unverified"})
 		}
 	}
@@ -376,16 +376,16 @@ func ReadPrepareImport(ctx context.Context, c *tfe.Client, input PrepareImportIn
 		} else {
 			out.Types[i].ManagedTypeSupport = "absent_historically"
 		}
-		carry.Target.IdentitySupport[out.Types[i].ManagedType] = out.Types[i].IdentitySupport
+		importContext.Target.IdentitySupport[out.Types[i].ManagedType] = out.Types[i].IdentitySupport
 	}
-	carry.SelectionDigest, err = importDigest(*carry)
+	importContext.SelectionDigest, err = importDigest(*importContext)
 	if err != nil {
 		return nil, err
 	}
-	out.Carry = carry
+	out.ImportContext = importContext
 	out.Status = "prepared"
 	out.NextAction = "Inspect the existing user-designated local tree, exact lock releases, selected observations, relevant module calls and instances, provider mappings, and existing variables and references. The proposed managed type is not proved by the Search list type, and historical schema does not attest the lock, a proposed import block, or provider scope. First author for the selected identities, effective provider scope and target locked provider's managed/identity schema. Consult that release's resource/import documentation and the target Terraform version's official import and module documentation; search_providers with the locked provider_version followed by get_provider_details can help when available. Treat generated blocks as drafts, make evidence-backed adaptations and author one reviewed resource and import block per result at distinct exact addresses. If the intended address is in an editable local module, check its calls and instances for sibling effects; do not edit remote-source modules. Review changed files and sensitive upload scope. " +
-		"In the execution context that will run Terraform, review the user-approved cloud or remote-backend configuration and confirm the effective CLI host, organization, project (when relevant) and workspace with the user. Explicit cloud settings take precedence over their fallbacks; account for applicable CLI fallbacks and workspace-selection overrides without dumping environment contents; if the mapping is ambiguous, consult Terraform's cloud-connection and CLI-environment documentation and ask the user to resolve it. Confirm only that authentication for the intended host is available through the user's existing CLI setup. Do not read, print, request, copy or set credential values. MCP server configuration and authentication are separate from Terraform CLI configuration and authentication. Resolve a specific destination mismatch before starting a Run. Confirm both initiating CLI and HCP execution support import blocks (>=1.5); an init that creates a workspace/project or migrates state needs separate permission. After explicit approval for one speculative plan, an example from the confirmed directory is terraform plan -no-color -input=false (or terraform -chdir=<directory> plan -no-color -input=false), without -out or apply. These flags aid non-interactive review, not proof of a plan-only Run. The CLI, not Search MCP, uploads the configuration and creates the Run. Compare its Run URL with the intended host/org/workspace, then verify the exact Run's workspace and plan_only=true. If its Run URL or outcome is uncertain, reconcile before retrying; keep carry unchanged for verification. Approval is for one speculative plan only. This Search-to-import workflow ends after Plan review and handoff of the proposed HCL and findings; do not apply or run terraform import as its next step."
+		"In the execution context that will run Terraform, review the user-approved cloud or remote-backend configuration and confirm the effective CLI host, organization, project (when relevant) and workspace with the user. Explicit cloud settings take precedence over their fallbacks; account for applicable CLI fallbacks and workspace-selection overrides without dumping environment contents; if the mapping is ambiguous, consult Terraform's cloud-connection and CLI-environment documentation and ask the user to resolve it. Confirm only that authentication for the intended host is available through the user's existing CLI setup. Do not read, print, request, copy or set credential values. MCP server configuration and authentication are separate from Terraform CLI configuration and authentication. Resolve a specific destination mismatch before starting a Run. Confirm both initiating CLI and HCP execution support import blocks (>=1.5); an init that creates a workspace/project or migrates state needs separate permission. After explicit approval for one speculative plan, an example from the confirmed directory is terraform plan -no-color -input=false (or terraform -chdir=<directory> plan -no-color -input=false), without -out or apply. These flags aid non-interactive review, not proof of a plan-only Run. The CLI, not Search MCP, uploads the configuration and creates the Run. Compare its Run URL with the intended host/org/workspace, then verify the exact Run's workspace and plan_only=true. If its Run URL or outcome is uncertain, reconcile before retrying; keep import context unchanged for verification. Approval is for one speculative plan only. This Search-to-import workflow ends after Plan review and handoff of the proposed HCL and findings; do not apply or run terraform import as its next step."
 	if err := checkImportResultBudget(out); err != nil {
 		return nil, err
 	}

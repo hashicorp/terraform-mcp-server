@@ -132,22 +132,22 @@ func TestImportToolsEndToEndLocalHTTPAndLegacyWire(t *testing.T) {
 	t.Setenv("TFE_ADDRESS", backend.URL)
 	t.Setenv("TFE_TOKEN", "test-token")
 	t.Setenv("MCP_ORGANIZATION_ALLOWLIST", "org")
-	carry, bindings, _ := importTestCarry(t)
+	importContext, bindings, _ := importTestImportContext(t)
 	c, err := tfe.NewClient(&tfe.Config{Address: backend.URL, Token: "test-token", HTTPClient: backend.Client()})
 	require.NoError(t, err)
-	prep, err := ReadPrepareImport(context.Background(), c, PrepareImportInput{OrganizationName: "org", WorkspaceName: "target", QueryRunID: "qry-example", Selections: []ImportSelection{{QueryResultMarker: bindings[0].QueryResultMarker, ManagedType: "aws_s3_bucket"}}, LockedProviders: carry.LockedProviders})
+	prep, err := ReadPrepareImport(context.Background(), c, PrepareImportInput{OrganizationName: "org", WorkspaceName: "target", QueryRunID: "qry-example", Selections: []ImportSelection{{QueryResultMarker: bindings[0].QueryResultMarker, ManagedType: "aws_s3_bucket"}}, LockedProviders: importContext.LockedProviders})
 	require.NoError(t, err)
 	require.Equal(t, "prepared", prep.Status)
 	require.Equal(t, "source", prep.SourceWorkspaceName)
-	require.NotEmpty(t, prep.Carry.SelectionDigest)
+	require.NotEmpty(t, prep.ImportContext.SelectionDigest)
 	require.Equal(t, "unknown", prep.Types[0].SchemaStatus)
 	require.Equal(t, "6.66.0", prep.Types[0].LockedProviderVersion)
 	require.Equal(t, "6.66.0", prep.Types[0].SearchProviderVersion)
 	result, err := ReadVerifyImportPlan(context.Background(), c, VerifyImportInput{OrganizationName: "org", WorkspaceName: "target", RunID: "run-example"})
 	require.NoError(t, err)
-	require.Equal(t, "carry_required", result.Status)
+	require.Equal(t, "import_context_required", result.Status)
 	require.Zero(t, *reads)
-	result, err = ReadVerifyImportPlan(context.Background(), c, VerifyImportInput{OrganizationName: "org", WorkspaceName: "target", RunID: "run-example", Carry: prep.Carry, Bindings: bindings, DetailAddresses: []string{"aws_s3_bucket.sample"}})
+	result, err = ReadVerifyImportPlan(context.Background(), c, VerifyImportInput{OrganizationName: "org", WorkspaceName: "target", RunID: "run-example", ImportContext: prep.ImportContext, Bindings: bindings, DetailAddresses: []string{"aws_s3_bucket.sample"}})
 	require.NoError(t, err)
 	require.Equal(t, "plan_available", result.Status)
 	require.Equal(t, 1, result.Changes["none"])
@@ -172,7 +172,7 @@ func TestImportToolsEndToEndLocalHTTPAndLegacyWire(t *testing.T) {
 	require.NotContains(t, string(encoded), "overall")
 	// A real mark3labs CallToolRequest must preserve the same structured/text
 	// response, not merely the plain-Go helper's result.
-	args := map[string]any{"organization_name": "org", "workspace_name": "target", "run_id": "run-example", "carry": prep.Carry, "bindings": bindings}
+	args := map[string]any{"organization_name": "org", "workspace_name": "target", "run_id": "run-example", "import_context": prep.ImportContext, "bindings": bindings}
 	ctx := server.NewMCPServer("test", "0").WithContext(context.Background(), importTestSession{})
 	wire, err := VerifyImportPlan(silentLogger()).Handler(ctx, mcp.CallToolRequest{Params: mcp.CallToolParams{Arguments: args}})
 	require.NoError(t, err)
@@ -183,7 +183,7 @@ func TestImportToolsEndToEndLocalHTTPAndLegacyWire(t *testing.T) {
 	require.Contains(t, text.Text, `"plan_available"`)
 	require.NotContains(t, text.Text, `"attention"`)
 	require.NotContains(t, text.Text, "private-import-id-sentinel")
-	prepareArgs := map[string]any{"organization_name": "org", "workspace_name": "target", "query_run_id": "qry-example", "locked_providers": prep.Carry.LockedProviders, "selections": []ImportSelection{{QueryResultMarker: bindings[0].QueryResultMarker, ManagedType: "aws_s3_bucket"}}}
+	prepareArgs := map[string]any{"organization_name": "org", "workspace_name": "target", "query_run_id": "qry-example", "locked_providers": prep.ImportContext.LockedProviders, "selections": []ImportSelection{{QueryResultMarker: bindings[0].QueryResultMarker, ManagedType: "aws_s3_bucket"}}}
 	var logged bytes.Buffer
 	logger := log.New()
 	logger.SetOutput(&logged)
@@ -229,8 +229,8 @@ func TestVerifyImportPlanReturnsKnownHostRunUIURLAfterAssociationCheck(t *testin
 	// HCP address from which a browser Run URL can be constructed.
 	c, err := tfe.NewClient(&tfe.Config{Address: "https://app.staging.terraform.io", Token: "test-token", HTTPClient: &http.Client{Transport: importRewriteTransport{backend: backendURL, next: http.DefaultTransport}}})
 	require.NoError(t, err)
-	carry, bindings, _ := importTestCarry(t)
-	result, err := ReadVerifyImportPlan(context.Background(), c, VerifyImportInput{OrganizationName: "org", WorkspaceName: "target", RunID: "run-example", Carry: carry, Bindings: bindings})
+	importContext, bindings, _ := importTestImportContext(t)
+	result, err := ReadVerifyImportPlan(context.Background(), c, VerifyImportInput{OrganizationName: "org", WorkspaceName: "target", RunID: "run-example", ImportContext: importContext, Bindings: bindings})
 	require.NoError(t, err)
 	require.Equal(t, "plan_available", result.Status)
 	require.Equal(t, "plan-example", result.PlanID)
@@ -259,8 +259,8 @@ func TestPrepareImportKeepsSameNameSearchListAndManagedType(t *testing.T) {
 	require.Equal(t, "prepared", prepared.Status)
 	require.Len(t, prepared.SelectedResults, 1)
 	require.Equal(t, "aws_sqs_queue", prepared.SelectedResults[0].ResourceType)
-	require.Equal(t, "aws_sqs_queue", prepared.Carry.SelectedResults[0].ListType)
-	require.Equal(t, "aws_sqs_queue", prepared.Carry.SelectedResults[0].ManagedType)
+	require.Equal(t, "aws_sqs_queue", prepared.ImportContext.SelectedResults[0].ListType)
+	require.Equal(t, "aws_sqs_queue", prepared.ImportContext.SelectedResults[0].ManagedType)
 	require.Equal(t, "6.66.0", prepared.Types[0].SearchProviderVersion)
 	require.Equal(t, "6.18.0", prepared.Types[0].LockedProviderVersion)
 	require.Equal(t, "unknown", prepared.Types[0].ManagedTypeSupport, "no historical target schema was read")
@@ -316,8 +316,8 @@ func TestVerifyImportPlanAttentionOnlyIncludesSelectedExceptions(t *testing.T) {
 			c, err := tfe.NewClient(&tfe.Config{Address: backend.URL, Token: "test-token", HTTPClient: backend.Client()})
 			require.NoError(t, err)
 			t.Setenv("MCP_ORGANIZATION_ALLOWLIST", "org")
-			carry, bindings, _ := importTestCarry(t)
-			result, err := ReadVerifyImportPlan(context.Background(), c, VerifyImportInput{OrganizationName: "org", WorkspaceName: "target", RunID: "run-example", Carry: carry, Bindings: bindings})
+			importContext, bindings, _ := importTestImportContext(t)
+			result, err := ReadVerifyImportPlan(context.Background(), c, VerifyImportInput{OrganizationName: "org", WorkspaceName: "target", RunID: "run-example", ImportContext: importContext, Bindings: bindings})
 			require.NoError(t, err)
 			require.Equal(t, "plan_available", result.Status)
 			require.Equal(t, 1, result.Changes[tc.change])
@@ -361,7 +361,7 @@ func TestImportIdentityReviewActionDoesNotConflateMixedFindings(t *testing.T) {
 
 func TestVerifyImportPlanVersionDifferenceKeepsPlanAndIdentitySeparateOnMark3labsWire(t *testing.T) {
 	provider := queryResultProvider{Source: "registry.terraform.io/hashicorp/aws", Version: "6.66.0"}
-	carry := &ImportCarry{QueryRunID: "qry-example", Providers: map[string]queryResultProvider{"aws_sqs_queue": provider}, Target: ImportCarryTarget{WorkspaceID: "ws-example", OrganizationName: "org", IdentitySupport: map[string]string{"aws_sqs_queue": "unknown"}}, LockedProviders: map[string]string{provider.Source: "6.18.0"}}
+	importContext := &ImportContext{QueryRunID: "qry-example", Providers: map[string]queryResultProvider{"aws_sqs_queue": provider}, Target: ImportContextTarget{WorkspaceID: "ws-example", OrganizationName: "org", IdentitySupport: map[string]string{"aws_sqs_queue": "unknown"}}, LockedProviders: map[string]string{provider.Source: "6.18.0"}}
 	var bindings []ImportBinding
 	var resources, changes []string
 	for _, name := range []string{"unmanaged", "modtest_jobs"} {
@@ -369,13 +369,13 @@ func TestVerifyImportPlanVersionDifferenceKeepsPlanAndIdentitySeparateOnMark3lab
 		marker, err := queryResultMarker("qry-example", provider, "aws_sqs_queue", identity)
 		require.NoError(t, err)
 		addr := "aws_sqs_queue." + name
-		carry.SelectedResults = append(carry.SelectedResults, ImportCarrySelection{QueryResultMarker: marker, ListType: "aws_sqs_queue", ManagedType: "aws_sqs_queue", Identity: identity, SearchIdentityVersion: 1})
+		importContext.SelectedResults = append(importContext.SelectedResults, ImportContextSelection{QueryResultMarker: marker, ListType: "aws_sqs_queue", ManagedType: "aws_sqs_queue", Identity: identity, SearchIdentityVersion: 1})
 		bindings = append(bindings, ImportBinding{QueryResultMarker: marker, TargetAddress: addr})
 		resources = append(resources, fmt.Sprintf(`{"address":%q,"identity_schema_version":0}`, addr))
 		changes = append(changes, fmt.Sprintf(`{"address":%q,"mode":"managed","type":"aws_sqs_queue","provider_name":"registry.terraform.io/hashicorp/aws","change":{"actions":["no-op"],"importing":{"id":"private-id-sentinel"},"after_identity":{"url":%q,"account_id":"private-account-sentinel","region":"private-region-sentinel"}}}`, addr, identity["url"]))
 	}
 	var err error
-	carry.SelectionDigest, err = importDigest(*carry)
+	importContext.SelectionDigest, err = importDigest(*importContext)
 	require.NoError(t, err)
 	planJSON := fmt.Sprintf(`{"format_version":"1.2","terraform_version":"1.14.0","complete":true,"errored":false,"planned_values":{"root_module":{"resources":[%s]}},"resource_changes":[%s],"output_changes":{},"deferred_changes":[],"resource_drift":[]}`, strings.Join(resources, ","), strings.Join(changes, ","))
 	backend, _ := importWireBackendWithPlan(t, "planned_and_finished", "finished", "aws_sqs_queue", planJSON)
@@ -383,7 +383,7 @@ func TestVerifyImportPlanVersionDifferenceKeepsPlanAndIdentitySeparateOnMark3lab
 	t.Setenv("TFE_TOKEN", "test-token")
 	t.Setenv("MCP_ORGANIZATION_ALLOWLIST", "org")
 	ctx := server.NewMCPServer("test", "0").WithContext(context.Background(), importTestSession{})
-	wire, err := VerifyImportPlan(silentLogger()).Handler(ctx, mcp.CallToolRequest{Params: mcp.CallToolParams{Arguments: map[string]any{"organization_name": "org", "workspace_name": "target", "run_id": "run-example", "carry": carry, "bindings": bindings}}})
+	wire, err := VerifyImportPlan(silentLogger()).Handler(ctx, mcp.CallToolRequest{Params: mcp.CallToolParams{Arguments: map[string]any{"organization_name": "org", "workspace_name": "target", "run_id": "run-example", "import_context": importContext, "bindings": bindings}}})
 	require.NoError(t, err)
 	require.False(t, wire.IsError)
 	data, err := json.Marshal(wire.StructuredContent)
@@ -423,9 +423,9 @@ func TestVerifyImportPlanVersionDifferenceKeepsPlanAndIdentitySeparateOnMark3lab
 }
 
 func TestVerifyImportPlanEightCleanImportsHaveNoAttention(t *testing.T) {
-	carry, _, _ := importTestCarry(t)
-	carry.SelectedResults = nil
-	provider := carry.Providers["aws_s3_buckets"]
+	importContext, _, _ := importTestImportContext(t)
+	importContext.SelectedResults = nil
+	provider := importContext.Providers["aws_s3_buckets"]
 	var bindings []ImportBinding
 	var resources, changes []string
 	for i := range 8 {
@@ -434,20 +434,20 @@ func TestVerifyImportPlanEightCleanImportsHaveNoAttention(t *testing.T) {
 		identity := map[string]any{"bucket": name}
 		marker, err := queryResultMarker("qry-example", provider, "aws_s3_buckets", identity)
 		require.NoError(t, err)
-		carry.SelectedResults = append(carry.SelectedResults, ImportCarrySelection{QueryResultMarker: marker, ListType: "aws_s3_buckets", ManagedType: "aws_s3_bucket", Identity: identity, SearchIdentityVersion: 0})
+		importContext.SelectedResults = append(importContext.SelectedResults, ImportContextSelection{QueryResultMarker: marker, ListType: "aws_s3_buckets", ManagedType: "aws_s3_bucket", Identity: identity, SearchIdentityVersion: 0})
 		bindings = append(bindings, ImportBinding{QueryResultMarker: marker, TargetAddress: addr})
 		resources = append(resources, fmt.Sprintf(`{"address":%q,"identity_schema_version":0}`, addr))
 		changes = append(changes, fmt.Sprintf(`{"address":%q,"mode":"managed","type":"aws_s3_bucket","provider_name":"registry.terraform.io/hashicorp/aws","change":{"actions":["no-op"],"importing":{"identity":{"bucket":%q}},"after_identity":{"bucket":%q}}}`, addr, name, name))
 	}
 	var err error
-	carry.SelectionDigest, err = importDigest(*carry)
+	importContext.SelectionDigest, err = importDigest(*importContext)
 	require.NoError(t, err)
 	planJSON := fmt.Sprintf(`{"format_version":"1.2","terraform_version":"1.14.0","complete":true,"errored":false,"planned_values":{"root_module":{"resources":[%s]}},"resource_changes":[%s],"output_changes":{},"deferred_changes":[],"resource_drift":[]}`, strings.Join(resources, ","), strings.Join(changes, ","))
 	backend, _ := importWireBackendWithPlan(t, "planned_and_finished", "finished", "aws_s3_buckets", planJSON)
 	c, err := tfe.NewClient(&tfe.Config{Address: backend.URL, Token: "test-token", HTTPClient: backend.Client()})
 	require.NoError(t, err)
 	t.Setenv("MCP_ORGANIZATION_ALLOWLIST", "org")
-	result, err := ReadVerifyImportPlan(context.Background(), c, VerifyImportInput{OrganizationName: "org", WorkspaceName: "target", RunID: "run-example", Carry: carry, Bindings: bindings, DetailAddresses: []string{bindings[0].TargetAddress}})
+	result, err := ReadVerifyImportPlan(context.Background(), c, VerifyImportInput{OrganizationName: "org", WorkspaceName: "target", RunID: "run-example", ImportContext: importContext, Bindings: bindings, DetailAddresses: []string{bindings[0].TargetAddress}})
 	require.NoError(t, err)
 	require.Equal(t, "plan_available", result.Status)
 	require.Equal(t, 8, result.Changes["none"])
@@ -464,7 +464,7 @@ func TestVerifyImportPlanEightCleanImportsHaveNoAttention(t *testing.T) {
 	backendWithOutput, _ := importWireBackendWithPlan(t, "planned_and_finished", "finished", "aws_s3_buckets", withOutputChange)
 	cWithOutput, err := tfe.NewClient(&tfe.Config{Address: backendWithOutput.URL, Token: "test-token", HTTPClient: backendWithOutput.Client()})
 	require.NoError(t, err)
-	result, err = ReadVerifyImportPlan(context.Background(), cWithOutput, VerifyImportInput{OrganizationName: "org", WorkspaceName: "target", RunID: "run-example", Carry: carry, Bindings: bindings})
+	result, err = ReadVerifyImportPlan(context.Background(), cWithOutput, VerifyImportInput{OrganizationName: "org", WorkspaceName: "target", RunID: "run-example", ImportContext: importContext, Bindings: bindings})
 	require.NoError(t, err)
 	require.Empty(t, result.Attention)
 	require.Equal(t, 1, result.Plan.OutputChanges)
@@ -489,7 +489,7 @@ func TestVerifyImportPlanSQSImportWithUpdate(t *testing.T) {
 		LockedProviders: map[string]string{provider.Source: "6.18.0"},
 	})
 	require.NoError(t, err)
-	input := VerifyImportInput{OrganizationName: "org", WorkspaceName: "target", RunID: "run-example", Carry: prep.Carry,
+	input := VerifyImportInput{OrganizationName: "org", WorkspaceName: "target", RunID: "run-example", ImportContext: prep.ImportContext,
 		Bindings: []ImportBinding{{QueryResultMarker: marker, TargetAddress: "aws_sqs_queue.unmanaged"}}, DetailAddresses: []string{"aws_sqs_queue.unmanaged"}}
 	result, err := ReadVerifyImportPlan(context.Background(), c, input)
 	require.NoError(t, err)
@@ -594,8 +594,8 @@ func TestPrepareImportAllowsCallerProposedDifferentNameWithoutClaimingSupport(t 
 	})
 	require.NoError(t, err)
 	require.Equal(t, "prepared", prepared.Status)
-	require.Equal(t, "aws_s3_buckets", prepared.Carry.SelectedResults[0].ListType)
-	require.Equal(t, "aws_s3_bucket_logging", prepared.Carry.SelectedResults[0].ManagedType)
+	require.Equal(t, "aws_s3_buckets", prepared.ImportContext.SelectedResults[0].ListType)
+	require.Equal(t, "aws_s3_bucket_logging", prepared.ImportContext.SelectedResults[0].ManagedType)
 	require.Equal(t, "unknown", prepared.Types[0].ManagedTypeSupport, "different-name pairing is not proof of target support")
 }
 
@@ -629,9 +629,9 @@ func TestImportToolDescriptionsAndSchemas(t *testing.T) {
 	prepare := PrepareImport(silentLogger()).Tool
 	require.Contains(t, prepare.InputSchema.Required, "selections")
 	require.Contains(t, prepare.InputSchema.Required, "locked_providers")
-	require.Contains(t, prepare.OutputSchema.Properties, "carry")
+	require.Contains(t, prepare.OutputSchema.Properties, "import_context")
 	verify := VerifyImportPlan(silentLogger()).Tool
 	require.Contains(t, verify.InputSchema.Required, "run_id")
-	require.NotContains(t, verify.InputSchema.Required, "carry")
+	require.NotContains(t, verify.InputSchema.Required, "import_context")
 	require.Contains(t, verify.OutputSchema.Properties, "object_identity")
 }

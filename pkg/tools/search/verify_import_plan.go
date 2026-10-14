@@ -33,7 +33,7 @@ type VerifyImportInput struct {
 	OrganizationName string          `json:"organization_name"`
 	WorkspaceName    string          `json:"workspace_name"`
 	RunID            string          `json:"run_id"`
-	Carry            *ImportCarry    `json:"carry,omitempty"`
+	ImportContext    *ImportContext  `json:"import_context,omitempty"`
 	Bindings         []ImportBinding `json:"bindings,omitempty"`
 	DetailAddresses  []string        `json:"detail_addresses,omitempty"`
 }
@@ -133,23 +133,23 @@ func importRunUIURL(base url.URL, org, workspace, runID string) string {
 	return (&url.URL{Scheme: "https", Host: base.Hostname(), Path: "/app/" + org + "/" + workspace + "/runs/" + runID}).String()
 }
 
-func validateImportCarry(c *ImportCarry, bindings []ImportBinding, target *tfe.Workspace) (map[string]ImportCarrySelection, map[string]string, error) {
+func validateImportContext(c *ImportContext, bindings []ImportBinding, target *tfe.Workspace) (map[string]ImportContextSelection, map[string]string, error) {
 	if c == nil || !validQueryRunID(c.QueryRunID) || c.Target.WorkspaceID != target.ID || target.Organization == nil || !strings.EqualFold(c.Target.OrganizationName, target.Organization.Name) || len(c.SelectedResults) < 1 || len(c.SelectedResults) > maxImportSelections || len(bindings) != len(c.SelectedResults) || len(c.LockedProviders) == 0 {
-		return nil, nil, queryEvidenceError("carry_invalid")
+		return nil, nil, queryEvidenceError("import_context_invalid")
 	}
 	digest, err := importDigest(*c)
 	if err != nil || digest != c.SelectionDigest {
-		return nil, nil, queryEvidenceError("carry_digest_mismatch")
+		return nil, nil, queryEvidenceError("import_context_digest_mismatch")
 	}
-	selected, addresses, seen := map[string]ImportCarrySelection{}, map[string]string{}, map[string]bool{}
+	selected, addresses, seen := map[string]ImportContextSelection{}, map[string]string{}, map[string]bool{}
 	for _, s := range c.SelectedResults {
 		provider, ok := c.Providers[s.ListType]
 		if !ok || !importTypePattern.MatchString(s.ManagedType) || s.SearchIdentityVersion < 0 || len(s.Identity) == 0 || !exactLockedVersion.MatchString(c.LockedProviders[provider.Source]) {
-			return nil, nil, queryEvidenceError("carry_invalid")
+			return nil, nil, queryEvidenceError("import_context_invalid")
 		}
 		marker, err := queryResultMarker(c.QueryRunID, provider, s.ListType, s.Identity)
 		if err != nil || marker != s.QueryResultMarker || seen[marker] {
-			return nil, nil, queryEvidenceError("carry_marker_invalid")
+			return nil, nil, queryEvidenceError("import_context_marker_invalid")
 		}
 		seen[marker] = true
 		selected[marker] = s
@@ -214,8 +214,8 @@ func ReadVerifyImportPlan(ctx context.Context, c *tfe.Client, input VerifyImport
 		if out.PlanOnly == nil || !*out.PlanOnly || out.AutoApply == nil || *out.AutoApply {
 			return stop("blocked", "run_not_plan_only", "Stop: the backend has not confirmed both plan-only=true and auto-apply=false. Do not classify this Run.")
 		}
-		if input.Carry != nil && input.Carry.Target.WorkspaceID != w.ID {
-			return stop("blocked", "carry_target_mismatch", "The carried target differs from the Run's workspace. Confirm target and repeat preparation before any new plan.")
+		if input.ImportContext != nil && input.ImportContext.Target.WorkspaceID != w.ID {
+			return stop("blocked", "import_context_target_mismatch", "The carried target differs from the Run's workspace. Confirm target and repeat preparation before any new plan.")
 		}
 		out.RunUIURL = importRunUIURL(c.BaseURL(), w.Organization.Name, w.Name, run.Data.ID)
 		cv := run.Data.Relationships.ConfigurationVersion.Data
@@ -247,12 +247,12 @@ func ReadVerifyImportPlan(ctx context.Context, c *tfe.Client, input VerifyImport
 			if plan.Status != tfe.PlanFinished {
 				return stop("blocked", "plan_unavailable", "The terminal Run has no finished associated Plan; do not keep polling it as a successful plan.")
 			}
-			if input.Carry == nil || len(input.Bindings) == 0 {
-				return stop("carry_required", "carry_required", "Supply the unchanged prepare_import carry and one query_result_marker-to-target_address binding per selection; no Plan JSON was read.")
+			if input.ImportContext == nil || len(input.Bindings) == 0 {
+				return stop("import_context_required", "import_context_required", "Supply the unchanged prepare_import import_context and one query_result_marker-to-target_address binding per selection; no Plan JSON was read.")
 			}
-			selected, addresses, err := validateImportCarry(input.Carry, input.Bindings, w)
+			selected, addresses, err := validateImportContext(input.ImportContext, input.Bindings, w)
 			if err != nil {
-				return stop("blocked", err.Error(), "The carry or bindings are inconsistent. Do not classify this Plan; recheck the reviewed selection and addresses.")
+				return stop("blocked", err.Error(), "The import context or bindings are inconsistent. Do not classify this Plan; recheck the reviewed selection and addresses.")
 			}
 			for requested := range details {
 				found := false
@@ -266,9 +266,9 @@ func ReadVerifyImportPlan(ctx context.Context, c *tfe.Client, input VerifyImport
 					return stop("blocked", "detail_address_not_selected", "Detail requests must name selected target addresses; review bindings before retrying.")
 				}
 			}
-			return classifyImportPlan(deadlineCtx, c, out, plan.ID, input.Carry, selected, addresses, details)
+			return classifyImportPlan(deadlineCtx, c, out, plan.ID, input.ImportContext, selected, addresses, details)
 		case "pending", "fetching", "fetching_completed", "pre_plan_running", "pre_plan_completed", "queuing", "plan_queued", "planning", "planned", "cost_estimating", "cost_estimated", "policy_checking", "policy_checked", "post_plan_running", "post_plan_completed":
-			// Carry is optional while the Run is still in progress.
+			// Import context is optional while the Run is still in progress.
 			if planRel != nil {
 				if planRel.Type != "plans" || planRel.ID == "" {
 					return stop("blocked", "run_plan_unassociated", "The Run has an invalid Plan relationship. Inspect it in HCP Terraform.")
@@ -308,11 +308,11 @@ func ReadVerifyImportPlan(ctx context.Context, c *tfe.Client, input VerifyImport
 	if ctx.Err() != nil || !observed {
 		return nil, queryEvidenceError("verify_canceled")
 	}
-	out.Status, out.Diagnostics, out.NextAction, out.RetryAfterSeconds = "pending", []string{"run_pending"}, "Poll verify_import_plan with the same Run ID; carry/bindings can wait until the associated Plan is finished. Do not start another Run.", 5
+	out.Status, out.Diagnostics, out.NextAction, out.RetryAfterSeconds = "pending", []string{"run_pending"}, "Poll verify_import_plan with the same Run ID; import_context/bindings can wait until the associated Plan is finished. Do not start another Run.", 5
 	return out, checkImportResultBudget(out)
 }
 
-func classifyImportPlan(ctx context.Context, c *tfe.Client, out *VerifyImportResult, planID string, carry *ImportCarry, selected map[string]ImportCarrySelection, addresses map[string]string, detailWanted map[string]bool) (*VerifyImportResult, error) {
+func classifyImportPlan(ctx context.Context, c *tfe.Client, out *VerifyImportResult, planID string, importContext *ImportContext, selected map[string]ImportContextSelection, addresses map[string]string, detailWanted map[string]bool) (*VerifyImportResult, error) {
 	req, err := c.NewRequest(http.MethodGet, "plans/"+url.PathEscape(planID)+"/json-output", nil)
 	if err != nil {
 		return nil, queryEvidenceError("plan_read_unavailable")
@@ -484,7 +484,7 @@ func classifyImportPlan(ctx context.Context, c *tfe.Client, out *VerifyImportRes
 		if index := byAddress[addr]; index > 0 {
 			rc := plan.ResourceChanges[index-1]
 			detail.Actions, detail.AfterIdentityPresent, detail.ReplacePathCount = rc.Change.Actions, jsonPresent(rc.Change.AfterIdentity), len(rc.Change.ReplacePaths)
-			if rc.Mode != "managed" || rc.Type != entry.ManagedType || rc.ProviderName != carry.Providers[entry.ListType].Source {
+			if rc.Mode != "managed" || rc.Type != entry.ManagedType || rc.ProviderName != importContext.Providers[entry.ListType].Source {
 				item.Change, item.IdentityReason = "type_mismatch", "plan_type_or_provider_differs"
 			} else if !jsonPresent(rc.Change.Importing) {
 				item.Change, item.IdentityReason = "import_missing", "no_import_marker"
@@ -513,7 +513,7 @@ func classifyImportPlan(ctx context.Context, c *tfe.Client, out *VerifyImportRes
 					default:
 						return nil, queryEvidenceError("plan_actions_unsupported")
 					}
-					item.ObjectIdentity, item.IdentityReason = compareImportPlanIdentity(entry, versions, addr, rc.Change.AfterIdentity, plan.TerraformVersion, carry.Target.IdentitySupport[entry.ManagedType])
+					item.ObjectIdentity, item.IdentityReason = compareImportPlanIdentity(entry, versions, addr, rc.Change.AfterIdentity, plan.TerraformVersion, importContext.Target.IdentitySupport[entry.ManagedType])
 				}
 			}
 		}
@@ -634,7 +634,7 @@ func jsonPresent(raw json.RawMessage) bool {
 	return len(raw) != 0 && !bytes.Equal(bytes.TrimSpace(raw), []byte("null"))
 }
 
-func compareImportPlanIdentity(selection ImportCarrySelection, versions map[string]uint64, address string, raw json.RawMessage, terraformVersion, support string) (string, string) {
+func compareImportPlanIdentity(selection ImportContextSelection, versions map[string]uint64, address string, raw json.RawMessage, terraformVersion, support string) (string, string) {
 	if !jsonPresent(raw) {
 		if old, known := terraformImportSyntaxVersion(terraformVersion); known && old {
 			return "unsupported", "terraform_cli_no_identity"
