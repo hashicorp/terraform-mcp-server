@@ -18,8 +18,19 @@ import (
 	"github.com/hashicorp/go-tfe"
 )
 
-const verifyImportWait = 40 * time.Second
+// Keep enough headroom below the mark3labs HTTP server's 30-second
+// WriteTimeout to serialize and write a pending response.
+const verifyImportWait = 20 * time.Second
 const verifyImportInterval = 2 * time.Second
+
+type verifyImportPollConfig struct {
+	wait     time.Duration
+	interval time.Duration
+}
+
+func defaultVerifyImportPollConfig() verifyImportPollConfig {
+	return verifyImportPollConfig{wait: verifyImportWait, interval: verifyImportInterval}
+}
 
 var importRunPattern = regexp.MustCompile(`^run-[a-zA-Z0-9-]{1,124}$`)
 var importAddressPattern = regexp.MustCompile(`^[a-zA-Z0-9_\[\]".:-]+$`)
@@ -169,8 +180,15 @@ func validateImportContext(c *ImportContext, bindings []ImportBinding, target *t
 // The verifier never reads QueryRun evidence, local files or caller-supplied
 // Plan/CV IDs. Every returned association comes from the exact backend Run.
 func ReadVerifyImportPlan(ctx context.Context, c *tfe.Client, input VerifyImportInput) (*VerifyImportResult, error) {
+	return readVerifyImportPlanWithConfig(ctx, c, input, defaultVerifyImportPollConfig())
+}
+
+func readVerifyImportPlanWithConfig(ctx context.Context, c *tfe.Client, input VerifyImportInput, config verifyImportPollConfig) (*VerifyImportResult, error) {
 	if !validImportWorkspaceName(input.OrganizationName) || !validImportWorkspaceName(input.WorkspaceName) || !importRunPattern.MatchString(input.RunID) || len(input.DetailAddresses) > 20 {
 		return nil, queryEvidenceError("verify_input_invalid")
+	}
+	if config.wait <= 0 || config.interval <= 0 {
+		return nil, queryEvidenceError("verify_config_invalid")
 	}
 	details := map[string]bool{}
 	for _, address := range input.DetailAddresses {
@@ -179,7 +197,7 @@ func ReadVerifyImportPlan(ctx context.Context, c *tfe.Client, input VerifyImport
 		}
 		details[address] = true
 	}
-	deadlineCtx, cancel := context.WithTimeout(ctx, verifyImportWait)
+	deadlineCtx, cancel := context.WithTimeout(ctx, config.wait)
 	defer cancel()
 	w, err := c.Workspaces.Read(deadlineCtx, input.OrganizationName, input.WorkspaceName)
 	if err != nil || w == nil || !validImportWorkspaceName(w.ID) || w.Name != input.WorkspaceName || w.Organization == nil || !strings.EqualFold(w.Organization.Name, input.OrganizationName) || !allowedImportOrganization(w.Organization.Name) {
@@ -300,7 +318,7 @@ func ReadVerifyImportPlan(ctx context.Context, c *tfe.Client, input VerifyImport
 			return nil, queryEvidenceError("verify_canceled")
 		case <-deadlineCtx.Done():
 			break
-		case <-time.After(verifyImportInterval):
+		case <-time.After(config.interval):
 			continue
 		}
 		break
