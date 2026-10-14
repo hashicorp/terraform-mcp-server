@@ -6,6 +6,7 @@ package terraform
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"os"
 	"strings"
@@ -52,9 +53,16 @@ type searchQuerySummary struct {
 	} `json:"diagnostics"`
 }
 
+type searchQueryStatus struct {
+	QueryRunID        string `json:"query_run_id"`
+	Status            string `json:"status"`
+	Terminal          bool   `json:"terminal"`
+	RetryAfterSeconds int    `json:"retry_after_seconds"`
+}
+
 func TestTerraformSearchWorkflow(t *testing.T) {
 	requireTfOperations(t)
-	workspaceName := os.Getenv("TF_SEARCH_WORKSPACE")
+	workspaceName := strings.TrimSpace(os.Getenv("TF_SEARCH_WORKSPACE"))
 	if tfeToken == "" || workspaceName == "" {
 		t.Skip("supply TFE_TOKEN and TF_SEARCH_WORKSPACE for the live Search fixture")
 	}
@@ -178,19 +186,7 @@ func TestTerraformSearchWorkflow(t *testing.T) {
 	require.NotEmpty(t, queryRunID, "execute_query should return a query run ID")
 	t.Logf("Search query run: %s (retained in fixture workspace for diagnosis)", queryRunID)
 
-	statusResult, statusText := callSearchTool(t, s, "get_query_status", map[string]any{
-		"query_run_id": queryRunID,
-	})
-	require.False(t, statusResult.IsError, "query status should reach a terminal state: %s", statusText)
-	_, statusJSON, found := strings.Cut(statusText, "\n\n")
-	require.True(t, found, "status response must contain its JSON details")
-	var status struct {
-		ID     string `json:"id"`
-		Status string `json:"status"`
-	}
-	require.NoError(t, json.Unmarshal([]byte(statusJSON), &status))
-	assert.Equal(t, queryRunID, status.ID)
-	require.Contains(t, []string{"finished", "errored", "canceled"}, status.Status)
+	status := waitForSearchQuery(t, s, queryRunID)
 
 	summaryResult, summaryText := callSearchTool(t, s, "get_query_summary", map[string]any{
 		"query_run_id": queryRunID,
@@ -226,7 +222,7 @@ func TestTerraformSearchWorkflow(t *testing.T) {
 }
 
 func searchFixtureValue(name, fallback string) string {
-	if value := os.Getenv(name); value != "" {
+	if value := strings.TrimSpace(os.Getenv(name)); value != "" {
 		return value
 	}
 	return fallback
@@ -239,8 +235,8 @@ func newSearchTestingSession(t *testing.T) *mcp.ClientSession {
 	session, err := testingClient.Connect(ctx, &mcp.StreamableClientTransport{
 		Endpoint: mcpEndpoint,
 		HTTPClient: &http.Client{
-			// get_query_status can poll for two minutes.
-			Timeout:   3 * time.Minute,
+			// Each status call has a bounded server-side polling budget.
+			Timeout:   toolCallTimeout,
 			Transport: &authTransport{token: tfeToken, roundtripper: http.DefaultTransport},
 		},
 	}, nil)
@@ -252,10 +248,92 @@ func newSearchTestingSession(t *testing.T) *mcp.ClientSession {
 // sensitive. Only surface tool errors; credentials live in the HTTP transport.
 func callSearchTool(t *testing.T, s *mcp.ClientSession, name string, arguments map[string]any) (*mcp.CallToolResult, string) {
 	t.Helper()
-	result, err := s.CallTool(t.Context(), &mcp.CallToolParams{Name: name, Arguments: arguments})
+	ctx, cancel := context.WithTimeout(t.Context(), toolCallTimeout)
+	defer cancel()
+	result, err := s.CallTool(ctx, &mcp.CallToolParams{Name: name, Arguments: arguments})
 	require.NoError(t, err, "MCP call %s failed", name)
 	require.NotNil(t, result)
 	return result, getTextContent(result)
+}
+
+func waitForSearchQuery(t *testing.T, s *mcp.ClientSession, queryRunID string) searchQueryStatus {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Minute)
+	defer cancel()
+	var status searchQueryStatus
+	for {
+		callCtx, cancelCall := context.WithTimeout(ctx, toolCallTimeout)
+		result, err := s.CallTool(callCtx, &mcp.CallToolParams{
+			Name: "get_query_status", Arguments: map[string]any{"query_run_id": queryRunID},
+		})
+		cancelCall()
+		require.NoError(t, err, "poll query %s; last status: %s", queryRunID, status.Status)
+		require.NotNil(t, result)
+		text := getTextContent(result)
+		require.False(t, result.IsError, "query status request failed: %s", text)
+		status, err = parseSearchQueryStatus(text, queryRunID)
+		require.NoError(t, err)
+		if status.Terminal {
+			return status
+		}
+		timer := time.NewTimer(time.Duration(status.RetryAfterSeconds) * time.Second)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			t.Fatalf("timed out waiting for query %s; last status: %s", queryRunID, status.Status)
+		case <-timer.C:
+		}
+	}
+}
+
+// Both SDKs expose the same JSON fallback after the human-readable guidance.
+func parseSearchQueryStatus(text, queryRunID string) (searchQueryStatus, error) {
+	var status searchQueryStatus
+	_, payload, found := strings.Cut(text, "\n\n")
+	if !found {
+		return status, fmt.Errorf("status response must contain its JSON details")
+	}
+	if err := json.Unmarshal([]byte(payload), &status); err != nil {
+		return status, fmt.Errorf("invalid status JSON: %w", err)
+	}
+	if status.QueryRunID != queryRunID {
+		return status, fmt.Errorf("status query_run_id %q does not match %q", status.QueryRunID, queryRunID)
+	}
+	terminal := status.Status == "finished" || status.Status == "errored" || status.Status == "canceled"
+	if status.Terminal != terminal {
+		return status, fmt.Errorf("terminal flag does not match status %q", status.Status)
+	}
+	if !status.Terminal && (status.Status == "" || status.RetryAfterSeconds <= 0) {
+		return status, fmt.Errorf("nonterminal status must include a status and positive retry_after_seconds")
+	}
+	return status, nil
+}
+
+func TestParseSearchQueryStatus(t *testing.T) {
+	for _, test := range []struct {
+		name, text, wantError string
+		terminal              bool
+	}{
+		{"finished", "Done\n\n{\"query_run_id\":\"qr-test\",\"status\":\"finished\",\"terminal\":true}", "", true},
+		{"errored", "Done\n\n{\"query_run_id\":\"qr-test\",\"status\":\"errored\",\"terminal\":true}", "", true},
+		{"canceled", "Done\n\n{\"query_run_id\":\"qr-test\",\"status\":\"canceled\",\"terminal\":true}", "", true},
+		{"running", "Retry\n\n{\"query_run_id\":\"qr-test\",\"status\":\"running\",\"terminal\":false,\"retry_after_seconds\":5}", "", false},
+		{"missing JSON", "Done", "JSON details", false},
+		{"malformed JSON", "Done\n\n{", "invalid status JSON", false},
+		{"old ID field", "Done\n\n{\"id\":\"qr-test\",\"status\":\"finished\",\"terminal\":true}", "does not match", false},
+		{"inconsistent terminal", "Done\n\n{\"query_run_id\":\"qr-test\",\"status\":\"running\",\"terminal\":true}", "terminal flag", false},
+		{"missing retry", "Retry\n\n{\"query_run_id\":\"qr-test\",\"status\":\"running\",\"terminal\":false}", "positive retry_after_seconds", false},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			status, err := parseSearchQueryStatus(test.text, "qr-test")
+			if test.wantError != "" {
+				require.ErrorContains(t, err, test.wantError)
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, test.terminal, status.Terminal)
+		})
+	}
 }
 
 func extractSearchExamplePayload(t *testing.T, guide string) string {
