@@ -9,7 +9,7 @@ require (
 	github.com/hashicorp/jsonapi v1.5.0
 	github.com/instana/go-sensor v1.77.0
 	github.com/mark3labs/mcp-go v0.58.0
-	github.com/modelcontextprotocol/go-sdk v1.7.0
+	github.com/modelcontextprotocol/go-sdk v1.8.0
 	github.com/sirupsen/logrus v1.10.2
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/viper v1.21.0
