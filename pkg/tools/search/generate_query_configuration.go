@@ -292,8 +292,9 @@ func stripMarkdownLinks(s string) string {
 func cleanDescription(raw string) string {
 	desc := strings.ReplaceAll(raw, "\n", " ")
 	desc = stripMarkdownLinks(desc)
-	if len(desc) > 120 {
-		desc = desc[:117] + "..."
+	runes := []rune(desc)
+	if len(runes) > 120 {
+		desc = string(runes[:117]) + "..."
 	}
 	return desc
 }
