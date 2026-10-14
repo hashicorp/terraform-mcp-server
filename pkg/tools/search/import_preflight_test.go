@@ -15,22 +15,22 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func importTestCarry(t *testing.T) (*ImportCarry, []ImportBinding, *tfe.Workspace) {
+func importTestImportContext(t *testing.T) (*ImportContext, []ImportBinding, *tfe.Workspace) {
 	t.Helper()
 	provider := queryResultProvider{Source: "registry.terraform.io/hashicorp/aws", Version: "6.66.0"}
 	identity := map[string]any{"bucket": "sample"}
 	marker, err := queryResultMarker("qry-example", provider, "aws_s3_buckets", identity)
 	require.NoError(t, err)
-	carry := &ImportCarry{QueryRunID: "qry-example", Providers: map[string]queryResultProvider{"aws_s3_buckets": provider}, Target: ImportCarryTarget{WorkspaceID: "ws-example", OrganizationName: "org", IdentitySupport: map[string]string{"aws_s3_bucket": "unknown"}}, LockedProviders: map[string]string{provider.Source: "6.66.0"}, SelectedResults: []ImportCarrySelection{{QueryResultMarker: marker, ListType: "aws_s3_buckets", ManagedType: "aws_s3_bucket", Identity: identity, SearchIdentityVersion: 0}}}
-	carry.SelectionDigest, err = importDigest(*carry)
+	importContext := &ImportContext{QueryRunID: "qry-example", Providers: map[string]queryResultProvider{"aws_s3_buckets": provider}, Target: ImportContextTarget{WorkspaceID: "ws-example", OrganizationName: "org", IdentitySupport: map[string]string{"aws_s3_bucket": "unknown"}}, LockedProviders: map[string]string{provider.Source: "6.66.0"}, SelectedResults: []ImportContextSelection{{QueryResultMarker: marker, ListType: "aws_s3_buckets", ManagedType: "aws_s3_bucket", Identity: identity, SearchIdentityVersion: 0}}}
+	importContext.SelectionDigest, err = importDigest(*importContext)
 	require.NoError(t, err)
-	return carry, []ImportBinding{{QueryResultMarker: marker, TargetAddress: "aws_s3_bucket.sample"}}, &tfe.Workspace{ID: "ws-example", Organization: &tfe.Organization{Name: "org"}}
+	return importContext, []ImportBinding{{QueryResultMarker: marker, TargetAddress: "aws_s3_bucket.sample"}}, &tfe.Workspace{ID: "ws-example", Organization: &tfe.Organization{Name: "org"}}
 }
 
 func TestPrepareImportInputsRequireExactLockAndExplicitSelection(t *testing.T) {
 	input := PrepareImportInput{OrganizationName: "org", WorkspaceName: "target", QueryRunID: "qry-example", LockedProviders: map[string]string{"registry.terraform.io/hashicorp/aws": "6.66.0"}}
-	carry, _, _ := importTestCarry(t)
-	input.Selections = []ImportSelection{{QueryResultMarker: carry.SelectedResults[0].QueryResultMarker, ManagedType: "aws_s3_bucket"}}
+	importContext, _, _ := importTestImportContext(t)
+	input.Selections = []ImportSelection{{QueryResultMarker: importContext.SelectedResults[0].QueryResultMarker, ManagedType: "aws_s3_bucket"}}
 	require.True(t, validImportInput(input))
 	input.LockedProviders["registry.terraform.io/hashicorp/aws"] = ">= 6.0"
 	require.False(t, validImportInput(input))
@@ -39,30 +39,30 @@ func TestPrepareImportInputsRequireExactLockAndExplicitSelection(t *testing.T) {
 	require.False(t, validImportInput(input))
 }
 
-func TestVerifyImportCarryAndBindingIntegrity(t *testing.T) {
-	carry, bindings, workspace := importTestCarry(t)
-	selected, addresses, err := validateImportCarry(carry, bindings, workspace)
+func TestVerifyImportContextAndBindingIntegrity(t *testing.T) {
+	importContext, bindings, workspace := importTestImportContext(t)
+	selected, addresses, err := validateImportContext(importContext, bindings, workspace)
 	require.NoError(t, err)
 	require.Len(t, selected, 1)
-	require.Equal(t, "aws_s3_bucket.sample", addresses[carry.SelectedResults[0].QueryResultMarker])
-	carry.LockedProviders["registry.terraform.io/hashicorp/aws"] = "6.66.1"
-	_, _, err = validateImportCarry(carry, bindings, workspace)
-	require.EqualError(t, err, "carry_digest_mismatch")
-	carry.SelectionDigest, err = importDigest(*carry)
+	require.Equal(t, "aws_s3_bucket.sample", addresses[importContext.SelectedResults[0].QueryResultMarker])
+	importContext.LockedProviders["registry.terraform.io/hashicorp/aws"] = "6.66.1"
+	_, _, err = validateImportContext(importContext, bindings, workspace)
+	require.EqualError(t, err, "import_context_digest_mismatch")
+	importContext.SelectionDigest, err = importDigest(*importContext)
 	require.NoError(t, err)
 	bindings[0].TargetAddress = ""
-	_, _, err = validateImportCarry(carry, bindings, workspace)
+	_, _, err = validateImportContext(importContext, bindings, workspace)
 	require.EqualError(t, err, "binding_invalid")
-	carry.SelectedResults[0].QueryResultMarker = "candidate-v0"
-	carry.SelectionDigest, err = importDigest(*carry)
+	importContext.SelectedResults[0].QueryResultMarker = "candidate-v0"
+	importContext.SelectionDigest, err = importDigest(*importContext)
 	require.NoError(t, err)
-	_, _, err = validateImportCarry(carry, bindings, workspace)
-	require.EqualError(t, err, "carry_marker_invalid")
+	_, _, err = validateImportContext(importContext, bindings, workspace)
+	require.EqualError(t, err, "import_context_marker_invalid")
 }
 
 func TestVerifyIdentityNeverUsesImportIDAsIdentity(t *testing.T) {
-	carry, _, _ := importTestCarry(t)
-	selection := carry.SelectedResults[0]
+	importContext, _, _ := importTestImportContext(t)
+	selection := importContext.SelectedResults[0]
 	after := json.RawMessage(`{"bucket":"sample"}`)
 	status, _ := compareImportPlanIdentity(selection, map[string]uint64{"aws_s3_bucket.sample": 0}, "aws_s3_bucket.sample", after, "1.12.0", "unknown")
 	require.Equal(t, "matched", status)
