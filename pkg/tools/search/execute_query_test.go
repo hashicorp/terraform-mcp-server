@@ -35,8 +35,9 @@ func TestExecuteQueryDefinition(t *testing.T) {
 	tool := ExecuteQuery(silentLogger())
 
 	assert.Equal(t, "execute_query", tool.Tool.Name)
-	assert.Contains(t, tool.Tool.InputSchema.Required, "organization_name")
-	assert.Contains(t, tool.Tool.InputSchema.Required, "workspace_name")
+	assert.NotContains(t, tool.Tool.InputSchema.Required, "organization_name")
+	assert.NotContains(t, tool.Tool.InputSchema.Required, "workspace_name")
+	assert.Contains(t, tool.Tool.Description, "TF_MCP_QUERY_WORKSPACE")
 	assert.NotContains(t, tool.Tool.InputSchema.Properties, "workspace_id")
 	assert.Contains(t, tool.Tool.InputSchema.Required, "query_configuration")
 	require.NotNil(t, tool.Tool.Annotations.ReadOnlyHint)

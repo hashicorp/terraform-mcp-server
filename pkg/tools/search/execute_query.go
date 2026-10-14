@@ -55,14 +55,8 @@ func ExecuteQuery(logger *log.Logger) server.ServerTool {
 			mcp.WithOpenWorldHintAnnotation(true),
 			mcp.WithReadOnlyHintAnnotation(false),
 			mcp.WithDestructiveHintAnnotation(false),
-			mcp.WithString("organization_name",
-				mcp.Required(),
-				mcp.Description("Name of the HCP Terraform organization containing the workspace."),
-			),
-			mcp.WithString("workspace_name",
-				mcp.Required(),
-				mcp.Description("Name of the HCP Terraform workspace in which to create and execute the query. The tool resolves its ID using go-tfe."),
-			),
+			mcp.WithString("organization_name", mcp.Description(QueryOrganizationDescription)),
+			mcp.WithString("workspace_name", mcp.Description(QueryWorkspaceDescription)),
 			mcp.WithString("query_configuration",
 				mcp.Required(),
 				mcp.Description(
@@ -81,17 +75,11 @@ func ExecuteQuery(logger *log.Logger) server.ServerTool {
 }
 
 func executeQueryHandler(ctx context.Context, request mcp.CallToolRequest, logger *log.Logger) (*mcp.CallToolResult, error) {
-	organizationName, err := request.RequireString("organization_name")
-	if err != nil || strings.TrimSpace(organizationName) == "" {
-		return toolErrorf(logger, "execute_query", "missing required input: organization_name")
+	scope := ResolveSearchScope(request.GetString("organization_name", ""), request.GetString("workspace_name", ""))
+	if !scope.Ready() {
+		return mcp.NewToolResultText(scope.InputRequest()), nil
 	}
-	organizationName = strings.TrimSpace(organizationName)
-
-	workspaceName, err := request.RequireString("workspace_name")
-	if err != nil || strings.TrimSpace(workspaceName) == "" {
-		return toolErrorf(logger, "execute_query", "missing required input: workspace_name")
-	}
-	workspaceName = strings.TrimSpace(workspaceName)
+	organizationName, workspaceName := scope.Organization.Value, scope.Workspace.Value
 
 	rawConfiguration, err := request.RequireString("query_configuration")
 	if err != nil || strings.TrimSpace(rawConfiguration) == "" {
@@ -252,6 +240,12 @@ MANDATORY WORKFLOW: Before calling this tool, call provider_list_schema_list and
 generate_query_configuration. Do not skip generate_query_configuration or construct the payload
 directly. Pass an organization name, workspace name, and the provider/resource configuration
 produced from its guidance.
+Explicit organization/workspace inputs override environment values. Otherwise use
+TF_MCP_QUERY_WORKSPACE for queries; TF_MCP_IMPORT_WORKSPACE is a separate import target.
+TF_WORKSPACE, TF_CLOUD_ORGANIZATION, and TFC_ORGANIZATION are candidates only: ask the user
+to confirm or replace them before using them. Ask only for missing inputs. If this tool
+returns confirmation_required or input_required, treat it as normal clarification, not
+a failure: ask the user a concise question, wait, then retry with explicit arguments.
 Never construct resource_type from an ordinary managed resource name: it must be an exact key
 in list_resource_schemas for the selected provider version. If no matching key exists, do not
 call this tool. The tool resolves the workspace

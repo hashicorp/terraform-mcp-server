@@ -25,15 +25,15 @@ type GenerateQueryConfigurationArguments struct {
 }
 
 type ProviderListSchemaListArguments struct {
-	OrganizationName  string `json:"organization_name" jsonschema:"HCP Terraform organization used to scope catalog requests"`
-	WorkspaceName     string `json:"workspace_name" jsonschema:"Existing HCP Terraform workspace that will execute the query"`
+	OrganizationName  string `json:"organization_name,omitempty" jsonschema:"Optional organization; explicit input overrides TF_CLOUD_ORGANIZATION and TFC_ORGANIZATION candidates, which require user confirmation"`
+	WorkspaceName     string `json:"workspace_name,omitempty" jsonschema:"Optional query workspace; explicit input overrides TF_MCP_QUERY_WORKSPACE, then TF_WORKSPACE requires user confirmation; never defaults to TF_MCP_IMPORT_WORKSPACE"`
 	ProviderNamespace string `json:"provider_namespace,omitempty" jsonschema:"Namespace; supply together with provider_name to fetch a schema"`
 	ProviderName      string `json:"provider_name,omitempty" jsonschema:"Short name; supply together with provider_namespace to fetch a schema"`
 }
 
 type ExecuteQueryArguments struct {
-	OrganizationName   string `json:"organization_name" jsonschema:"HCP Terraform organization containing the workspace"`
-	WorkspaceName      string `json:"workspace_name" jsonschema:"HCP Terraform workspace in which to execute the query"`
+	OrganizationName   string `json:"organization_name,omitempty" jsonschema:"Optional organization; explicit input overrides TF_CLOUD_ORGANIZATION and TFC_ORGANIZATION candidates, which require user confirmation"`
+	WorkspaceName      string `json:"workspace_name,omitempty" jsonschema:"Optional query workspace; explicit input overrides TF_MCP_QUERY_WORKSPACE, then TF_WORKSPACE requires user confirmation; never defaults to TF_MCP_IMPORT_WORKSPACE"`
 	QueryConfiguration string `json:"query_configuration" jsonschema:"JSON no-code query configuration produced using provider_list_schema_list and generate_query_configuration"`
 }
 
@@ -78,14 +78,15 @@ func ProviderListSchemaListTool() *mcp.Tool {
 }
 
 func ProviderListSchemaListFunc(ctx context.Context, req *mcp.CallToolRequest, input ProviderListSchemaListArguments) (*mcp.CallToolResult, any, error) {
-	if strings.TrimSpace(input.OrganizationName) == "" || strings.TrimSpace(input.WorkspaceName) == "" {
-		return nil, nil, fmt.Errorf("organization_name and workspace_name are required; ask the user to provide both before fetching provider schemas")
+	scope := searchlogic.ResolveSearchScope(input.OrganizationName, input.WorkspaceName)
+	if !scope.Ready() {
+		return textResult(scope.InputRequest()), nil, nil
 	}
 	tfeClient, err := client.GetTfeClient(ctx, client.SessionIDFromRequest(req))
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to get Terraform client: %w", err)
 	}
-	text, err := searchlogic.ProviderListSchemaListText(ctx, tfeClient, input.OrganizationName, input.WorkspaceName, input.ProviderNamespace, input.ProviderName)
+	text, err := searchlogic.ProviderListSchemaListText(ctx, tfeClient, scope.Organization.Value, scope.Workspace.Value, input.ProviderNamespace, input.ProviderName)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -98,8 +99,12 @@ func ExecuteQueryTool() *mcp.Tool {
 }
 
 func ExecuteQueryFunc(ctx context.Context, req *mcp.CallToolRequest, input ExecuteQueryArguments) (*mcp.CallToolResult, any, error) {
-	if strings.TrimSpace(input.OrganizationName) == "" || strings.TrimSpace(input.WorkspaceName) == "" || strings.TrimSpace(input.QueryConfiguration) == "" {
-		return nil, nil, fmt.Errorf("organization_name, workspace_name and query_configuration are required")
+	scope := searchlogic.ResolveSearchScope(input.OrganizationName, input.WorkspaceName)
+	if !scope.Ready() {
+		return textResult(scope.InputRequest()), nil, nil
+	}
+	if strings.TrimSpace(input.QueryConfiguration) == "" {
+		return nil, nil, fmt.Errorf("missing required input: query_configuration")
 	}
 	if err := searchlogic.ValidateQueryConfiguration(input.QueryConfiguration); err != nil {
 		return nil, nil, fmt.Errorf("invalid query_configuration: %w", err)
@@ -108,7 +113,7 @@ func ExecuteQueryFunc(ctx context.Context, req *mcp.CallToolRequest, input Execu
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to get Terraform client: %w", err)
 	}
-	text, err := searchlogic.ExecuteQueryText(ctx, tfeClient, input.OrganizationName, input.WorkspaceName, input.QueryConfiguration)
+	text, err := searchlogic.ExecuteQueryText(ctx, tfeClient, scope.Organization.Value, scope.Workspace.Value, input.QueryConfiguration)
 	if err != nil {
 		return nil, nil, err
 	}
