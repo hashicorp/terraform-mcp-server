@@ -33,7 +33,7 @@ func TestStdioServerListsRegistryTools(t *testing.T) {
 	for _, tool := range res.Tools {
 		names[tool.Name] = true
 	}
-	require.True(t, names["search_providers"], "registry tool should be registered")
+	require.True(t, names["search_provider_docs"], "registry tool should be registered")
 	require.False(t, names["list_workspaces"], "TFE tool must not be registered for the registry toolset")
 }
 
