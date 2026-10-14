@@ -11,6 +11,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"regexp"
 	"strconv"
 	"time"
 
@@ -23,6 +24,17 @@ import (
 
 const DefaultPublicRegistryURL = "https://registry.terraform.io"
 
+var retryLogURLPattern = regexp.MustCompile(`[A-Za-z][A-Za-z0-9+.-]*://[^\s"'<>]+`)
+
+type redactingRetryLogger struct {
+	logger *log.Logger
+}
+
+func (l redactingRetryLogger) Printf(format string, args ...interface{}) {
+	message := fmt.Sprintf(format, args...)
+	l.logger.Print(retryLogURLPattern.ReplaceAllString(message, "[redacted-url]"))
+}
+
 // CreateHTTPClient initializes a retryable HTTP client
 func CreateHTTPClient(insecureSkipVerify bool, logger *log.Logger) *http.Client {
 	retryClient := retryablehttp.NewClient()
@@ -31,7 +43,7 @@ func CreateHTTPClient(insecureSkipVerify bool, logger *log.Logger) *http.Client 
 		// still satisfy retryablehttp.Logger and panic on the first request.
 		retryClient.Logger = nil
 	} else {
-		retryClient.Logger = logger
+		retryClient.Logger = redactingRetryLogger{logger: logger}
 	}
 
 	transport := &http.Transport{

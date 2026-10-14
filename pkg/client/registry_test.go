@@ -4,6 +4,7 @@
 package client
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"net/http"
@@ -18,6 +19,41 @@ import (
 
 // --- sendRegistryCall ---
 var logger = log.New()
+
+func TestRetryLoggerRedactsCompleteURLs(t *testing.T) {
+	var output bytes.Buffer
+	testLogger := log.New()
+	testLogger.SetOutput(&output)
+	redactingRetryLogger{logger: testLogger}.Printf(
+		"[ERR] GET %s request failed: redirect from %s",
+		"https://archivist.example/private/log?X-Amz-Signature=secret-sentinel",
+		"http://other.example/downgrade?token=other-secret",
+	)
+
+	logged := output.String()
+	require.Contains(t, logged, "[redacted-url]")
+	for _, secret := range []string{"archivist.example", "/private/log", "secret-sentinel", "other.example", "other-secret"} {
+		require.NotContains(t, logged, secret)
+	}
+}
+
+func TestCreateHTTPClientUsesRedactingRetryLogger(t *testing.T) {
+	var output bytes.Buffer
+	testLogger := log.New()
+	testLogger.SetOutput(&output)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	secretURL := server.URL + "/private/log?X-Amz-Signature=secret-sentinel"
+	resp, err := CreateHTTPClient(false, testLogger).Get(secretURL)
+	require.NoError(t, err)
+	require.NoError(t, resp.Body.Close())
+	require.NotContains(t, output.String(), server.URL)
+	require.NotContains(t, output.String(), "secret-sentinel")
+	require.Contains(t, output.String(), "[redacted-url]")
+}
 
 func TestSendRegistryCall(t *testing.T) {
 	tests := []struct {
