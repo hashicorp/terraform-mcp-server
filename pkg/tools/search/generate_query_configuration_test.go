@@ -110,6 +110,17 @@ func TestStripMarkdownLinks_BracketWithoutLink(t *testing.T) {
 	}
 }
 
+func TestCleanDescriptionTruncatesByRune(t *testing.T) {
+	description := strings.Repeat("é", 121)
+	got := cleanDescription(description)
+	if got != strings.Repeat("é", 117)+"..." {
+		t.Fatalf("unexpected UTF-8-safe truncation: %q", got)
+	}
+	if len([]rune(got)) != 120 {
+		t.Fatalf("expected 120 runes, got %d", len([]rune(got)))
+	}
+}
+
 // ── parseListResourceSchemas ─────────────────────────────────────────────────
 
 func TestParseListResourceSchemas_BareMap(t *testing.T) {
