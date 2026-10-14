@@ -38,15 +38,27 @@ type listResourceBlock struct {
 }
 
 // listResourceBlockType describes a nested block attribute such as "filter".
-// nesting_mode controls whether the block may appear multiple times:
-// "list" and "set" → repeatable; "single" and "map" → not repeatable.
+// Terraform schema JSON uses min_items/max_items for cardinality; it does not
+// expose a required boolean for nested blocks.
 type listResourceBlockType struct {
 	// NestingMode is "single", "list", "set", or "map".
-	// "list" and "set" mean the same block-type attribute may be submitted
-	// multiple times and the backend coalesces the values into an array.
 	NestingMode string            `json:"nesting_mode"`
-	Required    bool              `json:"required"`
+	MinItems    int               `json:"min_items"`
+	MaxItems    int               `json:"max_items"`
 	Block       listResourceBlock `json:"block"`
+}
+
+func (b listResourceBlockType) required() bool {
+	return b.MinItems > 0
+}
+
+func (b listResourceBlockType) repeatable() bool {
+	if b.NestingMode != "list" && b.NestingMode != "set" {
+		return false
+	}
+	// max_items == 0 is the provider-schema representation for no explicit
+	// upper bound. A positive maximum above one is also repeatable.
+	return b.MaxItems == 0 || b.MaxItems > 1
 }
 
 // listResourceAttribute captures the per-attribute metadata we expose to the
@@ -445,13 +457,13 @@ func writeResourceCatalog(b *strings.Builder, schemas map[string]listResourceEnt
 			btNames := sortedKeys(blockTypes)
 
 			b.WriteString("**Block-type attributes** (pass as a JSON object for `value`)\n\n")
-			b.WriteString("| Block attribute | Required | nesting_mode | Sub-attributes |\n")
-			b.WriteString("|-----------------|----------|--------------|----------------|\n")
+			b.WriteString("| Block attribute | Required | nesting_mode | min_items | max_items | Sub-attributes |\n")
+			b.WriteString("|-----------------|----------|--------------|-----------|-----------|----------------|\n")
 
 			for _, btName := range btNames {
 				bt := blockTypes[btName]
 				reqLabel := "optional"
-				if bt.Required {
+				if bt.required() {
 					reqLabel = "**required**"
 				}
 
@@ -472,12 +484,14 @@ func writeResourceCatalog(b *strings.Builder, schemas map[string]listResourceEnt
 					nestingMode = "single"
 				}
 				repeatNote := ""
-				if nestingMode == "list" || nestingMode == "set" {
+				if bt.repeatable() {
 					repeatNote = " _(repeatable)_"
+				} else if (nestingMode == "list" || nestingMode == "set") && bt.MaxItems == 1 {
+					repeatNote = " _(at most one)_"
 				}
 
-				b.WriteString(fmt.Sprintf("| `%s` | %s | `%s`%s | %s |\n",
-					btName, reqLabel, nestingMode, repeatNote, subStr))
+				b.WriteString(fmt.Sprintf("| `%s` | %s | `%s`%s | `%d` | `%d` | %s |\n",
+					btName, reqLabel, nestingMode, repeatNote, bt.MinItems, bt.MaxItems, subStr))
 			}
 			b.WriteString("\n")
 		}
@@ -551,7 +565,7 @@ func buildExampleAttributes(attrs map[string]listResourceAttribute, blockTypes m
 	// Required block-type attributes.
 	for _, name := range sortedKeys(blockTypes) {
 		bt := blockTypes[name]
-		if !bt.Required {
+		if !bt.required() {
 			continue
 		}
 		result = append(result, map[string]any{
@@ -617,7 +631,7 @@ func writeVariableNotes(b *strings.Builder) {
 	b.WriteString("| Omitting a **required** attribute | Required attributes must always be present |\n")
 	b.WriteString("| Passing `${var.name}` inside a longer string | Variable injection only works for exact-match values |\n")
 	b.WriteString("| Sending a non-positive or non-integer `limit` | Omit `limit` or use a positive integer (UI default is 100) |\n")
-	b.WriteString("| Repeating a `single` nesting_mode block type | Only `list` and `set` block types may appear more than once |\n")
+	b.WriteString("| Repeating a block beyond its `max_items` | Follow both `nesting_mode` and `max_items`; a list or set with `max_items: 1` is not repeatable |\n")
 	b.WriteString("| Forgetting `generate_config_out` when you need HCL scaffolding | Set `generate_config_out: true` in the top-level attributes |\n\n")
 }
 
@@ -644,8 +658,8 @@ or produced by 'terraform providers schema -json'), this tool:
 3. Catalogs every resource type with its scalar attributes AND block-type attributes
    (name, type, required/optional, nesting_mode, sub-attributes, description)
    so the agent knows exactly which filters can be applied and how to express them.
-4. Explains block-type (nested object) attributes and repeatable block semantics
-   controlled by nesting_mode (list/set = repeatable; single/map = not).
+4. Explains block-type (nested object) attributes and cardinality from nesting_mode,
+   min_items and max_items; list/set blocks with max_items 1 are not repeatable.
 5. Documents the generate_config_out flag that controls HCL scaffolding output.
 6. Provides a ready-to-use example payload pre-filled with placeholder values for
    required scalar and block-type attributes.
