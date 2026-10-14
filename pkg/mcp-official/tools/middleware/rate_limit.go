@@ -7,6 +7,7 @@ import (
 	"context"
 
 	tfeclient "github.com/hashicorp/terraform-mcp-server/pkg/client"
+	officialclient "github.com/hashicorp/terraform-mcp-server/pkg/mcp-official/client"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -26,7 +27,7 @@ func RateLimit(rl *tfeclient.RateLimitMiddleware) mcp.Middleware {
 
 			sessionID := ""
 			if session, ok := req.GetSession().(*mcp.ServerSession); ok && session != nil {
-				sessionID = session.ID()
+				sessionID = officialclient.SessionID(session)
 			}
 
 			if err := rl.Allow(sessionID, params.Name); err != nil {
