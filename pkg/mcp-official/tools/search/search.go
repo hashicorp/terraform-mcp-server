@@ -46,8 +46,6 @@ type QuerySummaryArguments struct {
 	ResourceType string `json:"resource_type,omitempty" jsonschema:"Optional exact Search list-resource type filter"`
 	Address      string `json:"address,omitempty" jsonschema:"Optional exact list block address filter"`
 	NameContains string `json:"name_contains,omitempty" jsonschema:"Optional case-insensitive display-name substring"`
-	Limit        int    `json:"limit,omitempty" jsonschema:"Optional page size; default 100, maximum 200"`
-	After        string `json:"after,omitempty" jsonschema:"Cursor returned as next_cursor for the same QueryRun and filters"`
 }
 
 func tool(name, description, title string, readOnly, openWorld bool) *mcp.Tool {
@@ -186,7 +184,7 @@ func GetQueryStatusFunc(logger *slog.Logger) mcp.ToolHandlerFor[QueryRunArgument
 func GetQuerySummaryTool() *mcp.Tool {
 	summaryTool := tool("get_query_summary", searchlogic.GetQuerySummaryDescription,
 		"Get HCP Terraform query summary", true, true)
-	schema, err := jsonschema.For[searchlogic.QueryDiscoveryPage](nil)
+	schema, err := jsonschema.For[searchlogic.QueryDiscoverySummary](nil)
 	if err != nil {
 		panic(err)
 	}
@@ -194,27 +192,24 @@ func GetQuerySummaryTool() *mcp.Tool {
 	return summaryTool
 }
 
-func GetQuerySummaryFunc(ctx context.Context, req *mcp.CallToolRequest, input QuerySummaryArguments) (*mcp.CallToolResult, *searchlogic.QueryDiscoveryPage, error) {
+func GetQuerySummaryFunc(ctx context.Context, req *mcp.CallToolRequest, input QuerySummaryArguments) (*mcp.CallToolResult, *searchlogic.QueryDiscoverySummary, error) {
 	if strings.TrimSpace(input.QueryRunID) == "" {
 		return nil, nil, fmt.Errorf("missing required input: query_run_id")
-	}
-	if input.Limit < 0 || input.Limit > 200 {
-		return nil, nil, fmt.Errorf("limit must be between 1 and 200 when supplied")
 	}
 	tfeClient, err := client.GetTfeClient(ctx, client.SessionIDFromRequest(req))
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to get Terraform client; check session configuration")
 	}
-	filter := searchlogic.QueryDiscoveryFilter{ResourceType: input.ResourceType, Address: input.Address, NameContains: input.NameContains, Limit: input.Limit, After: input.After}
-	page, err := searchlogic.ReadQueryDiscoveryPage(ctx, tfeClient, input.QueryRunID, filter)
+	filter := searchlogic.QueryDiscoveryFilter{ResourceType: input.ResourceType, Address: input.Address, NameContains: input.NameContains}
+	summary, err := searchlogic.ReadQueryDiscoverySummary(ctx, tfeClient, input.QueryRunID, filter)
 	if err != nil {
 		return nil, nil, fmt.Errorf("query summary unavailable: %w", err)
 	}
-	text, err := searchlogic.FormatQueryDiscoveryPage(page)
+	text, err := searchlogic.FormatQueryDiscoverySummary(summary)
 	if err != nil {
 		return nil, nil, fmt.Errorf("query summary unavailable: %w", err)
 	}
-	return textResult(text), page, nil
+	return textResult(text), summary, nil
 }
 
 func PrepareImportTool() *mcp.Tool {

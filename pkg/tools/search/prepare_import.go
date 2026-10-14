@@ -306,8 +306,8 @@ func ReadPrepareImport(ctx context.Context, c *tfe.Client, input PrepareImportIn
 	}
 	// Reuse the summary's whole-QueryRun selectability guards. A later
 	// oversized or sensitive row cannot be skipped just because the caller
-	// happened to select a different marker from the first page.
-	if _, err := pageQueryDiscovery(checkedSource, evidence, QueryDiscoveryFilter{Limit: 1}); err != nil {
+	// selected a different marker.
+	if err := validateQueryDiscoveryEvidence(evidence); err != nil {
 		return nil, err
 	}
 	byMarker := make(map[string]queryResultEvidence, len(evidence.Results))

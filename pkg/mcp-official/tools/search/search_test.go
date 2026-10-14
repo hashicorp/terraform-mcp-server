@@ -30,6 +30,12 @@ func TestOfficialSearchArgumentsAndValidation(t *testing.T) {
 	require.True(t, ok)
 	require.Contains(t, summarySchema.Properties, "selectable")
 	require.Contains(t, summarySchema.Properties, "lists")
+	require.NotContains(t, summarySchema.Properties, "has_more")
+	require.NotContains(t, summarySchema.Properties, "next_cursor")
+	summaryInputSchema, err := jsonschema.For[QuerySummaryArguments](nil)
+	require.NoError(t, err)
+	require.NotContains(t, summaryInputSchema.Properties, "limit")
+	require.NotContains(t, summaryInputSchema.Properties, "after")
 
 	_, _, err = GetQueryStatusFunc(slog.Default())(context.Background(), nil, QueryRunArguments{QueryRunID: " "})
 	require.ErrorContains(t, err, "missing required input: query_run_id")
