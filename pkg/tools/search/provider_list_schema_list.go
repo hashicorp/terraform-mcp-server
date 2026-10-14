@@ -111,12 +111,15 @@ func ProviderListSchemaListText(ctx context.Context, tfeClient *tfe.Client, orgN
 	if orgName == "" || workspaceName == "" {
 		return "", fmt.Errorf("organization_name and workspace_name are required; ask the user to provide both before fetching provider schemas")
 	}
+	if (providerNamespace == "") != (providerName == "") {
+		return "", fmt.Errorf("provider_namespace and provider_name must either both be supplied or both be omitted")
+	}
 	if _, err := tfeClient.Workspaces.Read(ctx, orgName, workspaceName); err != nil {
 		return "", fmt.Errorf("failed to read workspace %q in organization %q: %w", workspaceName, orgName, err)
 	}
 
 	// ── Branch: list all providers ────────────────────────────────────────────
-	if providerNamespace == "" || providerName == "" {
+	if providerNamespace == "" {
 		return listSupportedProvidersText(ctx, tfeClient, orgName)
 	}
 
