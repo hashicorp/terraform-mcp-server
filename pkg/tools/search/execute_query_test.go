@@ -86,7 +86,9 @@ func TestParseExecuteQueryConfigurationValidation(t *testing.T) {
 		{name: "missing resource type", payload: `{"no_code_query_providers":[{"namespace":"hashicorp","name":"aws","version":"1.0.0","no_code_query_resources":[{"body":{}}]}]}`, want: "body.resource_type"},
 		{name: "zero limit", payload: `{"no_code_query_providers":[{"namespace":"hashicorp","name":"aws","version":"1.0.0","no_code_query_resources":[{"body":{"resource_type":"aws_instance","limit":0}}]}]}`, want: "positive integer"},
 		{name: "fractional limit", payload: `{"no_code_query_providers":[{"namespace":"hashicorp","name":"aws","version":"1.0.0","no_code_query_resources":[{"body":{"resource_type":"aws_instance","limit":1.5}}]}]}`, want: "positive integer"},
+		{name: "quoted limit", payload: `{"no_code_query_providers":[{"namespace":"hashicorp","name":"aws","version":"1.0.0","no_code_query_resources":[{"body":{"resource_type":"aws_instance","limit":"25"}}]}]}`, want: "positive integer"},
 		{name: "blank attribute", payload: `{"no_code_query_providers":[{"namespace":"hashicorp","name":"aws","version":"1.0.0","no_code_query_resources":[{"body":{"resource_type":"aws_instance","attributes":[{"attribute":""}]}}]}]}`, want: "name is required"},
+		{name: "missing attribute value", payload: `{"no_code_query_providers":[{"namespace":"hashicorp","name":"aws","version":"1.0.0","no_code_query_resources":[{"body":{"resource_type":"aws_instance","attributes":[{"attribute":"region"}]}}]}]}`, want: "value is required"},
 	}
 
 	for _, test := range tests {

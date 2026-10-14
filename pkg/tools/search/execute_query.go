@@ -215,6 +215,9 @@ func parseExecuteQueryConfiguration(raw string) (*executeQueryConfiguration, err
 					if !ok || !hasName || strings.TrimSpace(name) == "" {
 						return nil, fmt.Errorf("provider %d resource %d attribute %d name is required", providerIndex, resourceIndex, attributeIndex)
 					}
+					if _, hasValue := entry["value"]; !hasValue {
+						return nil, fmt.Errorf("provider %d resource %d attribute %d value is required", providerIndex, resourceIndex, attributeIndex)
+					}
 				}
 			}
 		}
@@ -224,16 +227,12 @@ func parseExecuteQueryConfiguration(raw string) (*executeQueryConfiguration, err
 }
 
 func isPositiveInteger(value any) bool {
-	switch v := value.(type) {
-	case json.Number:
-		n, err := strconv.ParseInt(v.String(), 10, 64)
-		return err == nil && n > 0
-	case string:
-		n, err := strconv.ParseInt(strings.TrimSpace(v), 10, 64)
-		return err == nil && n > 0
-	default:
+	v, ok := value.(json.Number)
+	if !ok {
 		return false
 	}
+	n, err := strconv.ParseInt(v.String(), 10, 64)
+	return err == nil && n > 0
 }
 
 // The create response should be tiny; reject excessive data rather than buffering
