@@ -18,7 +18,7 @@ import (
 type UpdateWorkspaceArguments struct {
 	TerraformOrgName    string   `json:"terraform_org_name"`
 	WorkspaceName       string   `json:"workspace_name"`
-	NewName             string   `json:"new_name,omitempty"`
+	NewName             *string  `json:"new_name,omitempty"`
 	Description         *string  `json:"description,omitempty"`
 	TerraformVersion    string   `json:"terraform_version,omitempty"`
 	WorkingDirectory    *string  `json:"working_directory,omitempty"`
@@ -152,8 +152,12 @@ func workspaceUpdateOptions(input UpdateWorkspaceArguments) (tfe.WorkspaceUpdate
 	options := tfe.WorkspaceUpdateOptions{}
 	changed := false
 
-	if input.NewName != "" {
-		options.Name = tfe.String(input.NewName)
+	if input.NewName != nil {
+		newName := strings.TrimSpace(*input.NewName)
+		if newName == "" {
+			return tfe.WorkspaceUpdateOptions{}, fmt.Errorf("new_name must not be blank")
+		}
+		options.Name = tfe.String(newName)
 		changed = true
 	}
 	if input.Description != nil {

@@ -47,6 +47,8 @@ func TestUpdateWorkspaceToolInputSchema(t *testing.T) {
 }
 
 func TestUpdateWorkspaceFuncRejectsInvalidArguments(t *testing.T) {
+	empty := ""
+	blank := "   "
 	tests := []struct {
 		input   UpdateWorkspaceArguments
 		wantErr string
@@ -56,6 +58,8 @@ func TestUpdateWorkspaceFuncRejectsInvalidArguments(t *testing.T) {
 		{input: UpdateWorkspaceArguments{TerraformOrgName: "organization", WorkspaceName: "workspace"}, wantErr: "at least one workspace setting must be provided"},
 		{input: UpdateWorkspaceArguments{TerraformOrgName: "organization", WorkspaceName: "workspace", ExecutionMode: "invalid"}, wantErr: `execution_mode "invalid" must be one of: local, remote`},
 		{input: UpdateWorkspaceArguments{TerraformOrgName: "organization", WorkspaceName: "workspace", ExecutionMode: "agent"}, wantErr: `execution_mode "agent" must be one of: local, remote`},
+		{input: UpdateWorkspaceArguments{TerraformOrgName: "organization", WorkspaceName: "workspace", NewName: &empty}, wantErr: "new_name must not be blank"},
+		{input: UpdateWorkspaceArguments{TerraformOrgName: "organization", WorkspaceName: "workspace", NewName: &blank}, wantErr: "new_name must not be blank"},
 		{
 			input: UpdateWorkspaceArguments{
 				TerraformOrgName: "organization",
@@ -97,6 +101,15 @@ func TestWorkspaceUpdateOptions(t *testing.T) {
 	assert.Equal(t, []string{"modules/", "environments/"}, options.TriggerPrefixes)
 	assert.NotNil(t, options.TriggerPatterns)
 	assert.Empty(t, options.TriggerPatterns)
+}
+
+func TestWorkspaceUpdateOptionsTrimsNewName(t *testing.T) {
+	newName := "  renamed-workspace  "
+	options, err := workspaceUpdateOptions(UpdateWorkspaceArguments{NewName: &newName})
+	require.NoError(t, err)
+
+	require.NotNil(t, options.Name)
+	assert.Equal(t, "renamed-workspace", *options.Name)
 }
 
 func TestWorkspaceUpdateOptionsClearsFields(t *testing.T) {
