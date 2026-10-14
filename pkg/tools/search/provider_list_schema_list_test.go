@@ -36,6 +36,21 @@ func newProviderListTFEClient(t *testing.T, server *httptest.Server) *tfe.Client
 	return tfeClient
 }
 
+func TestProviderListSchemaListTextRejectsPartialProviderIdentifier(t *testing.T) {
+	for _, tc := range []struct {
+		name, namespace, provider string
+	}{
+		{name: "namespace only", namespace: "hashicorp"},
+		{name: "name only", provider: "aws"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			text, err := ProviderListSchemaListText(context.Background(), nil, "org", "workspace", tc.namespace, tc.provider)
+			require.Empty(t, text)
+			require.EqualError(t, err, "provider_namespace and provider_name must either both be supplied or both be omitted")
+		})
+	}
+}
+
 // ── helpers ───────────────────────────────────────────────────────────────────
 
 // providerListServer spins up a test HTTP server that serves a fixed providers
