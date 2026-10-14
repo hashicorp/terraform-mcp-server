@@ -1,5 +1,9 @@
 # 1.3.1
 
+FEATURES
+
+* [New Tools] Terraform Search adds `provider_list_schema_list`, `generate_query_configuration`, `execute_query`, `get_query_status`, and `get_query_summary` on both the legacy and official MCP servers. Query status polling is bounded per call.
+
 IMPROVEMENTS
 
 * `get_latest_provider_version`, `get_provider_capabilities` and `search_providers` now tell the agent not to guess the provider namespace when unsure.

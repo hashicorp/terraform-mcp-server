@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	registryTools "github.com/hashicorp/terraform-mcp-server/pkg/mcp-official/tools/registry"
+	searchTools "github.com/hashicorp/terraform-mcp-server/pkg/mcp-official/tools/search"
 	tfeTools "github.com/hashicorp/terraform-mcp-server/pkg/mcp-official/tools/tfe"
 	"github.com/hashicorp/terraform-mcp-server/pkg/toolsets"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -22,6 +23,21 @@ import (
 
 var officialFactories = map[string]func(svr *mcp.Server, logger *slog.Logger){
 	// Add entries here as each tool gets ported to the official go-sdk
+	"generate_query_configuration": func(svr *mcp.Server, _ *slog.Logger) {
+		mcp.AddTool(svr, searchTools.GenerateQueryConfigurationTool(), searchTools.GenerateQueryConfigurationFunc)
+	},
+	"provider_list_schema_list": func(svr *mcp.Server, _ *slog.Logger) {
+		mcp.AddTool(svr, searchTools.ProviderListSchemaListTool(), searchTools.ProviderListSchemaListFunc)
+	},
+	"execute_query": func(svr *mcp.Server, _ *slog.Logger) {
+		mcp.AddTool(svr, searchTools.ExecuteQueryTool(), searchTools.ExecuteQueryFunc)
+	},
+	"get_query_status": func(svr *mcp.Server, logger *slog.Logger) {
+		mcp.AddTool(svr, searchTools.GetQueryStatusTool(), searchTools.GetQueryStatusFunc(logger))
+	},
+	"get_query_summary": func(svr *mcp.Server, _ *slog.Logger) {
+		mcp.AddTool(svr, searchTools.GetQuerySummaryTool(), searchTools.GetQuerySummaryFunc)
+	},
 	"list_workspaces": func(svr *mcp.Server, _ *slog.Logger) {
 		mcp.AddTool(svr, tfeTools.ListWorkspacesTool(), tfeTools.ListWorkspacesFunc)
 	},
