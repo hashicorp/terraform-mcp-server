@@ -61,6 +61,7 @@ func TestSearchProviderDocsParameterValidation(t *testing.T) {
 		{name: "provider name missing", params: map[string]any{"service_slug": "s3"}, expectError: true},
 		{name: "service slug missing", params: map[string]any{"provider_name": "aws"}, expectError: true},
 		{name: "invalid document type", params: map[string]any{"provider_name": "aws", "service_slug": "s3", "provider_document_type": "invalid"}, expectError: true},
+		{name: "unknown parameter", params: map[string]any{"provider_name": "aws", "service_slug": "s3", "unknown": true}, expectError: true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

@@ -23,11 +23,6 @@ type GetLatestProviderVersionArguments struct {
 }
 
 func GetLatestProviderVersionTool() *mcp.Tool {
-	input, err := jsonschema.For[GetLatestProviderVersionArguments](nil)
-	if err != nil {
-		panic(err)
-	}
-
 	return &mcp.Tool{
 		Name:        "get_latest_provider_version",
 		Description: "Fetches the latest version of a Terraform provider from the public registry",
@@ -37,7 +32,6 @@ func GetLatestProviderVersionTool() *mcp.Tool {
 			ReadOnlyHint:    true,
 			DestructiveHint: jsonschema.Ptr(false),
 		},
-		InputSchema: input,
 	}
 }
 
@@ -73,9 +67,5 @@ func getLatestProviderVersion(ctx context.Context, request *mcp.CallToolRequest,
 		return nil, nil, fmt.Errorf("provider not found: %s/%s - verify the namespace and provider name are correct", namespace, name)
 	}
 
-	return &mcp.CallToolResult{
-		Content: []mcp.Content{
-			&mcp.TextContent{Text: version},
-		},
-	}, nil, nil
+	return textResult(version), nil, nil
 }

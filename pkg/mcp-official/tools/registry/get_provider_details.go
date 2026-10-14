@@ -25,11 +25,6 @@ type GetProviderDetailsArguments struct {
 }
 
 func GetProviderDetailsTool() *mcp.Tool {
-	input, err := jsonschema.For[GetProviderDetailsArguments](nil)
-	if err != nil {
-		panic(err)
-	}
-
 	return &mcp.Tool{
 		Name:        "get_provider_details",
 		Description: `Fetches up-to-date documentation for a specific service from a Terraform provider. You must call 'search_provider_docs' tool first to obtain the exact tfprovider-compatible provider_doc_id required to use this tool.`,
@@ -39,7 +34,6 @@ func GetProviderDetailsTool() *mcp.Tool {
 			ReadOnlyHint:    true,
 			DestructiveHint: jsonschema.Ptr(false),
 		},
-		InputSchema: input,
 	}
 }
 
@@ -76,7 +70,5 @@ func getProviderDetails(ctx context.Context, request *mcp.CallToolRequest, input
 		return nil, nil, fmt.Errorf("failed to parse provider docs for %s", providerDocID)
 	}
 
-	return &mcp.CallToolResult{
-		Content: []mcp.Content{&mcp.TextContent{Text: details.Data.Attributes.Content}},
-	}, nil, nil
+	return textResult(details.Data.Attributes.Content), nil, nil
 }

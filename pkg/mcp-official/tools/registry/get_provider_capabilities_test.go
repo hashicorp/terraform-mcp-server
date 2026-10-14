@@ -48,6 +48,7 @@ func TestGetProviderCapabilitiesParameterValidation(t *testing.T) {
 		{name: "namespace missing", params: map[string]any{"name": "aws"}, expectError: true},
 		{name: "name missing", params: map[string]any{"namespace": "hashicorp"}, expectError: true},
 		{name: "optional version present", params: map[string]any{"namespace": "hashicorp", "name": "aws", "version": "5.0.0"}},
+		{name: "unknown parameter", params: map[string]any{"namespace": "hashicorp", "name": "aws", "unknown": true}, expectError: true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
