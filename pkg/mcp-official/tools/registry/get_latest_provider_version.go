@@ -18,7 +18,7 @@ import (
 )
 
 type GetLatestProviderVersionArguments struct {
-	Namespace string `json:"namespace" jsonschema:"The namespace of the Terraform provider, typically the company or GitHub organization that created it, e.g. hashicorp"`
+	Namespace string `json:"namespace" jsonschema:"The namespace of the Terraform provider, typically the company or GitHub organization that created it, e.g. hashicorp. If you are not certain of the namespace, do not guess, ask the user. Most HashiCorp-maintained providers are in the hashicorp namespace"`
 	Name      string `json:"name" jsonschema:"The name of the Terraform provider, e.g. aws, azurerm, or google"`
 }
 

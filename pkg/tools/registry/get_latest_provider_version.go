@@ -24,7 +24,7 @@ func GetLatestProviderVersion(logger *log.Logger) server.ServerTool {
 			mcp.WithDestructiveHintAnnotation(false),
 			mcp.WithString("namespace",
 				mcp.Required(),
-				mcp.Description("The namespace of the Terraform provider, typically the name of the company, or their GitHub organization name that created the provider e.g., 'hashicorp'")),
+				mcp.Description("The namespace of the Terraform provider, typically the name of the company, or their GitHub organization name that created the provider e.g., 'hashicorp'. If you are not certain of the namespace, do not guess, ask the user. Most HashiCorp-maintained providers are in the 'hashicorp' namespace")),
 			mcp.WithString("name",
 				mcp.Required(),
 				mcp.Description("The name of the Terraform provider, e.g., 'aws', 'azurerm', 'google', etc.")),
