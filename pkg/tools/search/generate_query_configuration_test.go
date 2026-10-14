@@ -160,6 +160,41 @@ func TestParseListResourceSchemas_EmptyWrappedMap(t *testing.T) {
 	}
 }
 
+func TestParseListResourceSchemas_NestedBlockCardinality(t *testing.T) {
+	raw := `{"aws_instance":{"block":{"block_types":{"filter":{"nesting_mode":"list","min_items":1,"max_items":1,"block":{"attributes":{}}}}}}}`
+	schemas, err := parseListResourceSchemas(raw)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	filter := schemas["aws_instance"].Block.BlockTypes["filter"]
+	if filter.MinItems != 1 || filter.MaxItems != 1 || !filter.required() || filter.repeatable() {
+		t.Fatalf("unexpected nested block cardinality: %#v", filter)
+	}
+}
+
+func TestListResourceBlockTypeCardinality(t *testing.T) {
+	for _, tc := range []struct {
+		name                 string
+		block                listResourceBlockType
+		required, repeatable bool
+	}{
+		{name: "optional single", block: listResourceBlockType{NestingMode: "single"}},
+		{name: "required single", block: listResourceBlockType{NestingMode: "single", MinItems: 1, MaxItems: 1}, required: true},
+		{name: "optional list capped at one", block: listResourceBlockType{NestingMode: "list", MaxItems: 1}},
+		{name: "required repeatable list", block: listResourceBlockType{NestingMode: "list", MinItems: 1, MaxItems: 3}, required: true, repeatable: true},
+		{name: "unbounded set", block: listResourceBlockType{NestingMode: "set"}, repeatable: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if tc.block.required() != tc.required {
+				t.Fatalf("required() = %v, want %v", tc.block.required(), tc.required)
+			}
+			if tc.block.repeatable() != tc.repeatable {
+				t.Fatalf("repeatable() = %v, want %v", tc.block.repeatable(), tc.repeatable)
+			}
+		})
+	}
+}
+
 // ── filterResourceTypes ──────────────────────────────────────────────────────
 
 func TestFilterResourceTypes_AllWhenEmpty(t *testing.T) {
@@ -229,6 +264,7 @@ func TestWriteResourceCatalog_IncludesBlockTypes(t *testing.T) {
 				BlockTypes: map[string]listResourceBlockType{
 					"filter": {
 						NestingMode: "list",
+						MaxItems:    3,
 						Block: listResourceBlock{
 							Attributes: map[string]listResourceAttribute{
 								"name":   {Type: "string", Required: true},
@@ -287,8 +323,9 @@ func TestBuildExampleAttributes_IncludesRequiredBlockType(t *testing.T) {
 	attrs := map[string]listResourceAttribute{}
 	blockTypes := map[string]listResourceBlockType{
 		"filter": {
-			Required:    true,
 			NestingMode: "list",
+			MinItems:    1,
+			MaxItems:    1,
 			Block: listResourceBlock{
 				Attributes: map[string]listResourceAttribute{
 					"name":   {Type: "string", Required: true},
@@ -317,7 +354,7 @@ func TestBuildExampleAttributes_IncludesRequiredBlockType(t *testing.T) {
 
 func TestBuildExampleAttributes_SkipsOptionalBlockType(t *testing.T) {
 	blockTypes := map[string]listResourceBlockType{
-		"filter": {Required: false, NestingMode: "list"},
+		"filter": {MinItems: 0, NestingMode: "list"},
 	}
 	result := buildExampleAttributes(nil, blockTypes)
 	if len(result) != 0 {
