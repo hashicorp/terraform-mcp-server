@@ -30,9 +30,7 @@ func GetQuerySummary(logger *log.Logger) server.ServerTool {
 			mcp.WithString("resource_type", mcp.Description("Optional exact Search list-resource type filter.")),
 			mcp.WithString("address", mcp.Description("Optional exact list block address filter.")),
 			mcp.WithString("name_contains", mcp.Description("Optional case-insensitive display-name substring.")),
-			mcp.WithNumber("limit", mcp.Description("Optional page size (default 100, maximum 200)."), mcp.Min(1), mcp.Max(200)),
-			mcp.WithString("after", mcp.Description("Previous next_cursor to continue the same QueryRun snapshot and filters.")),
-			mcp.WithOutputSchema[QueryDiscoveryPage](),
+			mcp.WithOutputSchema[QueryDiscoverySummary](),
 		),
 		Handler: func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			return getQuerySummaryHandler(ctx, request, logger)
@@ -50,7 +48,7 @@ func getQuerySummaryHandler(ctx context.Context, request mcp.CallToolRequest, lo
 	if err != nil {
 		return toolErrorf(logger, "get_query_summary", "failed to get Terraform client; check session configuration")
 	}
-	filter := QueryDiscoveryFilter{ResourceType: request.GetString("resource_type", ""), Address: request.GetString("address", ""), NameContains: request.GetString("name_contains", ""), Limit: request.GetInt("limit", 100), After: request.GetString("after", "")}
+	filter := QueryDiscoveryFilter{ResourceType: request.GetString("resource_type", ""), Address: request.GetString("address", ""), NameContains: request.GetString("name_contains", "")}
 	return getQuerySummaryWithClient(ctx, tfeClient, queryRunID, filter, logger)
 }
 
@@ -59,26 +57,26 @@ func getQuerySummaryWithClient(ctx context.Context, tfeClient *tfe.Client, query
 	if queryRunID == "" {
 		return toolErrorf(logger, "get_query_summary", "missing required input: query_run_id")
 	}
-	summary, err := ReadQueryDiscoveryPage(ctx, tfeClient, queryRunID, filter)
+	summary, err := ReadQueryDiscoverySummary(ctx, tfeClient, queryRunID, filter)
 	if err != nil {
 		return toolErrorf(logger, "get_query_summary", "query summary unavailable: %v", err)
 	}
-	text, err := FormatQueryDiscoveryPage(summary)
+	text, err := FormatQueryDiscoverySummary(summary)
 	if err != nil {
 		return toolErrorf(logger, "get_query_summary", "query summary unavailable: %v", err)
 	}
 	return mcp.NewToolResultStructured(summary, text), nil
 }
 
-// ReadQuerySummary retains the plain-Go first-page entry point for callers
-// that used it before V1. It now returns only bounded, provenance-checked
+// ReadQuerySummary retains the plain-Go entry point for callers that used it
+// before V1. It now returns only bounded, provenance-checked
 // Search results, not raw log rows or backend diagnostic detail.
 func ReadQuerySummary(ctx context.Context, tfeClient *tfe.Client, queryRunID string) (string, error) {
-	page, err := ReadQueryDiscoveryPage(ctx, tfeClient, strings.TrimSpace(queryRunID), QueryDiscoveryFilter{})
+	summary, err := ReadQueryDiscoverySummary(ctx, tfeClient, strings.TrimSpace(queryRunID), QueryDiscoveryFilter{})
 	if err != nil {
 		return "", err
 	}
-	return FormatQueryDiscoveryPage(page)
+	return FormatQueryDiscoverySummary(summary)
 }
 
 const getQuerySummaryDescription = `Returns bounded, backend-scoped Search results from a finished QueryRun.
@@ -91,7 +89,8 @@ and any tags for each result shown to the user, including in script output.
 There is no tag filter; choose from the returned rows with the user. Missing
 tags do not prove a resource is untagged. If attributes_captured is false and
 tags matter, ask before a new query (for example with generate_config_out true).
-It has new markers and may still lack tags. Follow next_cursor as after with
-the same filters until has_more is false; a page is not the entire query. Nonselectable results
-have no markers and cannot be prepared for import. A marker is continuity,
-not an import ID, authorization or proof of object identity.`
+It has new markers and may still lack tags. The response contains every result
+matching any supplied summary filters or is nonselectable when the complete
+summary exceeds the response limit. Nonselectable results have no markers and
+cannot be prepared for import. A marker is continuity, not an import ID,
+authorization or proof of object identity.`

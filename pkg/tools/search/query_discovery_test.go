@@ -11,11 +11,9 @@ import (
 	"net/http/httptest"
 	"strconv"
 	"strings"
-	"sync/atomic"
 	"testing"
 
 	"github.com/hashicorp/go-tfe"
-	mcpclient "github.com/hashicorp/terraform-mcp-server/pkg/client"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/stretchr/testify/require"
 )
@@ -32,84 +30,68 @@ func testDiscovery(t *testing.T, ids ...string) (*queryDiscoveryProvenance, *que
 	return &queryDiscoveryProvenance{QueryRunID: "qry-test", Organization: "org", WorkspaceName: "ws", WorkspaceID: "ws-test"}, evidence
 }
 
-func TestPageQueryDiscoveryPreservesMarkersAndSnapshot(t *testing.T) {
+func TestSummarizeQueryDiscoveryReturnsEveryMatchingResult(t *testing.T) {
 	prov, evidence := testDiscovery(t, "first", "second", "third")
-	page, err := pageQueryDiscovery(prov, evidence, QueryDiscoveryFilter{Limit: 2})
+	summary, err := summarizeQueryDiscovery(prov, evidence, QueryDiscoveryFilter{})
 	require.NoError(t, err)
-	require.True(t, page.Selectable)
-	require.Equal(t, "org", page.SourceOrganizationName)
-	require.Equal(t, 3, page.TotalMatching)
-	require.Equal(t, 1, page.Remaining)
-	require.True(t, page.HasMore)
-	require.Equal(t, evidence.Results[0].Marker, page.Lists[0].Results[0].Marker)
-	continuation, err := pageQueryDiscovery(prov, evidence, QueryDiscoveryFilter{Limit: 2, After: page.NextCursor})
+	require.True(t, summary.Selectable)
+	require.Equal(t, "org", summary.SourceOrganizationName)
+	require.Equal(t, 3, summary.TotalMatching)
+	require.Equal(t, 3, summary.Returned)
+	require.Len(t, summary.Lists[0].Results, 3)
+	require.Equal(t, evidence.Results[0].Marker, summary.Lists[0].Results[0].Marker)
+	require.Contains(t, summary.NextAction, "all results of this query")
+
+	filtered, err := summarizeQueryDiscovery(prov, evidence, QueryDiscoveryFilter{NameContains: "second"})
 	require.NoError(t, err)
-	require.Equal(t, 1, continuation.Returned)
-	require.Equal(t, evidence.Results[2].Marker, continuation.Lists[0].Results[0].Marker)
-	require.False(t, continuation.HasMore)
-	_, err = pageQueryDiscovery(prov, evidence, QueryDiscoveryFilter{Limit: 2, After: page.NextCursor, NameContains: "first"})
-	require.EqualError(t, err, "query_cursor_invalid")
-	evidence.LogDigest = "sha256:changed"
-	_, err = pageQueryDiscovery(prov, evidence, QueryDiscoveryFilter{Limit: 2, After: page.NextCursor})
-	require.EqualError(t, err, "query_snapshot_changed")
+	require.Equal(t, 1, filtered.TotalMatching)
+	require.Equal(t, 1, filtered.Returned)
+	require.Equal(t, evidence.Results[1].Marker, filtered.Lists[0].Results[0].Marker)
+	require.Contains(t, filtered.NextAction, "all results matching the supplied summary filters")
 }
 
-func TestPageQueryDiscoveryProjectsTagsAndExplainsMissingAttributes(t *testing.T) {
+func TestSummarizeQueryDiscoveryProjectsTagsAndExplainsMissingAttributes(t *testing.T) {
 	prov, evidence := testDiscovery(t, "captured", "missing", "untagged")
 	evidence.Results[0].ResourceObject = map[string]any{"tags": map[string]any{"team": "search", "enabled": true, "count": json.Number("2"), "nested": map[string]any{"private": "value"}}}
 	evidence.Results[2].ResourceObject = map[string]any{"name": "untagged"}
-	page, err := pageQueryDiscovery(prov, evidence, QueryDiscoveryFilter{Limit: 1})
+	summary, err := summarizeQueryDiscovery(prov, evidence, QueryDiscoveryFilter{})
 	require.NoError(t, err)
-	require.Equal(t, 1, page.RowsWithoutAttributes)
-	require.True(t, page.HasMore)
-	require.Equal(t, map[string]any{"team": "search", "enabled": true, "count": json.Number("2")}, page.Lists[0].Results[0].Tags)
-	require.True(t, page.Lists[0].Results[0].AttributesCaptured)
-	require.Contains(t, page.NextAction, "same filters until has_more is false")
-	require.Contains(t, page.NextAction, "any tags, including in script output")
-	continuation, err := pageQueryDiscovery(prov, evidence, QueryDiscoveryFilter{Limit: 2, After: page.NextCursor})
-	require.NoError(t, err)
-	require.Equal(t, 1, continuation.RowsWithoutAttributes)
-	require.False(t, continuation.Lists[0].Results[0].AttributesCaptured)
-	require.Empty(t, continuation.Lists[0].Results[0].Tags)
-	require.True(t, continuation.Lists[0].Results[1].AttributesCaptured)
-	require.Empty(t, continuation.Lists[0].Results[1].Tags)
-	require.Contains(t, continuation.NextAction, "For rows with attributes_captured false, tags are unknown")
-	require.Contains(t, continuation.NextAction, "ask before a new query")
-	text, err := FormatQueryDiscoveryPage(continuation)
+	require.Equal(t, 1, summary.RowsWithoutAttributes)
+	require.Equal(t, map[string]any{"team": "search", "enabled": true, "count": json.Number("2")}, summary.Lists[0].Results[0].Tags)
+	require.True(t, summary.Lists[0].Results[0].AttributesCaptured)
+	require.False(t, summary.Lists[0].Results[1].AttributesCaptured)
+	require.Empty(t, summary.Lists[0].Results[1].Tags)
+	require.True(t, summary.Lists[0].Results[2].AttributesCaptured)
+	require.Empty(t, summary.Lists[0].Results[2].Tags)
+	require.Contains(t, summary.NextAction, "For rows with attributes_captured false, tags are unknown")
+	require.Contains(t, summary.NextAction, "ask before a new query")
+	text, err := FormatQueryDiscoverySummary(summary)
 	require.NoError(t, err)
 	require.Contains(t, text, `"attributes_captured":false`)
 	require.NotContains(t, text, "private")
 }
 
-func TestPageQueryDiscoveryStopsOnOversizeFirstRow(t *testing.T) {
+func TestSummarizeQueryDiscoveryRejectsOversizedCompleteResponse(t *testing.T) {
 	prov, evidence := testDiscovery(t, "first")
-	evidence.Results[0].Identity["large"] = strings.Repeat("x", maxQueryPageBytes)
-	page, err := pageQueryDiscovery(prov, evidence, QueryDiscoveryFilter{})
-	require.Nil(t, page)
-	require.EqualError(t, err, "query_page_oversized")
+	evidence.Results[0].Identity["large"] = strings.Repeat("x", maxQuerySummaryBytes)
+	summary, err := summarizeQueryDiscovery(prov, evidence, QueryDiscoveryFilter{})
+	require.Nil(t, summary)
+	require.EqualError(t, err, "query_summary_oversized")
 }
 
-func TestPageQueryDiscoveryOversizeLaterRowBlocksFirstPage(t *testing.T) {
-	prov, evidence := testDiscovery(t, "first", "second", "third")
-	evidence.Results[1].Identity["large"] = strings.Repeat("x", maxQueryPageBytes)
-	page, err := pageQueryDiscovery(prov, evidence, QueryDiscoveryFilter{})
-	require.Nil(t, page)
-	require.EqualError(t, err, "query_page_oversized")
-}
-
-func TestPageQueryDiscoveryNeverProjectsSignedArtifact(t *testing.T) {
+func TestSummarizeQueryDiscoveryNeverProjectsSignedArtifact(t *testing.T) {
 	prov, evidence := testDiscovery(t, "first")
 	evidence.Results[0].Identity["url"] = "https://storage.example/path?X-Amz-Signature=sentinel"
-	page, err := pageQueryDiscovery(prov, evidence, QueryDiscoveryFilter{})
-	require.Nil(t, page)
+	summary, err := summarizeQueryDiscovery(prov, evidence, QueryDiscoveryFilter{})
+	require.Nil(t, summary)
 	require.EqualError(t, err, "query_sensitive_result")
 	evidence.Results[0].Identity["url"] = "https://example.com/resources/one"
-	page, err = pageQueryDiscovery(prov, evidence, QueryDiscoveryFilter{})
+	summary, err = summarizeQueryDiscovery(prov, evidence, QueryDiscoveryFilter{})
 	require.NoError(t, err)
-	require.Equal(t, "https://example.com/resources/one", page.Lists[0].Results[0].Identity["url"])
+	require.Equal(t, "https://example.com/resources/one", summary.Lists[0].Results[0].Identity["url"])
 	evidence.Results[0].ResourceObject = map[string]any{"tags": map[string]any{"link": "https://storage.example/log?X-Amz-Signature=sentinel"}}
-	page, err = pageQueryDiscovery(prov, evidence, QueryDiscoveryFilter{})
-	require.Nil(t, page)
+	summary, err = summarizeQueryDiscovery(prov, evidence, QueryDiscoveryFilter{})
+	require.Nil(t, summary)
 	require.EqualError(t, err, "query_sensitive_result")
 }
 
@@ -145,6 +127,7 @@ func TestQueryProvenanceChecksBackendAssociations(t *testing.T) {
 
 func TestLegacyQuerySummaryProjectsBoundedSelectableResults(t *testing.T) {
 	t.Setenv("MCP_ORGANIZATION_ALLOWLIST", "org")
+	var logRedirects int
 	var backend *httptest.Server
 	backend = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/vnd.api+json")
@@ -158,6 +141,9 @@ func TestLegacyQuerySummaryProjectsBoundedSelectableResults(t *testing.T) {
 		case "/api/v2/search/no-code-query/ncqry-test":
 			_, _ = fmt.Fprint(w, `{"data":{"id":"ncqry-test","attributes":{"no-code-query-providers":[{"namespace":"hashicorp","name":"aws","version":"6.66.0","no-code-query-resources":[{"body":{"resource_type":"aws_s3_buckets"}}]}]},"relationships":{"workspace":{"data":{"id":"ws-test"}}}}}`)
 		case "/logs":
+			logRedirects++
+			http.Redirect(w, r, "/archivist?"+r.URL.RawQuery, http.StatusFound)
+		case "/archivist":
 			found := strings.Replace(string(queryEvidenceFixture("0")), `"identity_version":0`, `"identity_version":0,"resource_object":{"tags":{"team":"search"}}`, 1)
 			data := append([]byte("\x02Terraform query started\n"+`{"type":"provider_installation_start","provider":"aws"}`+"\n"), []byte(found)...)
 			data = append(data, 3)
@@ -176,14 +162,15 @@ func TestLegacyQuerySummaryProjectsBoundedSelectableResults(t *testing.T) {
 	result, err := getQuerySummaryWithClient(context.Background(), client, "qry-test", QueryDiscoveryFilter{}, silentLogger())
 	require.NoError(t, err)
 	require.False(t, result.IsError, "tool content: %#v", result.Content)
-	page, ok := result.StructuredContent.(*QueryDiscoveryPage)
+	summary, ok := result.StructuredContent.(*QueryDiscoverySummary)
 	require.True(t, ok)
-	require.True(t, page.Selectable)
-	require.Equal(t, "org", page.SourceOrganizationName)
-	require.Len(t, page.Lists, 1)
-	require.Regexp(t, `^qrm1-`, page.Lists[0].Results[0].Marker)
-	require.Equal(t, map[string]any{"team": "search"}, page.Lists[0].Results[0].Tags)
-	require.True(t, page.Lists[0].Results[0].AttributesCaptured)
+	require.True(t, summary.Selectable)
+	require.Equal(t, "org", summary.SourceOrganizationName)
+	require.Len(t, summary.Lists, 1)
+	require.Regexp(t, `^qrm1-`, summary.Lists[0].Results[0].Marker)
+	require.Equal(t, map[string]any{"team": "search"}, summary.Lists[0].Results[0].Tags)
+	require.True(t, summary.Lists[0].Results[0].AttributesCaptured)
+	require.Positive(t, logRedirects, "the official go-tfe log reader must retain its redirect behavior")
 	text, ok := mcp.AsTextContent(result.Content[0])
 	require.True(t, ok)
 	require.Contains(t, text.Text, `"query_result_marker"`)
@@ -191,21 +178,15 @@ func TestLegacyQuerySummaryProjectsBoundedSelectableResults(t *testing.T) {
 	require.NotContains(t, text.Text, "/logs")
 }
 
-func TestQuerySummaryReadsLargeLogInFewRequestsWithoutReturningSignedURL(t *testing.T) {
+func TestQuerySummaryOversizedCompleteResultIsNonselectable(t *testing.T) {
 	t.Setenv("MCP_ORGANIZATION_ALLOWLIST", "org")
 	var lines []string
-	for i := 0; i < 3000; i++ {
-		lines = append(lines, fmt.Sprintf(`{"type":"list_resource_found","list_resource_found":{"address":"list.aws_s3_buckets.all","resource_type":"aws_s3_buckets","display_name":"bucket-%d","identity":{"bucket":"bucket-%d"},"identity_version":0}}`, i, i))
+	for i := range 400 {
+		name := fmt.Sprintf("bucket-%03d-%s", i, strings.Repeat("x", 200))
+		lines = append(lines, fmt.Sprintf(`{"type":"list_resource_found","list_resource_found":{"address":"list.aws_s3_buckets.all","resource_type":"aws_s3_buckets","display_name":%q,"identity":{"bucket":%q},"identity_version":0}}`, name, name))
 	}
-	lines = append(lines, `{"type":"list_complete","list_complete":{"address":"list.aws_s3_buckets.all","total":3000}}`)
+	lines = append(lines, `{"type":"list_complete","list_complete":{"address":"list.aws_s3_buckets.all","total":400}}`)
 	logData := []byte("\x02" + strings.Join(lines, "\n") + "\n\x03")
-	require.Greater(t, len(logData), 400<<10)
-	const signedQuery = "X-Amz-Signature=secret-sentinel"
-	var requests int
-	var denyLog atomic.Bool
-	var capLog atomic.Bool
-	var leakedHeader atomic.Bool
-	var missingSignature atomic.Bool
 	var backend *httptest.Server
 	backend = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/vnd.api+json")
@@ -213,69 +194,31 @@ func TestQuerySummaryReadsLargeLogInFewRequestsWithoutReturningSignedURL(t *test
 		case "/api/v2/ping":
 			w.WriteHeader(http.StatusOK)
 		case "/api/v2/queries/qry-test":
-			_, _ = fmt.Fprintf(w, `{"data":{"type":"queries","id":"qry-test","attributes":{"status":"finished","log-read-url":%q},"relationships":{"workspace":{"data":{"type":"workspaces","id":"ws-test"}},"no-code-query":{"data":{"type":"no-code-queries","id":"ncqry-test"}}}}}`, backend.URL+"/logs?"+signedQuery)
+			_, _ = fmt.Fprintf(w, `{"data":{"type":"queries","id":"qry-test","attributes":{"status":"finished","log-read-url":%q},"relationships":{"workspace":{"data":{"type":"workspaces","id":"ws-test"}},"no-code-query":{"data":{"type":"no-code-queries","id":"ncqry-test"}}}}}`, backend.URL+"/logs")
 		case "/api/v2/workspaces/ws-test":
 			_, _ = fmt.Fprint(w, `{"data":{"type":"workspaces","id":"ws-test","attributes":{"name":"ws"},"relationships":{"organization":{"data":{"type":"organizations","id":"org"}}}}}`)
 		case "/api/v2/search/no-code-query/ncqry-test":
 			_, _ = fmt.Fprint(w, `{"data":{"id":"ncqry-test","attributes":{"no-code-query-providers":[{"namespace":"hashicorp","name":"aws","version":"6.66.0","no-code-query-resources":[{"body":{"resource_type":"aws_s3_buckets"}}]}]},"relationships":{"workspace":{"data":{"id":"ws-test"}}}}}`)
 		case "/logs":
-			requests++
-			for _, name := range []string{"Authorization", "X-Forwarded-For", "X-Test-Secret", mcpclient.SharedSecretHeader} {
-				if r.Header.Get(name) != "" {
-					leakedHeader.Store(true)
-				}
-			}
-			if r.URL.Query().Get("X-Amz-Signature") != "secret-sentinel" {
-				missingSignature.Store(true)
-			}
-			if denyLog.Load() {
-				http.Error(w, "log unavailable: "+backend.URL+"/logs?"+signedQuery, http.StatusForbidden)
-				return
-			}
 			offset, _ := strconv.Atoi(r.URL.Query().Get("offset"))
 			limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
 			if offset < len(logData) {
-				end := min(len(logData), offset+limit)
-				if capLog.Load() {
-					end = min(end, offset+(64<<10))
-				}
-				// Force many small network body reads per request. The fast path
-				// must drain the response, not treat each read as a new range.
-				for start := offset; start < end; start += 4096 {
-					_, _ = w.Write(logData[start:min(end, start+4096)])
-					w.(http.Flusher).Flush()
-				}
+				_, _ = w.Write(logData[offset:min(len(logData), offset+limit)])
 			}
 		default:
 			http.NotFound(w, r)
 		}
 	}))
 	defer backend.Close()
-	client, err := tfe.NewClient(&tfe.Config{Address: backend.URL, Token: "test-token", HTTPClient: backend.Client(), Headers: http.Header{"X-Test-Secret": {"private-header-sentinel"}, "X-Forwarded-For": {"127.0.0.1"}, mcpclient.SharedSecretHeader: {"shared-secret-sentinel"}}})
+	c, err := tfe.NewClient(&tfe.Config{Address: backend.URL, Token: "test-token", HTTPClient: backend.Client()})
 	require.NoError(t, err)
-	result, err := getQuerySummaryWithClient(context.Background(), client, "qry-test", QueryDiscoveryFilter{Limit: 2}, silentLogger())
+
+	summary, err := ReadQueryDiscoverySummary(context.Background(), c, "qry-test", QueryDiscoveryFilter{})
 	require.NoError(t, err)
-	require.False(t, result.IsError)
-	page := result.StructuredContent.(*QueryDiscoveryPage)
-	require.Equal(t, 3000, page.ResourcesDiscovered)
-	require.True(t, page.HasMore)
-	require.NotEmpty(t, page.NextCursor)
-	t.Logf("log bytes: %d; log GETs: %d", len(logData), requests)
-	require.Equal(t, 1, requests, "a large streamed response must be fully consumed in one GET")
-	require.False(t, leakedHeader.Load(), "API bearer and custom headers must not go to the signed log host")
-	require.False(t, missingSignature.Load(), "preserve the backend's signed query parameters")
-	require.NotContains(t, fmt.Sprint(result), signedQuery)
-	require.NotContains(t, fmt.Sprint(result), "/logs")
-	capLog.Store(true)
-	second, err := getQuerySummaryWithClient(context.Background(), client, "qry-test", QueryDiscoveryFilter{Limit: 2, After: page.NextCursor}, silentLogger())
-	require.NoError(t, err)
-	require.False(t, second.IsError)
-	require.Equal(t, 3000, second.StructuredContent.(*QueryDiscoveryPage).ResourcesDiscovered)
-	require.Less(t, requests, 16, "capped responses should need a few large ranged GETs")
-	denyLog.Store(true)
-	blocked, err := getQuerySummaryWithClient(context.Background(), client, "qry-test", QueryDiscoveryFilter{}, silentLogger())
-	require.NoError(t, err)
-	require.True(t, blocked.IsError)
-	require.NotContains(t, fmt.Sprint(blocked), signedQuery)
-	require.NotContains(t, fmt.Sprint(blocked), "/logs")
+	require.Equal(t, "nonselectable", summary.Status)
+	require.False(t, summary.Selectable)
+	require.Equal(t, 400, summary.ResourcesDiscovered)
+	require.Equal(t, []string{"query_summary_oversized"}, summary.Diagnostics)
+	require.Empty(t, summary.Lists)
+	require.NotContains(t, fmt.Sprint(summary), "bucket-000")
 }

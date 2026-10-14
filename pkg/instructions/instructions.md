@@ -58,7 +58,7 @@ The Terraform MCP server provides tools for generating better Terraform code thr
 
 **Terraform Search (when Search tools are available)**:
 1. Before a new workspace-scoped query, confirm its organization and source workspace (A). Use `provider_list_schema_list` → `generate_query_configuration` → `execute_query`; retain the returned `query_run_id` and reviewed creation-time inputs separately. An existing QueryRun ID can be used to review the same result without starting another query.
-2. Call `get_query_status` with that ID until terminal, then `get_query_summary`. Follow any paging and selectability guidance it provides; do not assume the first response contains every result. Search-only requests end here—do not ask for an import target or local path.
+2. Call `get_query_status` with that ID until terminal, then `get_query_summary`. Follow its selectability guidance; a selectable response contains every result matching any supplied summary filters. Search-only requests end here—do not ask for an import target or local path.
 
 **Search-to-import (only when `prepare_import` and `verify_import_plan` are available and import is requested)**:
 1. Confirm the target (same Search workspace A or another workspace B in the same organization), the user's existing local configuration path and explicit result selections. Review its exact locked provider versions; retain `query_result_marker` values unchanged—they are neither import IDs nor proof of the cloud object. Follow `prepare_import`'s description and `next_action` for authoring and limitations.

@@ -6,9 +6,8 @@ package search
 import (
 	"bytes"
 	"context"
-	"encoding/base64"
 	"encoding/json"
-	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"os"
@@ -18,16 +17,13 @@ import (
 	"github.com/hashicorp/terraform-mcp-server/pkg/client"
 )
 
-const maxQueryPageBytes = 64 << 10
+const maxQuerySummaryBytes = 64 << 10
 const maxQueryRowBytes = 32 << 10
-const maxQueryCursorBytes = 2048
 
 type QueryDiscoveryFilter struct {
 	ResourceType string
 	Address      string
 	NameContains string
-	Limit        int
-	After        string
 }
 
 type queryDiscoveryRow struct {
@@ -45,7 +41,7 @@ type queryDiscoveryGroup struct {
 	Results      []queryDiscoveryRow `json:"results"`
 }
 
-type QueryDiscoveryPage struct {
+type QueryDiscoverySummary struct {
 	QueryRunID             string                `json:"query_run_id"`
 	Status                 string                `json:"status"`
 	SourceOrganizationName string                `json:"source_organization_name,omitempty"`
@@ -58,25 +54,14 @@ type QueryDiscoveryPage struct {
 	TotalMatching          int                   `json:"total_matching,omitempty"`
 	RowsWithoutAttributes  int                   `json:"rows_without_attributes,omitempty"`
 	Returned               int                   `json:"returned,omitempty"`
-	HasMore                bool                  `json:"has_more,omitempty"`
-	Remaining              int                   `json:"remaining,omitempty"`
 	Diagnostics            []string              `json:"diagnostics,omitempty"`
-	NextCursor             string                `json:"next_cursor,omitempty"`
 	NextAction             string                `json:"next_action"`
 	Lists                  []queryDiscoveryGroup `json:"lists,omitempty"`
-}
-
-type queryDiscoveryCursor struct {
-	QueryRunID string `json:"q"`
-	Digest     string `json:"d"`
-	Marker     string `json:"m"`
-	Filter     string `json:"f"`
 }
 
 // queryDiscoveryProvenance is backend-derived, never supplied by the caller.
 type queryDiscoveryProvenance struct {
 	QueryRunID, Organization, WorkspaceName, WorkspaceID string
-	LogReadURL                                           string
 	Providers                                            map[string]queryResultProvider
 }
 
@@ -140,7 +125,7 @@ func readQueryDiscoveryProvenance(ctx context.Context, c *tfe.Client, queryID st
 			return nil, queryEvidenceError("query_organization_not_allowed")
 		}
 	}
-	prov := &queryDiscoveryProvenance{QueryRunID: queryID, Organization: w.Organization.Name, WorkspaceName: w.Name, WorkspaceID: w.ID, LogReadURL: run.LogReadURL}
+	prov := &queryDiscoveryProvenance{QueryRunID: queryID, Organization: w.Organization.Name, WorkspaceName: w.Name, WorkspaceID: w.ID}
 	if run.Status == tfe.QueryRunErrored || run.Status == tfe.QueryRunCanceled {
 		return prov, queryEvidenceError("query_not_selectable")
 	}
@@ -227,9 +212,16 @@ func readQueryDiscovery(ctx context.Context, c *tfe.Client, queryID string) (*qu
 	if err != nil {
 		return prov, nil, err
 	}
-	data, err := readFastQueryLog(ctx, c, prov.LogReadURL)
+	reader, err := c.QueryRuns.Logs(ctx, queryID)
 	if err != nil {
-		return prov, nil, err
+		return prov, nil, queryEvidenceError("query_log_unavailable")
+	}
+	data, err := io.ReadAll(io.LimitReader(reader, maxQueryEvidenceBytes+1))
+	if err != nil {
+		return prov, nil, queryEvidenceError("query_log_unavailable")
+	}
+	if len(data) > maxQueryEvidenceBytes {
+		return prov, nil, queryEvidenceError("query_evidence_size_limit")
 	}
 	evidence, err := parseQueryEvidence(queryID, data, prov.Providers)
 	if err != nil {
@@ -295,145 +287,72 @@ func unsafeDiscoveryValue(value any) bool {
 	return false
 }
 
-func encodeQueryCursor(c queryDiscoveryCursor) string {
-	raw, _ := json.Marshal(c)
-	return base64.RawURLEncoding.EncodeToString(raw)
-}
-
-func pageQueryDiscovery(prov *queryDiscoveryProvenance, evidence *queryEvidence, filter QueryDiscoveryFilter) (*QueryDiscoveryPage, error) {
-	if filter.Limit < 0 || filter.Limit > 200 {
-		return nil, queryEvidenceError("query_page_limit_invalid")
-	}
-	// Check every record before returning any selectable page. A later oversized
-	// or sensitive row cannot be hidden behind a successful first page.
+func validateQueryDiscoveryEvidence(evidence *queryEvidence) error {
+	// Check every record before returning any selectable summary. A later
+	// oversized or sensitive row cannot be hidden by presentation filters.
 	for _, result := range evidence.Results {
 		row := queryDiscoveryResultRow(result)
 		if unsafeDiscoveryValue(result.Address) || unsafeDiscoveryValue(result.ResourceType) || unsafeDiscoveryValue(row.DisplayName) || unsafeDiscoveryValue(row.Identity) || unsafeDiscoveryValue(row.Tags) {
-			return nil, queryEvidenceError("query_sensitive_result")
+			return queryEvidenceError("query_sensitive_result")
 		}
 		encoded, err := json.Marshal(row)
 		if err != nil || len(encoded) > maxQueryRowBytes {
-			return nil, queryEvidenceError("query_page_oversized")
+			return queryEvidenceError("query_summary_oversized")
 		}
 	}
-	if filter.Limit == 0 {
-		filter.Limit = 100
+	return nil
+}
+
+func summarizeQueryDiscovery(prov *queryDiscoveryProvenance, evidence *queryEvidence, filter QueryDiscoveryFilter) (*QueryDiscoverySummary, error) {
+	if err := validateQueryDiscoveryEvidence(evidence); err != nil {
+		return nil, err
 	}
-	filterKey := fmt.Sprintf("%s\x00%s\x00%s", filter.ResourceType, filter.Address, strings.ToLower(filter.NameContains))
 	matches := func(result queryResultEvidence) bool {
 		return (filter.ResourceType == "" || filter.ResourceType == result.ResourceType) &&
 			(filter.Address == "" || filter.Address == result.Address) &&
 			(filter.NameContains == "" || strings.Contains(strings.ToLower(result.DisplayName), strings.ToLower(filter.NameContains)))
 	}
-	start := 0
-	if filter.After != "" {
-		if len(filter.After) > maxQueryCursorBytes {
-			return nil, queryEvidenceError("query_cursor_invalid")
-		}
-		raw, err := base64.RawURLEncoding.DecodeString(filter.After)
-		var cursor queryDiscoveryCursor
-		if err != nil || decodeQueryEvidence(raw, &cursor) != nil || cursor.QueryRunID != prov.QueryRunID || cursor.Filter != filterKey {
-			return nil, queryEvidenceError("query_cursor_invalid")
-		}
-		if cursor.Digest != evidence.LogDigest {
-			return nil, queryEvidenceError("query_snapshot_changed")
-		}
-		start = -1
-		for i, result := range evidence.Results {
-			if result.Marker == cursor.Marker {
-				if !matches(result) {
-					return nil, queryEvidenceError("query_cursor_invalid")
-				}
-				start = i + 1
-				break
-			}
-		}
-		if start < 0 {
-			return nil, queryEvidenceError("query_cursor_invalid")
-		}
-	}
-	page := &QueryDiscoveryPage{QueryRunID: prov.QueryRunID, Status: "selectable", SourceOrganizationName: prov.Organization, SourceWorkspaceName: prov.WorkspaceName, SourceWorkspaceID: prov.WorkspaceID, LogDigest: evidence.LogDigest, Selectable: true, ResourcesDiscovered: len(evidence.Results), ByType: evidence.ByType, Lists: []queryDiscoveryGroup{}}
+	summary := &QueryDiscoverySummary{QueryRunID: prov.QueryRunID, Status: "selectable", SourceOrganizationName: prov.Organization, SourceWorkspaceName: prov.WorkspaceName, SourceWorkspaceID: prov.WorkspaceID, LogDigest: evidence.LogDigest, Selectable: true, ResourcesDiscovered: len(evidence.Results), ByType: evidence.ByType, Lists: []queryDiscoveryGroup{}}
 	groups := map[string]int{}
-	var lastMarker string
 	for _, result := range evidence.Results {
-		if matches(result) {
-			page.TotalMatching++
-			if result.ResourceObject == nil {
-				page.RowsWithoutAttributes++
-			}
-		}
-	}
-	for i, result := range evidence.Results {
 		if !matches(result) {
 			continue
 		}
-		if i < start {
-			continue
-		}
-		if page.Returned >= filter.Limit {
-			continue
+		summary.TotalMatching++
+		if result.ResourceObject == nil {
+			summary.RowsWithoutAttributes++
 		}
 		row := queryDiscoveryResultRow(result)
 		key := result.Address + "\x00" + result.ResourceType
 		index, exists := groups[key]
 		if !exists {
-			index = len(page.Lists)
+			index = len(summary.Lists)
 			groups[key] = index
-			page.Lists = append(page.Lists, queryDiscoveryGroup{Address: result.Address, ResourceType: result.ResourceType, Results: []queryDiscoveryRow{}})
+			summary.Lists = append(summary.Lists, queryDiscoveryGroup{Address: result.Address, ResourceType: result.ResourceType, Results: []queryDiscoveryRow{}})
 		}
-		page.Lists[index].Results = append(page.Lists[index].Results, row)
-		page.Returned++
-		lastMarker = result.Marker
-		// Whole serialized result, not just rows, must stay within the cap.
-		if data, err := json.Marshal(page); err != nil || len(data) > maxQueryPageBytes {
-			page.Lists[index].Results = page.Lists[index].Results[:len(page.Lists[index].Results)-1]
-			if len(page.Lists[index].Results) == 0 {
-				page.Lists = append(page.Lists[:index], page.Lists[index+1:]...)
-			}
-			page.Returned--
-			if page.Returned == 0 {
-				return nil, queryEvidenceError("query_page_oversized")
-			}
-			lastMarker = ""
-			for _, group := range page.Lists {
-				if len(group.Results) > 0 {
-					lastMarker = group.Results[len(group.Results)-1].Marker
-				}
-			}
-			break
-		}
+		summary.Lists[index].Results = append(summary.Lists[index].Results, row)
+		summary.Returned++
 	}
-	page.Remaining = page.TotalMatching - page.Returned
-	if start > 0 {
-		for i := 0; i < start; i++ {
-			r := evidence.Results[i]
-			if matches(r) {
-				page.Remaining--
-			}
-		}
-	}
-	page.HasMore = page.Remaining > 0
-	if page.HasMore {
-		page.NextCursor = encodeQueryCursor(queryDiscoveryCursor{QueryRunID: prov.QueryRunID, Digest: evidence.LogDigest, Marker: lastMarker, Filter: filterKey})
-		page.NextAction = "This is a partial page. Continue with next_cursor as after and the same filters until has_more is false."
+	if filter.ResourceType != "" || filter.Address != "" || filter.NameContains != "" {
+		summary.NextAction = "These are all results matching the supplied summary filters, not all results of the query or all cloud resources. Choose query_result_marker values with the user only if import is requested."
 	} else {
-		page.NextAction = "These are all results of this query, not all cloud resources. Choose query_result_marker values with the user only if import is requested."
+		summary.NextAction = "These are all results of this query, not all cloud resources. Choose query_result_marker values with the user only if import is requested."
 	}
-	page.NextAction += " Keep each shown result's query_result_marker, display_name and any tags, including in script output; tag filtering is not supported. Missing tags do not prove a resource is untagged."
-	if page.RowsWithoutAttributes > 0 {
-		page.NextAction += " For rows with attributes_captured false, tags are unknown. If tags matter, ask before a new query (for example with generate_config_out true); it creates new markers and may still lack tags."
+	summary.NextAction += " Keep each shown result's query_result_marker, display_name and any tags, including in script output; tag filtering is not supported. Missing tags do not prove a resource is untagged."
+	if summary.RowsWithoutAttributes > 0 {
+		summary.NextAction += " For rows with attributes_captured false, tags are unknown. If tags matter, ask before a new query (for example with generate_config_out true); it creates new markers and may still lack tags."
 	}
-	data, err := json.Marshal(page)
-	if err != nil || len(data) > maxQueryPageBytes {
-		return nil, queryEvidenceError("query_page_oversized")
+	data, err := json.Marshal(summary)
+	if err != nil || len(data) > maxQuerySummaryBytes {
+		return nil, queryEvidenceError("query_summary_oversized")
 	}
-	return page, nil
+	return summary, nil
 }
 
-// ReadQueryDiscoveryPage shares Search discovery across the two MCP SDKs.
+// ReadQueryDiscoverySummary shares Search discovery across the two MCP SDKs.
 // Only a safely observed completed QueryRun with invalid result evidence can
 // return a factual nonselectable result; backend/transport failures are errors.
-func ReadQueryDiscoveryPage(ctx context.Context, c *tfe.Client, queryID string, filter QueryDiscoveryFilter) (*QueryDiscoveryPage, error) {
+func ReadQueryDiscoverySummary(ctx context.Context, c *tfe.Client, queryID string, filter QueryDiscoveryFilter) (*QueryDiscoverySummary, error) {
 	if !validQueryRunID(queryID) {
 		return nil, queryEvidenceError("query_run_id_invalid")
 	}
@@ -442,18 +361,22 @@ func ReadQueryDiscoveryPage(ctx context.Context, c *tfe.Client, queryID string, 
 		if prov != nil {
 			switch err.Error() {
 			case "query_not_selectable", "query_identity_version_invalid", "query_evidence_incomplete", "query_duplicate_or_invalid_identity", "query_identity_invalid", "query_reported_error", "query_generated_block_conflict":
-				return &QueryDiscoveryPage{QueryRunID: queryID, Status: "nonselectable", SourceOrganizationName: prov.Organization, SourceWorkspaceName: prov.WorkspaceName, SourceWorkspaceID: prov.WorkspaceID, Selectable: false, Diagnostics: []string{err.Error()}, NextAction: "This QueryRun does not have complete selectable evidence. Do not select or import from it; review the query and ask before starting another."}, nil
+				return &QueryDiscoverySummary{QueryRunID: queryID, Status: "nonselectable", SourceOrganizationName: prov.Organization, SourceWorkspaceName: prov.WorkspaceName, SourceWorkspaceID: prov.WorkspaceID, Selectable: false, Diagnostics: []string{err.Error()}, NextAction: "This QueryRun does not have complete selectable evidence. Do not select or import from it; review the query and ask before starting another."}, nil
 			}
 		}
 		return nil, err
 	}
-	return pageQueryDiscovery(prov, evidence, filter)
+	summary, err := summarizeQueryDiscovery(prov, evidence, filter)
+	if err != nil && err.Error() == "query_summary_oversized" {
+		return &QueryDiscoverySummary{QueryRunID: queryID, Status: "nonselectable", SourceOrganizationName: prov.Organization, SourceWorkspaceName: prov.WorkspaceName, SourceWorkspaceID: prov.WorkspaceID, Selectable: false, ResourcesDiscovered: len(evidence.Results), ByType: evidence.ByType, Diagnostics: []string{"query_summary_oversized"}, NextAction: "The complete query summary exceeds the response limit. Do not select or import from a partial result; use narrower summary filters or refine and run a narrower Search query."}, nil
+	}
+	return summary, err
 }
 
-func FormatQueryDiscoveryPage(page *QueryDiscoveryPage) (string, error) {
-	data, err := json.Marshal(page)
-	if err != nil || len(data) > maxQueryPageBytes {
-		return "", queryEvidenceError("query_page_oversized")
+func FormatQueryDiscoverySummary(summary *QueryDiscoverySummary) (string, error) {
+	data, err := json.Marshal(summary)
+	if err != nil || len(data) > maxQuerySummaryBytes {
+		return "", queryEvidenceError("query_summary_oversized")
 	}
 	return string(data), nil
 }
