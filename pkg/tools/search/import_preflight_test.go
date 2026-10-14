@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/hashicorp/go-tfe"
 	"github.com/stretchr/testify/require"
@@ -124,4 +125,61 @@ func TestVerifyImportRunGuardsPlanJSONRead(t *testing.T) {
 			require.Zero(t, planReads, "no Plan metadata or JSON read is allowed")
 		})
 	}
+}
+
+func TestVerifyImportReturnsPendingWithinWaitBudget(t *testing.T) {
+	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/vnd.api+json")
+		switch r.URL.Path {
+		case "/api/v2/ping":
+			w.WriteHeader(http.StatusOK)
+		case "/api/v2/organizations/org/workspaces/target":
+			_, _ = fmt.Fprint(w, `{"data":{"type":"workspaces","id":"ws-example","attributes":{"name":"target"},"relationships":{"organization":{"data":{"type":"organizations","id":"org"}}}}}`)
+		case "/api/v2/runs/run-example":
+			_, _ = fmt.Fprint(w, `{"data":{"type":"runs","id":"run-example","attributes":{"status":"planning","plan-only":true,"auto-apply":false},"relationships":{"workspace":{"data":{"type":"workspaces","id":"ws-example"}},"plan":{"data":null},"configuration-version":{"data":{"type":"configuration-versions","id":"cv-example"}}}}}`)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer backend.Close()
+	t.Setenv("MCP_ORGANIZATION_ALLOWLIST", "org")
+	c, err := tfe.NewClient(&tfe.Config{Address: backend.URL, Token: "test-token", HTTPClient: backend.Client()})
+	require.NoError(t, err)
+
+	started := time.Now()
+	out, err := readVerifyImportPlanWithConfig(context.Background(), c, VerifyImportInput{OrganizationName: "org", WorkspaceName: "target", RunID: "run-example"}, verifyImportPollConfig{wait: 100 * time.Millisecond, interval: 10 * time.Millisecond})
+	require.NoError(t, err)
+	require.Equal(t, "pending", out.Status)
+	require.Equal(t, []string{"run_pending"}, out.Diagnostics)
+	require.Less(t, time.Since(started), time.Second)
+}
+
+func TestVerifyImportWaitLeavesHTTPWriteHeadroom(t *testing.T) {
+	require.Less(t, verifyImportWait, 30*time.Second)
+}
+
+func TestVerifyImportPreservesCallerCancellation(t *testing.T) {
+	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/vnd.api+json")
+		switch r.URL.Path {
+		case "/api/v2/ping":
+			w.WriteHeader(http.StatusOK)
+		case "/api/v2/organizations/org/workspaces/target":
+			_, _ = fmt.Fprint(w, `{"data":{"type":"workspaces","id":"ws-example","attributes":{"name":"target"},"relationships":{"organization":{"data":{"type":"organizations","id":"org"}}}}}`)
+		case "/api/v2/runs/run-example":
+			_, _ = fmt.Fprint(w, `{"data":{"type":"runs","id":"run-example","attributes":{"status":"planning","plan-only":true,"auto-apply":false},"relationships":{"workspace":{"data":{"type":"workspaces","id":"ws-example"}},"plan":{"data":null},"configuration-version":{"data":{"type":"configuration-versions","id":"cv-example"}}}}}`)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer backend.Close()
+	t.Setenv("MCP_ORGANIZATION_ALLOWLIST", "org")
+	c, err := tfe.NewClient(&tfe.Config{Address: backend.URL, Token: "test-token", HTTPClient: backend.Client()})
+	require.NoError(t, err)
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+
+	out, err := readVerifyImportPlanWithConfig(ctx, c, VerifyImportInput{OrganizationName: "org", WorkspaceName: "target", RunID: "run-example"}, verifyImportPollConfig{wait: time.Second, interval: 500 * time.Millisecond})
+	require.Nil(t, out)
+	require.EqualError(t, err, "verify_canceled")
 }
