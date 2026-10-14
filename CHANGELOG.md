@@ -6,6 +6,7 @@ BREAKING CHANGES
 
 IMPROVEMENTS
 
+* Bump Go to 1.26.9 and `golang.org/x/net` to v0.61.0, `golang.org/x/crypto` to v0.58.0 and `golang.org/x/text` to v0.43.0 to address known CVEs in the HTTP/2 stack, net/http, crypto/tls and html/template. [571](https://github.com/hashicorp/terraform-mcp-server/pull/571)
 * `get_latest_provider_version`, `get_provider_capabilities` and `search_providers` now tell the agent not to guess the provider namespace when unsure.
 * `get_private_module_details` now reports every submodule published with a private module, each with its own inputs, outputs, dependencies, provider dependencies, resources, and README, matching the detail already provided for the root module. The root module section is now labelled and its README is reported alongside its own inputs and outputs.
 * `get_private_module_details` now reports the module version its details were read from, and the generated usage snippet pins that version instead of the first entry in the module's version statuses, which may be a version whose ingress is still pending or has failed.
