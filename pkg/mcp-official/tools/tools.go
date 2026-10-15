@@ -44,6 +44,12 @@ var officialFactories = map[string]func(svr *mcp.Server, logger *slog.Logger){
 	"get_module_details": func(svr *mcp.Server, logger *slog.Logger) {
 		mcp.AddTool(svr, registryTools.GetModuleDetailsTool(), registryTools.GetModuleDetailsFunc(logger))
 	},
+	"search_policies": func(svr *mcp.Server, logger *slog.Logger) {
+		mcp.AddTool(svr, registryTools.SearchPoliciesTool(), registryTools.SearchPoliciesFunc(logger))
+	},
+	"get_policy_details": func(svr *mcp.Server, logger *slog.Logger) {
+		mcp.AddTool(svr, registryTools.GetPolicyDetailsTool(), registryTools.GetPolicyDetailsFunc(logger))
+	},
 	// TFE tools
 	"list_workspaces": func(svr *mcp.Server, _ *slog.Logger) {
 		mcp.AddTool(svr, tfeTools.ListWorkspacesTool(), tfeTools.ListWorkspacesFunc)
@@ -83,12 +89,6 @@ var officialFactories = map[string]func(svr *mcp.Server, logger *slog.Logger){
 	},
 	"get_token_permissions": func(svr *mcp.Server, _ *slog.Logger) {
 		mcp.AddTool(svr, tfeTools.GetTokenPermissionsTool(), tfeTools.GetTokenPermissionsFunc)
-	},
-	"list_state_versions": func(svr *mcp.Server, _ *slog.Logger) {
-		mcp.AddTool(svr, tfeTools.ListStateVersionsTool(), tfeTools.ListStateVersionsFunc)
-	},
-	"get_state_version": func(svr *mcp.Server, _ *slog.Logger) {
-		mcp.AddTool(svr, tfeTools.GetStateVersionTool(), tfeTools.GetStateVersionFunc)
 	},
 	"list_teams": func(svr *mcp.Server, _ *slog.Logger) {
 		mcp.AddTool(svr, tfeTools.ListTeamsTool(), tfeTools.ListTeamsFunc)

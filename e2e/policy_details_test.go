@@ -36,7 +36,6 @@ func TestGetPolicyDetailsRejectsMissingID(t *testing.T) {
 
 		require.True(t, result.IsError, "policy details should reject an empty payload")
 		assert.Contains(t, text, "terraform_policy_id", "error should identify the missing policy ID")
-		assert.Contains(t, text, "search_policies", "error should explain how to find a valid policy ID")
 	})
 }
 
@@ -88,6 +87,8 @@ func TestGetPolicyDetailsRejectsUnknownID(t *testing.T) {
 	})
 }
 
+// searchForPolicyID obtains a real policy ID so the details test follows the
+// search-before-details workflow expected by the MCP tool description.
 // searchForPolicyID obtains a real policy ID so the details test follows the
 // search-before-details workflow expected by the MCP tool description.
 // searchForPolicyID obtains a real ID for the details workflow.

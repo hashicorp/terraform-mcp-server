@@ -29,5 +29,8 @@ jobs:
       - name: Download dependencies
         run: make deps
 
-      - name: Run unit tests
+      - name: Run end-to-end tests with the legacy server
         run: make test-e2e
+
+      - name: Run public registry end-to-end tests with the official SDK server
+        run: make test-e2e-official-public-registry

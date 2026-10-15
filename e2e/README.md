@@ -20,6 +20,7 @@ The E2E tests are organized by tool:
 - `policy_details_test.go`
 - `latest_module_version_test.go`
 - `latest_provider_version_test.go`
+- `provider_capabilities_test.go`
 - `cors_e2e_test.go`
 
 Each tool test runs against both Stdio and HTTP using a fresh MCP session.
