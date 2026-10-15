@@ -285,7 +285,7 @@ func ReadPrepareImport(ctx context.Context, c *tfe.Client, input PrepareImportIn
 	if w.ID == "" || w.Name != input.WorkspaceName || w.Organization == nil || !strings.EqualFold(w.Organization.Name, prov.Organization) || !allowedImportOrganization(w.Organization.Name) {
 		return nil, queryEvidenceError("target_ownership_unverified")
 	}
-	if !validImportWorkspaceName(w.ID) || !validImportWorkspaceName(prov.WorkspaceID) || !validImportWorkspaceName(prov.WorkspaceName) || unsafeDiscoveryValue(w.TerraformVersion) {
+	if !validImportWorkspaceName(w.ID) || !validImportWorkspaceName(prov.WorkspaceID) || !validImportWorkspaceName(prov.WorkspaceName) {
 		return nil, queryEvidenceError("target_evidence_invalid")
 	}
 	out := &PrepareImportResult{Status: "blocked", Diagnostics: []string{}, QueryRunID: input.QueryRunID,
