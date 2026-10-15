@@ -13,6 +13,7 @@ import (
 	"github.com/hashicorp/terraform-mcp-server/pkg/client"
 	"github.com/hashicorp/terraform-mcp-server/pkg/logging"
 	mcpmark3labs "github.com/hashicorp/terraform-mcp-server/pkg/mcp-mark3labs"
+	mcpofficial "github.com/hashicorp/terraform-mcp-server/pkg/mcp-official"
 	"github.com/hashicorp/terraform-mcp-server/pkg/otelmetrics"
 	"github.com/hashicorp/terraform-mcp-server/pkg/toolsets"
 	log "github.com/sirupsen/logrus"
@@ -103,9 +104,18 @@ func runDefaultCommand(cmd *cobra.Command, _ []string) {
 	// Get toolsets from the command that was passed in
 	filter := getToolsetsFromCmd(cmd, logger)
 
-	if err := mcpmark3labs.RunStdioServer(logger, filter); err != nil {
+	if err := runStdioServer(logger, filter); err != nil {
 		stdlog.Fatal("failed to run stdio server:", err)
 	}
+}
+
+// runStdioServer selects the SDK implementation used for stdio.
+func runStdioServer(logger *log.Logger, filter toolsets.ToolFilter) error {
+	if os.Getenv("TF_X_OFFICIAL_SDK_ENABLED") == "true" {
+		logger.Info("TF_X_OFFICIAL_SDK_ENABLED set to true in env, enabling the official mcp go-sdk stdio server")
+		return mcpofficial.RunStdioServer(logger, filter)
+	}
+	return mcpmark3labs.RunStdioServer(logger, filter)
 }
 
 // Run is the terraform-mcp-server entrypoint: it resolves logging, decides

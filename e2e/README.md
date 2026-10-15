@@ -20,6 +20,7 @@ The E2E tests are organized by tool:
 - `policy_details_test.go`
 - `latest_module_version_test.go`
 - `latest_provider_version_test.go`
+- `provider_capabilities_test.go`
 - `cors_e2e_test.go`
 
 Each tool test runs against both Stdio and HTTP using a fresh MCP session.
@@ -32,6 +33,13 @@ Run the complete E2E suite:
 
 ```bash
 make test-e2e
+```
+
+Run public Registry tool tests over both Stdio and HTTP using the official SDK
+server:
+
+```bash
+make test-e2e-official-public-registry
 ```
 
 Run all E2E tests directly:

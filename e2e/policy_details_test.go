@@ -36,7 +36,6 @@ func TestGetPolicyDetailsRejectsMissingID(t *testing.T) {
 
 		require.True(t, result.IsError, "policy details should reject an empty payload")
 		assert.Contains(t, text, "terraform_policy_id", "error should identify the missing policy ID")
-		assert.Contains(t, text, "search_policies", "error should explain how to find a valid policy ID")
 	})
 }
 

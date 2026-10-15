@@ -43,7 +43,7 @@ var (
 
 			enabledToolsets := getToolsetsFromCmd(cmd.Root(), logger)
 
-			if err := mcpmark3labs.RunStdioServer(logger, enabledToolsets); err != nil {
+			if err := runStdioServer(logger, enabledToolsets); err != nil {
 				stdlog.Fatal("failed to run stdio server:", err)
 			}
 		},
