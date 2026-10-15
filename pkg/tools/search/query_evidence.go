@@ -117,6 +117,21 @@ func decodeQueryEvidence(raw []byte, target any) error {
 }
 
 func decodeQueryEvidenceLimit(raw []byte, target any, maxBytes, maxDepth int) error {
+	if err := validateQueryEvidenceJSON(raw, maxBytes, maxDepth); err != nil {
+		return err
+	}
+	decoder := json.NewDecoder(bytes.NewReader(raw))
+	decoder.UseNumber()
+	if err := decoder.Decode(target); err != nil {
+		return queryEvidenceError("query_evidence_invalid")
+	}
+	return nil
+}
+
+// validateQueryEvidenceJSON rejects duplicate keys, trailing JSON values, and
+// optional caller-defined size or depth violations without decoding into a
+// destination value.
+func validateQueryEvidenceJSON(raw []byte, maxBytes, maxDepth int) error {
 	// A zero limit disables that optional guard. QueryRun evidence currently
 	// uses the unbounded strict decoder above; explicit limits remain for
 	// callers decoding plan and schema artifacts.
@@ -164,11 +179,6 @@ func decodeQueryEvidenceLimit(raw []byte, target any, maxBytes, maxDepth int) er
 		return err
 	}
 	if _, err := decoder.Token(); !errors.Is(err, io.EOF) {
-		return queryEvidenceError("query_evidence_invalid")
-	}
-	decoder = json.NewDecoder(bytes.NewReader(raw))
-	decoder.UseNumber()
-	if err := decoder.Decode(target); err != nil {
 		return queryEvidenceError("query_evidence_invalid")
 	}
 	return nil
