@@ -4,6 +4,7 @@
 package search
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/json"
@@ -234,8 +235,8 @@ func readHistoricalSchema(ctx context.Context, c *tfe.Client, workspaceID string
 	if err != nil {
 		return source, nil, nil
 	}
-	buf := &queryBoundedWriter{limit: 32 << 20}
-	if err = req.Do(ctx, buf); err != nil {
+	var buf bytes.Buffer
+	if err = req.Do(ctx, &buf); err != nil {
 		return source, nil, nil
 	}
 	var artifact struct {
@@ -247,7 +248,7 @@ func readHistoricalSchema(ctx context.Context, c *tfe.Client, workspaceID string
 	}
 	// The historical schema is not required for preparation. Reject malformed
 	// or unsupported artifacts without treating them as evidence of absence.
-	if len(buf.buffer.Bytes()) == 0 || decodeQueryEvidenceLimit(buf.buffer.Bytes(), &artifact, 32<<20, 64) != nil || !terraformPlanFormatVersionPattern.MatchString(artifact.FormatVersion) {
+	if buf.Len() == 0 || decodeQueryEvidenceLimit(buf.Bytes(), &artifact, 32<<20, 64) != nil || !terraformPlanFormatVersionPattern.MatchString(artifact.FormatVersion) {
 		return source, nil, nil
 	}
 	resources, identities := map[string]json.RawMessage{}, map[string]json.RawMessage{}

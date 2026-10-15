@@ -8,7 +8,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"net/http"
 	"net/url"
 	"regexp"
 	"sort"
@@ -331,17 +330,8 @@ func readVerifyImportPlanWithConfig(ctx context.Context, c *tfe.Client, input Ve
 }
 
 func classifyImportPlan(ctx context.Context, c *tfe.Client, out *VerifyImportResult, planID string, importContext *ImportContext, selected map[string]ImportContextSelection, addresses map[string]string, detailWanted map[string]bool) (*VerifyImportResult, error) {
-	req, err := c.NewRequest(http.MethodGet, "plans/"+url.PathEscape(planID)+"/json-output", nil)
+	raw, err := c.Plans.ReadJSONOutput(ctx, planID)
 	if err != nil {
-		return nil, queryEvidenceError("plan_read_unavailable")
-	}
-	buf := &queryBoundedWriter{limit: 32 << 20}
-	if err := req.Do(ctx, buf); err != nil {
-		if buf.overLimit {
-			out.Status, out.Diagnostics = "blocked", []string{"plan_json_size_limit"}
-			out.NextAction = "The associated Plan JSON exceeds the 32 MiB verifier limit. Inspect the exact Run and full Plan in HCP Terraform; do not apply or start another Run to diagnose this response."
-			return out, checkImportResultBudget(out)
-		}
 		return nil, queryEvidenceError("plan_read_unavailable")
 	}
 	var plan struct {
@@ -379,18 +369,11 @@ func classifyImportPlan(ctx context.Context, c *tfe.Client, out *VerifyImportRes
 		out.Status, out.Diagnostics, out.NextAction = "blocked", []string{code}, guidance+" Review the exact Run and full Plan in HCP Terraform; do not apply or start another Run to diagnose this response."
 		return out, checkImportResultBudget(out)
 	}
-	if len(buf.buffer.Bytes()) == 0 {
+	if len(raw) == 0 {
 		return unsupported("plan_json_empty", "The associated Plan JSON response was empty.")
 	}
-	if err := decodeQueryEvidenceLimit(buf.buffer.Bytes(), &plan, 32<<20, 64); err != nil {
-		code := "plan_json_invalid"
-		switch err.Error() {
-		case "query_evidence_size_limit":
-			code = "plan_json_size_limit"
-		case "query_evidence_depth_limit":
-			code = "plan_json_depth_limit"
-		}
-		return unsupported(code, "The associated Plan JSON could not be safely decoded within verification limits.")
+	if err := decodeQueryEvidence(raw, &plan); err != nil {
+		return unsupported("plan_json_invalid", "The associated Plan JSON could not be safely decoded.")
 	}
 	if !terraformPlanFormatVersionPattern.MatchString(plan.FormatVersion) {
 		return unsupported("plan_format_unsupported", "The Plan JSON format is missing or is not a supported 1.x format.")

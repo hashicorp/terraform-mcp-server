@@ -524,8 +524,6 @@ func TestVerifyImportPlanSQSImportWithUpdate(t *testing.T) {
 		{"old Terraform", strings.Replace(planJSON, `"terraform_version":"1.17.0-dev.1"`, `"terraform_version":"1.4.9-dev.1"`, 1), "plan_terraform_version_unsupported"},
 		{"malformed Terraform version", strings.Replace(planJSON, `"terraform_version":"1.17.0-dev.1"`, `"terraform_version":"1.17.0 arbitrary-private-sentinel"`, 1), "plan_terraform_version_unavailable"},
 		{"invalid JSON", planJSON + `invalid-private-sentinel`, "plan_json_invalid"},
-		{"deep JSON", `{"nested":` + strings.Repeat("[", 65) + `"private-sentinel"` + strings.Repeat("]", 65) + `}`, "plan_json_depth_limit"},
-		{"oversized JSON", `{"padding":"` + strings.Repeat("x", 32<<20) + `"}`, "plan_json_size_limit"},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			fixtureServer, _ := importWireBackendWithPlan(t, "planned_and_finished", "finished", "aws_sqs_queue", tt.payload)
