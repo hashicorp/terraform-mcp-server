@@ -108,14 +108,22 @@ type PrepareImportResult struct {
 	ImportContext                     *ImportContext          `json:"import_context,omitempty"`
 }
 
+type importContextDigestPayload struct {
+	QueryRunID      string                         `json:"query_run_id"`
+	Providers       map[string]queryResultProvider `json:"providers"`
+	Target          ImportContextTarget            `json:"target"`
+	LockedProviders map[string]string              `json:"locked_providers"`
+	SelectedResults []ImportContextSelection       `json:"selected_results"`
+}
+
 func importDigest(c ImportContext) (string, error) {
-	data, err := json.Marshal(struct {
-		QueryRunID      string                         `json:"query_run_id"`
-		Providers       map[string]queryResultProvider `json:"providers"`
-		Target          ImportContextTarget            `json:"target"`
-		LockedProviders map[string]string              `json:"locked_providers"`
-		SelectedResults []ImportContextSelection       `json:"selected_results"`
-	}{c.QueryRunID, c.Providers, c.Target, c.LockedProviders, c.SelectedResults})
+	data, err := json.Marshal(importContextDigestPayload{
+		QueryRunID:      c.QueryRunID,
+		Providers:       c.Providers,
+		Target:          c.Target,
+		LockedProviders: c.LockedProviders,
+		SelectedResults: c.SelectedResults,
+	})
 	if err != nil {
 		return "", queryEvidenceError("import_context_invalid")
 	}

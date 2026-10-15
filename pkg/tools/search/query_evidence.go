@@ -46,17 +46,55 @@ type queryEvidence struct {
 	ByType  map[string]int
 }
 
+type queryResultMarkerPayload struct {
+	QueryRunID      string         `json:"query_run_id"`
+	ProviderSource  string         `json:"provider_source"`
+	ProviderVersion string         `json:"provider_version"`
+	ListType        string         `json:"list_type"`
+	Identity        map[string]any `json:"identity"`
+}
+
+type queryLogRecord struct {
+	Type       string               `json:"type"`
+	Found      *queryFoundResource  `json:"list_resource_found"`
+	Complete   *queryListCompletion `json:"list_complete"`
+	Diagnostic *queryLogDiagnostic  `json:"diagnostic"`
+}
+
+type queryFoundResource struct {
+	Address       string          `json:"address"`
+	ResourceType  string          `json:"resource_type"`
+	DisplayName   string          `json:"display_name"`
+	Identity      map[string]any  `json:"identity"`
+	Version       json.RawMessage `json:"identity_version"`
+	Resource      map[string]any  `json:"resource_object"`
+	Config        *string         `json:"config"`
+	ImportConfig  *string         `json:"import_config"`
+	Configuration *string         `json:"configuration"`
+	ImportBlock   *string         `json:"import_configuration"`
+}
+
+type queryListCompletion struct {
+	Address      string `json:"address"`
+	ResourceType string `json:"resource_type"`
+	Total        int    `json:"total"`
+}
+
+type queryLogDiagnostic struct {
+	Severity string `json:"severity"`
+}
+
 // The marker is deterministic within one QueryRun but does not authenticate
 // either a QueryRun or the identity of a cloud object. V0 candidate- values
 // are deliberately not accepted as V1 markers.
 func queryResultMarker(queryID string, provider queryResultProvider, listType string, identity map[string]any) (string, error) {
-	canonical, err := json.Marshal(struct {
-		QueryRunID      string         `json:"query_run_id"`
-		ProviderSource  string         `json:"provider_source"`
-		ProviderVersion string         `json:"provider_version"`
-		ListType        string         `json:"list_type"`
-		Identity        map[string]any `json:"identity"`
-	}{queryID, provider.Source, provider.Version, listType, identity})
+	canonical, err := json.Marshal(queryResultMarkerPayload{
+		QueryRunID:      queryID,
+		ProviderSource:  provider.Source,
+		ProviderVersion: provider.Version,
+		ListType:        listType,
+		Identity:        identity,
+	})
 	if err != nil {
 		return "", queryEvidenceError("query_identity_invalid")
 	}
@@ -163,29 +201,7 @@ func parseQueryEvidence(queryID string, data []byte, providers map[string]queryR
 			}
 			continue
 		}
-		var record struct {
-			Type  string `json:"type"`
-			Found *struct {
-				Address       string          `json:"address"`
-				ResourceType  string          `json:"resource_type"`
-				DisplayName   string          `json:"display_name"`
-				Identity      map[string]any  `json:"identity"`
-				Version       json.RawMessage `json:"identity_version"`
-				Resource      map[string]any  `json:"resource_object"`
-				Config        *string         `json:"config"`
-				ImportConfig  *string         `json:"import_config"`
-				Configuration *string         `json:"configuration"`
-				ImportBlock   *string         `json:"import_configuration"`
-			} `json:"list_resource_found"`
-			Complete *struct {
-				Address      string `json:"address"`
-				ResourceType string `json:"resource_type"`
-				Total        int    `json:"total"`
-			} `json:"list_complete"`
-			Diagnostic *struct {
-				Severity string `json:"severity"`
-			} `json:"diagnostic"`
-		}
+		var record queryLogRecord
 		if decodeQueryEvidence(line, &record) != nil {
 			return nil, queryEvidenceError("query_evidence_invalid")
 		}
