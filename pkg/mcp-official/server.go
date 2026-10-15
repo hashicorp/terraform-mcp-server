@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/hashicorp/terraform-mcp-server/pkg/mcp-official/resources"
 	"github.com/hashicorp/terraform-mcp-server/pkg/mcp-official/tools"
 	"github.com/hashicorp/terraform-mcp-server/pkg/toolsets"
 
@@ -71,5 +72,7 @@ func NewServer(version, instructions string, heartbeatInterval time.Duration, lo
 	}
 
 	tools.RegisterTools(svr, logger, filter)
+	resources.RegisterResources(svr, logger)
+	resources.RegisterResourceTemplates(svr, logger)
 	return svr
 }
