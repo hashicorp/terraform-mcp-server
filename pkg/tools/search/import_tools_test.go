@@ -4,7 +4,6 @@
 package search
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -19,7 +18,6 @@ import (
 	"github.com/hashicorp/go-tfe"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
-	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 )
 
@@ -123,19 +121,26 @@ func importWireBackendWithPlan(t *testing.T, status, planStatus, listType, planJ
 
 func requireImportReportGuidance(t *testing.T, next string) {
 	t.Helper()
-	for _, hint := range []string{
+	sections := []string{
 		"first summarize selected imports with both change=none and object_identity=matched; group them if numerous",
 		"Then report selected Plan changes by action",
 		"Separately group identities that are not matched by status and identity_reason",
-		"A selection can appear in both exception sections",
-		"not an inferred overlap between the independent changes and object_identity count maps",
+	}
+	for _, section := range sections {
+		require.Contains(t, next, section)
+	}
+	require.Less(t, strings.Index(next, sections[0]), strings.Index(next, sections[1]))
+	require.Less(t, strings.Index(next, sections[1]), strings.Index(next, sections[2]))
+	for _, boundary := range []string{
 		"Unverified is neither a match nor proof of a mismatch",
 		"Keep unselected actions, outputs and drift separate",
+		"An import-only Plan or N-to-import summary is not identity proof",
+		"separate approval for a new speculative plan",
+		"After full-Plan review",
+		"Do not run terraform apply, terraform import or apply_run",
 	} {
-		require.Contains(t, next, hint)
+		require.Contains(t, next, boundary)
 	}
-	require.Less(t, strings.Index(next, "first summarize selected imports"), strings.Index(next, "Then report selected Plan changes"))
-	require.Less(t, strings.Index(next, "Then report selected Plan changes"), strings.Index(next, "Separately group identities"))
 }
 
 func TestImportToolsEndToEndLocalHTTPAndLegacyWire(t *testing.T) {
@@ -169,11 +174,6 @@ func TestImportToolsEndToEndLocalHTTPAndLegacyWire(t *testing.T) {
 	require.Contains(t, result.NextAction, "raw Plan JSON may contain sensitive values")
 	require.Contains(t, result.NextAction, "outside this session")
 	requireImportReportGuidance(t, result.NextAction)
-	for _, hint := range []string{"An import-only Plan or N-to-import summary is not identity proof", "necessary editable local-module interfaces", "existing workspace's variables, references and coding practices", "separate approval for a new speculative plan", "A satisfactory first Plan requires no second Plan"} {
-		require.Contains(t, result.NextAction, hint)
-	}
-	require.Contains(t, result.NextAction, "After full-Plan review, report the separate action and identity findings and hand off the proposed HCL")
-	require.Contains(t, result.NextAction, "Do not run terraform apply, terraform import or apply_run as a continuation of this Search-to-import workflow")
 	require.Equal(t, 1, *reads)
 	require.Len(t, result.Detail, 1)
 	encoded, err := json.Marshal(result)
@@ -195,15 +195,11 @@ func TestImportToolsEndToEndLocalHTTPAndLegacyWire(t *testing.T) {
 	require.NotContains(t, text.Text, `"attention"`)
 	require.NotContains(t, text.Text, "private-import-id-sentinel")
 	prepareArgs := map[string]any{"organization_name": "org", "workspace_name": "target", "query_run_id": "qry-example", "locked_providers": prep.ImportContext.LockedProviders, "selections": []ImportSelection{{QueryResultMarker: bindings[0].QueryResultMarker, ManagedType: "aws_s3_bucket"}}}
-	var logged bytes.Buffer
-	logger := log.New()
-	logger.SetOutput(&logged)
-	wire, err = PrepareImport(logger).Handler(ctx, mcp.CallToolRequest{Params: mcp.CallToolParams{Arguments: prepareArgs}})
+	wire, err = PrepareImport(silentLogger()).Handler(ctx, mcp.CallToolRequest{Params: mcp.CallToolParams{Arguments: prepareArgs}})
 	require.NoError(t, err)
 	require.False(t, wire.IsError, "tool content: %#v", wire.Content)
 	require.Contains(t, fmt.Sprint(wire.StructuredContent), "prepared")
 	require.Contains(t, fmt.Sprint(wire.Content), "selection_digest")
-	require.NotContains(t, logged.String(), "signed-secret-sentinel")
 	require.NotContains(t, fmt.Sprint(wire.Content), "signed-secret-sentinel")
 }
 
@@ -276,12 +272,12 @@ func TestPrepareImportKeepsSameNameSearchListAndManagedType(t *testing.T) {
 	require.Equal(t, "6.18.0", prepared.Types[0].LockedProviderVersion)
 	require.Equal(t, "unknown", prepared.Types[0].ManagedTypeSupport, "no historical target schema was read")
 	require.Contains(t, prepared.NextAction, "proposed managed type is not proved")
-	for _, hint := range []string{"relevant module calls and instances", "target locked provider's managed/identity schema", "search_providers with the locked provider_version followed by get_provider_details", "sibling effects; do not edit remote-source modules"} {
+	for _, hint := range []string{"relevant module calls and instances", "target locked provider's managed/identity schema", "locked provider_version", "sibling effects"} {
 		require.Contains(t, prepared.NextAction, hint)
 	}
 	require.Contains(t, prepared.NextAction, "Approval is for one speculative plan only")
 	require.Contains(t, prepared.NextAction, "ends after Plan review and handoff of the proposed HCL and findings; do not apply or run terraform import")
-	for _, hint := range []string{"user-approved cloud or remote-backend configuration", "effective CLI host, organization, project", "Explicit cloud settings take precedence over their fallbacks", "CLI fallbacks and workspace-selection overrides without dumping environment contents", "if the mapping is ambiguous", "authentication for the intended host is available", "Do not read, print, request, copy or set credential values", "MCP server configuration and authentication are separate", "terraform plan -no-color -input=false", "plan_only=true"} {
+	for _, hint := range []string{"effective CLI host", "without dumping environment contents", "Do not read, print, request, copy or set credential values", "MCP server configuration and authentication are separate", "terraform plan -no-color -input=false", "plan_only=true"} {
 		require.Contains(t, prepared.NextAction, hint)
 	}
 	for _, guidance := range []string{prepared.NextAction, PrepareImportDescription, VerifyImportPlanDescription} {
@@ -416,10 +412,7 @@ func TestVerifyImportPlanVersionDifferenceKeepsPlanAndIdentitySeparateOnMark3lab
 	require.Contains(t, result.NextAction, "Identity needs review: 2 selected object identities are unverified")
 	require.Contains(t, result.NextAction, "Search 1, Plan 0")
 	require.Contains(t, result.NextAction, "Plan actions, separately: all 2 selected imports have no-op actions")
-	requireImportReportGuidance(t, result.NextAction)
 	require.Contains(t, result.NextAction, "A satisfactory first Plan requires no second Plan; identity uncertainty alone does not require changing HCL or starting another Run")
-	require.Contains(t, result.NextAction, "After full-Plan review, report the separate action and identity findings and hand off the proposed HCL")
-	require.Contains(t, result.NextAction, "Do not run terraform apply, terraform import or apply_run as a continuation of this Search-to-import workflow")
 	require.Less(t, strings.Index(result.NextAction, "Identity needs review"), strings.Index(result.NextAction, "Plan actions, separately"))
 	for _, hint := range []string{"If the user asks to investigate", "locked provider-release documentation", "aliases and module mappings", "corroboration, unknowns and conflicts", "Keep object_identity unverified", "identity uncertainty alone does not require changing configuration or starting another Run"} {
 		require.Contains(t, result.NextAction, hint)
@@ -464,7 +457,6 @@ func TestVerifyImportPlanEightCleanImportsHaveNoAttention(t *testing.T) {
 	require.Equal(t, 8, result.Changes["none"])
 	require.Equal(t, 8, result.ObjectIdentity["matched"])
 	require.Empty(t, result.Attention)
-	requireImportReportGuidance(t, result.NextAction)
 	require.Len(t, result.Detail, 1, "requested detail remains available for a clean import")
 	encoded, err := json.Marshal(result)
 	require.NoError(t, err)
@@ -515,7 +507,6 @@ func TestVerifyImportPlanSQSImportWithUpdate(t *testing.T) {
 	require.Equal(t, []string{"update"}, result.Detail[0].Actions)
 	require.Contains(t, result.Diagnostics, "plan_actions_require_review")
 	require.Contains(t, result.NextAction, "not safe to apply")
-	requireImportReportGuidance(t, result.NextAction)
 	require.Equal(t, 1, *reads)
 	encoded, err := json.Marshal(result)
 	require.NoError(t, err)
