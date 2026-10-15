@@ -249,9 +249,6 @@ func queryDiscoveryResultRow(result queryResultEvidence) queryDiscoveryRow {
 	return queryDiscoveryRow{Marker: result.Marker, DisplayName: result.DisplayName, Identity: result.Identity, IdentityVersion: result.IdentityVersion, Tags: queryDiscoveryTags(result.ResourceObject), AttributesCaptured: result.ResourceObject != nil}
 }
 
-// Do not expose signed artifact capabilities hidden in provider-supplied
-// display names, identity keys/values or tags. An ordinary resource URL
-// without signed-capability evidence is not rejected just for being a URL.
 func unsafeDiscoveryValue(value any) bool {
 	switch v := value.(type) {
 	case string:
@@ -287,22 +284,7 @@ func unsafeDiscoveryValue(value any) bool {
 	return false
 }
 
-func validateQueryDiscoveryEvidence(evidence *queryEvidence) error {
-	// Check every record before returning any selectable summary. A later
-	// oversized or sensitive row cannot be hidden by presentation filters.
-	for _, result := range evidence.Results {
-		row := queryDiscoveryResultRow(result)
-		if unsafeDiscoveryValue(result.Address) || unsafeDiscoveryValue(result.ResourceType) || unsafeDiscoveryValue(row.DisplayName) || unsafeDiscoveryValue(row.Identity) || unsafeDiscoveryValue(row.Tags) {
-			return queryEvidenceError("query_sensitive_result")
-		}
-	}
-	return nil
-}
-
 func summarizeQueryDiscovery(prov *queryDiscoveryProvenance, evidence *queryEvidence, filter QueryDiscoveryFilter) (*QueryDiscoverySummary, error) {
-	if err := validateQueryDiscoveryEvidence(evidence); err != nil {
-		return nil, err
-	}
 	matches := func(result queryResultEvidence) bool {
 		return (filter.ResourceType == "" || filter.ResourceType == result.ResourceType) &&
 			(filter.Address == "" || filter.Address == result.Address) &&

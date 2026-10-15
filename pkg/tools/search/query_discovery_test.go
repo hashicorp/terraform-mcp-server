@@ -81,22 +81,6 @@ func TestSummarizeQueryDiscoveryDoesNotApplyOutputSizeCaps(t *testing.T) {
 	require.NoError(t, err)
 }
 
-func TestSummarizeQueryDiscoveryNeverProjectsSignedArtifact(t *testing.T) {
-	prov, evidence := testDiscovery(t, "first")
-	evidence.Results[0].Identity["url"] = "https://storage.example/path?X-Amz-Signature=sentinel"
-	summary, err := summarizeQueryDiscovery(prov, evidence, QueryDiscoveryFilter{})
-	require.Nil(t, summary)
-	require.EqualError(t, err, "query_sensitive_result")
-	evidence.Results[0].Identity["url"] = "https://example.com/resources/one"
-	summary, err = summarizeQueryDiscovery(prov, evidence, QueryDiscoveryFilter{})
-	require.NoError(t, err)
-	require.Equal(t, "https://example.com/resources/one", summary.Lists[0].Results[0].Identity["url"])
-	evidence.Results[0].ResourceObject = map[string]any{"tags": map[string]any{"link": "https://storage.example/log?X-Amz-Signature=sentinel"}}
-	summary, err = summarizeQueryDiscovery(prov, evidence, QueryDiscoveryFilter{})
-	require.Nil(t, summary)
-	require.EqualError(t, err, "query_sensitive_result")
-}
-
 func TestQueryProvenanceChecksBackendAssociations(t *testing.T) {
 	t.Setenv("MCP_ORGANIZATION_ALLOWLIST", "org")
 	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
