@@ -90,7 +90,7 @@ There is no tag filter; choose from the returned rows with the user. Missing
 tags do not prove a resource is untagged. If attributes_captured is false and
 tags matter, ask before a new query (for example with generate_config_out true).
 It has new markers and may still lack tags. The response contains every result
-matching any supplied summary filters or is nonselectable when the complete
-summary exceeds the response limit. Nonselectable results have no markers and
-cannot be prepared for import. A marker is continuity, not an import ID,
+matching any supplied summary filters. A nonselectable result is returned only
+when the validated QueryRun evidence does not support selection. A marker is
+continuity, not an import ID,
 authorization or proof of object identity.`
