@@ -11,13 +11,11 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
-	"os"
 	"regexp"
 	"strings"
 
 	"github.com/hashicorp/go-tfe"
 	version "github.com/hashicorp/go-version"
-	"github.com/hashicorp/terraform-mcp-server/pkg/client"
 )
 
 var exactLockedVersion = regexp.MustCompile(`^[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z][0-9A-Za-z.-]*)?$`)
@@ -162,23 +160,6 @@ var importWorkspaceNamePattern = regexp.MustCompile(`^[a-zA-Z0-9_-]{1,256}$`)
 
 func validImportWorkspaceName(name string) bool { return importWorkspaceNamePattern.MatchString(name) }
 
-func allowedImportOrganization(org string) bool {
-	configured := os.Getenv(client.OrganizationAllowlistEnv)
-	if configured == "" {
-		return true
-	}
-	allowed, err := client.ParseOrganizationAllowlistCSV(configured)
-	if err != nil {
-		return false
-	}
-	for _, name := range allowed {
-		if strings.EqualFold(name, org) {
-			return true
-		}
-	}
-	return false
-}
-
 func terraformImportSyntaxVersion(setting string) (old, known bool) {
 	return terraformVersionBefore(setting, minimumImportBlockVersion)
 }
@@ -247,14 +228,14 @@ func ReadPrepareImport(ctx context.Context, c *tfe.Client, input PrepareImportIn
 	if err != nil {
 		return nil, err
 	}
-	if !strings.EqualFold(prov.Organization, input.OrganizationName) || !allowedImportOrganization(prov.Organization) {
+	if !strings.EqualFold(prov.Organization, input.OrganizationName) {
 		return nil, queryEvidenceError("query_organization_mismatch")
 	}
 	w, err := c.Workspaces.Read(ctx, input.OrganizationName, input.WorkspaceName)
 	if err != nil || w == nil {
 		return nil, queryEvidenceError("target_read_unavailable")
 	}
-	if w.ID == "" || w.Name != input.WorkspaceName || w.Organization == nil || !strings.EqualFold(w.Organization.Name, prov.Organization) || !allowedImportOrganization(w.Organization.Name) {
+	if w.ID == "" || w.Name != input.WorkspaceName || w.Organization == nil || !strings.EqualFold(w.Organization.Name, prov.Organization) {
 		return nil, queryEvidenceError("target_ownership_unverified")
 	}
 	if !validImportWorkspaceName(w.ID) || !validImportWorkspaceName(prov.WorkspaceID) || !validImportWorkspaceName(prov.WorkspaceName) {

@@ -147,7 +147,6 @@ func TestImportToolsEndToEndLocalHTTPAndLegacyWire(t *testing.T) {
 	backend, reads := importWireBackend(t, "planned_and_finished", "finished")
 	t.Setenv("TFE_ADDRESS", backend.URL)
 	t.Setenv("TFE_TOKEN", "test-token")
-	t.Setenv("MCP_ORGANIZATION_ALLOWLIST", "org")
 	importContext, bindings, _ := importTestImportContext(t)
 	c, err := tfe.NewClient(&tfe.Config{Address: backend.URL, Token: "test-token", HTTPClient: backend.Client()})
 	require.NoError(t, err)
@@ -231,7 +230,6 @@ func TestVerifyImportPlanReturnsKnownHostRunUIURLAfterAssociationCheck(t *testin
 	backend, _ := importWireBackend(t, "planned_and_finished", "finished")
 	backendURL, err := url.Parse(backend.URL)
 	require.NoError(t, err)
-	t.Setenv("MCP_ORGANIZATION_ALLOWLIST", "org")
 	// Keep all API reads inside the mock while exercising the trusted staging
 	// HCP address from which a browser Run URL can be constructed.
 	c, err := tfe.NewClient(&tfe.Config{Address: "https://app.staging.terraform.io", Token: "test-token", HTTPClient: &http.Client{Transport: importRewriteTransport{backend: backendURL, next: http.DefaultTransport}}})
@@ -251,7 +249,6 @@ func TestPrepareImportKeepsSameNameSearchListAndManagedType(t *testing.T) {
 	backend, _ := importWireBackendForListType(t, "planned_and_finished", "finished", "aws_sqs_queue")
 	c, err := tfe.NewClient(&tfe.Config{Address: backend.URL, Token: "test-token", HTTPClient: backend.Client()})
 	require.NoError(t, err)
-	t.Setenv("MCP_ORGANIZATION_ALLOWLIST", "org")
 	provider := queryResultProvider{Source: "registry.terraform.io/hashicorp/aws", Version: "6.66.0"}
 	identity := map[string]any{"url": "https://example.invalid/queue"}
 	marker, err := queryResultMarker("qry-example", provider, "aws_sqs_queue", identity)
@@ -322,7 +319,6 @@ func TestVerifyImportPlanAttentionOnlyIncludesSelectedExceptions(t *testing.T) {
 			backend, _ := importWireBackendWithPlan(t, "planned_and_finished", "finished", "aws_s3_buckets", tc.planJSON)
 			c, err := tfe.NewClient(&tfe.Config{Address: backend.URL, Token: "test-token", HTTPClient: backend.Client()})
 			require.NoError(t, err)
-			t.Setenv("MCP_ORGANIZATION_ALLOWLIST", "org")
 			importContext, bindings, _ := importTestImportContext(t)
 			result, err := ReadVerifyImportPlan(context.Background(), c, VerifyImportInput{OrganizationName: "org", WorkspaceName: "target", RunID: "run-example", ImportContext: importContext, Bindings: bindings})
 			require.NoError(t, err)
@@ -388,7 +384,6 @@ func TestVerifyImportPlanVersionDifferenceKeepsPlanAndIdentitySeparateOnMark3lab
 	backend, _ := importWireBackendWithPlan(t, "planned_and_finished", "finished", "aws_sqs_queue", planJSON)
 	t.Setenv("TFE_ADDRESS", backend.URL)
 	t.Setenv("TFE_TOKEN", "test-token")
-	t.Setenv("MCP_ORGANIZATION_ALLOWLIST", "org")
 	ctx := server.NewMCPServer("test", "0").WithContext(context.Background(), importTestSession{})
 	wire, err := VerifyImportPlan(silentLogger()).Handler(ctx, mcp.CallToolRequest{Params: mcp.CallToolParams{Arguments: map[string]any{"organization_name": "org", "workspace_name": "target", "run_id": "run-example", "import_context": importContext, "bindings": bindings}}})
 	require.NoError(t, err)
@@ -450,7 +445,6 @@ func TestVerifyImportPlanEightCleanImportsHaveNoAttention(t *testing.T) {
 	backend, _ := importWireBackendWithPlan(t, "planned_and_finished", "finished", "aws_s3_buckets", planJSON)
 	c, err := tfe.NewClient(&tfe.Config{Address: backend.URL, Token: "test-token", HTTPClient: backend.Client()})
 	require.NoError(t, err)
-	t.Setenv("MCP_ORGANIZATION_ALLOWLIST", "org")
 	result, err := ReadVerifyImportPlan(context.Background(), c, VerifyImportInput{OrganizationName: "org", WorkspaceName: "target", RunID: "run-example", ImportContext: importContext, Bindings: bindings, DetailAddresses: []string{bindings[0].TargetAddress}})
 	require.NoError(t, err)
 	require.Equal(t, "plan_available", result.Status)
@@ -482,7 +476,6 @@ func TestVerifyImportPlanSQSImportWithUpdate(t *testing.T) {
 	backend, reads := importWireBackendWithPlan(t, "planned_and_finished", "finished", "aws_sqs_queue", planJSON)
 	c, err := tfe.NewClient(&tfe.Config{Address: backend.URL, Token: "test-token", HTTPClient: backend.Client()})
 	require.NoError(t, err)
-	t.Setenv("MCP_ORGANIZATION_ALLOWLIST", "org")
 	provider := queryResultProvider{Source: "registry.terraform.io/hashicorp/aws", Version: "6.66.0"}
 	marker, err := queryResultMarker("qry-example", provider, "aws_sqs_queue", map[string]any{"url": "https://example.invalid/queue"})
 	require.NoError(t, err)
@@ -619,7 +612,6 @@ func TestPrepareImportAllowsCallerProposedDifferentNameWithoutClaimingSupport(t 
 	backend, _ := importWireBackend(t, "planned_and_finished", "finished")
 	c, err := tfe.NewClient(&tfe.Config{Address: backend.URL, Token: "test-token", HTTPClient: backend.Client()})
 	require.NoError(t, err)
-	t.Setenv("MCP_ORGANIZATION_ALLOWLIST", "org")
 	provider := queryResultProvider{Source: "registry.terraform.io/hashicorp/aws", Version: "6.66.0"}
 	marker, err := queryResultMarker("qry-example", provider, "aws_s3_buckets", map[string]any{"bucket": "sample"})
 	require.NoError(t, err)
@@ -646,7 +638,6 @@ func TestVerifyImportStopsOnFailedPlanWhileRunLags(t *testing.T) {
 	backend, reads := importWireBackend(t, "planning", "errored")
 	c, err := tfe.NewClient(&tfe.Config{Address: backend.URL, Token: "test-token", HTTPClient: backend.Client()})
 	require.NoError(t, err)
-	t.Setenv("MCP_ORGANIZATION_ALLOWLIST", "org")
 	result, err := ReadVerifyImportPlan(context.Background(), c, VerifyImportInput{OrganizationName: "org", WorkspaceName: "target", RunID: "run-example"})
 	require.NoError(t, err)
 	require.Equal(t, "failed", result.Status)

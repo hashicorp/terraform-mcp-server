@@ -203,7 +203,7 @@ func validateVerifyImportRequest(input VerifyImportInput, config verifyImportPol
 // readVerifyImportTarget resolves and validates the user-confirmed target workspace.
 func readVerifyImportTarget(ctx context.Context, c *tfe.Client, input VerifyImportInput) (*tfe.Workspace, error) {
 	w, err := c.Workspaces.Read(ctx, input.OrganizationName, input.WorkspaceName)
-	if err != nil || w == nil || !validImportWorkspaceName(w.ID) || w.Name != input.WorkspaceName || w.Organization == nil || !strings.EqualFold(w.Organization.Name, input.OrganizationName) || !allowedImportOrganization(w.Organization.Name) {
+	if err != nil || w == nil || !validImportWorkspaceName(w.ID) || w.Name != input.WorkspaceName || w.Organization == nil || !strings.EqualFold(w.Organization.Name, input.OrganizationName) {
 		return nil, queryEvidenceError("target_read_unavailable")
 	}
 	return w, nil
