@@ -69,12 +69,16 @@ func TestSummarizeQueryDiscoveryProjectsTagsAndExplainsMissingAttributes(t *test
 	require.NotContains(t, text, "private")
 }
 
-func TestSummarizeQueryDiscoveryRejectsOversizedCompleteResponse(t *testing.T) {
-	prov, evidence := testDiscovery(t, "first")
-	evidence.Results[0].Identity["large"] = strings.Repeat("x", maxQuerySummaryBytes)
+func TestSummarizeQueryDiscoveryDoesNotApplyOutputSizeCaps(t *testing.T) {
+	prov, evidence := testDiscovery(t, "large")
+	evidence.Results[0].Identity["large"] = strings.Repeat("x", 100*1024)
 	summary, err := summarizeQueryDiscovery(prov, evidence, QueryDiscoveryFilter{})
-	require.Nil(t, summary)
-	require.EqualError(t, err, "query_summary_oversized")
+	require.NoError(t, err)
+	require.Len(t, summary.Lists[0].Results, 1)
+	require.Len(t, summary.Lists[0].Results[0].Identity["large"], 100*1024)
+
+	_, err = FormatQueryDiscoverySummary(summary)
+	require.NoError(t, err)
 }
 
 func TestSummarizeQueryDiscoveryNeverProjectsSignedArtifact(t *testing.T) {
@@ -169,49 +173,4 @@ func TestLegacyQuerySummaryProjectsBoundedSelectableResults(t *testing.T) {
 	require.Contains(t, text.Text, `"query_result_marker"`)
 	require.Contains(t, text.Text, `"tags":{"team":"search"}`)
 	require.NotContains(t, text.Text, "/logs")
-}
-
-func TestQuerySummaryOversizedCompleteResultIsNonselectable(t *testing.T) {
-	t.Setenv("MCP_ORGANIZATION_ALLOWLIST", "org")
-	var lines []string
-	for i := range 400 {
-		name := fmt.Sprintf("bucket-%03d-%s", i, strings.Repeat("x", 200))
-		lines = append(lines, fmt.Sprintf(`{"type":"list_resource_found","list_resource_found":{"address":"list.aws_s3_buckets.all","resource_type":"aws_s3_buckets","display_name":%q,"identity":{"bucket":%q},"identity_version":0}}`, name, name))
-	}
-	lines = append(lines, `{"type":"list_complete","list_complete":{"address":"list.aws_s3_buckets.all","total":400}}`)
-	logData := []byte("\x02" + strings.Join(lines, "\n") + "\n\x03")
-	var backend *httptest.Server
-	backend = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/vnd.api+json")
-		switch r.URL.Path {
-		case "/api/v2/ping":
-			w.WriteHeader(http.StatusOK)
-		case "/api/v2/queries/qry-test":
-			_, _ = fmt.Fprintf(w, `{"data":{"type":"queries","id":"qry-test","attributes":{"status":"finished","log-read-url":%q},"relationships":{"workspace":{"data":{"type":"workspaces","id":"ws-test"}},"no-code-query":{"data":{"type":"no-code-queries","id":"ncqry-test"}}}}}`, backend.URL+"/logs")
-		case "/api/v2/workspaces/ws-test":
-			_, _ = fmt.Fprint(w, `{"data":{"type":"workspaces","id":"ws-test","attributes":{"name":"ws"},"relationships":{"organization":{"data":{"type":"organizations","id":"org"}}}}}`)
-		case "/api/v2/search/no-code-query/ncqry-test":
-			_, _ = fmt.Fprint(w, `{"data":{"id":"ncqry-test","attributes":{"no-code-query-providers":[{"namespace":"hashicorp","name":"aws","version":"6.66.0","no-code-query-resources":[{"body":{"resource_type":"aws_s3_buckets"}}]}]},"relationships":{"workspace":{"data":{"id":"ws-test"}}}}}`)
-		case "/logs":
-			offset, _ := strconv.Atoi(r.URL.Query().Get("offset"))
-			limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
-			if offset < len(logData) {
-				_, _ = w.Write(logData[offset:min(len(logData), offset+limit)])
-			}
-		default:
-			http.NotFound(w, r)
-		}
-	}))
-	defer backend.Close()
-	c, err := tfe.NewClient(&tfe.Config{Address: backend.URL, Token: "test-token", HTTPClient: backend.Client()})
-	require.NoError(t, err)
-
-	summary, err := ReadQueryDiscoverySummary(context.Background(), c, "qry-test", QueryDiscoveryFilter{})
-	require.NoError(t, err)
-	require.Equal(t, "nonselectable", summary.Status)
-	require.False(t, summary.Selectable)
-	require.Equal(t, 400, summary.ResourcesDiscovered)
-	require.Equal(t, []string{"query_summary_oversized"}, summary.Diagnostics)
-	require.Empty(t, summary.Lists)
-	require.NotContains(t, fmt.Sprint(summary), "bucket-000")
 }

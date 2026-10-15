@@ -17,9 +17,6 @@ import (
 	"github.com/hashicorp/terraform-mcp-server/pkg/client"
 )
 
-const maxQuerySummaryBytes = 64 << 10
-const maxQueryRowBytes = 32 << 10
-
 type QueryDiscoveryFilter struct {
 	ResourceType string
 	Address      string
@@ -315,10 +312,6 @@ func validateQueryDiscoveryEvidence(evidence *queryEvidence) error {
 		if unsafeDiscoveryValue(result.Address) || unsafeDiscoveryValue(result.ResourceType) || unsafeDiscoveryValue(row.DisplayName) || unsafeDiscoveryValue(row.Identity) || unsafeDiscoveryValue(row.Tags) {
 			return queryEvidenceError("query_sensitive_result")
 		}
-		encoded, err := json.Marshal(row)
-		if err != nil || len(encoded) > maxQueryRowBytes {
-			return queryEvidenceError("query_summary_oversized")
-		}
 	}
 	return nil
 }
@@ -361,10 +354,6 @@ func summarizeQueryDiscovery(prov *queryDiscoveryProvenance, evidence *queryEvid
 	if summary.RowsWithoutAttributes > 0 {
 		summary.NextAction += " For rows with attributes_captured false, tags are unknown. If tags matter, ask before a new query (for example with generate_config_out true); it creates new markers and may still lack tags."
 	}
-	data, err := json.Marshal(summary)
-	if err != nil || len(data) > maxQuerySummaryBytes {
-		return nil, queryEvidenceError("query_summary_oversized")
-	}
 	return summary, nil
 }
 
@@ -385,17 +374,13 @@ func ReadQueryDiscoverySummary(ctx context.Context, c *tfe.Client, queryID strin
 		}
 		return nil, err
 	}
-	summary, err := summarizeQueryDiscovery(prov, evidence, filter)
-	if err != nil && err.Error() == "query_summary_oversized" {
-		return &QueryDiscoverySummary{QueryRunID: queryID, Status: "nonselectable", SourceOrganizationName: prov.Organization, SourceWorkspaceName: prov.WorkspaceName, SourceWorkspaceID: prov.WorkspaceID, Selectable: false, ResourcesDiscovered: len(evidence.Results), ByType: evidence.ByType, Diagnostics: []string{"query_summary_oversized"}, NextAction: "The complete query summary exceeds the response limit. Do not select or import from a partial result; use narrower summary filters or refine and run a narrower Search query."}, nil
-	}
-	return summary, err
+	return summarizeQueryDiscovery(prov, evidence, filter)
 }
 
 func FormatQueryDiscoverySummary(summary *QueryDiscoverySummary) (string, error) {
 	data, err := json.Marshal(summary)
-	if err != nil || len(data) > maxQuerySummaryBytes {
-		return "", queryEvidenceError("query_summary_oversized")
+	if err != nil {
+		return "", queryEvidenceError("query_summary_unserializable")
 	}
 	return string(data), nil
 }
