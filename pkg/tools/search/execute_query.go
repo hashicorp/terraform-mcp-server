@@ -247,31 +247,6 @@ func isPositiveInteger(value any) bool {
 	return err == nil && n > 0
 }
 
-// The create response should be tiny; reject excessive data rather than buffering
-// an arbitrary Atlas response. This is not a bound on query results.
-const maxQueryCreateResponseBytes = 64 << 10
-
-type boundedQueryCreateResponse struct{ buffer bytes.Buffer }
-
-func (b *boundedQueryCreateResponse) Write(p []byte) (int, error) {
-	if len(p) > maxQueryCreateResponseBytes-b.buffer.Len() {
-		return 0, fmt.Errorf("query create response exceeds limit")
-	}
-	return b.buffer.Write(p)
-}
-
-func validQueryRunID(id string) bool {
-	if !strings.HasPrefix(id, "qry-") || len(id) <= len("qry-") || len(id) > 128 {
-		return false
-	}
-	for _, c := range id[len("qry-"):] {
-		if !((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '-') {
-			return false
-		}
-	}
-	return true
-}
-
 func submitExecuteQuery(ctx context.Context, tfeClient *tfe.Client, workspaceID string, configuration *executeQueryConfiguration) (*ExecuteQueryResponse, error) {
 	options := &executeQueryOptions{
 		Source:            executeQuerySource,
@@ -287,7 +262,7 @@ func submitExecuteQuery(ctx context.Context, tfeClient *tfe.Client, workspaceID 
 		return nil, fmt.Errorf("building request: %w", err)
 	}
 
-	var response boundedQueryCreateResponse
+	var response bytes.Buffer
 	if err := request.Do(ctx, &response); err != nil {
 		return nil, err
 	}
@@ -302,8 +277,8 @@ func submitExecuteQuery(ctx context.Context, tfeClient *tfe.Client, workspaceID 
 			} `json:"relationships"`
 		} `json:"data"`
 	}
-	if err := json.Unmarshal(response.buffer.Bytes(), &payload); err != nil || !validQueryRunID(payload.Data.Relationships.LatestQueryRun.Data.ID) {
-		return nil, fmt.Errorf("query create response did not contain a valid query run ID")
+	if err := json.Unmarshal(response.Bytes(), &payload); err != nil || strings.TrimSpace(payload.Data.Relationships.LatestQueryRun.Data.ID) == "" {
+		return nil, fmt.Errorf("query create response did not contain a query run ID")
 	}
 	return &ExecuteQueryResponse{QueryRunID: payload.Data.Relationships.LatestQueryRun.Data.ID}, nil
 }
