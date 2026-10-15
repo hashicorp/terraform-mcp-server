@@ -189,6 +189,9 @@ var officialFactories = map[string]func(svr *mcp.Server, logger *slog.Logger){
 	"create_workspace_tags": func(svr *mcp.Server, _ *slog.Logger) {
 		mcp.AddTool(svr, tfeTools.CreateWorkspaceTagsTool(), tfeTools.CreateWorkspaceTagsFunc)
 	},
+	"create_no_code_workspace": func(svr *mcp.Server, _ *slog.Logger) {
+		mcp.AddTool(svr, tfeTools.CreateNoCodeWorkspaceTool(), tfeTools.CreateNoCodeWorkspaceFunc)
+	},
 }
 
 func RegisterTools(svr *mcp.Server, logger *slog.Logger, filter toolsets.ToolFilter) {
