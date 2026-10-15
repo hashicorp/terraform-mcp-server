@@ -69,8 +69,8 @@ spec:
             - name: MCP_ORGANIZATION_ALLOWLIST
               value: {{ .Values.mcpServer.allowedOrganizations | join "," | quote }}
             {{- end }}
-            - name: ENABLE_TF_OPERATIONS
-              value: {{ .Values.mcpServer.enableTfOperations | default false | quote }}
+            - name: PREVENT_DESTRUCTIVE_OPERATIONS
+              value: {{ .Values.mcpServer.preventDestructiveOperations | quote }}
             {{- if .Values.mcpServer.redirectRootURL }}
             - name: MCP_REDIRECT_ROOT_URL
               value: {{ .Values.mcpServer.redirectRootURL | quote }}

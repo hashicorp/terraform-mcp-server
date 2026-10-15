@@ -47,7 +47,7 @@ jobs:
             --set mcpServer.tfeAddress=https://tfe.example.com \
             --set mcpServer.allowedOrigins=https://ide.example.com \
             --set mcpServer.sessionMode=stateless \
-            --set mcpServer.enableTfOperations=true \
+            --set mcpServer.preventDestructiveOperations=false \
             --set otel.enabled=true \
             --set otel.metricsEndpoint=http://collector:4318 \
             --set ingress.enabled=true
