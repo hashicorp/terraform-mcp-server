@@ -389,196 +389,271 @@ func readVerifyImportPlanWithConfig(ctx context.Context, c *tfe.Client, input Ve
 	return out, nil
 }
 
-func classifyImportPlan(ctx context.Context, c *tfe.Client, out *VerifyImportResult, planID string, importContext *ImportContext, selected map[string]ImportContextSelection, addresses map[string]string, detailWanted map[string]bool) (*VerifyImportResult, error) {
+type importPlanJSON struct {
+	FormatVersion    string                     `json:"format_version"`
+	TerraformVersion string                     `json:"terraform_version"`
+	Complete         *bool                      `json:"complete"`
+	Errored          bool                       `json:"errored"`
+	ResourceChanges  []importPlanResourceChange `json:"resource_changes"`
+	PlannedValues    struct {
+		RootModule importPlanModule `json:"root_module"`
+	} `json:"planned_values"`
+	OutputChanges   map[string]json.RawMessage `json:"output_changes"`
+	DeferredChanges []json.RawMessage          `json:"deferred_changes"`
+	ResourceDrift   []importPlanResourceDrift  `json:"resource_drift"`
+}
+
+type importPlanResourceChange struct {
+	Address      string           `json:"address"`
+	Mode         string           `json:"mode"`
+	Type         string           `json:"type"`
+	ProviderName string           `json:"provider_name"`
+	Change       importPlanChange `json:"change"`
+}
+
+type importPlanChange struct {
+	Actions       []string          `json:"actions"`
+	Importing     json.RawMessage   `json:"importing"`
+	AfterIdentity json.RawMessage   `json:"after_identity"`
+	ReplacePaths  []json.RawMessage `json:"replace_paths"`
+}
+
+type importPlanResourceDrift struct {
+	Address string `json:"address"`
+	Change  struct {
+		Actions []string `json:"actions"`
+	} `json:"change"`
+}
+
+type importPlanOutputChange struct {
+	Actions []string `json:"actions"`
+	Change  *struct {
+		Actions []string `json:"actions"`
+	} `json:"change"`
+}
+
+type importPlanImporting struct {
+	ID       json.RawMessage `json:"id"`
+	Identity json.RawMessage `json:"identity"`
+	Unknown  bool            `json:"unknown"`
+}
+
+// unsupportedImportPlan returns a value-free blocked result for unsafe Plan JSON.
+func unsupportedImportPlan(out *VerifyImportResult, code, guidance string) *VerifyImportResult {
+	out.Status, out.Diagnostics, out.NextAction = "blocked", []string{code}, guidance+" Review the exact Run and full Plan in HCP Terraform; do not apply or start another Run to diagnose this response."
+	return out
+}
+
+// readImportPlanJSON reads and validates the Plan JSON envelope before classification.
+func readImportPlanJSON(ctx context.Context, c *tfe.Client, out *VerifyImportResult, planID string) (*importPlanJSON, *VerifyImportResult, error) {
 	raw, err := c.Plans.ReadJSONOutput(ctx, planID)
 	if err != nil {
-		return nil, queryEvidenceError("plan_read_unavailable")
-	}
-	var plan struct {
-		FormatVersion    string `json:"format_version"`
-		TerraformVersion string `json:"terraform_version"`
-		Complete         *bool  `json:"complete"`
-		Errored          bool   `json:"errored"`
-		ResourceChanges  []struct {
-			Address      string `json:"address"`
-			Mode         string `json:"mode"`
-			Type         string `json:"type"`
-			ProviderName string `json:"provider_name"`
-			Change       struct {
-				Actions       []string          `json:"actions"`
-				Importing     json.RawMessage   `json:"importing"`
-				AfterIdentity json.RawMessage   `json:"after_identity"`
-				ReplacePaths  []json.RawMessage `json:"replace_paths"`
-			} `json:"change"`
-		} `json:"resource_changes"`
-		PlannedValues struct {
-			RootModule importPlanModule `json:"root_module"`
-		} `json:"planned_values"`
-		OutputChanges   map[string]json.RawMessage `json:"output_changes"`
-		DeferredChanges []json.RawMessage          `json:"deferred_changes"`
-		ResourceDrift   []struct {
-			Address string `json:"address"`
-			Change  struct {
-				Actions []string `json:"actions"`
-			} `json:"change"`
-		} `json:"resource_drift"`
-	}
-	// Only publish fixed, value-free reasons. Plan JSON can contain credentials,
-	// importing IDs and provider values; do not echo it or decoder errors.
-	unsupported := func(code, guidance string) (*VerifyImportResult, error) {
-		out.Status, out.Diagnostics, out.NextAction = "blocked", []string{code}, guidance+" Review the exact Run and full Plan in HCP Terraform; do not apply or start another Run to diagnose this response."
-		return out, nil
+		return nil, nil, queryEvidenceError("plan_read_unavailable")
 	}
 	if len(raw) == 0 {
-		return unsupported("plan_json_empty", "The associated Plan JSON response was empty.")
+		return nil, unsupportedImportPlan(out, "plan_json_empty", "The associated Plan JSON response was empty."), nil
 	}
+	var plan importPlanJSON
 	if err := decodeQueryEvidence(raw, &plan); err != nil {
-		return unsupported("plan_json_invalid", "The associated Plan JSON could not be safely decoded.")
+		return nil, unsupportedImportPlan(out, "plan_json_invalid", "The associated Plan JSON could not be safely decoded."), nil
 	}
 	if !terraformPlanFormatVersionPattern.MatchString(plan.FormatVersion) {
-		return unsupported("plan_format_unsupported", "The Plan JSON format is missing or is not a supported 1.x format.")
+		return nil, unsupportedImportPlan(out, "plan_format_unsupported", "The Plan JSON format is missing or is not a supported 1.x format."), nil
 	}
 	if plan.Complete == nil || !*plan.Complete {
-		return unsupported("plan_json_incomplete", "The Plan JSON does not report complete=true, even if the Run and Plan statuses are finished.")
+		return nil, unsupportedImportPlan(out, "plan_json_incomplete", "The Plan JSON does not report complete=true, even if the Run and Plan statuses are finished."), nil
 	}
 	if plan.Errored {
-		return unsupported("plan_json_errored", "The Plan JSON reports errored=true despite the finished Plan status.")
+		return nil, unsupportedImportPlan(out, "plan_json_errored", "The Plan JSON reports errored=true despite the finished Plan status."), nil
 	}
 	if old, known := terraformImportSyntaxVersion(plan.TerraformVersion); !known {
-		return unsupported("plan_terraform_version_unavailable", "The Plan JSON lacks a recognized Terraform release or prerelease version; import-block support cannot be checked from this evidence.")
+		return nil, unsupportedImportPlan(out, "plan_terraform_version_unavailable", "The Plan JSON lacks a recognized Terraform release or prerelease version; import-block support cannot be checked from this evidence."), nil
 	} else if old {
-		return unsupported("plan_terraform_version_unsupported", "The Plan JSON reports a Terraform release before 1.5, which cannot support import blocks.")
+		return nil, unsupportedImportPlan(out, "plan_terraform_version_unsupported", "The Plan JSON reports a Terraform release before 1.5, which cannot support import blocks."), nil
 	}
 	if len(plan.ResourceChanges) > 10000 || len(plan.ResourceDrift) > 100 || len(plan.DeferredChanges) > 10000 {
-		return unsupported("plan_change_limit", "The Plan exceeds verification's resource, drift or deferred-change limits.")
+		return nil, unsupportedImportPlan(out, "plan_change_limit", "The Plan exceeds verification's resource, drift or deferred-change limits."), nil
 	}
+	return &plan, nil, nil
+}
+
+// addUnselectedImportAddress records bounded, value-free context for unselected changes.
+func addUnselectedImportAddress(out *VerifyImportResult, address, kind string) {
+	if len(out.Unselected.Addresses) < 50 {
+		out.Unselected.Addresses = append(out.Unselected.Addresses, ImportUnselectedAddress{Address: address, Kind: kind})
+	} else {
+		out.Unselected.Truncated = true
+	}
+}
+
+// analyzeImportPlan validates aggregate evidence and indexes resource changes and identities.
+func analyzeImportPlan(plan *importPlanJSON, out *VerifyImportResult, selectedAddresses map[string]bool) (map[string]int, map[string]uint64, error) {
 	out.Plan = &ImportPlanFacts{TerraformVersion: plan.TerraformVersion, FormatVersion: plan.FormatVersion, ResourceChanges: len(plan.ResourceChanges), DeferredChanges: len(plan.DeferredChanges), ResourceDrift: len(plan.ResourceDrift)}
 	out.Unselected = &ImportUnselected{Addresses: []ImportUnselectedAddress{}}
-	addUnselected := func(address, kind string) {
-		if len(out.Unselected.Addresses) < 50 {
-			out.Unselected.Addresses = append(out.Unselected.Addresses, ImportUnselectedAddress{Address: address, Kind: kind})
-		} else {
-			out.Unselected.Truncated = true
-		}
-	}
 	for _, drift := range plan.ResourceDrift {
 		if drift.Address == "" || len(drift.Address) > 512 || !importAddressPattern.MatchString(drift.Address) || len(drift.Change.Actions) == 0 {
-			return nil, queryEvidenceError("plan_drift_evidence_invalid")
+			return nil, nil, queryEvidenceError("plan_drift_evidence_invalid")
 		}
-		addUnselected(drift.Address, "drift")
+		addUnselectedImportAddress(out, drift.Address, "drift")
 	}
 	out.Unselected.Drift = len(plan.ResourceDrift)
+
 	for _, raw := range plan.OutputChanges {
-		var change struct {
-			Actions []string `json:"actions"`
-			Change  *struct {
-				Actions []string `json:"actions"`
-			} `json:"change"`
-		}
+		var change importPlanOutputChange
 		if decodeQueryEvidence(raw, &change) != nil {
-			return nil, queryEvidenceError("plan_evidence_invalid")
+			return nil, nil, queryEvidenceError("plan_evidence_invalid")
 		}
 		actions := change.Actions
 		if len(actions) == 0 && change.Change != nil {
 			actions = change.Change.Actions
 		}
 		if len(actions) == 0 {
-			return nil, queryEvidenceError("plan_evidence_invalid")
+			return nil, nil, queryEvidenceError("plan_evidence_invalid")
 		}
 		if len(actions) != 1 || actions[0] != "no-op" {
 			out.Plan.OutputChanges++
 		}
 	}
-	out.Changes = map[string]int{}
-	out.ObjectIdentity = map[string]int{}
+
 	byAddress := map[string]int{}
-	selectedAddresses := map[string]bool{}
-	for _, addr := range addresses {
-		selectedAddresses[addr] = true
-	}
-	for i, rc := range plan.ResourceChanges {
-		if rc.Address == "" || len(rc.Address) > 512 || byAddress[rc.Address] != 0 || !importAddressPattern.MatchString(rc.Address) || len(rc.Change.Actions) == 0 || rc.Mode != "managed" && rc.Mode != "data" {
-			return nil, queryEvidenceError("plan_evidence_invalid")
+	for i, resource := range plan.ResourceChanges {
+		if resource.Address == "" || len(resource.Address) > 512 || byAddress[resource.Address] != 0 || !importAddressPattern.MatchString(resource.Address) || len(resource.Change.Actions) == 0 || resource.Mode != "managed" && resource.Mode != "data" {
+			return nil, nil, queryEvidenceError("plan_evidence_invalid")
 		}
-		for _, action := range rc.Change.Actions {
+		for _, action := range resource.Change.Actions {
 			switch action {
 			case "no-op", "create", "read", "update", "delete":
 			default:
-				return nil, queryEvidenceError("plan_actions_unsupported")
+				return nil, nil, queryEvidenceError("plan_actions_unsupported")
 			}
 		}
-		if jsonPresent(rc.Change.AfterIdentity) {
+		if jsonPresent(resource.Change.AfterIdentity) {
 			var after map[string]any
-			if decodeQueryEvidence(rc.Change.AfterIdentity, &after) != nil || len(after) == 0 {
-				return nil, queryEvidenceError("plan_identity_evidence_invalid")
+			if decodeQueryEvidence(resource.Change.AfterIdentity, &after) != nil || len(after) == 0 {
+				return nil, nil, queryEvidenceError("plan_identity_evidence_invalid")
 			}
 		}
-		byAddress[rc.Address] = i + 1
-		if !selectedAddresses[rc.Address] {
-			if jsonPresent(rc.Change.Importing) {
+		byAddress[resource.Address] = i + 1
+		if !selectedAddresses[resource.Address] {
+			if jsonPresent(resource.Change.Importing) {
 				out.Plan.ExtraImports++
-				addUnselected(rc.Address, "extra_import")
+				addUnselectedImportAddress(out, resource.Address, "extra_import")
 			}
-			if rc.Mode == "managed" && (len(rc.Change.Actions) != 1 || rc.Change.Actions[0] != "no-op") {
+			if resource.Mode == "managed" && (len(resource.Change.Actions) != 1 || resource.Change.Actions[0] != "no-op") {
 				out.Plan.OtherManagedActions++
-				addUnselected(rc.Address, "other_managed_action")
+				addUnselectedImportAddress(out, resource.Address, "other_managed_action")
 			}
 		}
 	}
+
 	versions := map[string]uint64{}
 	if err := collectImportPlanVersions(plan.PlannedValues.RootModule, versions, 0); err != nil {
+		return nil, nil, err
+	}
+	return byAddress, versions, nil
+}
+
+// classifyImportActions maps a supported Terraform action sequence to its result category.
+func classifyImportActions(actions []string) (string, error) {
+	switch {
+	case len(actions) == 1 && actions[0] == "no-op":
+		return "none", nil
+	case len(actions) == 1 && actions[0] == "update":
+		return "update", nil
+	case len(actions) == 1 && actions[0] == "create":
+		return "create", nil
+	case len(actions) == 2 && (actions[0] == "delete" || actions[1] == "delete"):
+		return "replace_or_destroy", nil
+	default:
+		return "", queryEvidenceError("plan_actions_unsupported")
+	}
+}
+
+// classifySelectedImport compares one selected result with its exact Plan entry.
+func classifySelectedImport(plan *importPlanJSON, importContext *ImportContext, marker string, selection ImportContextSelection, address string, byAddress map[string]int, versions map[string]uint64) (ImportPlanAttention, ImportPlanDetail, error) {
+	item := ImportPlanAttention{QueryResultMarker: marker, TargetAddress: address, Change: "not_in_plan", ObjectIdentity: "unverified", IdentityReason: "no_matching_plan_entry", SearchIdentityVersion: selection.SearchIdentityVersion}
+	detail := ImportPlanDetail{TargetAddress: address}
+	if version, ok := versions[address]; ok {
+		item.PlanIdentityVersion = &version
+	}
+	index := byAddress[address]
+	if index == 0 {
+		return item, detail, nil
+	}
+
+	resource := plan.ResourceChanges[index-1]
+	detail.Actions, detail.AfterIdentityPresent, detail.ReplacePathCount = resource.Change.Actions, jsonPresent(resource.Change.AfterIdentity), len(resource.Change.ReplacePaths)
+	if resource.Mode != "managed" || resource.Type != selection.ManagedType || resource.ProviderName != importContext.Providers[selection.ListType].Source {
+		item.Change, item.IdentityReason = "type_mismatch", "plan_type_or_provider_differs"
+		return item, detail, nil
+	}
+	if !jsonPresent(resource.Change.Importing) {
+		item.Change, item.IdentityReason = "import_missing", "no_import_marker"
+		return item, detail, nil
+	}
+
+	var importing importPlanImporting
+	if decodeQueryEvidence(resource.Change.Importing, &importing) != nil {
+		return item, detail, queryEvidenceError("plan_import_evidence_invalid")
+	}
+	detail.ImportIDPresent = jsonPresent(importing.ID)
+	if importing.Unknown || jsonPresent(importing.ID) == jsonPresent(importing.Identity) {
+		item.Change, item.IdentityReason = "import_missing", "no_usable_import_marker"
+		return item, detail, nil
+	}
+	change, err := classifyImportActions(resource.Change.Actions)
+	if err != nil {
+		return item, detail, err
+	}
+	item.Change = change
+	item.ObjectIdentity, item.IdentityReason = compareImportPlanIdentity(selection, versions, address, resource.Change.AfterIdentity, plan.TerraformVersion, importContext.Target.IdentitySupport[selection.ManagedType])
+	return item, detail, nil
+}
+
+// finalizeImportPlanResult adds diagnostics and review guidance after classification.
+func finalizeImportPlanResult(out *VerifyImportResult, selected int) {
+	out.Status, out.Diagnostics = "plan_available", []string{}
+	out.NextAction = "Attention lists only selected results with a non-no-op change or identity needing review; an empty list does not clear other Plan actions, outputs or drift. Report identity uncertainty and mismatches separately from Plan actions. Ask the user whether to review the full Plan outside this session via run_ui_url (or the confirmed CLI browser Run URL if absent), or to preview it here. Only if the user chooses in-session review and get_plan_json_output is available, call it with this result's plan_id; raw Plan JSON may contain sensitive values visible to the agent, so summarize actions without reproducing secrets or sensitive attributes. Review other managed actions, outputs, drift and provider scope; this bounded result does not attest the uploaded bytes or authorize apply."
+	if out.ObjectIdentity["unverified"]+out.ObjectIdentity["mismatched"]+out.ObjectIdentity["unsupported"] > 0 {
+		out.Diagnostics = append(out.Diagnostics, "identity_requires_review")
+		out.NextAction = importIdentityReviewAction(out, selected)
+	}
+	if out.Changes["update"]+out.Changes["create"]+out.Changes["replace_or_destroy"]+out.Plan.ExtraImports+out.Plan.OtherManagedActions+out.Plan.OutputChanges+out.Plan.DeferredChanges+out.Plan.ResourceDrift > 0 {
+		out.Diagnostics = append(out.Diagnostics, "plan_actions_require_review")
+		out.NextAction += " The Plan contains changes beyond a no-op import (or other changes/drift). Review the full attribute-level diff and reconcile the existing local configuration with the user; this Plan is not safe to apply as an import-only change. If configuration is revised, a separately approved new speculative plan must be verified under its own Run ID."
+	}
+	out.NextAction += " An import-only Plan or N-to-import summary is not identity proof; review separate identity findings, other actions, module instances, outputs and drift. If the full Plan is satisfactory and the user wants a refinement, adjust only the proposed imported resources and necessary editable local-module interfaces to follow the existing workspace's variables, references and coding practices. Check that changes preserve intended identities, addresses and provider scope; review the diff and obtain separate approval for a new speculative plan of the revised HCL, then verify its own Run ID. A satisfactory first Plan requires no second Plan; identity uncertainty alone does not require changing HCL or starting another Run. After full-Plan review, report the separate action and identity findings and hand off the proposed HCL. Do not run terraform apply, terraform import or apply_run as a continuation of this Search-to-import workflow; any eventual apply belongs to a separate, independently reviewed and authorized workflow."
+	out.NextAction += " In the user-facing report, first summarize selected imports with both change=none and object_identity=matched; group them if numerous. Then report selected Plan changes by action, identifying affected addresses as useful. Separately group identities that are not matched by status and identity_reason, explaining in plain language what the evidence means and what remains uncertain; identify affected addresses as useful. A selection can appear in both exception sections. Use attention and the selected bindings for this breakdown, not an inferred overlap between the independent changes and object_identity count maps. Unverified is neither a match nor proof of a mismatch; mismatched needs user review; unsupported means this identity could not be checked with available evidence. Matched is only a bounded comparison, not proof of provider scope or the selected cloud object. Keep unselected actions, outputs and drift separate."
+}
+
+// classifyImportPlan projects a finished Plan into value-free import findings.
+func classifyImportPlan(ctx context.Context, c *tfe.Client, out *VerifyImportResult, planID string, importContext *ImportContext, selected map[string]ImportContextSelection, addresses map[string]string, detailWanted map[string]bool) (*VerifyImportResult, error) {
+	plan, blocked, err := readImportPlanJSON(ctx, c, out, planID)
+	if blocked != nil || err != nil {
+		return blocked, err
+	}
+	selectedAddresses := make(map[string]bool, len(addresses))
+	for _, address := range addresses {
+		selectedAddresses[address] = true
+	}
+	byAddress, versions, err := analyzeImportPlan(plan, out, selectedAddresses)
+	if err != nil {
 		return nil, err
 	}
+	out.Changes = map[string]int{}
+	out.ObjectIdentity = map[string]int{}
 	markers := make([]string, 0, len(selected))
 	for marker := range selected {
 		markers = append(markers, marker)
 	}
 	sort.Strings(markers)
 	for _, marker := range markers {
-		entry := selected[marker]
-		addr := addresses[marker]
-		item := ImportPlanAttention{QueryResultMarker: marker, TargetAddress: addr, Change: "not_in_plan", ObjectIdentity: "unverified", IdentityReason: "no_matching_plan_entry", SearchIdentityVersion: entry.SearchIdentityVersion}
-		detail := ImportPlanDetail{TargetAddress: addr}
-		if v, ok := versions[addr]; ok {
-			item.PlanIdentityVersion = &v
+		selection, address := selected[marker], addresses[marker]
+		item, detail, err := classifySelectedImport(plan, importContext, marker, selection, address, byAddress, versions)
+		if err != nil {
+			return nil, err
 		}
-		if index := byAddress[addr]; index > 0 {
-			rc := plan.ResourceChanges[index-1]
-			detail.Actions, detail.AfterIdentityPresent, detail.ReplacePathCount = rc.Change.Actions, jsonPresent(rc.Change.AfterIdentity), len(rc.Change.ReplacePaths)
-			if rc.Mode != "managed" || rc.Type != entry.ManagedType || rc.ProviderName != importContext.Providers[entry.ListType].Source {
-				item.Change, item.IdentityReason = "type_mismatch", "plan_type_or_provider_differs"
-			} else if !jsonPresent(rc.Change.Importing) {
-				item.Change, item.IdentityReason = "import_missing", "no_import_marker"
-			} else {
-				var importing struct {
-					ID       json.RawMessage `json:"id"`
-					Identity json.RawMessage `json:"identity"`
-					Unknown  bool            `json:"unknown"`
-				}
-				if decodeQueryEvidence(rc.Change.Importing, &importing) != nil {
-					return nil, queryEvidenceError("plan_import_evidence_invalid")
-				}
-				detail.ImportIDPresent = jsonPresent(importing.ID)
-				if importing.Unknown || jsonPresent(importing.ID) == jsonPresent(importing.Identity) {
-					item.Change, item.IdentityReason = "import_missing", "no_usable_import_marker"
-				} else {
-					switch {
-					case len(rc.Change.Actions) == 1 && rc.Change.Actions[0] == "no-op":
-						item.Change = "none"
-					case len(rc.Change.Actions) == 1 && rc.Change.Actions[0] == "update":
-						item.Change = "update"
-					case len(rc.Change.Actions) == 1 && rc.Change.Actions[0] == "create":
-						item.Change = "create"
-					case len(rc.Change.Actions) == 2 && (rc.Change.Actions[0] == "delete" || rc.Change.Actions[1] == "delete"):
-						item.Change = "replace_or_destroy"
-					default:
-						return nil, queryEvidenceError("plan_actions_unsupported")
-					}
-					item.ObjectIdentity, item.IdentityReason = compareImportPlanIdentity(entry, versions, addr, rc.Change.AfterIdentity, plan.TerraformVersion, importContext.Target.IdentitySupport[entry.ManagedType])
-				}
-			}
-		}
-		if detailWanted[addr] {
+		if detailWanted[address] {
 			out.Detail = append(out.Detail, detail)
 		}
 		out.Changes[item.Change]++
@@ -587,18 +662,7 @@ func classifyImportPlan(ctx context.Context, c *tfe.Client, out *VerifyImportRes
 			out.Attention = append(out.Attention, item)
 		}
 	}
-	out.Status, out.Diagnostics = "plan_available", []string{}
-	out.NextAction = "Attention lists only selected results with a non-no-op change or identity needing review; an empty list does not clear other Plan actions, outputs or drift. Report identity uncertainty and mismatches separately from Plan actions. Ask the user whether to review the full Plan outside this session via run_ui_url (or the confirmed CLI browser Run URL if absent), or to preview it here. Only if the user chooses in-session review and get_plan_json_output is available, call it with this result's plan_id; raw Plan JSON may contain sensitive values visible to the agent, so summarize actions without reproducing secrets or sensitive attributes. Review other managed actions, outputs, drift and provider scope; this bounded result does not attest the uploaded bytes or authorize apply."
-	if out.ObjectIdentity["unverified"]+out.ObjectIdentity["mismatched"]+out.ObjectIdentity["unsupported"] > 0 {
-		out.Diagnostics = append(out.Diagnostics, "identity_requires_review")
-		out.NextAction = importIdentityReviewAction(out, len(selected))
-	}
-	if out.Changes["update"]+out.Changes["create"]+out.Changes["replace_or_destroy"]+out.Plan.ExtraImports+out.Plan.OtherManagedActions+out.Plan.OutputChanges+out.Plan.DeferredChanges+out.Plan.ResourceDrift > 0 {
-		out.Diagnostics = append(out.Diagnostics, "plan_actions_require_review")
-		out.NextAction += " The Plan contains changes beyond a no-op import (or other changes/drift). Review the full attribute-level diff and reconcile the existing local configuration with the user; this Plan is not safe to apply as an import-only change. If configuration is revised, a separately approved new speculative plan must be verified under its own Run ID."
-	}
-	out.NextAction += " An import-only Plan or N-to-import summary is not identity proof; review separate identity findings, other actions, module instances, outputs and drift. If the full Plan is satisfactory and the user wants a refinement, adjust only the proposed imported resources and necessary editable local-module interfaces to follow the existing workspace's variables, references and coding practices. Check that changes preserve intended identities, addresses and provider scope; review the diff and obtain separate approval for a new speculative plan of the revised HCL, then verify its own Run ID. A satisfactory first Plan requires no second Plan; identity uncertainty alone does not require changing HCL or starting another Run. After full-Plan review, report the separate action and identity findings and hand off the proposed HCL. Do not run terraform apply, terraform import or apply_run as a continuation of this Search-to-import workflow; any eventual apply belongs to a separate, independently reviewed and authorized workflow."
-	out.NextAction += " In the user-facing report, first summarize selected imports with both change=none and object_identity=matched; group them if numerous. Then report selected Plan changes by action, identifying affected addresses as useful. Separately group identities that are not matched by status and identity_reason, explaining in plain language what the evidence means and what remains uncertain; identify affected addresses as useful. A selection can appear in both exception sections. Use attention and the selected bindings for this breakdown, not an inferred overlap between the independent changes and object_identity count maps. Unverified is neither a match nor proof of a mismatch; mismatched needs user review; unsupported means this identity could not be checked with available evidence. Matched is only a bounded comparison, not proof of provider scope or the selected cloud object. Keep unselected actions, outputs and drift separate."
+	finalizeImportPlanResult(out, len(selected))
 	return out, nil
 }
 
