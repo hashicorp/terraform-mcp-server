@@ -85,7 +85,7 @@ func TestCreateNoCodeWorkspace(t *testing.T) {
 
 	workspaceID := gjson.Get(resultText, "data.attributes.workspace_id").String() // Legacy SDK
 	// TODO: Switch to the official SDK response after the migration is complete.
-	// Official SDK: workspaceID := gjson.Get(resultText, "workspace_id").String()
+	// workspaceID := gjson.Get(resultText, "workspace_id").String() // Official SDK
 	require.NotEmpty(t, workspaceID, "create_no_code_workspace should return a workspace_id")
 
 	workspace, err := client.Workspaces.ReadByID(t.Context(), workspaceID)
