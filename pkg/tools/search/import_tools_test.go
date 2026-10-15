@@ -25,53 +25,14 @@ import (
 
 type importTestSession struct{}
 
-func normalizeImportSchema(t *testing.T, schema any) any {
-	t.Helper()
-	data, err := json.Marshal(schema)
-	require.NoError(t, err)
-	var value any
-	require.NoError(t, json.Unmarshal(data, &value))
-	var normalize func(any) any
-	normalize = func(value any) any {
-		switch typed := value.(type) {
-		case map[string]any:
-			delete(typed, "description")
-			for key, child := range typed {
-				if key == "type" {
-					if choices, ok := child.([]any); ok {
-						var concrete []any
-						for _, choice := range choices {
-							if choice != "null" {
-								concrete = append(concrete, choice)
-							}
-						}
-						if len(concrete) == 1 {
-							typed[key] = concrete[0]
-							continue
-						}
-					}
-				}
-				typed[key] = normalize(child)
-			}
-		case []any:
-			for index, child := range typed {
-				typed[index] = normalize(child)
-			}
-		}
-		return value
-	}
-	return normalize(value)
-}
-
-func TestVerifyImportPlanImportContextSchemaMatchesOfficialSDK(t *testing.T) {
+func TestVerifyImportPlanInputSchemaMatchesOfficialSDK(t *testing.T) {
 	legacy := VerifyImportPlan(silentLogger())
-	legacyContext, ok := legacy.Tool.InputSchema.Properties["import_context"]
-	require.True(t, ok)
+	require.NotEmpty(t, legacy.Tool.RawInputSchema)
 	official, err := jsonschema.For[VerifyImportInput](nil)
 	require.NoError(t, err)
-	officialContext, ok := official.Properties["import_context"]
-	require.True(t, ok)
-	require.Equal(t, normalizeImportSchema(t, officialContext), normalizeImportSchema(t, legacyContext))
+	officialJSON, err := json.Marshal(official)
+	require.NoError(t, err)
+	require.JSONEq(t, string(officialJSON), string(legacy.Tool.RawInputSchema))
 }
 
 type importRewriteTransport struct {
@@ -681,7 +642,10 @@ func TestImportToolDescriptionsAndSchemas(t *testing.T) {
 	require.Contains(t, prepare.InputSchema.Required, "locked_providers")
 	require.Contains(t, prepare.OutputSchema.Properties, "import_context")
 	verify := VerifyImportPlan(silentLogger()).Tool
-	require.Contains(t, verify.InputSchema.Required, "run_id")
-	require.NotContains(t, verify.InputSchema.Required, "import_context")
+	var verifyInputSchema jsonschema.Schema
+	require.NoError(t, json.Unmarshal(verify.RawInputSchema, &verifyInputSchema))
+	require.Contains(t, verifyInputSchema.Required, "run_id")
+	require.NotContains(t, verifyInputSchema.Required, "import_context")
+	require.Contains(t, verifyInputSchema.Properties, "import_context")
 	require.Contains(t, verify.OutputSchema.Properties, "object_identity")
 }

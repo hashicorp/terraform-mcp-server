@@ -43,59 +43,6 @@ func decodeImportArguments(raw any, target any, limit int) error {
 	return nil
 }
 
-func importContextSchemaProperties() map[string]any {
-	stringMap := map[string]any{"type": "object", "additionalProperties": map[string]any{"type": "string"}}
-	return map[string]any{
-		"query_run_id": map[string]any{"type": "string"},
-		"providers": map[string]any{
-			"type": "object",
-			"additionalProperties": map[string]any{
-				"type": "object",
-				"properties": map[string]any{
-					"source":  map[string]any{"type": "string"},
-					"version": map[string]any{"type": "string"},
-				},
-				"required":             []string{"source", "version"},
-				"additionalProperties": false,
-			},
-		},
-		"target": map[string]any{
-			"type": "object",
-			"properties": map[string]any{
-				"workspace_id":      map[string]any{"type": "string"},
-				"organization_name": map[string]any{"type": "string"},
-				"terraform_version": map[string]any{"type": "string"},
-				"identity_support":  stringMap,
-			},
-			"required":             []string{"workspace_id", "organization_name", "identity_support"},
-			"additionalProperties": false,
-		},
-		"locked_providers": stringMap,
-		"selected_results": map[string]any{
-			"type": "array",
-			"items": map[string]any{
-				"type": "object",
-				"properties": map[string]any{
-					"query_result_marker":     map[string]any{"type": "string"},
-					"list_type":               map[string]any{"type": "string"},
-					"managed_type":            map[string]any{"type": "string"},
-					"identity":                map[string]any{"type": "object", "additionalProperties": true},
-					"search_identity_version": map[string]any{"type": "integer"},
-				},
-				"required":             []string{"query_result_marker", "list_type", "managed_type", "identity", "search_identity_version"},
-				"additionalProperties": false,
-			},
-		},
-		"selection_digest": map[string]any{"type": "string"},
-	}
-}
-
-func requiredObjectProperties(names ...string) mcp.PropertyOption {
-	return func(schema map[string]any) {
-		schema["required"] = names
-	}
-}
-
 func PrepareImport(logger *log.Logger) server.ServerTool {
 	return server.ServerTool{Tool: mcp.NewTool("prepare_import", mcp.WithDescription(PrepareImportDescription),
 		mcp.WithTitleAnnotation("Prepare explicit Search import selection"), mcp.WithReadOnlyHintAnnotation(true), mcp.WithDestructiveHintAnnotation(false), mcp.WithOpenWorldHintAnnotation(true),
@@ -128,14 +75,7 @@ func PrepareImport(logger *log.Logger) server.ServerTool {
 func VerifyImportPlan(logger *log.Logger) server.ServerTool {
 	return server.ServerTool{Tool: mcp.NewTool("verify_import_plan", mcp.WithDescription(VerifyImportPlanDescription),
 		mcp.WithTitleAnnotation("Inspect exact CLI speculative Run and Plan"), mcp.WithReadOnlyHintAnnotation(true), mcp.WithDestructiveHintAnnotation(false), mcp.WithOpenWorldHintAnnotation(true),
-		mcp.WithString("organization_name", mcp.Required()), mcp.WithString("workspace_name", mcp.Required()), mcp.WithString("run_id", mcp.Required()),
-		mcp.WithObject("import_context", mcp.Description("Unchanged prepare_import import_context, required for finished Plan classification."),
-			mcp.Properties(importContextSchemaProperties()),
-			requiredObjectProperties("query_run_id", "providers", "target", "locked_providers", "selected_results", "selection_digest"),
-			mcp.AdditionalProperties(false)),
-		mcp.WithArray("bindings", mcp.Description("One query_result_marker and exact target_address per selection, required for finished Plan classification."), mcp.MaxItems(100), mcp.Items(map[string]any{"type": "object", "required": []string{"query_result_marker", "target_address"}, "properties": map[string]any{"query_result_marker": map[string]any{"type": "string"}, "target_address": map[string]any{"type": "string"}}, "additionalProperties": false})),
-		mcp.WithArray("detail_addresses", mcp.Description("Optional selected target addresses to inspect without values (maximum 20)."), mcp.MaxItems(20), mcp.Items(map[string]any{"type": "string"})),
-		mcp.WithSchemaAdditionalProperties(false), mcp.WithOutputSchema[VerifyImportResult]()),
+		mcp.WithInputSchema[VerifyImportInput](), mcp.WithOutputSchema[VerifyImportResult]()),
 		Handler: func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			var input VerifyImportInput
 			if err := decodeImportArguments(request.GetRawArguments(), &input, 512<<10); err != nil {

@@ -89,6 +89,12 @@ func TestVerifyImportRejectsDuplicateDetailAddresses(t *testing.T) {
 	require.EqualError(t, err, "verify_input_invalid")
 }
 
+func TestVerifyImportRejectsTooManyBindingsBeforeBackendRead(t *testing.T) {
+	bindings := make([]ImportBinding, maxImportSelections+1)
+	_, err := ReadVerifyImportPlan(context.Background(), nil, VerifyImportInput{OrganizationName: "org", WorkspaceName: "target", RunID: "run-example", Bindings: bindings})
+	require.EqualError(t, err, "verify_input_invalid")
+}
+
 func TestVerifyImportRunGuardsPlanJSONRead(t *testing.T) {
 	for _, tc := range []struct {
 		name, workspace, planOnly, autoApply, want string
