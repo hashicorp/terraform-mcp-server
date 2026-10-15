@@ -36,17 +36,17 @@ var importRunPattern = regexp.MustCompile(`^run-[a-zA-Z0-9-]{1,124}$`)
 var importAddressPattern = regexp.MustCompile(`^[a-zA-Z0-9_\[\]".:-]+$`)
 
 type ImportBinding struct {
-	QueryResultMarker string `json:"query_result_marker"`
-	TargetAddress     string `json:"target_address"`
+	QueryResultMarker string `json:"query_result_marker" jsonschema:"Selected QueryRun result marker"`
+	TargetAddress     string `json:"target_address" jsonschema:"Exact Terraform target resource address"`
 }
 
 type VerifyImportInput struct {
-	OrganizationName string          `json:"organization_name"`
-	WorkspaceName    string          `json:"workspace_name"`
-	RunID            string          `json:"run_id"`
-	ImportContext    *ImportContext  `json:"import_context,omitempty"`
-	Bindings         []ImportBinding `json:"bindings,omitempty"`
-	DetailAddresses  []string        `json:"detail_addresses,omitempty"`
+	OrganizationName string          `json:"organization_name" jsonschema:"Confirmed target organization name"`
+	WorkspaceName    string          `json:"workspace_name" jsonschema:"Confirmed target workspace name"`
+	RunID            string          `json:"run_id" jsonschema:"Exact CLI-originated plan-only HCP Terraform Run ID"`
+	ImportContext    *ImportContext  `json:"import_context,omitempty" jsonschema:"Unchanged context returned by prepare_import; required for finished Plan classification"`
+	Bindings         []ImportBinding `json:"bindings,omitempty" jsonschema:"One query result marker to exact target address binding per selection; maximum 100"`
+	DetailAddresses  []string        `json:"detail_addresses,omitempty" jsonschema:"Optional selected target addresses to inspect without values; maximum 20"`
 }
 
 type ImportPlanFacts struct {
@@ -184,7 +184,7 @@ func ReadVerifyImportPlan(ctx context.Context, c *tfe.Client, input VerifyImport
 }
 
 func readVerifyImportPlanWithConfig(ctx context.Context, c *tfe.Client, input VerifyImportInput, config verifyImportPollConfig) (*VerifyImportResult, error) {
-	if !validImportWorkspaceName(input.OrganizationName) || !validImportWorkspaceName(input.WorkspaceName) || !importRunPattern.MatchString(input.RunID) || len(input.DetailAddresses) > 20 {
+	if !validImportWorkspaceName(input.OrganizationName) || !validImportWorkspaceName(input.WorkspaceName) || !importRunPattern.MatchString(input.RunID) || len(input.Bindings) > maxImportSelections || len(input.DetailAddresses) > 20 {
 		return nil, queryEvidenceError("verify_input_invalid")
 	}
 	if config.wait <= 0 || config.interval <= 0 {

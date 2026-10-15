@@ -43,27 +43,27 @@ type PrepareImportInput struct {
 }
 
 type ImportContextTarget struct {
-	WorkspaceID      string            `json:"workspace_id"`
-	OrganizationName string            `json:"organization_name"`
-	TerraformVersion string            `json:"terraform_version,omitempty"`
-	IdentitySupport  map[string]string `json:"identity_support"`
+	WorkspaceID      string            `json:"workspace_id" jsonschema:"Backend-derived target workspace ID"`
+	OrganizationName string            `json:"organization_name" jsonschema:"Backend-derived target organization name"`
+	TerraformVersion string            `json:"terraform_version,omitempty" jsonschema:"Optional target workspace Terraform version"`
+	IdentitySupport  map[string]string `json:"identity_support" jsonschema:"Identity support status by proposed managed resource type"`
 }
 
 type ImportContextSelection struct {
-	QueryResultMarker     string         `json:"query_result_marker"`
-	ListType              string         `json:"list_type"`
-	ManagedType           string         `json:"managed_type"`
-	Identity              map[string]any `json:"identity"`
-	SearchIdentityVersion int            `json:"search_identity_version"`
+	QueryResultMarker     string         `json:"query_result_marker" jsonschema:"Unchanged marker for the selected QueryRun result"`
+	ListType              string         `json:"list_type" jsonschema:"Search list-resource type"`
+	ManagedType           string         `json:"managed_type" jsonschema:"Caller-proposed target managed resource type"`
+	Identity              map[string]any `json:"identity" jsonschema:"Search identity object for the selected result"`
+	SearchIdentityVersion int            `json:"search_identity_version" jsonschema:"Search identity schema version"`
 }
 
 type ImportContext struct {
-	QueryRunID      string                         `json:"query_run_id"`
-	Providers       map[string]queryResultProvider `json:"providers"`
-	Target          ImportContextTarget            `json:"target"`
-	LockedProviders map[string]string              `json:"locked_providers"`
-	SelectedResults []ImportContextSelection       `json:"selected_results"`
-	SelectionDigest string                         `json:"selection_digest"`
+	QueryRunID      string                         `json:"query_run_id" jsonschema:"QueryRun containing the selected Search results"`
+	Providers       map[string]queryResultProvider `json:"providers" jsonschema:"QueryRun provider source and version by list-resource type"`
+	Target          ImportContextTarget            `json:"target" jsonschema:"Backend-derived target workspace context"`
+	LockedProviders map[string]string              `json:"locked_providers" jsonschema:"Agent-reported exact lock-file versions by provider source"`
+	SelectedResults []ImportContextSelection       `json:"selected_results" jsonschema:"Selected QueryRun results carried into Plan verification"`
+	SelectionDigest string                         `json:"selection_digest" jsonschema:"Copy-forward integrity digest for the import context"`
 }
 
 type PreparedImportType struct {
