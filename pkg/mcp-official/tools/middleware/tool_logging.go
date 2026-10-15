@@ -7,7 +7,6 @@ import (
 	"context"
 	"log/slog"
 
-	"github.com/hashicorp/terraform-mcp-server/pkg/toolsets"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -23,18 +22,6 @@ func ToolLogging(logger *slog.Logger) mcp.Middleware {
 			params := req.GetParams().(*mcp.CallToolParamsRaw)
 			toolName := params.Name
 			arguments := params.Arguments
-			if toolset, ok := toolsets.GetToolsetForTool(toolName); ok && toolset == toolsets.Search {
-				// Neither untrusted arguments nor backend errors belong in Search logs.
-				result, err := next(ctx, method, req)
-				if err != nil {
-					logger.ErrorContext(ctx, "Search tool call failed", "tool", toolName)
-				} else if toolResult, ok := result.(*mcp.CallToolResult); ok && toolResult.IsError {
-					logger.ErrorContext(ctx, "Search tool call failed", "tool", toolName)
-				} else {
-					logger.InfoContext(ctx, "Search tool call completed", "tool", toolName)
-				}
-				return result, err
-			}
 
 			result, err := next(ctx, method, req)
 			// Protocol-level error

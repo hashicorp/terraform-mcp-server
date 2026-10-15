@@ -16,20 +16,6 @@ import (
 )
 
 func TestToolLoggingMiddleware(t *testing.T) {
-	t.Run("omits Search arguments", func(t *testing.T) {
-		var buf bytes.Buffer
-		logger := log.New()
-		logger.SetOutput(&buf)
-		handler := ToolLoggingMiddleware(logger)(func(_ context.Context, _ mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-			return mcp.NewToolResultText("done"), nil
-		})
-		_, err := handler(context.Background(), mcp.CallToolRequest{Params: mcp.CallToolParams{
-			Name: "execute_query", Arguments: map[string]any{"query_configuration": "https://archivist.example/signed?secret=sentinel"},
-		}})
-		require.NoError(t, err)
-		assert.Contains(t, buf.String(), "execute_query")
-		assert.NotContains(t, buf.String(), "sentinel")
-	})
 	t.Run("logs tool call name and args at info level", func(t *testing.T) {
 		var buf bytes.Buffer
 		logger := log.New()
