@@ -80,11 +80,11 @@ func getPolicyDetails(ctx context.Context, request *mcp.CallToolRequest, input G
 }
 
 func formatPolicyDetails(policyDetails registryapi.TerraformPolicyDetails, terraformPolicyID string, logger *log.Logger) string {
-	readme := utils.ExtractReadme(policyDetails.Data.Attributes.Readme)
+	readme := strings.TrimSpace(utils.ExtractReadme(policyDetails.Data.Attributes.Readme))
 	readme = strings.TrimSpace(strings.TrimSuffix(readme, "---"))
 
 	var builder strings.Builder
-	builder.WriteString(fmt.Sprintf("## Policy details about %s \n\n%s", terraformPolicyID, readme))
+	builder.WriteString(fmt.Sprintf("## Policy details about %s \n\n%s\n\n", terraformPolicyID, readme))
 
 	var policyList strings.Builder
 	var moduleList strings.Builder
