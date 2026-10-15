@@ -182,7 +182,8 @@ func ReadVerifyImportPlan(ctx context.Context, c *tfe.Client, input VerifyImport
 	return readVerifyImportPlanWithConfig(ctx, c, input, defaultVerifyImportPollConfig())
 }
 
-func readVerifyImportPlanWithConfig(ctx context.Context, c *tfe.Client, input VerifyImportInput, config verifyImportPollConfig) (*VerifyImportResult, error) {
+// validateVerifyImportRequest validates caller input and indexes requested detail addresses.
+func validateVerifyImportRequest(input VerifyImportInput, config verifyImportPollConfig) (map[string]bool, error) {
 	if !validImportWorkspaceName(input.OrganizationName) || !validImportWorkspaceName(input.WorkspaceName) || !importRunPattern.MatchString(input.RunID) {
 		return nil, queryEvidenceError("verify_input_invalid")
 	}
@@ -196,118 +197,177 @@ func readVerifyImportPlanWithConfig(ctx context.Context, c *tfe.Client, input Ve
 		}
 		details[address] = true
 	}
-	deadlineCtx, cancel := context.WithTimeout(ctx, config.wait)
-	defer cancel()
-	w, err := c.Workspaces.Read(deadlineCtx, input.OrganizationName, input.WorkspaceName)
+	return details, nil
+}
+
+// readVerifyImportTarget resolves and validates the user-confirmed target workspace.
+func readVerifyImportTarget(ctx context.Context, c *tfe.Client, input VerifyImportInput) (*tfe.Workspace, error) {
+	w, err := c.Workspaces.Read(ctx, input.OrganizationName, input.WorkspaceName)
 	if err != nil || w == nil || !validImportWorkspaceName(w.ID) || w.Name != input.WorkspaceName || w.Organization == nil || !strings.EqualFold(w.Organization.Name, input.OrganizationName) || !allowedImportOrganization(w.Organization.Name) {
 		return nil, queryEvidenceError("target_read_unavailable")
 	}
-	out := &VerifyImportResult{Status: "blocked", RequestedRunID: input.RunID, OrganizationName: w.Organization.Name, WorkspaceName: w.Name, WorkspaceID: w.ID, Diagnostics: []string{}}
-	stop := func(status, code, guidance string) (*VerifyImportResult, error) {
-		out.Status, out.Diagnostics, out.NextAction = status, []string{code}, guidance
-		return out, nil
+	return w, nil
+}
+
+// stopVerifyImport builds a non-error result that stops the verification workflow.
+func stopVerifyImport(out *VerifyImportResult, status, code, guidance string) (*VerifyImportResult, error) {
+	out.Status, out.Diagnostics, out.NextAction = status, []string{code}, guidance
+	return out, nil
+}
+
+// observeImportRun reads the exact Run and verifies its target and plan-only properties.
+func observeImportRun(ctx context.Context, c *tfe.Client, input VerifyImportInput, target *tfe.Workspace, out *VerifyImportResult) (*importRunEvidence, *VerifyImportResult, error) {
+	raw, err := readQueryBackendJSON(ctx, c, "runs/"+url.PathEscape(input.RunID))
+	if err != nil {
+		return nil, nil, err
 	}
+	var run importRunEvidence
+	if decodeQueryEvidence(raw, &run) != nil || run.Data.ID != input.RunID {
+		return nil, nil, queryEvidenceError("run_evidence_invalid")
+	}
+
+	out.RunID, out.RunStatus, out.PlanOnly, out.AutoApply = run.Data.ID, run.Data.Attributes.Status, run.Data.Attributes.PlanOnly, run.Data.Attributes.AutoApply
+	out.PlanID, out.PlanStatus, out.ConfigurationVersionID = "", "", ""
+	workspace := run.Data.Relationships.Workspace.Data
+	if workspace == nil || workspace.Type != "workspaces" || workspace.ID != target.ID {
+		result, err := stopVerifyImport(out, "blocked", "run_workspace_mismatch", "Stop: the exact Run is not associated with the confirmed target. Do not inspect its Plan as this import attempt.")
+		return nil, result, err
+	}
+	if out.PlanOnly == nil || !*out.PlanOnly || out.AutoApply == nil || *out.AutoApply {
+		result, err := stopVerifyImport(out, "blocked", "run_not_plan_only", "Stop: the backend has not confirmed both plan-only=true and auto-apply=false. Do not classify this Run.")
+		return nil, result, err
+	}
+	if input.ImportContext != nil && input.ImportContext.Target.WorkspaceID != target.ID {
+		result, err := stopVerifyImport(out, "blocked", "import_context_target_mismatch", "The carried target differs from the Run's workspace. Confirm target and repeat preparation before any new plan.")
+		return nil, result, err
+	}
+
+	out.RunUIURL = importRunUIURL(c.BaseURL(), target.Organization.Name, target.Name, run.Data.ID)
+	if cv := run.Data.Relationships.ConfigurationVersion.Data; cv != nil && cv.Type == "configuration-versions" {
+		out.ConfigurationVersionID = cv.ID
+	}
+	if plan := run.Data.Relationships.Plan.Data; plan != nil && plan.Type == "plans" {
+		out.PlanID = plan.ID
+	}
+	return &run, nil, nil
+}
+
+// readAssociatedImportPlan reads the backend-associated Plan and verifies its ID.
+func readAssociatedImportPlan(ctx context.Context, c *tfe.Client, out *VerifyImportResult, planID string) (*tfe.Plan, *VerifyImportResult, error) {
+	plan, err := c.Plans.Read(ctx, planID)
+	if err != nil {
+		return nil, nil, queryEvidenceError("plan_read_unavailable")
+	}
+	if plan == nil || plan.ID != planID {
+		result, err := stopVerifyImport(out, "blocked", "plan_association_unverified", "The associated Plan ID could not be verified.")
+		return nil, result, err
+	}
+	out.PlanStatus = string(plan.Status)
+	return plan, nil, nil
+}
+
+// verifyFinishedImportRun validates and classifies a terminal Run's finished Plan.
+func verifyFinishedImportRun(ctx context.Context, c *tfe.Client, input VerifyImportInput, target *tfe.Workspace, out *VerifyImportResult, run *importRunEvidence, details map[string]bool) (*VerifyImportResult, error) {
+	cv := run.Data.Relationships.ConfigurationVersion.Data
+	planRelation := run.Data.Relationships.Plan.Data
+	if cv == nil || cv.ID == "" || cv.Type != "configuration-versions" || planRelation == nil || planRelation.ID == "" || planRelation.Type != "plans" {
+		return stopVerifyImport(out, "blocked", "run_plan_unassociated", "The terminal Run lacks an observed Plan or configuration-version association; do not guess an ID or classify a Plan.")
+	}
+	plan, result, err := readAssociatedImportPlan(ctx, c, out, planRelation.ID)
+	if result != nil || err != nil {
+		return result, err
+	}
+	if plan.Status == tfe.PlanErrored || plan.Status == tfe.PlanCanceled || plan.Status == tfe.PlanUnreachable {
+		return stopVerifyImport(out, "failed", "plan_failed", "The associated Plan failed. Review it in HCP Terraform; do not treat it as an import result.")
+	}
+	if plan.Status != tfe.PlanFinished {
+		return stopVerifyImport(out, "blocked", "plan_unavailable", "The terminal Run has no finished associated Plan; do not keep polling it as a successful plan.")
+	}
+	if input.ImportContext == nil || len(input.Bindings) == 0 {
+		return stopVerifyImport(out, "import_context_required", "import_context_required", "Supply the unchanged prepare_import import_context and one query_result_marker-to-target_address binding per selection; no Plan JSON was read.")
+	}
+	selected, addresses, err := validateImportContext(input.ImportContext, input.Bindings, target)
+	if err != nil {
+		return stopVerifyImport(out, "blocked", err.Error(), "The import context or bindings are inconsistent. Do not classify this Plan; recheck the reviewed selection and addresses.")
+	}
+	selectedAddresses := make(map[string]bool, len(addresses))
+	for _, address := range addresses {
+		selectedAddresses[address] = true
+	}
+	for requested := range details {
+		if !selectedAddresses[requested] {
+			return stopVerifyImport(out, "blocked", "detail_address_not_selected", "Detail requests must name selected target addresses; review bindings before retrying.")
+		}
+	}
+	return classifyImportPlan(ctx, c, out, plan.ID, input.ImportContext, selected, addresses, details)
+}
+
+// inspectPendingImportPlan checks an in-progress Run's associated Plan for terminal failure.
+func inspectPendingImportPlan(ctx context.Context, c *tfe.Client, out *VerifyImportResult, run *importRunEvidence) (*VerifyImportResult, error) {
+	planRelation := run.Data.Relationships.Plan.Data
+	if planRelation == nil {
+		return nil, nil
+	}
+	if planRelation.Type != "plans" || planRelation.ID == "" {
+		return stopVerifyImport(out, "blocked", "run_plan_unassociated", "The Run has an invalid Plan relationship. Inspect it in HCP Terraform.")
+	}
+	plan, result, err := readAssociatedImportPlan(ctx, c, out, planRelation.ID)
+	if result != nil || err != nil {
+		return result, err
+	}
+	switch plan.Status {
+	case tfe.PlanErrored, tfe.PlanCanceled, tfe.PlanUnreachable:
+		return stopVerifyImport(out, "failed", "plan_failed", "The Plan failed, even though the Run status has not caught up. Review it in HCP Terraform.")
+	case tfe.PlanFinished, tfe.PlanCreated, tfe.PlanMFAWaiting, tfe.PlanPending, tfe.PlanQueued, tfe.PlanRunning:
+		return nil, nil
+	default:
+		return stopVerifyImport(out, "blocked", "plan_status_unexpected", "Unexpected Plan status; inspect the exact Plan before retrying.")
+	}
+}
+
+// readVerifyImportPlanWithConfig polls the exact Run and dispatches status-specific verification.
+func readVerifyImportPlanWithConfig(ctx context.Context, c *tfe.Client, input VerifyImportInput, config verifyImportPollConfig) (*VerifyImportResult, error) {
+	details, err := validateVerifyImportRequest(input, config)
+	if err != nil {
+		return nil, err
+	}
+	deadlineCtx, cancel := context.WithTimeout(ctx, config.wait)
+	defer cancel()
+	target, err := readVerifyImportTarget(deadlineCtx, c, input)
+	if err != nil {
+		return nil, err
+	}
+	out := &VerifyImportResult{Status: "blocked", RequestedRunID: input.RunID, OrganizationName: target.Organization.Name, WorkspaceName: target.Name, WorkspaceID: target.ID, Diagnostics: []string{}}
 	var observed bool
 	for {
-		raw, err := readQueryBackendJSON(deadlineCtx, c, "runs/"+url.PathEscape(input.RunID))
+		run, result, err := observeImportRun(deadlineCtx, c, input, target, out)
 		if err != nil {
+			if err == queryEvidenceError("run_evidence_invalid") {
+				return nil, err
+			}
 			// Caller cancellation or failed backend reads are not pending.
 			if ctx.Err() != nil || !observed || deadlineCtx.Err() == nil {
 				return nil, queryEvidenceError("run_read_unavailable")
 			}
 			break
 		}
-		var run importRunEvidence
-		if decodeQueryEvidence(raw, &run) != nil || run.Data.ID != input.RunID {
-			return nil, queryEvidenceError("run_evidence_invalid")
+		if result != nil {
+			return result, nil
 		}
 		observed = true
-		out.RunID, out.RunStatus, out.PlanOnly, out.AutoApply = run.Data.ID, run.Data.Attributes.Status, run.Data.Attributes.PlanOnly, run.Data.Attributes.AutoApply
-		out.PlanID, out.PlanStatus, out.ConfigurationVersionID = "", "", ""
-		ws := run.Data.Relationships.Workspace.Data
-		if ws == nil || ws.Type != "workspaces" || ws.ID != w.ID {
-			return stop("blocked", "run_workspace_mismatch", "Stop: the exact Run is not associated with the confirmed target. Do not inspect its Plan as this import attempt.")
-		}
-		if out.PlanOnly == nil || !*out.PlanOnly || out.AutoApply == nil || *out.AutoApply {
-			return stop("blocked", "run_not_plan_only", "Stop: the backend has not confirmed both plan-only=true and auto-apply=false. Do not classify this Run.")
-		}
-		if input.ImportContext != nil && input.ImportContext.Target.WorkspaceID != w.ID {
-			return stop("blocked", "import_context_target_mismatch", "The carried target differs from the Run's workspace. Confirm target and repeat preparation before any new plan.")
-		}
-		out.RunUIURL = importRunUIURL(c.BaseURL(), w.Organization.Name, w.Name, run.Data.ID)
-		cv := run.Data.Relationships.ConfigurationVersion.Data
-		if cv != nil && cv.Type == "configuration-versions" {
-			out.ConfigurationVersionID = cv.ID
-		}
-		planRel := run.Data.Relationships.Plan.Data
-		if planRel != nil && planRel.Type == "plans" {
-			out.PlanID = planRel.ID
-		}
 		switch out.RunStatus {
 		case "errored", "discarded", "canceled", "force_canceled", "policy_soft_failed":
-			return stop("failed", "run_failed", "This plan-only Run failed or was canceled. Review the Run in HCP Terraform; no import was applied.")
+			return stopVerifyImport(out, "failed", "run_failed", "This plan-only Run failed or was canceled. Review the Run in HCP Terraform; no import was applied.")
 		case "planned_and_finished":
-			if cv == nil || cv.ID == "" || cv.Type != "configuration-versions" || planRel == nil || planRel.ID == "" || planRel.Type != "plans" {
-				return stop("blocked", "run_plan_unassociated", "The terminal Run lacks an observed Plan or configuration-version association; do not guess an ID or classify a Plan.")
-			}
-			plan, err := c.Plans.Read(deadlineCtx, planRel.ID)
-			if err != nil {
-				return nil, queryEvidenceError("plan_read_unavailable")
-			}
-			if plan == nil || plan.ID != planRel.ID {
-				return stop("blocked", "plan_association_unverified", "The associated Plan ID could not be verified.")
-			}
-			out.PlanStatus = string(plan.Status)
-			if plan.Status == tfe.PlanErrored || plan.Status == tfe.PlanCanceled || plan.Status == tfe.PlanUnreachable {
-				return stop("failed", "plan_failed", "The associated Plan failed. Review it in HCP Terraform; do not treat it as an import result.")
-			}
-			if plan.Status != tfe.PlanFinished {
-				return stop("blocked", "plan_unavailable", "The terminal Run has no finished associated Plan; do not keep polling it as a successful plan.")
-			}
-			if input.ImportContext == nil || len(input.Bindings) == 0 {
-				return stop("import_context_required", "import_context_required", "Supply the unchanged prepare_import import_context and one query_result_marker-to-target_address binding per selection; no Plan JSON was read.")
-			}
-			selected, addresses, err := validateImportContext(input.ImportContext, input.Bindings, w)
-			if err != nil {
-				return stop("blocked", err.Error(), "The import context or bindings are inconsistent. Do not classify this Plan; recheck the reviewed selection and addresses.")
-			}
-			for requested := range details {
-				found := false
-				for _, address := range addresses {
-					if requested == address {
-						found = true
-						break
-					}
-				}
-				if !found {
-					return stop("blocked", "detail_address_not_selected", "Detail requests must name selected target addresses; review bindings before retrying.")
-				}
-			}
-			return classifyImportPlan(deadlineCtx, c, out, plan.ID, input.ImportContext, selected, addresses, details)
+			return verifyFinishedImportRun(deadlineCtx, c, input, target, out, run, details)
 		case "pending", "fetching", "fetching_completed", "pre_plan_running", "pre_plan_completed", "queuing", "plan_queued", "planning", "planned", "cost_estimating", "cost_estimated", "policy_checking", "policy_checked", "post_plan_running", "post_plan_completed":
 			// Import context is optional while the Run is still in progress.
-			if planRel != nil {
-				if planRel.Type != "plans" || planRel.ID == "" {
-					return stop("blocked", "run_plan_unassociated", "The Run has an invalid Plan relationship. Inspect it in HCP Terraform.")
-				}
-				plan, err := c.Plans.Read(deadlineCtx, planRel.ID)
-				if err != nil {
-					return nil, queryEvidenceError("plan_read_unavailable")
-				}
-				if plan == nil || plan.ID != planRel.ID {
-					return stop("blocked", "plan_association_unverified", "The associated Plan ID could not be verified.")
-				}
-				out.PlanStatus = string(plan.Status)
-				switch plan.Status {
-				case tfe.PlanErrored, tfe.PlanCanceled, tfe.PlanUnreachable:
-					return stop("failed", "plan_failed", "The Plan failed, even though the Run status has not caught up. Review it in HCP Terraform.")
-				case tfe.PlanFinished, tfe.PlanCreated, tfe.PlanMFAWaiting, tfe.PlanPending, tfe.PlanQueued, tfe.PlanRunning:
-				default:
-					return stop("blocked", "plan_status_unexpected", "Unexpected Plan status; inspect the exact Plan before retrying.")
-				}
+			result, err := inspectPendingImportPlan(deadlineCtx, c, out, run)
+			if result != nil || err != nil {
+				return result, err
 			}
 		default:
-			return stop("blocked", "run_status_unexpected", "Unexpected Run state; inspect the exact Run in HCP Terraform instead of polling indefinitely.")
+			return stopVerifyImport(out, "blocked", "run_status_unexpected", "Unexpected Run state; inspect the exact Run in HCP Terraform instead of polling indefinitely.")
 		}
 		if deadlineCtx.Err() != nil {
 			break
