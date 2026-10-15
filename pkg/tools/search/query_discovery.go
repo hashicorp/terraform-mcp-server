@@ -249,41 +249,6 @@ func queryDiscoveryResultRow(result queryResultEvidence) queryDiscoveryRow {
 	return queryDiscoveryRow{Marker: result.Marker, DisplayName: result.DisplayName, Identity: result.Identity, IdentityVersion: result.IdentityVersion, Tags: queryDiscoveryTags(result.ResourceObject), AttributesCaptured: result.ResourceObject != nil}
 }
 
-func unsafeDiscoveryValue(value any) bool {
-	switch v := value.(type) {
-	case string:
-		for _, part := range strings.Fields(v) {
-			part = strings.Trim(part, `"'()<>[],;`)
-			u, err := url.Parse(part)
-			if err != nil || u.Scheme != "https" && u.Scheme != "http" {
-				continue
-			}
-			if u.User != nil || strings.Contains(strings.ToLower(u.Hostname()), "archivist") {
-				return true
-			}
-			for key := range u.Query() {
-				switch strings.ToLower(key) {
-				case "x-amz-signature", "x-goog-signature", "signature", "sig", "token", "access_token", "x-amz-credential":
-					return true
-				}
-			}
-		}
-	case map[string]any:
-		for key, entry := range v {
-			if unsafeDiscoveryValue(key) || unsafeDiscoveryValue(entry) {
-				return true
-			}
-		}
-	case []any:
-		for _, entry := range v {
-			if unsafeDiscoveryValue(entry) {
-				return true
-			}
-		}
-	}
-	return false
-}
-
 func summarizeQueryDiscovery(prov *queryDiscoveryProvenance, evidence *queryEvidence, filter QueryDiscoveryFilter) (*QueryDiscoverySummary, error) {
 	matches := func(result queryResultEvidence) bool {
 		return (filter.ResourceType == "" || filter.ResourceType == result.ResourceType) &&
