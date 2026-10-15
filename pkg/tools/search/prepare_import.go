@@ -314,12 +314,6 @@ func ReadPrepareImport(ctx context.Context, c *tfe.Client, input PrepareImportIn
 	if checkedSource == nil || checkedSource.WorkspaceID != prov.WorkspaceID || !strings.EqualFold(checkedSource.Organization, prov.Organization) {
 		return nil, queryEvidenceError("query_provenance_changed")
 	}
-	// Reuse the summary's whole-QueryRun selectability guards. A later
-	// oversized or sensitive row cannot be skipped just because the caller
-	// selected a different marker.
-	if err := validateQueryDiscoveryEvidence(evidence); err != nil {
-		return nil, err
-	}
 	byMarker := make(map[string]queryResultEvidence, len(evidence.Results))
 	for _, result := range evidence.Results {
 		byMarker[result.Marker] = result
@@ -336,9 +330,6 @@ func ReadPrepareImport(ctx context.Context, c *tfe.Client, input PrepareImportIn
 		}
 		if _, ok := input.LockedProviders[found.Provider.Source]; !ok {
 			return nil, queryEvidenceError("lock_versions_invalid")
-		}
-		if unsafeDiscoveryValue(found.Address) || unsafeDiscoveryValue(found.DisplayName) || unsafeDiscoveryValue(found.Identity) || unsafeDiscoveryValue(found.ResourceObject) || unsafeDiscoveryValue(found.Configuration) || unsafeDiscoveryValue(found.ImportConfig) {
-			return nil, queryEvidenceError("query_sensitive_result")
 		}
 		out.SelectedResults = append(out.SelectedResults, found)
 		importContext.Providers[found.ResourceType] = found.Provider
@@ -367,7 +358,7 @@ func ReadPrepareImport(ctx context.Context, c *tfe.Client, input PrepareImportIn
 		if _, exists := resourceSchemas[kind]; exists {
 			out.Types[i].ManagedTypeSupport = "supported_historically"
 			var schema map[string]any
-			if raw := resourceSchemas[kind]; len(raw) < 16<<10 && decodeQueryEvidenceLimit(raw, &schema, 16<<10, 32) == nil && !unsafeDiscoveryValue(schema) {
+			if raw := resourceSchemas[kind]; len(raw) < 16<<10 && decodeQueryEvidenceLimit(raw, &schema, 16<<10, 32) == nil {
 				out.Types[i].ManagedSchema = schema
 			} else {
 				out.Types[i].SchemaStatus = "unavailable"
@@ -376,7 +367,7 @@ func ReadPrepareImport(ctx context.Context, c *tfe.Client, input PrepareImportIn
 			}
 			if _, found := identitySchemas[kind]; found {
 				var identity map[string]any
-				if raw := identitySchemas[kind]; len(raw) < 16<<10 && decodeQueryEvidenceLimit(raw, &identity, 16<<10, 32) == nil && !unsafeDiscoveryValue(identity) {
+				if raw := identitySchemas[kind]; len(raw) < 16<<10 && decodeQueryEvidenceLimit(raw, &identity, 16<<10, 32) == nil {
 					out.Types[i].IdentitySupport = "supported_historically"
 					out.Types[i].IdentitySchema = identity
 				}
