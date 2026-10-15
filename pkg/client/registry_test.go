@@ -20,19 +20,58 @@ import (
 // --- sendRegistryCall ---
 var logger = log.New()
 
-func TestRetryLoggerRedactsCompleteURLs(t *testing.T) {
+func TestRedactRetryURL(t *testing.T) {
+	tests := map[string]struct {
+		input string
+		want  string
+	}{
+		"archivist object": {
+			input: "https://archivist.example/v1/object/secret-object?X-Amz-Signature=secret-sentinel",
+			want:  "https://archivist.example/v1/object/___REDACTED___",
+		},
+		"archivist path": {
+			input: "https://archivist.example/private/log?token=secret-sentinel",
+			want:  "https://archivist.example/___REDACTED___",
+		},
+		"signed query": {
+			input: "https://storage.example/private/log?X-Goog-Signature=secret-sentinel",
+			want:  "https://storage.example/private/log?___REDACTED___",
+		},
+		"embedded credentials": {
+			input: "https://user:password@example.com/private/log",
+			want:  "https://redacted@example.com/private/log",
+		},
+		"ordinary URL": {
+			input: "https://registry.terraform.io/v1/providers",
+			want:  "https://registry.terraform.io/v1/providers",
+		},
+		"trailing punctuation": {
+			input: "https://archivist.example/v1/object/secret-object?sig=secret-sentinel.",
+			want:  "https://archivist.example/v1/object/___REDACTED___.",
+		},
+	}
+
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			require.Equal(t, test.want, redactRetryURL(test.input))
+		})
+	}
+}
+
+func TestRetryLoggerRedactsCapabilityURLParts(t *testing.T) {
 	var output bytes.Buffer
 	testLogger := log.New()
 	testLogger.SetOutput(&output)
 	redactingRetryLogger{logger: testLogger}.Printf(
 		"[ERR] GET %s request failed: redirect from %s",
-		"https://archivist.example/private/log?X-Amz-Signature=secret-sentinel",
-		"http://other.example/downgrade?token=other-secret",
+		"https://archivist.example/v1/object/secret-object?X-Amz-Signature=secret-sentinel",
+		"http://storage.example/downgrade?X-Amz-Signature=other-secret",
 	)
 
 	logged := output.String()
-	require.Contains(t, logged, "[redacted-url]")
-	for _, secret := range []string{"archivist.example", "/private/log", "secret-sentinel", "other.example", "other-secret"} {
+	require.Contains(t, logged, "https://archivist.example/v1/object/___REDACTED___")
+	require.Contains(t, logged, "http://storage.example/downgrade?___REDACTED___")
+	for _, secret := range []string{"secret-object", "secret-sentinel", "other-secret"} {
 		require.NotContains(t, logged, secret)
 	}
 }
@@ -50,9 +89,8 @@ func TestCreateHTTPClientUsesRedactingRetryLogger(t *testing.T) {
 	resp, err := CreateHTTPClient(false, testLogger).Get(secretURL)
 	require.NoError(t, err)
 	require.NoError(t, resp.Body.Close())
-	require.NotContains(t, output.String(), server.URL)
+	require.Contains(t, output.String(), server.URL+"/private/log?___REDACTED___")
 	require.NotContains(t, output.String(), "secret-sentinel")
-	require.Contains(t, output.String(), "[redacted-url]")
 }
 
 func TestSendRegistryCall(t *testing.T) {
