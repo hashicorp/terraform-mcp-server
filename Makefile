@@ -114,7 +114,7 @@ help:
 	@echo "  crt-build               - Build using crt-build script"
 	@echo "  test                    - Run all tests"
 	@echo "  test-e2e                - Run end-to-end tests"
-	@echo "  test-e2e-official-public-registry - Run public registry e2e tests against the official SDK HTTP endpoint"
+	@echo "  test-e2e-official-public-registry - Run public registry e2e tests against the official SDK over Stdio and HTTP"
 	@echo "  test-hcpt               - Run hcpt tests (optional: RUN=<pattern> to filter tests)"
 	@echo "  test-security           - Run security-related tests"
 	@echo "  test-http               - Test StreamableHTTP health endpoint"
