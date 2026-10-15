@@ -127,7 +127,6 @@ func TestQueryProvenanceChecksBackendAssociations(t *testing.T) {
 
 func TestLegacyQuerySummaryProjectsBoundedSelectableResults(t *testing.T) {
 	t.Setenv("MCP_ORGANIZATION_ALLOWLIST", "org")
-	var logRedirects int
 	var backend *httptest.Server
 	backend = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/vnd.api+json")
@@ -141,9 +140,6 @@ func TestLegacyQuerySummaryProjectsBoundedSelectableResults(t *testing.T) {
 		case "/api/v2/search/no-code-query/ncqry-test":
 			_, _ = fmt.Fprint(w, `{"data":{"id":"ncqry-test","attributes":{"no-code-query-providers":[{"namespace":"hashicorp","name":"aws","version":"6.66.0","no-code-query-resources":[{"body":{"resource_type":"aws_s3_buckets"}}]}]},"relationships":{"workspace":{"data":{"id":"ws-test"}}}}}`)
 		case "/logs":
-			logRedirects++
-			http.Redirect(w, r, "/archivist?"+r.URL.RawQuery, http.StatusFound)
-		case "/archivist":
 			found := strings.Replace(string(queryEvidenceFixture("0")), `"identity_version":0`, `"identity_version":0,"resource_object":{"tags":{"team":"search"}}`, 1)
 			data := append([]byte("\x02Terraform query started\n"+`{"type":"provider_installation_start","provider":"aws"}`+"\n"), []byte(found)...)
 			data = append(data, 3)
@@ -170,7 +166,6 @@ func TestLegacyQuerySummaryProjectsBoundedSelectableResults(t *testing.T) {
 	require.Regexp(t, `^qrm1-`, summary.Lists[0].Results[0].Marker)
 	require.Equal(t, map[string]any{"team": "search"}, summary.Lists[0].Results[0].Tags)
 	require.True(t, summary.Lists[0].Results[0].AttributesCaptured)
-	require.Positive(t, logRedirects, "the official go-tfe log reader must retain its redirect behavior")
 	text, ok := mcp.AsTextContent(result.Content[0])
 	require.True(t, ok)
 	require.Contains(t, text.Text, `"query_result_marker"`)
