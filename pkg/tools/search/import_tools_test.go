@@ -564,7 +564,21 @@ func TestTerraformImportSyntaxVersionPrereleaseAndMalformed(t *testing.T) {
 	}{
 		{"1.14.0", false, true},
 		{"v1.17.0-dev.20261012+build.1", false, true},
+		{"1.17.0-alpha.1", false, true},
+		{"1.17.0-beta.1", false, true},
+		{"1.17.0-rc.1", false, true},
 		{"1.4.9-dev.1", true, true},
+		{"1.4.9-alpha.1", true, true},
+		{"1.4.9-beta.1", true, true},
+		{"1.4.9-rc.1", true, true},
+		{"1.5.0-alpha.1", false, true},
+		{"1.5.0-alpha20230517", false, true},
+		{"1.5.0-beta.1", false, true},
+		{"1.5.0-beta1", false, true},
+		{"1.5.0-rc.1", false, true},
+		{"1.5.0-rc1", false, true},
+		{"1.5.0-dev.1", false, true},
+		{"1.5.0-dev", false, true},
 		{"1.5.0", false, true},
 		{"1.17.0 arbitrary", false, false},
 		{"1.17.0-", false, false},
@@ -573,6 +587,28 @@ func TestTerraformImportSyntaxVersionPrereleaseAndMalformed(t *testing.T) {
 	} {
 		t.Run(tt.version, func(t *testing.T) {
 			old, known := terraformImportSyntaxVersion(tt.version)
+			require.Equal(t, tt.old, old)
+			require.Equal(t, tt.known, known)
+		})
+	}
+}
+
+func TestTerraformVersionBeforeResourceIdentityPrereleases(t *testing.T) {
+	for _, tt := range []struct {
+		version    string
+		old, known bool
+	}{
+		{"1.11.9-rc.1", true, true},
+		{"1.12.0-alpha.1", false, true},
+		{"1.12.0-beta.1", false, true},
+		{"1.12.0-rc.1", false, true},
+		{"1.12.0-dev.1", false, true},
+		{"1.12.0", false, true},
+		{"~> 1.12", false, false},
+		{"latest", false, false},
+	} {
+		t.Run(tt.version, func(t *testing.T) {
+			old, known := terraformVersionBefore(tt.version, minimumResourceIdentityVersion)
 			require.Equal(t, tt.old, old)
 			require.Equal(t, tt.known, known)
 		})

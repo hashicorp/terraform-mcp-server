@@ -13,10 +13,10 @@ import (
 	"net/url"
 	"os"
 	"regexp"
-	"strconv"
 	"strings"
 
 	"github.com/hashicorp/go-tfe"
+	version "github.com/hashicorp/go-version"
 	"github.com/hashicorp/terraform-mcp-server/pkg/client"
 )
 
@@ -25,6 +25,9 @@ var providerSourcePattern = regexp.MustCompile(`^[a-zA-Z0-9.-]+/[a-zA-Z0-9_-]+/[
 var importMarkerPattern = regexp.MustCompile(`^qrm1-[a-f0-9]{64}$`)
 var importTypePattern = regexp.MustCompile(`^[a-zA-Z][a-zA-Z0-9_]*$`)
 var terraformPlanFormatVersionPattern = regexp.MustCompile(`^1\.[0-9]+$`)
+
+var minimumImportBlockVersion = version.Must(version.NewVersion("1.5.0"))
+var minimumResourceIdentityVersion = version.Must(version.NewVersion("1.12.0"))
 
 type ImportSelection struct {
 	QueryResultMarker string `json:"query_result_marker"`
@@ -177,23 +180,8 @@ func allowedImportOrganization(org string) bool {
 }
 
 func terraformImportSyntaxVersion(setting string) (old, known bool) {
-	// HCP plans may report a prerelease Terraform build. Do not mistake a
-	// well-formed suffix for an unknown version, but never accept arbitrary
-	// trailing text as proof of import-block support.
-	parts := terraformImportVersionPattern.FindStringSubmatch(setting)
-	if parts == nil {
-		return false, false
-	}
-	major, e1 := strconv.Atoi(parts[1])
-	minor, e2 := strconv.Atoi(parts[2])
-	patch, e3 := strconv.Atoi(parts[3])
-	if e1 != nil || e2 != nil || e3 != nil || major < 0 || minor < 0 || patch < 0 {
-		return false, false
-	}
-	return major < 1 || major == 1 && minor < 5, true
+	return terraformVersionBefore(setting, minimumImportBlockVersion)
 }
-
-var terraformImportVersionPattern = regexp.MustCompile(`^v?([0-9]+)\.([0-9]+)\.([0-9]+)(?:-[0-9A-Za-z]+(?:[.-][0-9A-Za-z]+)*)?(?:\+[0-9A-Za-z]+(?:[.-][0-9A-Za-z]+)*)?$`)
 
 // Historical state/plan data is optional context: inaccessible state does not
 // prove an empty target. Never use the most recent Run as a substitute.
@@ -355,7 +343,7 @@ func ReadPrepareImport(ctx context.Context, c *tfe.Client, input PrepareImportIn
 					out.Types[i].IdentitySupport = "supported_historically"
 					out.Types[i].IdentitySchema = identity
 				}
-			} else if old, known := terraformVersionBefore(schemaSource.TerraformVersion, 1, 12); known && !old {
+			} else if old, known := terraformVersionBefore(schemaSource.TerraformVersion, minimumResourceIdentityVersion); known && !old {
 				out.Types[i].IdentitySupport = "none_historically"
 			}
 		} else {
@@ -374,16 +362,14 @@ func ReadPrepareImport(ctx context.Context, c *tfe.Client, input PrepareImportIn
 	return out, nil
 }
 
-func terraformVersionBefore(setting string, major, minor int) (bool, bool) {
-	parts := strings.Split(strings.TrimPrefix(setting, "v"), ".")
-	if len(parts) != 3 {
+func terraformVersionBefore(setting string, minimum *version.Version) (bool, bool) {
+	parsed, err := version.NewSemver(setting)
+	if err != nil {
 		return false, false
 	}
-	ma, e1 := strconv.Atoi(parts[0])
-	mi, e2 := strconv.Atoi(parts[1])
-	_, e3 := strconv.Atoi(parts[2])
-	if e1 != nil || e2 != nil || e3 != nil {
-		return false, false
-	}
-	return ma < major || ma == major && mi < minor, true
+	// This is a feature-line comparison: prerelease Terraform builds from a
+	// core release that contains the feature qualify even though SemVer orders
+	// them before the final release. For example, 1.5.0-beta has import-block
+	// syntax and 1.12.0-dev has resource identity support.
+	return parsed.Core().LessThan(minimum.Core()), true
 }
