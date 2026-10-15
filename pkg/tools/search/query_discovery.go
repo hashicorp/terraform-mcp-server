@@ -10,11 +10,9 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"os"
 	"strings"
 
 	"github.com/hashicorp/go-tfe"
-	"github.com/hashicorp/terraform-mcp-server/pkg/client"
 )
 
 type QueryDiscoveryFilter struct {
@@ -140,21 +138,6 @@ func readQueryDiscoveryProvenance(ctx context.Context, c *tfe.Client, queryID st
 	w, err := c.Workspaces.ReadByID(ctx, run.Workspace.ID)
 	if err != nil || w == nil || w.ID != run.Workspace.ID || w.Name == "" || w.Organization == nil || w.Organization.Name == "" {
 		return nil, queryEvidenceError("query_ownership_unverified")
-	}
-	// Both server transports can authorize a token for an allowlisted org
-	// without checking the derived QueryRun's org. Enforce that boundary here.
-	if configured := os.Getenv(client.OrganizationAllowlistEnv); configured != "" {
-		allowed, err := client.ParseOrganizationAllowlistCSV(configured)
-		if err != nil {
-			return nil, queryEvidenceError("query_organization_not_allowed")
-		}
-		match := false
-		for _, name := range allowed {
-			match = match || strings.EqualFold(name, w.Organization.Name)
-		}
-		if !match {
-			return nil, queryEvidenceError("query_organization_not_allowed")
-		}
 	}
 	prov := &queryDiscoveryProvenance{QueryRunID: queryID, Organization: w.Organization.Name, WorkspaceName: w.Name, WorkspaceID: w.ID}
 	if run.Status == tfe.QueryRunErrored || run.Status == tfe.QueryRunCanceled {

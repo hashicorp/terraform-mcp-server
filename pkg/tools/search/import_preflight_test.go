@@ -150,7 +150,6 @@ func TestVerifyImportDetailAddressesHaveNoApplicationCountLimit(t *testing.T) {
 		}
 	}))
 	defer backend.Close()
-	t.Setenv("MCP_ORGANIZATION_ALLOWLIST", "org")
 	c, err := tfe.NewClient(&tfe.Config{Address: backend.URL, Token: "test-token", HTTPClient: backend.Client()})
 	require.NoError(t, err)
 
@@ -185,7 +184,6 @@ func TestVerifyImportRunGuardsPlanJSONRead(t *testing.T) {
 				}
 			}))
 			defer backend.Close()
-			t.Setenv("MCP_ORGANIZATION_ALLOWLIST", "org")
 			c, err := tfe.NewClient(&tfe.Config{Address: backend.URL, Token: "test-token", HTTPClient: backend.Client()})
 			require.NoError(t, err)
 			out, err := ReadVerifyImportPlan(context.Background(), c, VerifyImportInput{OrganizationName: "org", WorkspaceName: "target", RunID: "run-example"})
@@ -212,7 +210,6 @@ func TestVerifyImportReturnsPendingWithinWaitBudget(t *testing.T) {
 		}
 	}))
 	defer backend.Close()
-	t.Setenv("MCP_ORGANIZATION_ALLOWLIST", "org")
 	c, err := tfe.NewClient(&tfe.Config{Address: backend.URL, Token: "test-token", HTTPClient: backend.Client()})
 	require.NoError(t, err)
 
@@ -243,7 +240,6 @@ func TestVerifyImportPreservesCallerCancellation(t *testing.T) {
 		}
 	}))
 	defer backend.Close()
-	t.Setenv("MCP_ORGANIZATION_ALLOWLIST", "org")
 	c, err := tfe.NewClient(&tfe.Config{Address: backend.URL, Token: "test-token", HTTPClient: backend.Client()})
 	require.NoError(t, err)
 	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)

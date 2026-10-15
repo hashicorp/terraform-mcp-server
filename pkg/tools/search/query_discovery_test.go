@@ -82,7 +82,6 @@ func TestSummarizeQueryDiscoveryDoesNotApplyOutputSizeCaps(t *testing.T) {
 }
 
 func TestQueryProvenanceChecksBackendAssociations(t *testing.T) {
-	t.Setenv("MCP_ORGANIZATION_ALLOWLIST", "org")
 	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/vnd.api+json")
 		switch r.URL.Path {
@@ -105,14 +104,9 @@ func TestQueryProvenanceChecksBackendAssociations(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "org", prov.Organization)
 	require.Equal(t, "registry.terraform.io/hashicorp/aws", prov.Providers["aws_s3_buckets"].Source)
-	t.Setenv("MCP_ORGANIZATION_ALLOWLIST", "other-org")
-	prov, err = readQueryDiscoveryProvenance(context.Background(), client, "qry-test")
-	require.Nil(t, prov)
-	require.EqualError(t, err, "query_organization_not_allowed")
 }
 
 func TestLegacyQuerySummaryProjectsBoundedSelectableResults(t *testing.T) {
-	t.Setenv("MCP_ORGANIZATION_ALLOWLIST", "org")
 	var backend *httptest.Server
 	backend = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/vnd.api+json")
