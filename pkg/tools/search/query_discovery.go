@@ -47,13 +47,11 @@ type QueryDiscoverySummary struct {
 	SourceOrganizationName string                `json:"source_organization_name,omitempty"`
 	SourceWorkspaceName    string                `json:"source_workspace_name,omitempty"`
 	SourceWorkspaceID      string                `json:"source_workspace_id,omitempty"`
-	LogDigest              string                `json:"log_digest,omitempty"`
 	Selectable             bool                  `json:"selectable"`
 	ResourcesDiscovered    int                   `json:"resources_discovered,omitempty"`
 	ByType                 map[string]int        `json:"by_type,omitempty"`
 	TotalMatching          int                   `json:"total_matching,omitempty"`
 	RowsWithoutAttributes  int                   `json:"rows_without_attributes,omitempty"`
-	Returned               int                   `json:"returned,omitempty"`
 	Diagnostics            []string              `json:"diagnostics,omitempty"`
 	NextAction             string                `json:"next_action"`
 	Lists                  []queryDiscoveryGroup `json:"lists,omitempty"`
@@ -312,7 +310,7 @@ func summarizeQueryDiscovery(prov *queryDiscoveryProvenance, evidence *queryEvid
 			(filter.Address == "" || filter.Address == result.Address) &&
 			(filter.NameContains == "" || strings.Contains(strings.ToLower(result.DisplayName), strings.ToLower(filter.NameContains)))
 	}
-	summary := &QueryDiscoverySummary{QueryRunID: prov.QueryRunID, Status: "selectable", SourceOrganizationName: prov.Organization, SourceWorkspaceName: prov.WorkspaceName, SourceWorkspaceID: prov.WorkspaceID, LogDigest: evidence.LogDigest, Selectable: true, ResourcesDiscovered: len(evidence.Results), ByType: evidence.ByType, Lists: []queryDiscoveryGroup{}}
+	summary := &QueryDiscoverySummary{QueryRunID: prov.QueryRunID, Status: "selectable", SourceOrganizationName: prov.Organization, SourceWorkspaceName: prov.WorkspaceName, SourceWorkspaceID: prov.WorkspaceID, Selectable: true, ResourcesDiscovered: len(evidence.Results), ByType: evidence.ByType, Lists: []queryDiscoveryGroup{}}
 	groups := map[string]int{}
 	for _, result := range evidence.Results {
 		if !matches(result) {
@@ -331,7 +329,6 @@ func summarizeQueryDiscovery(prov *queryDiscoveryProvenance, evidence *queryEvid
 			summary.Lists = append(summary.Lists, queryDiscoveryGroup{Address: result.Address, ResourceType: result.ResourceType, Results: []queryDiscoveryRow{}})
 		}
 		summary.Lists[index].Results = append(summary.Lists[index].Results, row)
-		summary.Returned++
 	}
 	if filter.ResourceType != "" || filter.Address != "" || filter.NameContains != "" {
 		summary.NextAction = "These are all results matching the supplied summary filters, not all results of the query or all cloud resources. Choose query_result_marker values with the user only if import is requested."
