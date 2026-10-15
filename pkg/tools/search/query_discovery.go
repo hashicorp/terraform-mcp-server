@@ -141,7 +141,7 @@ func readQueryDiscoveryProvenance(ctx context.Context, c *tfe.Client, queryID st
 	}
 	prov := &queryDiscoveryProvenance{QueryRunID: queryID, Organization: w.Organization.Name, WorkspaceName: w.Name, WorkspaceID: w.ID}
 	if run.Status == tfe.QueryRunErrored || run.Status == tfe.QueryRunCanceled {
-		return prov, queryEvidenceError("query_not_selectable")
+		return prov, queryEvidenceError(queryNotSelectableCode)
 	}
 	if run.Status != tfe.QueryRunFinished {
 		return prov, queryEvidenceError("query_not_finished")
@@ -169,7 +169,7 @@ func readQueryDiscoveryProvenance(ctx context.Context, c *tfe.Client, queryID st
 	providers := map[string]queryResultProvider{}
 	for _, p := range stored.Data.Attributes.Providers {
 		if p.Namespace == "" || p.Name == "" || p.Version == "" {
-			return nil, queryEvidenceError("query_provider_source_unresolved")
+			return nil, queryEvidenceError(queryProviderSourceUnresolvedCode)
 		}
 		provider := queryResultProvider{Source: "registry.terraform.io/" + p.Namespace + "/" + p.Name, Version: p.Version}
 		for _, r := range p.Resources {
@@ -178,7 +178,7 @@ func readQueryDiscoveryProvenance(ctx context.Context, c *tfe.Client, queryID st
 				kind = r.Body.HyphenType
 			}
 			if kind == "" || r.Body.Type != "" && r.Body.HyphenType != "" && r.Body.Type != r.Body.HyphenType {
-				return nil, queryEvidenceError("query_provider_source_unresolved")
+				return nil, queryEvidenceError(queryProviderSourceUnresolvedCode)
 			}
 			if previous, exists := providers[kind]; exists && previous != provider {
 				return nil, queryEvidenceError("query_provider_ambiguous")
@@ -187,7 +187,7 @@ func readQueryDiscoveryProvenance(ctx context.Context, c *tfe.Client, queryID st
 		}
 	}
 	if len(providers) == 0 {
-		return nil, queryEvidenceError("query_provider_source_unresolved")
+		return nil, queryEvidenceError(queryProviderSourceUnresolvedCode)
 	}
 	prov.Providers = providers
 	return prov, nil
@@ -270,6 +270,26 @@ func summarizeQueryDiscovery(prov *queryDiscoveryProvenance, evidence *queryEvid
 	return summary, nil
 }
 
+// nonselectableQueryEvidenceCode identifies evidence failures that safely produce a factual nonselectable result.
+func nonselectableQueryEvidenceCode(err error) (queryEvidenceCode, bool) {
+	code, ok := queryEvidenceErrorCode(err)
+	if !ok {
+		return "", false
+	}
+	switch code {
+	case queryNotSelectableCode,
+		queryIdentityVersionInvalidCode,
+		queryEvidenceIncompleteCode,
+		queryDuplicateOrInvalidIdentityCode,
+		queryIdentityInvalidCode,
+		queryReportedErrorCode,
+		queryGeneratedBlockConflictCode:
+		return code, true
+	default:
+		return "", false
+	}
+}
+
 // ReadQueryDiscoverySummary shares Search discovery across the two MCP SDKs.
 // Only a safely observed completed QueryRun with invalid result evidence can
 // return a factual nonselectable result; backend/transport failures are errors.
@@ -280,9 +300,8 @@ func ReadQueryDiscoverySummary(ctx context.Context, c *tfe.Client, queryID strin
 	prov, evidence, err := readQueryDiscovery(ctx, c, queryID)
 	if err != nil {
 		if prov != nil {
-			switch err.Error() {
-			case "query_not_selectable", "query_identity_version_invalid", "query_evidence_incomplete", "query_duplicate_or_invalid_identity", "query_identity_invalid", "query_reported_error", "query_generated_block_conflict":
-				return &QueryDiscoverySummary{QueryRunID: queryID, Status: "nonselectable", SourceOrganizationName: prov.Organization, SourceWorkspaceName: prov.WorkspaceName, SourceWorkspaceID: prov.WorkspaceID, Selectable: false, Diagnostics: []string{err.Error()}, NextAction: "This QueryRun does not have complete selectable evidence. Do not select or import from it; review the query and ask before starting another."}, nil
+			if code, ok := nonselectableQueryEvidenceCode(err); ok {
+				return &QueryDiscoverySummary{QueryRunID: queryID, Status: "nonselectable", SourceOrganizationName: prov.Organization, SourceWorkspaceName: prov.WorkspaceName, SourceWorkspaceID: prov.WorkspaceID, Selectable: false, Diagnostics: []string{string(code)}, NextAction: "This QueryRun does not have complete selectable evidence. Do not select or import from it; review the query and ask before starting another."}, nil
 			}
 		}
 		return nil, err

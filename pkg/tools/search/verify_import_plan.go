@@ -223,7 +223,7 @@ func observeImportRun(ctx context.Context, c *tfe.Client, input VerifyImportInpu
 	}
 	var run importRunEvidence
 	if decodeQueryEvidence(raw, &run) != nil || run.Data.ID != input.RunID {
-		return nil, nil, queryEvidenceError("run_evidence_invalid")
+		return nil, nil, queryEvidenceError(runEvidenceInvalidCode)
 	}
 
 	out.RunID, out.RunStatus, out.PlanOnly, out.AutoApply = run.Data.ID, run.Data.Attributes.Status, run.Data.Attributes.PlanOnly, run.Data.Attributes.AutoApply
@@ -342,7 +342,7 @@ func readVerifyImportPlanWithConfig(ctx context.Context, c *tfe.Client, input Ve
 	for {
 		run, result, err := observeImportRun(deadlineCtx, c, input, target, out)
 		if err != nil {
-			if err == queryEvidenceError("run_evidence_invalid") {
+			if code, ok := queryEvidenceErrorCode(err); ok && code == runEvidenceInvalidCode {
 				return nil, err
 			}
 			// Caller cancellation or failed backend reads are not pending.

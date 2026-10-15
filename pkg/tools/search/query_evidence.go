@@ -14,9 +14,39 @@ import (
 	"strings"
 )
 
-type queryEvidenceError string
+type queryEvidenceCode string
 
-func (e queryEvidenceError) Error() string { return string(e) }
+const (
+	queryNotSelectableCode              queryEvidenceCode = "query_not_selectable"
+	queryIdentityVersionInvalidCode     queryEvidenceCode = "query_identity_version_invalid"
+	queryEvidenceIncompleteCode         queryEvidenceCode = "query_evidence_incomplete"
+	queryDuplicateOrInvalidIdentityCode queryEvidenceCode = "query_duplicate_or_invalid_identity"
+	queryIdentityInvalidCode            queryEvidenceCode = "query_identity_invalid"
+	queryReportedErrorCode              queryEvidenceCode = "query_reported_error"
+	queryGeneratedBlockConflictCode     queryEvidenceCode = "query_generated_block_conflict"
+	queryProviderSourceUnresolvedCode   queryEvidenceCode = "query_provider_source_unresolved"
+	runEvidenceInvalidCode              queryEvidenceCode = "run_evidence_invalid"
+)
+
+type queryEvidenceFailure struct {
+	code queryEvidenceCode
+}
+
+func (e *queryEvidenceFailure) Error() string { return string(e.code) }
+
+// queryEvidenceError creates a value-free error identified by a stable diagnostic code.
+func queryEvidenceError(code queryEvidenceCode) error {
+	return &queryEvidenceFailure{code: code}
+}
+
+// queryEvidenceErrorCode extracts a diagnostic code through wrapped errors.
+func queryEvidenceErrorCode(err error) (queryEvidenceCode, bool) {
+	var failure *queryEvidenceFailure
+	if !errors.As(err, &failure) {
+		return "", false
+	}
+	return failure.code, true
+}
 
 type queryResultProvider struct {
 	Source  string `json:"source"`
@@ -91,7 +121,7 @@ func queryResultMarker(queryID string, provider queryResultProvider, listType st
 		Identity:        identity,
 	})
 	if err != nil {
-		return "", queryEvidenceError("query_identity_invalid")
+		return "", queryEvidenceError(queryIdentityInvalidCode)
 	}
 	return fmt.Sprintf("qrm1-%x", sha256.Sum256(canonical)), nil
 }
@@ -217,23 +247,23 @@ func parseQueryEvidence(queryID string, data []byte, providers map[string]queryR
 		case "list_resource_found":
 			f := record.Found
 			if f == nil || f.Address == "" || f.ResourceType == "" || len(f.Identity) == 0 {
-				return nil, queryEvidenceError("query_identity_invalid")
+				return nil, queryEvidenceError(queryIdentityInvalidCode)
 			}
 			version, ok := validIdentityVersion(f.Version)
 			if !ok {
-				return nil, queryEvidenceError("query_identity_version_invalid")
+				return nil, queryEvidenceError(queryIdentityVersionInvalidCode)
 			}
 			provider, ok := providers[f.ResourceType]
 			if !ok || provider.Source == "" || provider.Version == "" {
-				return nil, queryEvidenceError("query_provider_source_unresolved")
+				return nil, queryEvidenceError(queryProviderSourceUnresolvedCode)
 			}
 			marker, err := queryResultMarker(queryID, provider, f.ResourceType, f.Identity)
 			if err != nil || seen[marker] {
-				return nil, queryEvidenceError("query_duplicate_or_invalid_identity")
+				return nil, queryEvidenceError(queryDuplicateOrInvalidIdentityCode)
 			}
 			seen[marker] = true
 			if f.Config != nil && f.Configuration != nil && *f.Config != *f.Configuration || f.ImportConfig != nil && f.ImportBlock != nil && *f.ImportConfig != *f.ImportBlock {
-				return nil, queryEvidenceError("query_generated_block_conflict")
+				return nil, queryEvidenceError(queryGeneratedBlockConflictCode)
 			}
 			result := queryResultEvidence{Marker: marker, Address: f.Address, ResourceType: f.ResourceType, DisplayName: f.DisplayName, Identity: f.Identity, IdentityVersion: version, Provider: provider, ResourceObject: f.Resource}
 			if f.Config != nil {
@@ -263,7 +293,7 @@ func parseQueryEvidence(queryID string, data []byte, providers map[string]queryR
 			completeTypes[record.Complete.Address] = record.Complete.ResourceType
 		case "diagnostic":
 			if record.Diagnostic == nil || strings.ToLower(record.Diagnostic.Severity) != "warning" {
-				return nil, queryEvidenceError("query_reported_error")
+				return nil, queryEvidenceError(queryReportedErrorCode)
 			}
 		case "version", "log", "list_start":
 			if record.Found != nil || record.Complete != nil || record.Diagnostic != nil {
@@ -279,21 +309,21 @@ func parseQueryEvidence(queryID string, data []byte, providers map[string]queryR
 		}
 	}
 	if len(totals) == 0 {
-		return nil, queryEvidenceError("query_evidence_incomplete")
+		return nil, queryEvidenceError(queryEvidenceIncompleteCode)
 	}
 	for addr, total := range totals {
 		if counts[addr] != total {
-			return nil, queryEvidenceError("query_evidence_incomplete")
+			return nil, queryEvidenceError(queryEvidenceIncompleteCode)
 		}
 	}
 	for addr := range counts {
 		if _, ok := totals[addr]; !ok {
-			return nil, queryEvidenceError("query_evidence_incomplete")
+			return nil, queryEvidenceError(queryEvidenceIncompleteCode)
 		}
 	}
 	for _, result := range out.Results {
 		if kind := completeTypes[result.Address]; kind != "" && kind != result.ResourceType {
-			return nil, queryEvidenceError("query_evidence_incomplete")
+			return nil, queryEvidenceError(queryEvidenceIncompleteCode)
 		}
 	}
 	return out, nil
