@@ -19,6 +19,8 @@ func TestGetQuerySummaryDefinition(t *testing.T) {
 	assert.NotContains(t, tool.Tool.InputSchema.Properties, "limit")
 	assert.Contains(t, tool.Tool.OutputSchema.Properties, "selectable")
 	assert.Contains(t, tool.Tool.OutputSchema.Properties, "lists")
+	assert.NotContains(t, tool.Tool.OutputSchema.Properties, "log_digest")
+	assert.NotContains(t, tool.Tool.OutputSchema.Properties, "returned")
 	assert.Contains(t, tool.Tool.Description, "get_query_status")
 	assert.Contains(t, tool.Tool.Description, "query_result_marker")
 	assert.Contains(t, tool.Tool.Description, "including in script output")

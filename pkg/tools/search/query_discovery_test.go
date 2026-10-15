@@ -37,7 +37,6 @@ func TestSummarizeQueryDiscoveryReturnsEveryMatchingResult(t *testing.T) {
 	require.True(t, summary.Selectable)
 	require.Equal(t, "org", summary.SourceOrganizationName)
 	require.Equal(t, 3, summary.TotalMatching)
-	require.Equal(t, 3, summary.Returned)
 	require.Len(t, summary.Lists[0].Results, 3)
 	require.Equal(t, evidence.Results[0].Marker, summary.Lists[0].Results[0].Marker)
 	require.Contains(t, summary.NextAction, "all results of this query")
@@ -45,7 +44,6 @@ func TestSummarizeQueryDiscoveryReturnsEveryMatchingResult(t *testing.T) {
 	filtered, err := summarizeQueryDiscovery(prov, evidence, QueryDiscoveryFilter{NameContains: "second"})
 	require.NoError(t, err)
 	require.Equal(t, 1, filtered.TotalMatching)
-	require.Equal(t, 1, filtered.Returned)
 	require.Equal(t, evidence.Results[1].Marker, filtered.Lists[0].Results[0].Marker)
 	require.Contains(t, filtered.NextAction, "all results matching the supplied summary filters")
 }

@@ -15,7 +15,7 @@ import (
 )
 
 // Query evidence is read in full before any result becomes selectable. The
-// response/page budget is separate from this raw log bound.
+// response budget is separate from this raw log bound.
 const maxQueryEvidenceBytes = 4 << 20
 const maxQueryEvidenceDepth = 32
 
@@ -42,9 +42,8 @@ type queryResultEvidence struct {
 }
 
 type queryEvidence struct {
-	Results   []queryResultEvidence
-	ByType    map[string]int
-	LogDigest string
+	Results []queryResultEvidence
+	ByType  map[string]int
 }
 
 // The marker is deterministic within one QueryRun but does not authenticate
@@ -146,7 +145,7 @@ func parseQueryEvidence(queryID string, data []byte, providers map[string]queryR
 	if queryID == "" || len(data) > maxQueryEvidenceBytes {
 		return nil, queryEvidenceError("query_evidence_size_limit")
 	}
-	out := &queryEvidence{Results: []queryResultEvidence{}, ByType: map[string]int{}, LogDigest: fmt.Sprintf("sha256:%x", sha256.Sum256(data))}
+	out := &queryEvidence{Results: []queryResultEvidence{}, ByType: map[string]int{}}
 	counts, totals, seen := map[string]int{}, map[string]int{}, map[string]bool{}
 	completeTypes := map[string]string{}
 	for _, line := range bytes.Split(data, []byte{'\n'}) {
