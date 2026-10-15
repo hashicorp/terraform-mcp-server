@@ -99,8 +99,8 @@ func buildTFEConfig(terraformAddress string, terraformSkipTLSVerify bool, terraf
 	}
 
 	// QueryRun/Plan log and artifact locations can be bearer-capability URLs.
-	// CreateHTTPClient preserves retry diagnostics while replacing every
-	// absolute URL, including its path and query, before logging.
+	// CreateHTTPClient preserves retry diagnostics while redacting their
+	// capability-bearing path and query components before logging.
 	config.HTTPClient = CreateHTTPClient(terraformSkipTLSVerify, logger)
 	return config
 }
