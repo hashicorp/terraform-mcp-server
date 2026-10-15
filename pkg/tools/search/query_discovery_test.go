@@ -6,6 +6,7 @@ package search
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -17,6 +18,30 @@ import (
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/stretchr/testify/require"
 )
+
+func TestNonselectableQueryEvidenceCode(t *testing.T) {
+	for _, expected := range []queryEvidenceCode{
+		queryNotSelectableCode,
+		queryIdentityVersionInvalidCode,
+		queryEvidenceIncompleteCode,
+		queryDuplicateOrInvalidIdentityCode,
+		queryIdentityInvalidCode,
+		queryReportedErrorCode,
+		queryGeneratedBlockConflictCode,
+	} {
+		t.Run(string(expected), func(t *testing.T) {
+			actual, ok := nonselectableQueryEvidenceCode(fmt.Errorf("wrapped: %w", queryEvidenceError(expected)))
+			require.True(t, ok)
+			require.Equal(t, expected, actual)
+		})
+	}
+
+	for _, err := range []error{errors.New("query_not_selectable"), queryEvidenceError(queryProviderSourceUnresolvedCode)} {
+		code, ok := nonselectableQueryEvidenceCode(err)
+		require.False(t, ok)
+		require.Empty(t, code)
+	}
+}
 
 func testDiscovery(t *testing.T, ids ...string) (*queryDiscoveryProvenance, *queryEvidence) {
 	t.Helper()
