@@ -4,13 +4,13 @@ The Terraform MCP server provides tools for generating better Terraform code thr
 
 ## Tool Usage Guidelines
 
-**Before generating new Terraform code**: Consult relevant provider/module documentation. For an existing configuration, preserve its constraints and locked provider versions; do not silently select the latest version or substitute a public source for a private one.
+**BEFORE generating any Terraform code**: Query registries for latest provider/module versions and styling guidelines. When enterprise tools are enabled AND a Terraform token is provided, search private registries first, then fall back to public.
 
 **Provider Consistency**: All modules in a project must use compatible provider versions. Verify with get_provider_details before generating code.
 
-**Validation Flow**: Use terraform fmt and, when appropriate tooling is available, terraform validate on authored code. Do not treat local validation as an HCP Terraform plan. Obtain approval before a plan that may start a remote Run.
+**Validation Flow**: Run terraform validate immediately after generation, then terraform plan only if validation passes. Use terraform fmt to format code as needed.
 
-**User Confirmation Required**: Get explicit approval before `create_run`, `apply_run`, `discard_run`, `cancel_run`, or a CLI plan that may create an HCP Terraform Run. Approval for a plan is not approval to apply.
+**User Confirmation Required**: ALWAYS get explicit yes/no confirmation before: `create_run`, `apply_run`, `discard_run`, `cancel_run`.
 
 ## Always Available Tools
 
@@ -23,7 +23,7 @@ The Terraform MCP server provides tools for generating better Terraform code thr
 
 - **Policy Discovery**: `search_policies` → `get_policy_details`
 
-- Use these to choose compatible versions for new code; preserve existing lock selections.
+- Use these to ensure generated code uses current versions and follows best practices
 
 ## HCP Terraform/TFE Tools (When enterprise tools are enabled AND a Terraform token is provided)
 

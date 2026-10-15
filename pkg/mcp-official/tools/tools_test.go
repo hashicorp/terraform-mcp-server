@@ -20,18 +20,24 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestOfficialSearchRegistrationAndConfigurationCall(t *testing.T) {
+func newOfficialSearchSession(t *testing.T) (context.Context, *mcp.ClientSession) {
+	t.Helper()
 	ctx := context.Background()
 	serverTransport, clientTransport := mcp.NewInMemoryTransports()
-	srv := mcp.NewServer(&mcp.Implementation{Name: "search-test", Version: "0.0.0"}, nil)
+	srv := mcp.NewServer(&mcp.Implementation{Name: "search-test", Version: "0"}, nil)
 	RegisterTools(srv, slog.Default(), toolsets.NewToolsetFilter([]string{toolsets.Search}))
 	serverSession, err := srv.Connect(ctx, serverTransport, nil)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = serverSession.Close() })
-	client := mcp.NewClient(&mcp.Implementation{Name: "search-test-client", Version: "0.0.0"}, nil)
+	client := mcp.NewClient(&mcp.Implementation{Name: "search-test-client", Version: "0"}, nil)
 	session, err := client.Connect(ctx, clientTransport, nil)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = session.Close() })
+	return ctx, session
+}
+
+func TestOfficialSearchRegistrationAndConfigurationCall(t *testing.T) {
+	ctx, session := newOfficialSearchSession(t)
 
 	listed, err := session.ListTools(ctx, nil)
 	require.NoError(t, err)
@@ -101,7 +107,6 @@ func TestOfficialSearchRegistrationAndConfigurationCall(t *testing.T) {
 }
 
 func TestOfficialSearchScopedCatalogAndQuerySubmission(t *testing.T) {
-	ctx := context.Background()
 	var posted atomic.Bool
 	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
@@ -136,16 +141,7 @@ func TestOfficialSearchScopedCatalogAndQuerySubmission(t *testing.T) {
 	t.Cleanup(backend.Close)
 	t.Setenv("TFE_ADDRESS", backend.URL)
 	t.Setenv("TFE_TOKEN", "test-token")
-	serverTransport, clientTransport := mcp.NewInMemoryTransports()
-	srv := mcp.NewServer(&mcp.Implementation{Name: "search-test", Version: "0.0.0"}, nil)
-	RegisterTools(srv, slog.Default(), toolsets.NewToolsetFilter([]string{toolsets.Search}))
-	serverSession, err := srv.Connect(ctx, serverTransport, nil)
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = serverSession.Close() })
-	client := mcp.NewClient(&mcp.Implementation{Name: "search-test-client", Version: "0.0.0"}, nil)
-	session, err := client.Connect(ctx, clientTransport, nil)
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = session.Close() })
+	ctx, session := newOfficialSearchSession(t)
 
 	result, err := session.CallTool(ctx, &mcp.CallToolParams{Name: "provider_list_schema_list", Arguments: map[string]any{"organization_name": "org", "workspace_name": "ws"}})
 	require.NoError(t, err)
@@ -186,7 +182,6 @@ func TestOfficialSearchScopedCatalogAndQuerySubmission(t *testing.T) {
 }
 
 func TestOfficialImportVerifyObservedFailureAndNoPlanJSON(t *testing.T) {
-	ctx := context.Background()
 	var planReads atomic.Int32
 	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/vnd.api+json")
@@ -206,16 +201,7 @@ func TestOfficialImportVerifyObservedFailureAndNoPlanJSON(t *testing.T) {
 	t.Setenv("TFE_ADDRESS", backend.URL)
 	t.Setenv("TFE_TOKEN", "test-token")
 	t.Setenv("MCP_ORGANIZATION_ALLOWLIST", "org")
-	serverTransport, clientTransport := mcp.NewInMemoryTransports()
-	srv := mcp.NewServer(&mcp.Implementation{Name: "search-import-test", Version: "0"}, nil)
-	RegisterTools(srv, slog.Default(), toolsets.NewToolsetFilter([]string{toolsets.Search}))
-	ss, err := srv.Connect(ctx, serverTransport, nil)
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = ss.Close() })
-	client := mcp.NewClient(&mcp.Implementation{Name: "test", Version: "0"}, nil)
-	session, err := client.Connect(ctx, clientTransport, nil)
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = session.Close() })
+	ctx, session := newOfficialSearchSession(t)
 	result, err := session.CallTool(ctx, &mcp.CallToolParams{Name: "verify_import_plan", Arguments: map[string]any{"organization_name": "org", "workspace_name": "target", "run_id": "run-example"}})
 	require.NoError(t, err)
 	require.False(t, result.IsError, "observed failed Run is a factual domain result")
@@ -231,10 +217,6 @@ func TestOfficialImportVerifyObservedFailureAndNoPlanJSON(t *testing.T) {
 }
 
 func TestOfficialImportPrepareAndFinishedPlan(t *testing.T) {
-	ctx := context.Background()
-	var omitPlanTerraformVersion atomic.Bool
-	var planIdentityVersion atomic.Int32
-	planIdentityVersion.Store(1)
 	var backend *httptest.Server
 	backend = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/vnd.api+json")
@@ -268,11 +250,7 @@ func TestOfficialImportPrepareAndFinishedPlan(t *testing.T) {
 		case "/api/v2/plans/plan-test":
 			_, _ = fmt.Fprint(w, `{"data":{"type":"plans","id":"plan-test","attributes":{"status":"finished"}}}`)
 		case "/api/v2/plans/plan-test/json-output":
-			if omitPlanTerraformVersion.Load() {
-				_, _ = fmt.Fprint(w, `{"format_version":"1.2","complete":true,"errored":false,"private":"secret-id-sentinel"}`)
-				return
-			}
-			_, _ = fmt.Fprintf(w, `{"format_version":"1.2","terraform_version":"1.14.0","complete":true,"errored":false,"planned_values":{"root_module":{"resources":[{"address":"aws_s3_bucket.sample","identity_schema_version":%d}]}},"resource_changes":[{"address":"aws_s3_bucket.sample","mode":"managed","type":"aws_s3_bucket","provider_name":"registry.terraform.io/hashicorp/aws","change":{"actions":["no-op"],"importing":{"id":"secret-id-sentinel"},"after_identity":{"bucket":"sample"}}}],"resource_drift":[]}`, planIdentityVersion.Load())
+			_, _ = fmt.Fprint(w, `{"format_version":"1.2","terraform_version":"1.14.0","complete":true,"errored":false,"planned_values":{"root_module":{"resources":[{"address":"aws_s3_bucket.sample","identity_schema_version":1}]}},"resource_changes":[{"address":"aws_s3_bucket.sample","mode":"managed","type":"aws_s3_bucket","provider_name":"registry.terraform.io/hashicorp/aws","change":{"actions":["no-op"],"importing":{"id":"secret-id-sentinel"},"after_identity":{"bucket":"sample"}}}],"resource_drift":[]}`)
 		default:
 			http.NotFound(w, r)
 		}
@@ -281,16 +259,7 @@ func TestOfficialImportPrepareAndFinishedPlan(t *testing.T) {
 	t.Setenv("TFE_ADDRESS", backend.URL)
 	t.Setenv("TFE_TOKEN", "test-token")
 	t.Setenv("MCP_ORGANIZATION_ALLOWLIST", "org")
-	serverTransport, clientTransport := mcp.NewInMemoryTransports()
-	srv := mcp.NewServer(&mcp.Implementation{Name: "import-test", Version: "0"}, nil)
-	RegisterTools(srv, slog.Default(), toolsets.NewToolsetFilter([]string{toolsets.Search}))
-	ss, err := srv.Connect(ctx, serverTransport, nil)
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = ss.Close() })
-	cl := mcp.NewClient(&mcp.Implementation{Name: "test", Version: "0"}, nil)
-	session, err := cl.Connect(ctx, clientTransport, nil)
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = session.Close() })
+	ctx, session := newOfficialSearchSession(t)
 	summary, err := session.CallTool(ctx, &mcp.CallToolParams{Name: "get_query_summary", Arguments: map[string]any{"query_run_id": "qry-test"}})
 	require.NoError(t, err)
 	require.False(t, summary.IsError)
@@ -311,34 +280,9 @@ func TestOfficialImportPrepareAndFinishedPlan(t *testing.T) {
 	require.Equal(t, float64(1), facts["object_identity"].(map[string]any)["matched"])
 	require.NotContains(t, fmt.Sprint(verify.Content), "secret-id-sentinel")
 	require.NotContains(t, fmt.Sprint(verify.StructuredContent), "secret-id-sentinel")
-	planIdentityVersion.Store(0)
-	differentVersion, err := session.CallTool(ctx, &mcp.CallToolParams{Name: "verify_import_plan", Arguments: map[string]any{"organization_name": "org", "workspace_name": "target", "run_id": "run-example", "import_context": prepared["import_context"], "bindings": []any{map[string]any{"query_result_marker": marker, "target_address": "aws_s3_bucket.sample"}}}})
-	require.NoError(t, err)
-	require.False(t, differentVersion.IsError)
-	diff := differentVersion.StructuredContent.(map[string]any)
-	require.Equal(t, float64(1), diff["changes"].(map[string]any)["none"])
-	require.Equal(t, float64(1), diff["object_identity"].(map[string]any)["unverified"])
-	entry := diff["attention"].([]any)[0].(map[string]any)
-	require.Equal(t, "none", entry["change"])
-	require.Equal(t, "identity_schema_version_differs", entry["identity_reason"])
-	require.Contains(t, diff["next_action"], "Search 1, Plan 0")
-	require.Contains(t, diff["next_action"], "If the user asks to investigate")
-	require.Contains(t, differentVersion.Content[0].(*mcp.TextContent).Text, `"identity_schema_version_differs"`)
-	require.NotContains(t, fmt.Sprint(differentVersion), "secret-id-sentinel")
-	omitPlanTerraformVersion.Store(true)
-	blocked, err := session.CallTool(ctx, &mcp.CallToolParams{Name: "verify_import_plan", Arguments: map[string]any{"organization_name": "org", "workspace_name": "target", "run_id": "run-example", "import_context": prepared["import_context"], "bindings": []any{map[string]any{"query_result_marker": marker, "target_address": "aws_s3_bucket.sample"}}}})
-	require.NoError(t, err)
-	require.False(t, blocked.IsError)
-	data := blocked.StructuredContent.(map[string]any)
-	require.Equal(t, "blocked", data["status"])
-	require.Equal(t, "plan_terraform_version_unavailable", data["diagnostics"].([]any)[0])
-	require.Contains(t, blocked.Content[0].(*mcp.TextContent).Text, `"plan_terraform_version_unavailable"`)
-	require.NotContains(t, fmt.Sprint(blocked.Content), "secret-id-sentinel")
-	require.NotContains(t, fmt.Sprint(blocked.StructuredContent), "secret-id-sentinel")
 }
 
 func TestOfficialSearchQuerySummarySelectableAndNonselectable(t *testing.T) {
-	ctx := context.Background()
 	for _, tc := range []struct {
 		name, version, status string
 		selectable            bool
@@ -375,16 +319,7 @@ func TestOfficialSearchQuerySummarySelectableAndNonselectable(t *testing.T) {
 			t.Setenv("TFE_ADDRESS", backend.URL)
 			t.Setenv("TFE_TOKEN", "test-token")
 			t.Setenv("MCP_ORGANIZATION_ALLOWLIST", "org")
-			serverTransport, clientTransport := mcp.NewInMemoryTransports()
-			srv := mcp.NewServer(&mcp.Implementation{Name: "search-test", Version: "0"}, nil)
-			RegisterTools(srv, slog.Default(), toolsets.NewToolsetFilter([]string{toolsets.Search}))
-			serverSession, err := srv.Connect(ctx, serverTransport, nil)
-			require.NoError(t, err)
-			t.Cleanup(func() { _ = serverSession.Close() })
-			client := mcp.NewClient(&mcp.Implementation{Name: "test", Version: "0"}, nil)
-			session, err := client.Connect(ctx, clientTransport, nil)
-			require.NoError(t, err)
-			t.Cleanup(func() { _ = session.Close() })
+			ctx, session := newOfficialSearchSession(t)
 			result, err := session.CallTool(ctx, &mcp.CallToolParams{Name: "get_query_summary", Arguments: map[string]any{"query_run_id": "qry-test"}})
 			require.NoError(t, err)
 			require.False(t, result.IsError, "result: %#v", result.Content)

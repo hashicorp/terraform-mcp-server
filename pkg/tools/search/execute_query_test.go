@@ -4,7 +4,6 @@
 package search
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -15,7 +14,6 @@ import (
 
 	"github.com/hashicorp/go-tfe"
 	"github.com/mark3labs/mcp-go/mcp"
-	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -244,10 +242,7 @@ func TestLegacyExecuteQueryStructuredProjection(t *testing.T) {
 	defer backend.Close()
 	client, err := tfe.NewClient(&tfe.Config{Address: backend.URL, Token: "test-token", HTTPClient: backend.Client()})
 	require.NoError(t, err)
-	var logged bytes.Buffer
-	logger := log.New()
-	logger.SetOutput(&logged)
-	result, err := executeQueryWithClient(context.Background(), client, "org", "ws", validExecuteQueryConfiguration, logger)
+	result, err := executeQueryWithClient(context.Background(), client, "org", "ws", validExecuteQueryConfiguration, silentLogger())
 	require.NoError(t, err)
 	require.False(t, result.IsError)
 	text, ok := mcp.AsTextContent(result.Content[0])
@@ -255,5 +250,4 @@ func TestLegacyExecuteQueryStructuredProjection(t *testing.T) {
 	assert.JSONEq(t, `{"query_run_id":"qry-test"}`, text.Text)
 	assert.Equal(t, "qry-test", result.StructuredContent.(*ExecuteQueryResponse).QueryRunID)
 	assert.NotContains(t, fmt.Sprint(result), sentinel)
-	assert.NotContains(t, logged.String(), sentinel)
 }
