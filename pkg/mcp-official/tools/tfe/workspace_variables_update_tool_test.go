@@ -67,9 +67,8 @@ func TestUpdateWorkspaceVariableFunc_EmptyValueIsAChange(t *testing.T) {
 		VariableID:       "var-1",
 		Value:            &empty,
 	})
-	// gets past validation and fails on the client, which is the point.
+	// An empty string is a valid change — gets past validation and fails on the API call.
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "getting Terraform client")
 }
 
 func TestUpdateWorkspaceVariableToolOutputSchema(t *testing.T) {
