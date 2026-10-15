@@ -93,6 +93,7 @@ func runForEachTransport(
 func createStdioClient(t *testing.T) (*mcp.ClientSession, func()) {
 	t.Helper()
 	t.Log("Starting Stdio MCP client...")
+	config := currentServerConfig()
 
 	cmd := exec.Command(
 		"docker",
@@ -101,6 +102,7 @@ func createStdioClient(t *testing.T) (*mcp.ClientSession, func()) {
 		"--rm",
 		"-e", "MCP_RATE_LIMIT_GLOBAL=50:100",
 		"-e", "MCP_RATE_LIMIT_SESSION=50:100",
+		"-e", fmt.Sprintf("%s=%t", officialSDKEnabledEnv, config.officialSDK),
 		"terraform-mcp-server:test-e2e",
 	)
 
@@ -119,7 +121,7 @@ func createStdioClient(t *testing.T) (*mcp.ClientSession, func()) {
 	require.NoError(t, err, "failed to connect over stdio")
 	initResult := session.InitializeResult()
 	require.NotNil(t, initResult)
-	require.Equal(t, legacyServerName, initResult.ServerInfo.Name)
+	require.Equal(t, config.serverName, initResult.ServerInfo.Name)
 
 	cleanup := func() {
 		if err := session.Close(); err != nil {

@@ -15,7 +15,16 @@ permissions:
 
 jobs:
   e2e-test:
+    name: E2E (${{ matrix.suite }})
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - suite: legacy server
+            make_target: test-e2e
+          - suite: official SDK - public Registry
+            make_target: test-e2e-official-public-registry
 
     steps:
       - name: Check out code
@@ -29,8 +38,5 @@ jobs:
       - name: Download dependencies
         run: make deps
 
-      - name: Run end-to-end tests with the legacy server
-        run: make test-e2e
-
-      - name: Run public registry end-to-end tests with the official SDK server
-        run: make test-e2e-official-public-registry
+      - name: Run end-to-end tests
+        run: make ${{ matrix.make_target }}

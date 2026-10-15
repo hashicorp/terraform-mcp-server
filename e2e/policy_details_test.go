@@ -89,8 +89,6 @@ func TestGetPolicyDetailsRejectsUnknownID(t *testing.T) {
 
 // searchForPolicyID obtains a real policy ID so the details test follows the
 // search-before-details workflow expected by the MCP tool description.
-// searchForPolicyID obtains a real policy ID so the details test follows the
-// search-before-details workflow expected by the MCP tool description.
 // searchForPolicyID obtains a real ID for the details workflow.
 func searchForPolicyID(t *testing.T, session *mcp.ClientSession, query string) string {
 	t.Helper()

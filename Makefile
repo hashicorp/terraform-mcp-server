@@ -38,9 +38,9 @@ test:
 test-e2e:
 	@trap '$(MAKE) cleanup-test-containers' EXIT; $(GO) test -v --tags e2e ./e2e
 
-# Run public registry tool e2e tests against the official SDK HTTP endpoint.
+# Run public registry tool e2e tests against the official SDK over Stdio and HTTP excluding CORS tests.
 test-e2e-official-public-registry:
-	@trap '$(MAKE) cleanup-test-containers' EXIT; TF_X_OFFICIAL_SDK_ENABLED=true $(GO) test -v --tags e2e ./e2e -run '.*/HTTP$$'
+	@trap '$(MAKE) cleanup-test-containers' EXIT; TF_X_OFFICIAL_SDK_ENABLED=true $(GO) test -v --tags e2e ./e2e -run '.*/(Stdio|HTTP)$$'
 
 # Run hcpt tests
 # Usage: make test-hcpt RUN=TestWorkspace

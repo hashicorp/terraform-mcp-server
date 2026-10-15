@@ -35,6 +35,13 @@ Run the complete E2E suite:
 make test-e2e
 ```
 
+Run public Registry tool tests over both Stdio and HTTP using the official SDK
+server:
+
+```bash
+make test-e2e-official-public-registry
+```
+
 Run all E2E tests directly:
 
 ```bash
