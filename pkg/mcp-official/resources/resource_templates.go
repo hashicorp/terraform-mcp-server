@@ -36,7 +36,7 @@ func providerResourceTemplate(resourceURI string, description string, logger *sl
 			URITemplate: resourceURI,
 			Name:        description,
 			Description: "Describes details for a Terraform provider",
-			MIMEType:    "application/json",
+			MIMEType:    "text/markdown",
 		},
 		func(ctx context.Context, request *mcp.ReadResourceRequest) (*mcp.ReadResourceResult, error) {
 			logrusLogger.Infof("Provider resource template - resourceURI: %s", request.Params.URI)
@@ -50,16 +50,23 @@ func providerResourceTemplate(resourceURI string, description string, logger *sl
 			if err != nil {
 				return nil, utils.LogAndReturnError(logrusLogger, "getting provider details for resource template", err)
 			}
-			return &mcp.ReadResourceResult{
-				Contents: []*mcp.ResourceContents{
-					{
-						MIMEType: "text/markdown",
-						URI:      resourceURI,
-						Text:     providerDocs,
-					},
-				},
-			}, nil
+			return providerResourceResult(request.Params.URI, providerDocs), nil
 		}
+}
+
+// providerResourceResult builds the read result for a provider template. The
+// content URI is the URI the client asked for, not the template, so the client
+// can match the response to its request.
+func providerResourceResult(requestedURI, docs string) *mcp.ReadResourceResult {
+	return &mcp.ReadResourceResult{
+		Contents: []*mcp.ResourceContents{
+			{
+				MIMEType: "text/markdown",
+				URI:      requestedURI,
+				Text:     docs,
+			},
+		},
+	}
 }
 
 // providerResourceTemplateHelper fetches the provider details based on the resource URI
@@ -79,9 +86,6 @@ func providerResourceTemplateHelper(ctx context.Context, httpClient *http.Client
 
 	providerVersionUri := path.Join(utils.PROVIDER_BASE_PATH, namespace, "name", name, "version", version)
 	logger.Debugf("Provider resource template - providerVersionUri: %s", providerVersionUri)
-	if err != nil {
-		return "", utils.LogAndReturnError(logger, "getting provider details for resource template", err)
-	}
 
 	// Get the provider-version-id for the specified provider version
 	providerVersionID, err := registryapi.GetProviderVersionID(ctx, httpClient, namespace, name, version, logger)

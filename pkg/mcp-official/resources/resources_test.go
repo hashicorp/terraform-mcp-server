@@ -74,7 +74,7 @@ func TestRegisteredResourceTemplates(t *testing.T) {
 	tmpl := res.ResourceTemplates[0]
 	require.Equal(t, "registry:/providers/{namespace}/name/{name}/version/{version}", tmpl.URITemplate)
 	require.Equal(t, "Provider details", tmpl.Name)
-	require.Equal(t, "application/json", tmpl.MIMEType)
+	require.Equal(t, "text/markdown", tmpl.MIMEType)
 }
 
 func TestServerAdvertisesResourcesCapability(t *testing.T) {
@@ -92,4 +92,16 @@ func TestReadUnknownResourceFails(t *testing.T) {
 func TestProviderResourceTemplateHelperRejectsBadURI(t *testing.T) {
 	_, err := providerResourceTemplateHelper(context.Background(), http.DefaultClient, "bad-uri", nil)
 	require.ErrorContains(t, err, "invalid provider URI format")
+}
+
+func TestProviderResourceResultUsesRequestedURI(t *testing.T) {
+	const requested = "registry:/providers/hashicorp/name/random/version/3.6.0"
+
+	res := providerResourceResult(requested, "# docs")
+
+	require.Len(t, res.Contents, 1)
+	require.Equal(t, requested, res.Contents[0].URI, "must be the requested URI, not the template")
+	require.NotContains(t, res.Contents[0].URI, "{namespace}")
+	require.Equal(t, "text/markdown", res.Contents[0].MIMEType)
+	require.Equal(t, "# docs", res.Contents[0].Text)
 }
