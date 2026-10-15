@@ -83,7 +83,9 @@ func TestCreateNoCodeWorkspace(t *testing.T) {
 	require.False(t, result.IsError, "create_no_code_workspace should not return an error: %s", resultText)
 	require.NotEmpty(t, resultText, "create_no_code_workspace result should not be empty")
 
-	workspaceID := gjson.Get(resultText, "data.attributes.workspace_id").String()
+	workspaceID := gjson.Get(resultText, "data.attributes.workspace_id").String() // Legacy SDK
+	// TODO: Switch to the official SDK response after the migration is complete.
+	// Official SDK: workspaceID := gjson.Get(resultText, "workspace_id").String()
 	require.NotEmpty(t, workspaceID, "create_no_code_workspace should return a workspace_id")
 
 	workspace, err := client.Workspaces.ReadByID(t.Context(), workspaceID)
