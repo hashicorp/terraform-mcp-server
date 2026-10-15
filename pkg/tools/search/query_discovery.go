@@ -60,30 +60,16 @@ type queryDiscoveryProvenance struct {
 	Providers                                            map[string]queryResultProvider
 }
 
-type queryBoundedWriter struct {
-	buffer    bytes.Buffer
-	limit     int
-	overLimit bool
-}
-
-func (b *queryBoundedWriter) Write(p []byte) (int, error) {
-	if len(p) > b.limit-b.buffer.Len() {
-		b.overLimit = true
-		return 0, queryEvidenceError("query_evidence_size_limit")
-	}
-	return b.buffer.Write(p)
-}
-
 func readQueryBackendJSON(ctx context.Context, c *tfe.Client, endpoint string) ([]byte, error) {
 	req, err := c.NewRequest(http.MethodGet, endpoint, nil)
 	if err != nil {
 		return nil, queryEvidenceError("query_backend_unavailable")
 	}
-	buf := &queryBoundedWriter{limit: maxQueryEvidenceBytes}
-	if err := req.Do(ctx, buf); err != nil {
+	var buf bytes.Buffer
+	if err := req.Do(ctx, &buf); err != nil {
 		return nil, queryEvidenceError("query_backend_unavailable")
 	}
-	return buf.buffer.Bytes(), nil
+	return buf.Bytes(), nil
 }
 
 type queryWireRelation struct {
@@ -233,12 +219,9 @@ func readQueryDiscovery(ctx context.Context, c *tfe.Client, queryID string) (*qu
 	if err != nil {
 		return prov, nil, queryEvidenceError("query_log_unavailable")
 	}
-	data, err := io.ReadAll(io.LimitReader(reader, maxQueryEvidenceBytes+1))
+	data, err := io.ReadAll(reader)
 	if err != nil {
 		return prov, nil, queryEvidenceError("query_log_unavailable")
-	}
-	if len(data) > maxQueryEvidenceBytes {
-		return prov, nil, queryEvidenceError("query_evidence_size_limit")
 	}
 	evidence, err := parseQueryEvidence(queryID, data, prov.Providers)
 	if err != nil {

@@ -14,11 +14,6 @@ import (
 	"strings"
 )
 
-// Query evidence is read in full before any result becomes selectable. The
-// response budget is separate from this raw log bound.
-const maxQueryEvidenceBytes = 4 << 20
-const maxQueryEvidenceDepth = 32
-
 type queryEvidenceError string
 
 func (e queryEvidenceError) Error() string { return string(e) }
@@ -115,21 +110,24 @@ func validIdentityVersion(raw json.RawMessage) (int, bool) {
 	return int(n), err == nil
 }
 
-// decodeQueryEvidence rejects duplicate JSON keys and deep nesting before
-// decoding. It does not return or log untrusted JSON on failure.
+// decodeQueryEvidence rejects duplicate JSON keys before decoding. It does not
+// return or log untrusted JSON on failure.
 func decodeQueryEvidence(raw []byte, target any) error {
-	return decodeQueryEvidenceLimit(raw, target, maxQueryEvidenceBytes, maxQueryEvidenceDepth)
+	return decodeQueryEvidenceLimit(raw, target, 0, 0)
 }
 
 func decodeQueryEvidenceLimit(raw []byte, target any, maxBytes, maxDepth int) error {
-	if len(raw) > maxBytes {
+	// A zero limit disables that optional guard. QueryRun evidence currently
+	// uses the unbounded strict decoder above; explicit limits remain for
+	// callers decoding plan and schema artifacts.
+	if maxBytes > 0 && len(raw) > maxBytes {
 		return queryEvidenceError("query_evidence_size_limit")
 	}
 	decoder := json.NewDecoder(bytes.NewReader(raw))
 	decoder.UseNumber()
 	var walk func(int) error
 	walk = func(depth int) error {
-		if depth > maxDepth {
+		if maxDepth > 0 && depth > maxDepth {
 			return queryEvidenceError("query_evidence_depth_limit")
 		}
 		token, err := decoder.Token()
@@ -180,8 +178,8 @@ func decodeQueryEvidenceLimit(raw []byte, target any, maxBytes, maxDepth int) er
 // record is malformed, duplicated, lacks a valid version/identity, or has
 // incomplete list totals. It never returns a partial selection on failure.
 func parseQueryEvidence(queryID string, data []byte, providers map[string]queryResultProvider) (*queryEvidence, error) {
-	if queryID == "" || len(data) > maxQueryEvidenceBytes {
-		return nil, queryEvidenceError("query_evidence_size_limit")
+	if queryID == "" {
+		return nil, queryEvidenceError("query_evidence_invalid")
 	}
 	out := &queryEvidence{Results: []queryResultEvidence{}, ByType: map[string]int{}}
 	counts, totals, seen := map[string]int{}, map[string]int{}, map[string]bool{}
