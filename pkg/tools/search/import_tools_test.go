@@ -630,11 +630,15 @@ func TestImportToolDescriptionsAndSchemas(t *testing.T) {
 	require.Contains(t, prepare.InputSchema.Required, "selections")
 	require.Contains(t, prepare.InputSchema.Required, "locked_providers")
 	require.Contains(t, prepare.OutputSchema.Properties, "import_context")
+	require.NotContains(t, string(prepare.RawInputSchema), `"maxItems":100`)
+	require.NotContains(t, prepare.Description, "1–100")
 	verify := VerifyImportPlan(silentLogger()).Tool
 	var verifyInputSchema jsonschema.Schema
 	require.NoError(t, json.Unmarshal(verify.RawInputSchema, &verifyInputSchema))
 	require.Contains(t, verifyInputSchema.Required, "run_id")
 	require.NotContains(t, verifyInputSchema.Required, "import_context")
 	require.Contains(t, verifyInputSchema.Properties, "import_context")
+	require.NotContains(t, string(verify.RawInputSchema), "maximum 100")
+	require.NotContains(t, string(verify.RawInputSchema), "maximum 20")
 	require.Contains(t, verify.OutputSchema.Properties, "object_identity")
 }
