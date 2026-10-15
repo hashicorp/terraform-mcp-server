@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -79,9 +80,48 @@ func TestVerifyIdentityNeverUsesImportIDAsIdentity(t *testing.T) {
 	require.Equal(t, "unverified", status)
 }
 
-func TestImportResultLimitsIncludeBothCopies(t *testing.T) {
-	result := PrepareImportResult{Status: "prepared", NextAction: string(make([]byte, maxImportResultBytes/2))}
-	require.EqualError(t, checkImportResultBudget(result), "import_response_limit")
+func TestImportInputsAndResultsHaveNoApplicationSizeLimit(t *testing.T) {
+	selections := make([]ImportSelection, 101)
+	for i := range selections {
+		selections[i] = ImportSelection{QueryResultMarker: fmt.Sprintf("qrm1-%064x", i), ManagedType: "aws_s3_bucket"}
+	}
+	input := PrepareImportInput{
+		OrganizationName: "org",
+		WorkspaceName:    "target",
+		QueryRunID:       "qry-example",
+		Selections:       selections,
+		LockedProviders:  map[string]string{"registry.terraform.io/hashicorp/aws": "6.66.0"},
+	}
+	require.True(t, validImportInput(input))
+
+	text, err := FormatImportResult(PrepareImportResult{Status: "prepared", NextAction: strings.Repeat("x", 256<<10)})
+	require.NoError(t, err)
+	require.Contains(t, text, `"status":"prepared"`)
+}
+
+func TestImportArgumentDecodingHasNoApplicationSizeOrDepthLimit(t *testing.T) {
+	type arguments struct {
+		Value any `json:"value"`
+	}
+	deep := any("value")
+	for range 65 {
+		deep = []any{deep}
+	}
+	raw, err := json.Marshal(map[string]any{"value": map[string]any{"large": strings.Repeat("x", 512<<10), "deep": deep}})
+	require.NoError(t, err)
+
+	var decoded arguments
+	require.NoError(t, decodeImportArguments(json.RawMessage(raw), &decoded))
+	require.NotNil(t, decoded.Value)
+}
+
+func TestImportArgumentDecodingRetainsStrictStructureChecks(t *testing.T) {
+	type arguments struct {
+		Value string `json:"value"`
+	}
+	var decoded arguments
+	require.EqualError(t, decodeImportArguments(json.RawMessage(`{"value":"one","value":"two"}`), &decoded), "query_evidence_invalid")
+	require.EqualError(t, decodeImportArguments(json.RawMessage(`{"value":"one","unknown":true}`), &decoded), "import_arguments_invalid")
 }
 
 func TestVerifyImportRejectsDuplicateDetailAddresses(t *testing.T) {
@@ -89,10 +129,34 @@ func TestVerifyImportRejectsDuplicateDetailAddresses(t *testing.T) {
 	require.EqualError(t, err, "verify_input_invalid")
 }
 
-func TestVerifyImportRejectsTooManyBindingsBeforeBackendRead(t *testing.T) {
-	bindings := make([]ImportBinding, maxImportSelections+1)
-	_, err := ReadVerifyImportPlan(context.Background(), nil, VerifyImportInput{OrganizationName: "org", WorkspaceName: "target", RunID: "run-example", Bindings: bindings})
-	require.EqualError(t, err, "verify_input_invalid")
+func TestVerifyImportDetailAddressesHaveNoApplicationCountLimit(t *testing.T) {
+	details := make([]string, 21)
+	for i := range details {
+		details[i] = fmt.Sprintf("aws_s3_bucket.sample%d", i)
+	}
+	var runReads int
+	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/vnd.api+json")
+		switch r.URL.Path {
+		case "/api/v2/ping":
+			w.WriteHeader(http.StatusOK)
+		case "/api/v2/organizations/org/workspaces/target":
+			_, _ = fmt.Fprint(w, `{"data":{"type":"workspaces","id":"ws-example","attributes":{"name":"target"},"relationships":{"organization":{"data":{"type":"organizations","id":"org"}}}}}`)
+		case "/api/v2/runs/run-example":
+			runReads++
+			http.NotFound(w, r)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer backend.Close()
+	t.Setenv("MCP_ORGANIZATION_ALLOWLIST", "org")
+	c, err := tfe.NewClient(&tfe.Config{Address: backend.URL, Token: "test-token", HTTPClient: backend.Client()})
+	require.NoError(t, err)
+
+	_, err = ReadVerifyImportPlan(context.Background(), c, VerifyImportInput{OrganizationName: "org", WorkspaceName: "target", RunID: "run-example", DetailAddresses: details})
+	require.EqualError(t, err, "run_read_unavailable")
+	require.Equal(t, 1, runReads)
 }
 
 func TestVerifyImportRunGuardsPlanJSONRead(t *testing.T) {

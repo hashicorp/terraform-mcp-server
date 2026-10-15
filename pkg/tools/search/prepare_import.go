@@ -20,9 +20,6 @@ import (
 	"github.com/hashicorp/terraform-mcp-server/pkg/client"
 )
 
-const maxImportSelections = 100
-const maxImportResultBytes = 256 << 10
-
 var exactLockedVersion = regexp.MustCompile(`^[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z][0-9A-Za-z.-]*)?$`)
 var providerSourcePattern = regexp.MustCompile(`^[a-zA-Z0-9.-]+/[a-zA-Z0-9_-]+/[a-zA-Z0-9_-]+$`)
 var importMarkerPattern = regexp.MustCompile(`^qrm1-[a-f0-9]{64}$`)
@@ -131,20 +128,7 @@ func importDigest(c ImportContext) (string, error) {
 	return fmt.Sprintf("sha256:%x", sha256.Sum256(data)), nil
 }
 
-func checkImportResultBudget(v any) error {
-	data, err := json.Marshal(v)
-	if err != nil || len(data) > maxImportResultBytes/2 {
-		// Results are returned in structured and JSON-text form. Cap their
-		// combined content before either transport serializes its envelope.
-		return queryEvidenceError("import_response_limit")
-	}
-	return nil
-}
-
 func FormatImportResult(v any) (string, error) {
-	if err := checkImportResultBudget(v); err != nil {
-		return "", err
-	}
 	data, err := json.Marshal(v)
 	if err != nil {
 		return "", queryEvidenceError("import_response_invalid")
@@ -153,7 +137,7 @@ func FormatImportResult(v any) (string, error) {
 }
 
 func validImportInput(input PrepareImportInput) bool {
-	if !validImportWorkspaceName(input.OrganizationName) || !validImportWorkspaceName(input.WorkspaceName) || input.WorkspaceID != "" && !validImportWorkspaceName(input.WorkspaceID) || strings.TrimSpace(input.QueryRunID) == "" || len(input.Selections) == 0 || len(input.Selections) > maxImportSelections || len(input.LockedProviders) == 0 {
+	if !validImportWorkspaceName(input.OrganizationName) || !validImportWorkspaceName(input.WorkspaceName) || input.WorkspaceID != "" && !validImportWorkspaceName(input.WorkspaceID) || strings.TrimSpace(input.QueryRunID) == "" || len(input.Selections) == 0 || len(input.LockedProviders) == 0 {
 		return false
 	}
 	for source, version := range input.LockedProviders {
@@ -295,7 +279,7 @@ func ReadPrepareImport(ctx context.Context, c *tfe.Client, input PrepareImportIn
 	blocked := func(code, action string) (*PrepareImportResult, error) {
 		out.Diagnostics = []string{code}
 		out.NextAction = action
-		return out, checkImportResultBudget(out)
+		return out, nil
 	}
 	if input.WorkspaceID != "" && input.WorkspaceID != w.ID {
 		return blocked("target_mismatch", "Confirm the intended target workspace before preparing again; nothing was uploaded or planned.")
@@ -387,9 +371,6 @@ func ReadPrepareImport(ctx context.Context, c *tfe.Client, input PrepareImportIn
 	out.Status = "prepared"
 	out.NextAction = "Inspect the existing user-designated local tree, exact lock releases, selected observations, relevant module calls and instances, provider mappings, and existing variables and references. The proposed managed type is not proved by the Search list type, and historical schema does not attest the lock, a proposed import block, or provider scope. First author for the selected identities, effective provider scope and target locked provider's managed/identity schema. Consult that release's resource/import documentation and the target Terraform version's official import and module documentation; search_providers with the locked provider_version followed by get_provider_details can help when available. Treat generated blocks as drafts, make evidence-backed adaptations and author one reviewed resource and import block per result at distinct exact addresses. If the intended address is in an editable local module, check its calls and instances for sibling effects; do not edit remote-source modules. Review changed files and sensitive upload scope. " +
 		"In the execution context that will run Terraform, review the user-approved cloud or remote-backend configuration and confirm the effective CLI host, organization, project (when relevant) and workspace with the user. Explicit cloud settings take precedence over their fallbacks; account for applicable CLI fallbacks and workspace-selection overrides without dumping environment contents; if the mapping is ambiguous, consult Terraform's cloud-connection and CLI-environment documentation and ask the user to resolve it. Confirm only that authentication for the intended host is available through the user's existing CLI setup. Do not read, print, request, copy or set credential values. MCP server configuration and authentication are separate from Terraform CLI configuration and authentication. Resolve a specific destination mismatch before starting a Run. Confirm both initiating CLI and HCP execution support import blocks (>=1.5); an init that creates a workspace/project or migrates state needs separate permission. After explicit approval for one speculative plan, an example from the confirmed directory is terraform plan -no-color -input=false (or terraform -chdir=<directory> plan -no-color -input=false), without -out or apply. These flags aid non-interactive review, not proof of a plan-only Run. The CLI, not Search MCP, uploads the configuration and creates the Run. Compare its Run URL with the intended host/org/workspace, then verify the exact Run's workspace and plan_only=true. If its Run URL or outcome is uncertain, reconcile before retrying; keep import context unchanged for verification. Approval is for one speculative plan only. This Search-to-import workflow ends after Plan review and handoff of the proposed HCL and findings; do not apply or run terraform import as its next step."
-	if err := checkImportResultBudget(out); err != nil {
-		return nil, err
-	}
 	return out, nil
 }
 

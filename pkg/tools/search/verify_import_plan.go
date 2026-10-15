@@ -44,8 +44,8 @@ type VerifyImportInput struct {
 	WorkspaceName    string          `json:"workspace_name" jsonschema:"Confirmed target workspace name"`
 	RunID            string          `json:"run_id" jsonschema:"Exact CLI-originated plan-only HCP Terraform Run ID"`
 	ImportContext    *ImportContext  `json:"import_context,omitempty" jsonschema:"Unchanged context returned by prepare_import; required for finished Plan classification"`
-	Bindings         []ImportBinding `json:"bindings,omitempty" jsonschema:"One query result marker to exact target address binding per selection; maximum 100"`
-	DetailAddresses  []string        `json:"detail_addresses,omitempty" jsonschema:"Optional selected target addresses to inspect without values; maximum 20"`
+	Bindings         []ImportBinding `json:"bindings,omitempty" jsonschema:"One query result marker to exact target address binding per selection"`
+	DetailAddresses  []string        `json:"detail_addresses,omitempty" jsonschema:"Optional selected target addresses to inspect without values"`
 }
 
 type ImportPlanFacts struct {
@@ -144,7 +144,7 @@ func importRunUIURL(base url.URL, org, workspace, runID string) string {
 }
 
 func validateImportContext(c *ImportContext, bindings []ImportBinding, target *tfe.Workspace) (map[string]ImportContextSelection, map[string]string, error) {
-	if c == nil || strings.TrimSpace(c.QueryRunID) == "" || c.Target.WorkspaceID != target.ID || target.Organization == nil || !strings.EqualFold(c.Target.OrganizationName, target.Organization.Name) || len(c.SelectedResults) < 1 || len(c.SelectedResults) > maxImportSelections || len(bindings) != len(c.SelectedResults) || len(c.LockedProviders) == 0 {
+	if c == nil || strings.TrimSpace(c.QueryRunID) == "" || c.Target.WorkspaceID != target.ID || target.Organization == nil || !strings.EqualFold(c.Target.OrganizationName, target.Organization.Name) || len(c.SelectedResults) < 1 || len(bindings) != len(c.SelectedResults) || len(c.LockedProviders) == 0 {
 		return nil, nil, queryEvidenceError("import_context_invalid")
 	}
 	digest, err := importDigest(*c)
@@ -183,7 +183,7 @@ func ReadVerifyImportPlan(ctx context.Context, c *tfe.Client, input VerifyImport
 }
 
 func readVerifyImportPlanWithConfig(ctx context.Context, c *tfe.Client, input VerifyImportInput, config verifyImportPollConfig) (*VerifyImportResult, error) {
-	if !validImportWorkspaceName(input.OrganizationName) || !validImportWorkspaceName(input.WorkspaceName) || !importRunPattern.MatchString(input.RunID) || len(input.Bindings) > maxImportSelections || len(input.DetailAddresses) > 20 {
+	if !validImportWorkspaceName(input.OrganizationName) || !validImportWorkspaceName(input.WorkspaceName) || !importRunPattern.MatchString(input.RunID) {
 		return nil, queryEvidenceError("verify_input_invalid")
 	}
 	if config.wait <= 0 || config.interval <= 0 {
@@ -205,7 +205,7 @@ func readVerifyImportPlanWithConfig(ctx context.Context, c *tfe.Client, input Ve
 	out := &VerifyImportResult{Status: "blocked", RequestedRunID: input.RunID, OrganizationName: w.Organization.Name, WorkspaceName: w.Name, WorkspaceID: w.ID, Diagnostics: []string{}}
 	stop := func(status, code, guidance string) (*VerifyImportResult, error) {
 		out.Status, out.Diagnostics, out.NextAction = status, []string{code}, guidance
-		return out, checkImportResultBudget(out)
+		return out, nil
 	}
 	var observed bool
 	for {
@@ -326,7 +326,7 @@ func readVerifyImportPlanWithConfig(ctx context.Context, c *tfe.Client, input Ve
 		return nil, queryEvidenceError("verify_canceled")
 	}
 	out.Status, out.Diagnostics, out.NextAction, out.RetryAfterSeconds = "pending", []string{"run_pending"}, "Poll verify_import_plan with the same Run ID; import_context/bindings can wait until the associated Plan is finished. Do not start another Run.", 5
-	return out, checkImportResultBudget(out)
+	return out, nil
 }
 
 func classifyImportPlan(ctx context.Context, c *tfe.Client, out *VerifyImportResult, planID string, importContext *ImportContext, selected map[string]ImportContextSelection, addresses map[string]string, detailWanted map[string]bool) (*VerifyImportResult, error) {
@@ -367,7 +367,7 @@ func classifyImportPlan(ctx context.Context, c *tfe.Client, out *VerifyImportRes
 	// importing IDs and provider values; do not echo it or decoder errors.
 	unsupported := func(code, guidance string) (*VerifyImportResult, error) {
 		out.Status, out.Diagnostics, out.NextAction = "blocked", []string{code}, guidance+" Review the exact Run and full Plan in HCP Terraform; do not apply or start another Run to diagnose this response."
-		return out, checkImportResultBudget(out)
+		return out, nil
 	}
 	if len(raw) == 0 {
 		return unsupported("plan_json_empty", "The associated Plan JSON response was empty.")
@@ -539,9 +539,6 @@ func classifyImportPlan(ctx context.Context, c *tfe.Client, out *VerifyImportRes
 	}
 	out.NextAction += " An import-only Plan or N-to-import summary is not identity proof; review separate identity findings, other actions, module instances, outputs and drift. If the full Plan is satisfactory and the user wants a refinement, adjust only the proposed imported resources and necessary editable local-module interfaces to follow the existing workspace's variables, references and coding practices. Check that changes preserve intended identities, addresses and provider scope; review the diff and obtain separate approval for a new speculative plan of the revised HCL, then verify its own Run ID. A satisfactory first Plan requires no second Plan; identity uncertainty alone does not require changing HCL or starting another Run. After full-Plan review, report the separate action and identity findings and hand off the proposed HCL. Do not run terraform apply, terraform import or apply_run as a continuation of this Search-to-import workflow; any eventual apply belongs to a separate, independently reviewed and authorized workflow."
 	out.NextAction += " In the user-facing report, first summarize selected imports with both change=none and object_identity=matched; group them if numerous. Then report selected Plan changes by action, identifying affected addresses as useful. Separately group identities that are not matched by status and identity_reason, explaining in plain language what the evidence means and what remains uncertain; identify affected addresses as useful. A selection can appear in both exception sections. Use attention and the selected bindings for this breakdown, not an inferred overlap between the independent changes and object_identity count maps. Unverified is neither a match nor proof of a mismatch; mismatched needs user review; unsupported means this identity could not be checked with available evidence. Matched is only a bounded comparison, not proof of provider scope or the selected cloud object. Keep unselected actions, outputs and drift separate."
-	if err := checkImportResultBudget(out); err != nil {
-		return nil, err
-	}
 	return out, nil
 }
 
