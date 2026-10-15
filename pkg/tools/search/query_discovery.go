@@ -90,10 +90,60 @@ func readQueryBackendJSON(ctx context.Context, c *tfe.Client, endpoint string) (
 }
 
 type queryWireRelation struct {
-	Data *struct {
-		ID   string `json:"id"`
-		Type string `json:"type"`
-	} `json:"data"`
+	Data *queryWireResourceIdentifier `json:"data"`
+}
+
+type queryWireResourceIdentifier struct {
+	ID   string `json:"id"`
+	Type string `json:"type"`
+}
+
+type queryRunProvenanceResponse struct {
+	Data queryRunProvenanceData `json:"data"`
+}
+
+type queryRunProvenanceData struct {
+	ID            string                `json:"id"`
+	Relationships queryRunRelationships `json:"relationships"`
+}
+
+type queryRunRelationships struct {
+	NoCode    queryWireRelation `json:"no-code-query"`
+	Workspace queryWireRelation `json:"workspace"`
+}
+
+type queryStoredNoCodeResponse struct {
+	Data queryStoredNoCodeData `json:"data"`
+}
+
+type queryStoredNoCodeData struct {
+	ID            string                         `json:"id"`
+	Attributes    queryStoredNoCodeAttributes    `json:"attributes"`
+	Relationships queryStoredNoCodeRelationships `json:"relationships"`
+}
+
+type queryStoredNoCodeAttributes struct {
+	Providers []queryStoredProvider `json:"no-code-query-providers"`
+}
+
+type queryStoredNoCodeRelationships struct {
+	Workspace queryWireRelation `json:"workspace"`
+}
+
+type queryStoredProvider struct {
+	Namespace string                `json:"namespace"`
+	Name      string                `json:"name"`
+	Version   string                `json:"version"`
+	Resources []queryStoredResource `json:"no-code-query-resources"`
+}
+
+type queryStoredResource struct {
+	Body queryStoredResourceBody `json:"body"`
+}
+
+type queryStoredResourceBody struct {
+	Type       string `json:"resource_type"`
+	HyphenType string `json:"resource-type"`
 }
 
 func readQueryDiscoveryProvenance(ctx context.Context, c *tfe.Client, queryID string) (*queryDiscoveryProvenance, error) {
@@ -134,15 +184,7 @@ func readQueryDiscoveryProvenance(ctx context.Context, c *tfe.Client, queryID st
 	if err != nil {
 		return nil, err
 	}
-	var wire struct {
-		Data struct {
-			ID            string `json:"id"`
-			Relationships struct {
-				NoCode    queryWireRelation `json:"no-code-query"`
-				Workspace queryWireRelation `json:"workspace"`
-			} `json:"relationships"`
-		} `json:"data"`
-	}
+	var wire queryRunProvenanceResponse
 	if err := decodeQueryEvidence(raw, &wire); err != nil {
 		return nil, err
 	}
@@ -154,27 +196,7 @@ func readQueryDiscoveryProvenance(ctx context.Context, c *tfe.Client, queryID st
 	if err != nil {
 		return nil, err
 	}
-	var stored struct {
-		Data struct {
-			ID         string `json:"id"`
-			Attributes struct {
-				Providers []struct {
-					Namespace string `json:"namespace"`
-					Name      string `json:"name"`
-					Version   string `json:"version"`
-					Resources []struct {
-						Body struct {
-							Type       string `json:"resource_type"`
-							HyphenType string `json:"resource-type"`
-						} `json:"body"`
-					} `json:"no-code-query-resources"`
-				} `json:"no-code-query-providers"`
-			} `json:"attributes"`
-			Relationships struct {
-				Workspace queryWireRelation `json:"workspace"`
-			} `json:"relationships"`
-		} `json:"data"`
-	}
+	var stored queryStoredNoCodeResponse
 	if decodeQueryEvidence(raw, &stored) != nil || stored.Data.ID != nc.ID || stored.Data.Relationships.Workspace.Data == nil || stored.Data.Relationships.Workspace.Data.ID != w.ID {
 		return nil, queryEvidenceError("query_provenance_unavailable")
 	}
