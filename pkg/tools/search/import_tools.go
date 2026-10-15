@@ -28,7 +28,7 @@ func decodeImportArguments(raw any, target any) error {
 	if err != nil {
 		return queryEvidenceError("import_arguments_invalid")
 	}
-	if err := decodeQueryEvidence(data, target); err != nil {
+	if err := validateQueryEvidenceJSON(data, 0, 0); err != nil {
 		return err
 	}
 	dec := json.NewDecoder(bytes.NewReader(data))
