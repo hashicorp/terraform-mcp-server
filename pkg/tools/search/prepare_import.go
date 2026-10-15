@@ -153,7 +153,7 @@ func FormatImportResult(v any) (string, error) {
 }
 
 func validImportInput(input PrepareImportInput) bool {
-	if !validImportWorkspaceName(input.OrganizationName) || !validImportWorkspaceName(input.WorkspaceName) || input.WorkspaceID != "" && !validImportWorkspaceName(input.WorkspaceID) || !validQueryRunID(input.QueryRunID) || len(input.Selections) == 0 || len(input.Selections) > maxImportSelections || len(input.LockedProviders) == 0 {
+	if !validImportWorkspaceName(input.OrganizationName) || !validImportWorkspaceName(input.WorkspaceName) || input.WorkspaceID != "" && !validImportWorkspaceName(input.WorkspaceID) || strings.TrimSpace(input.QueryRunID) == "" || len(input.Selections) == 0 || len(input.Selections) > maxImportSelections || len(input.LockedProviders) == 0 {
 		return false
 	}
 	for source, version := range input.LockedProviders {

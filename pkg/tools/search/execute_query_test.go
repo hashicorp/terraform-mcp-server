@@ -167,15 +167,15 @@ func TestSubmitExecuteQueryReturnsAPIError(t *testing.T) {
 func TestSubmitQueryProjectsIDAndDoesNotExposeBackendCapabilities(t *testing.T) {
 	const secret = "https://archivist.example/signed?token=secret"
 	for _, tc := range []struct {
-		name, status, body string
-		wantErr            bool
+		name, status, body, wantID string
+		wantErr                    bool
 	}{
-		{"created", "201", `{"data":{"id":"ncqry-test","download_url":"` + secret + `","relationships":{"latest-query-run":{"data":{"id":"qry-test"}}}}}`, false},
-		{"missing relationship", "201", `{"data":{"id":"ncqry-test","url":"` + secret + `"}}`, true},
-		{"malformed ID", "201", `{"data":{"relationships":{"latest-query-run":{"data":{"id":"qry-https://archivist.example"}}}}}}`, true},
-		{"malformed body", "201", `{"data":`, true},
-		{"oversized valid body", "201", `{"data":{"relationships":{"latest-query-run":{"data":{"id":"qry-test"}}}}}` + strings.Repeat(" ", maxQueryCreateResponseBytes), true},
-		{"rejected POST", "422", `{"errors":[{"detail":"` + secret + `"}]}`, true},
+		{"created", "201", `{"data":{"id":"ncqry-test","download_url":"` + secret + `","relationships":{"latest-query-run":{"data":{"id":"qry-test"}}}}}`, "qry-test", false},
+		{"missing relationship", "201", `{"data":{"id":"ncqry-test","url":"` + secret + `"}}`, "", true},
+		{"opaque ID", "201", `{"data":{"relationships":{"latest-query-run":{"data":{"id":"future.query:id"}}}}}`, "future.query:id", false},
+		{"malformed body", "201", `{"data":`, "", true},
+		{"large valid body", "201", `{"data":{"relationships":{"latest-query-run":{"data":{"id":"qry-test"}}}}}` + strings.Repeat(" ", 64<<10), "qry-test", false},
+		{"rejected POST", "422", `{"errors":[{"detail":"` + secret + `"}]}`, "", true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -206,7 +206,7 @@ func TestSubmitQueryProjectsIDAndDoesNotExposeBackendCapabilities(t *testing.T) 
 				return
 			}
 			require.NoError(t, err)
-			assert.JSONEq(t, `{"query_run_id":"qry-test"}`, text)
+			assert.JSONEq(t, fmt.Sprintf(`{"query_run_id":%q}`, tc.wantID), text)
 			assert.False(t, strings.Contains(text, secret))
 		})
 	}

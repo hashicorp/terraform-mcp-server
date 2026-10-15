@@ -144,7 +144,7 @@ func importRunUIURL(base url.URL, org, workspace, runID string) string {
 }
 
 func validateImportContext(c *ImportContext, bindings []ImportBinding, target *tfe.Workspace) (map[string]ImportContextSelection, map[string]string, error) {
-	if c == nil || !validQueryRunID(c.QueryRunID) || c.Target.WorkspaceID != target.ID || target.Organization == nil || !strings.EqualFold(c.Target.OrganizationName, target.Organization.Name) || len(c.SelectedResults) < 1 || len(c.SelectedResults) > maxImportSelections || len(bindings) != len(c.SelectedResults) || len(c.LockedProviders) == 0 {
+	if c == nil || strings.TrimSpace(c.QueryRunID) == "" || c.Target.WorkspaceID != target.ID || target.Organization == nil || !strings.EqualFold(c.Target.OrganizationName, target.Organization.Name) || len(c.SelectedResults) < 1 || len(c.SelectedResults) > maxImportSelections || len(bindings) != len(c.SelectedResults) || len(c.LockedProviders) == 0 {
 		return nil, nil, queryEvidenceError("import_context_invalid")
 	}
 	digest, err := importDigest(*c)
