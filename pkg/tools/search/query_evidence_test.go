@@ -74,7 +74,6 @@ func TestQueryEvidenceRejectsEntireResultOnInvalidInput(t *testing.T) {
 		{"unknown result payload", string(queryEvidenceFixture("0")) + `{"type":"log","list_resource_found":{"identity":{"bucket":"hidden"}}}`, "query_evidence_invalid"},
 		{"malformed JSON progress", string(queryEvidenceFixture("0")) + `{"type":"provider_installation_start",`, "query_evidence_invalid"},
 		{"error diagnostic", string(queryEvidenceFixture("0")) + `{"type":"diagnostic","diagnostic":{"severity":"error","detail":"https://signed.example/token"}}`, "query_reported_error"},
-		{"oversized log", strings.Repeat("x", maxQueryEvidenceBytes+1), "query_evidence_size_limit"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			evidence, err := parseQueryEvidence("qry-one", []byte(tc.data), testQueryProviders())
@@ -83,6 +82,12 @@ func TestQueryEvidenceRejectsEntireResultOnInvalidInput(t *testing.T) {
 			require.NotContains(t, err.Error(), "signed.example")
 		})
 	}
+}
+
+func TestQueryEvidenceDoesNotApplyByteOrDepthCaps(t *testing.T) {
+	raw := []byte(strings.Repeat("[", 40) + `{"value":"` + strings.Repeat("x", 128*1024) + `"}` + strings.Repeat("]", 40))
+	var value any
+	require.NoError(t, decodeQueryEvidence(raw, &value))
 }
 
 func TestQueryEvidenceRejectsUnknownProviderWithoutPartialResults(t *testing.T) {
