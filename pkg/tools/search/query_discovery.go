@@ -155,7 +155,7 @@ func readQueryDiscoveryProvenance(ctx context.Context, c *tfe.Client, queryID st
 		return nil, err
 	}
 	nc, ws := wire.Data.Relationships.NoCode.Data, wire.Data.Relationships.Workspace.Data
-	if wire.Data.ID != queryID || nc == nil || nc.ID == "" || nc.Type != "no-code-queries" || ws == nil || ws.ID != w.ID {
+	if wire.Data.ID != queryID || nc == nil || strings.TrimSpace(nc.ID) == "" || nc.Type != "no-code-queries" || ws == nil || ws.ID != w.ID {
 		return nil, queryEvidenceError("query_provenance_unavailable")
 	}
 	raw, err = readQueryBackendJSON(ctx, c, "search/no-code-query/"+url.PathEscape(nc.ID))
