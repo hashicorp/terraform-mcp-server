@@ -31,7 +31,6 @@ func defaultVerifyImportPollConfig() verifyImportPollConfig {
 	return verifyImportPollConfig{wait: verifyImportWait, interval: verifyImportInterval}
 }
 
-var importRunPattern = regexp.MustCompile(`^run-[a-zA-Z0-9-]{1,124}$`)
 var importAddressPattern = regexp.MustCompile(`^[a-zA-Z0-9_\[\]".:-]+$`)
 
 type ImportBinding struct {
@@ -137,10 +136,12 @@ type importRunEvidence struct {
 func importRunUIURL(base url.URL, org, workspace, runID string) string {
 	if base.Scheme != "https" || base.User != nil || base.RawQuery != "" || base.Fragment != "" || base.Port() != "" ||
 		(base.Hostname() != "app.terraform.io" && base.Hostname() != "app.staging.terraform.io") ||
-		!validImportWorkspaceName(org) || !validImportWorkspaceName(workspace) || !importRunPattern.MatchString(runID) {
+		strings.TrimSpace(org) == "" || strings.TrimSpace(workspace) == "" || strings.TrimSpace(runID) == "" {
 		return ""
 	}
-	return (&url.URL{Scheme: "https", Host: base.Hostname(), Path: "/app/" + org + "/" + workspace + "/runs/" + runID}).String()
+	path := "/app/" + org + "/workspaces/" + workspace + "/runs/" + runID
+	rawPath := "/app/" + url.PathEscape(org) + "/workspaces/" + url.PathEscape(workspace) + "/runs/" + url.PathEscape(runID)
+	return (&url.URL{Scheme: "https", Host: base.Hostname(), Path: path, RawPath: rawPath}).String()
 }
 
 func validateImportContext(c *ImportContext, bindings []ImportBinding, target *tfe.Workspace) (map[string]ImportContextSelection, map[string]string, error) {
@@ -184,7 +185,7 @@ func ReadVerifyImportPlan(ctx context.Context, c *tfe.Client, input VerifyImport
 
 // validateVerifyImportRequest validates caller input and indexes requested detail addresses.
 func validateVerifyImportRequest(input VerifyImportInput, config verifyImportPollConfig) (map[string]bool, error) {
-	if !validImportWorkspaceName(input.OrganizationName) || !validImportWorkspaceName(input.WorkspaceName) || !importRunPattern.MatchString(input.RunID) {
+	if strings.TrimSpace(input.OrganizationName) == "" || strings.TrimSpace(input.WorkspaceName) == "" || strings.TrimSpace(input.RunID) == "" {
 		return nil, queryEvidenceError("verify_input_invalid")
 	}
 	if config.wait <= 0 || config.interval <= 0 {
@@ -203,7 +204,7 @@ func validateVerifyImportRequest(input VerifyImportInput, config verifyImportPol
 // readVerifyImportTarget resolves and validates the user-confirmed target workspace.
 func readVerifyImportTarget(ctx context.Context, c *tfe.Client, input VerifyImportInput) (*tfe.Workspace, error) {
 	w, err := c.Workspaces.Read(ctx, input.OrganizationName, input.WorkspaceName)
-	if err != nil || w == nil || !validImportWorkspaceName(w.ID) || w.Name != input.WorkspaceName || w.Organization == nil || !strings.EqualFold(w.Organization.Name, input.OrganizationName) {
+	if err != nil || w == nil || strings.TrimSpace(w.ID) == "" || w.Name != input.WorkspaceName || w.Organization == nil || !strings.EqualFold(w.Organization.Name, input.OrganizationName) {
 		return nil, queryEvidenceError("target_read_unavailable")
 	}
 	return w, nil
@@ -327,6 +328,9 @@ func inspectPendingImportPlan(ctx context.Context, c *tfe.Client, out *VerifyImp
 
 // readVerifyImportPlanWithConfig polls the exact Run and dispatches status-specific verification.
 func readVerifyImportPlanWithConfig(ctx context.Context, c *tfe.Client, input VerifyImportInput, config verifyImportPollConfig) (*VerifyImportResult, error) {
+	input.OrganizationName = strings.TrimSpace(input.OrganizationName)
+	input.WorkspaceName = strings.TrimSpace(input.WorkspaceName)
+	input.RunID = strings.TrimSpace(input.RunID)
 	details, err := validateVerifyImportRequest(input, config)
 	if err != nil {
 		return nil, err
