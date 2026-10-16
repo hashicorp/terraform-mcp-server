@@ -292,6 +292,9 @@ generate_query_configuration for the same source organization/workspace. Pass
 the schema-backed provider/resource configuration produced from that guidance;
 resource_type must be an exact list_resource_schemas key. Do not construct the
 payload directly from an ordinary managed-resource name.
+Do not add a requested condition that is absent from the list-resource schema;
+follow the generator guidance for generate_config_out when later selection
+depends on additional result data.
 
 Established success returns only query_run_id. Pass that exact ID to
 get_query_status. If creation does not return a trustworthy ID, reconcile the

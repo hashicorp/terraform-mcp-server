@@ -75,6 +75,56 @@ func TestPrepareImportPreservesTerraformDomainValidation(t *testing.T) {
 	require.EqualError(t, err, "verify_input_invalid")
 }
 
+func TestPrepareImportProviderSourceDiagnostics(t *testing.T) {
+	validMarker := "qrm1-" + strings.Repeat("a", 64)
+	input := PrepareImportInput{
+		OrganizationName: "org", WorkspaceName: "target", QueryRunID: "qry-example",
+		Selections: []ImportSelection{{QueryResultMarker: validMarker, ManagedType: "aws_s3_bucket"}},
+	}
+
+	input.LockedProviders = map[string]string{"registry.terraform.io/hashicorp/aws": "6.18.0"}
+	require.NoError(t, ValidatePrepareImportInput(input))
+	input.LockedProviders = map[string]string{"providers.example.com/team/aws": "6.18.0"}
+	require.NoError(t, ValidatePrepareImportInput(input), "custom registry hosts remain valid")
+
+	input.LockedProviders = map[string]string{"hashicorp/aws": "6.18.0"}
+	err := ValidatePrepareImportInput(input)
+	require.EqualError(t, err, `locked_provider_source_invalid: locked_providers key "hashicorp/aws" is abbreviated; copy the complete hostname/namespace/type address from .terraform.lock.hcl, using "registry.terraform.io/hashicorp/aws" for this public-registry shorthand`)
+	code, ok := searchDiagnosticCodeFromError(err)
+	require.True(t, ok)
+	require.Equal(t, lockedProviderSourceInvalidCode, code)
+
+	input.LockedProviders = map[string]string{
+		"hashicorp/aws":                       "6.18.0",
+		"registry.terraform.io/hashicorp/aws": "6.18.0",
+	}
+	err = ValidatePrepareImportInput(input)
+	require.ErrorContains(t, err, "locked_provider_source_invalid")
+	require.ErrorContains(t, err, `locked_providers key "hashicorp/aws"`)
+
+	input.LockedProviders = map[string]string{"unsafe\nsource": "6.18.0"}
+	err = ValidatePrepareImportInput(input)
+	require.ErrorContains(t, err, "locked_provider_source_invalid")
+	require.NotContains(t, err.Error(), "unsafe")
+	require.NotContains(t, err.Error(), "\n")
+
+	input.LockedProviders = map[string]string{"registry.terraform.io/hashicorp/aws": ">= 6.0"}
+	err = ValidatePrepareImportInput(input)
+	require.ErrorContains(t, err, "lock_versions_invalid")
+	require.ErrorContains(t, err, "exact selected version")
+}
+
+func TestPrepareImportShorthandFailsBeforeClientUse(t *testing.T) {
+	input := PrepareImportInput{
+		OrganizationName: "org", WorkspaceName: "target", QueryRunID: "qry-example",
+		Selections:      []ImportSelection{{QueryResultMarker: "qrm1-" + strings.Repeat("a", 64), ManagedType: "aws_s3_bucket"}},
+		LockedProviders: map[string]string{"hashicorp/aws": "6.18.0"},
+	}
+	result, err := ReadPrepareImport(context.Background(), nil, input)
+	require.Nil(t, result)
+	require.ErrorContains(t, err, "locked_provider_source_invalid")
+}
+
 func TestVerifyImportContextAndBindingIntegrity(t *testing.T) {
 	importContext, bindings, workspace := importTestImportContext(t)
 	selected, addresses, err := validateImportContext(importContext, bindings, workspace)

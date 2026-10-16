@@ -271,7 +271,7 @@ func summarizeQueryDiscovery(prov *queryDiscoveryProvenance, evidence *queryEvid
 	}
 	summary.NextAction = "For a Search-only request, report these results and stop; do not request a target workspace or local path. If import is requested, ask the user to select one or more displayed query_result_marker values. Keep each displayed marker, display_name and available tags together; supplied filters affect presentation only, and missing tags do not prove a resource is untagged."
 	if summary.RowsWithoutAttributes > 0 {
-		summary.NextAction += " For rows with attributes_captured false, tags are unknown; if tags are necessary for selection, ask before a new query and explain that new markers may still lack tags."
+		summary.NextAction += " Some matching rows have attributes_captured false, so additional result data is unknown. If that data is necessary for selection, ask before creating another QueryRun. If approved and not already enabled, repeat the same schema-backed query with generate_config_out true, preserving supported filters and omitting unsupported conditions. This requests provider resource objects and generated HCL but does not guarantee capture; the new QueryRun has new markers, and this summary exposes only its declared projections rather than arbitrary resource attributes."
 	}
 	return summary, nil
 }

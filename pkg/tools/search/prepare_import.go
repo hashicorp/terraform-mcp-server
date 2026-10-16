@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"net/url"
 	"regexp"
+	"sort"
 	"strings"
 
 	"github.com/hashicorp/go-tfe"
@@ -38,7 +39,7 @@ type PrepareImportInput struct {
 	WorkspaceID      string            `json:"workspace_id,omitempty"`
 	QueryRunID       string            `json:"query_run_id"`
 	Selections       []ImportSelection `json:"selections"`
-	LockedProviders  map[string]string `json:"locked_providers"`
+	LockedProviders  map[string]string `json:"locked_providers" jsonschema:"Exact versions keyed by the complete quoted hostname/namespace/type source copied from .terraform.lock.hcl, including custom registry hosts; do not abbreviate registry.terraform.io/hashicorp/aws to hashicorp/aws"`
 }
 
 type ImportContextTarget struct {
@@ -60,7 +61,7 @@ type ImportContext struct {
 	QueryRunID      string                         `json:"query_run_id" jsonschema:"QueryRun containing the selected Search results"`
 	Providers       map[string]queryResultProvider `json:"providers" jsonschema:"QueryRun provider source and version by list-resource type"`
 	Target          ImportContextTarget            `json:"target" jsonschema:"Backend-derived target workspace context"`
-	LockedProviders map[string]string              `json:"locked_providers" jsonschema:"Agent-reported exact lock-file versions by provider source"`
+	LockedProviders map[string]string              `json:"locked_providers" jsonschema:"Agent-reported exact lock-file versions keyed by the complete hostname/namespace/type source copied from .terraform.lock.hcl; do not abbreviate registry.terraform.io/hashicorp/aws to hashicorp/aws"`
 	SelectedResults []ImportContextSelection       `json:"selected_results" jsonschema:"Selected QueryRun results carried into Plan verification"`
 	SelectionDigest string                         `json:"selection_digest" jsonschema:"Copy-forward integrity digest for the import context"`
 }
@@ -154,22 +155,60 @@ func PrepareImportToolOutput(ctx context.Context, c *tfe.Client, input PrepareIm
 // validNormalizedPrepareImportInput validates an input after its opaque HCP
 // identifiers have been trimmed by ReadPrepareImport.
 func validNormalizedPrepareImportInput(input PrepareImportInput) bool {
+	return ValidatePrepareImportInput(input) == nil
+}
+
+func normalizePrepareImportInput(input PrepareImportInput) PrepareImportInput {
+	input.OrganizationName = strings.TrimSpace(input.OrganizationName)
+	input.WorkspaceName = strings.TrimSpace(input.WorkspaceName)
+	input.WorkspaceID = strings.TrimSpace(input.WorkspaceID)
+	input.QueryRunID = strings.TrimSpace(input.QueryRunID)
+	return input
+}
+
+// ValidatePrepareImportInput performs transport-independent validation before
+// either MCP adapter acquires a backend client.
+func ValidatePrepareImportInput(input PrepareImportInput) error {
+	input = normalizePrepareImportInput(input)
 	if input.OrganizationName == "" || input.WorkspaceName == "" || input.QueryRunID == "" || len(input.Selections) == 0 || len(input.LockedProviders) == 0 {
-		return false
+		return searchDiagnosticError(prepareInputInvalidCode)
 	}
-	for source, version := range input.LockedProviders {
-		if len(source) > 256 || len(version) > 128 || !providerSourcePattern.MatchString(source) || !exactLockedVersion.MatchString(version) {
-			return false
-		}
+	if err := validateLockedProviders(input.LockedProviders); err != nil {
+		return err
 	}
 	seen := map[string]bool{}
 	for _, s := range input.Selections {
 		if !importMarkerPattern.MatchString(s.QueryResultMarker) || len(s.ManagedType) > 256 || !importTypePattern.MatchString(s.ManagedType) || seen[s.QueryResultMarker] {
-			return false
+			return searchDiagnosticError(prepareInputInvalidCode)
 		}
 		seen[s.QueryResultMarker] = true
 	}
-	return true
+	return nil
+}
+
+func validateLockedProviders(locked map[string]string) error {
+	sources := make([]string, 0, len(locked))
+	for source := range locked {
+		sources = append(sources, source)
+	}
+	sort.Strings(sources)
+	for _, source := range sources {
+		version := locked[source]
+		if len(source) > 256 {
+			return searchDiagnosticErrorWithDetail(lockedProviderSourceInvalidCode, "locked_providers keys must use the complete hostname/namespace/type address copied from .terraform.lock.hcl")
+		}
+		parts := strings.Split(source, "/")
+		if len(parts) == 2 && importTypePattern.MatchString(parts[0]) && importTypePattern.MatchString(parts[1]) {
+			return searchDiagnosticErrorWithDetail(lockedProviderSourceInvalidCode, fmt.Sprintf("locked_providers key %q is abbreviated; copy the complete hostname/namespace/type address from .terraform.lock.hcl, using %q for this public-registry shorthand", source, "registry.terraform.io/"+source))
+		}
+		if !providerSourcePattern.MatchString(source) {
+			return searchDiagnosticErrorWithDetail(lockedProviderSourceInvalidCode, "locked_providers keys must use the complete hostname/namespace/type address copied from .terraform.lock.hcl")
+		}
+		if len(version) > 128 || !exactLockedVersion.MatchString(version) {
+			return searchDiagnosticErrorWithDetail(lockVersionsInvalidCode, fmt.Sprintf("locked_providers[%q] must contain the exact selected version from .terraform.lock.hcl, not a constraint", source))
+		}
+	}
+	return nil
 }
 
 func terraformImportSyntaxVersion(setting string) (old, known bool) {
@@ -233,12 +272,9 @@ func readHistoricalSchema(ctx context.Context, c *tfe.Client, workspaceID string
 }
 
 func ReadPrepareImport(ctx context.Context, c *tfe.Client, input PrepareImportInput) (*PrepareImportResult, error) {
-	input.OrganizationName = strings.TrimSpace(input.OrganizationName)
-	input.WorkspaceName = strings.TrimSpace(input.WorkspaceName)
-	input.WorkspaceID = strings.TrimSpace(input.WorkspaceID)
-	input.QueryRunID = strings.TrimSpace(input.QueryRunID)
-	if !validNormalizedPrepareImportInput(input) {
-		return nil, searchDiagnosticError(prepareInputInvalidCode)
+	input = normalizePrepareImportInput(input)
+	if err := ValidatePrepareImportInput(input); err != nil {
+		return nil, err
 	}
 	prov, err := readQueryDiscoveryProvenance(ctx, c, input.QueryRunID)
 	if err != nil {
@@ -291,11 +327,11 @@ func ReadPrepareImport(ctx context.Context, c *tfe.Client, input PrepareImportIn
 		// The list type is not necessarily a plural of the managed type.
 		// Keep the caller-proposed managed type and Search list type separate;
 		// the optional target schema and finished Plan supply target-side checks.
-		if !ok || !providerSourcePattern.MatchString(found.Provider.Source) || !exactLockedVersion.MatchString(found.Provider.Version) || !strings.HasPrefix(selection.ManagedType, strings.Split(found.Provider.Source, "/")[2]+"_") {
+		if !ok || len(found.Provider.Source) > 256 || !providerSourcePattern.MatchString(found.Provider.Source) || !exactLockedVersion.MatchString(found.Provider.Version) || !strings.HasPrefix(selection.ManagedType, strings.Split(found.Provider.Source, "/")[2]+"_") {
 			return nil, searchDiagnosticError(selectionInvalidCode)
 		}
 		if _, ok := input.LockedProviders[found.Provider.Source]; !ok {
-			return nil, searchDiagnosticError(lockVersionsInvalidCode)
+			return nil, searchDiagnosticErrorWithDetail(lockVersionsInvalidCode, fmt.Sprintf("locked_providers must include the exact provider source %q required by the selected Search result; copy it from .terraform.lock.hcl", found.Provider.Source))
 		}
 		out.SelectedResults = append(out.SelectedResults, found)
 		importContext.Providers[found.ResourceType] = found.Provider

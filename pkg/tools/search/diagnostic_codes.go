@@ -48,6 +48,7 @@ const (
 	importContextMarkerInvalidCode  searchDiagnosticCode = "import_context_marker_invalid"
 	importResponseInvalidCode       searchDiagnosticCode = "import_response_invalid"
 	lockVersionsInvalidCode         searchDiagnosticCode = "lock_versions_invalid"
+	lockedProviderSourceInvalidCode searchDiagnosticCode = "locked_provider_source_invalid"
 	prepareInputInvalidCode         searchDiagnosticCode = "prepare_input_invalid"
 	selectionInvalidCode            searchDiagnosticCode = "selection_invalid"
 	targetEvidenceInvalidCode       searchDiagnosticCode = "target_evidence_invalid"
@@ -74,11 +75,15 @@ const (
 )
 
 type searchDiagnosticFailure struct {
-	code  searchDiagnosticCode
-	cause error
+	code   searchDiagnosticCode
+	detail string
+	cause  error
 }
 
 func (e *searchDiagnosticFailure) Error() string {
+	if e.detail != "" {
+		return string(e.code) + ": " + e.detail
+	}
 	return string(e.code)
 }
 
@@ -87,6 +92,12 @@ func (e *searchDiagnosticFailure) Unwrap() error { return e.cause }
 // searchDiagnosticError creates a value-free error identified by a stable code.
 func searchDiagnosticError(code searchDiagnosticCode) error {
 	return &searchDiagnosticFailure{code: code}
+}
+
+// searchDiagnosticErrorWithDetail adds reviewed, non-sensitive recovery text
+// while preserving the stable diagnostic code for both MCP adapters.
+func searchDiagnosticErrorWithDetail(code searchDiagnosticCode, detail string) error {
+	return &searchDiagnosticFailure{code: code, detail: detail}
 }
 
 // searchDiagnosticErrorWithCause retains an operational cause for Go error

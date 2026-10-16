@@ -112,12 +112,29 @@ func TestSummarizeQueryDiscoveryProjectsTagsAndExplainsMissingAttributes(t *test
 	require.Empty(t, summary.Lists[0].Results[1].Tags)
 	require.True(t, summary.Lists[0].Results[2].AttributesCaptured)
 	require.Empty(t, summary.Lists[0].Results[2].Tags)
-	require.Contains(t, summary.NextAction, "For rows with attributes_captured false, tags are unknown")
-	require.Contains(t, summary.NextAction, "ask before a new query")
+	require.Contains(t, summary.NextAction, "attributes_captured false")
+	require.Contains(t, summary.NextAction, "ask before creating another QueryRun")
+	require.Contains(t, summary.NextAction, "generate_config_out true")
+	require.Contains(t, summary.NextAction, "preserving supported filters")
+	require.Contains(t, summary.NextAction, "omitting unsupported conditions")
+	require.Contains(t, summary.NextAction, "does not guarantee capture")
+	require.Contains(t, summary.NextAction, "new QueryRun has new markers")
+	require.Contains(t, summary.NextAction, "rather than arbitrary resource attributes")
 	text, err := FormatQueryDiscoverySummary(summary)
 	require.NoError(t, err)
 	require.Contains(t, text, `"attributes_captured":false`)
 	require.NotContains(t, text, "private")
+}
+
+func TestSummarizeQueryDiscoveryDoesNotRecommendRetryWhenAllRowsCaptured(t *testing.T) {
+	prov, evidence := testDiscovery(t, "captured", "captured-without-tags")
+	evidence.Results[0].ResourceObject = map[string]any{"tags": map[string]any{"environment": "production"}}
+	evidence.Results[1].ResourceObject = map[string]any{"name": "captured-without-tags"}
+	summary, err := summarizeQueryDiscovery(prov, evidence, QueryDiscoveryFilter{})
+	require.NoError(t, err)
+	require.Zero(t, summary.RowsWithoutAttributes)
+	require.NotContains(t, summary.NextAction, "repeat the same schema-backed query")
+	require.Contains(t, summary.NextAction, "missing tags do not prove a resource is untagged")
 }
 
 func TestSummarizeQueryDiscoveryDoesNotApplyOutputSizeCaps(t *testing.T) {
