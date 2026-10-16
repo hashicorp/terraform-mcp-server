@@ -83,7 +83,7 @@ func TestCreateNoCodeWorkspace(t *testing.T) {
 	require.False(t, result.IsError, "create_no_code_workspace should not return an error: %s", resultText)
 	require.NotEmpty(t, resultText, "create_no_code_workspace result should not be empty")
 
-	workspaceID := gjson.Get(resultText, "data.attributes.workspace_id").String()
+	workspaceID := gjson.Get(resultText, pick("data.attributes.workspace_id", "workspace_id")).String()
 	require.NotEmpty(t, workspaceID, "create_no_code_workspace should return a workspace_id")
 
 	workspace, err := client.Workspaces.ReadByID(t.Context(), workspaceID)
@@ -191,10 +191,15 @@ func TestWorkspaceHappyPath(t *testing.T) {
 
 	// Delete workspace
 	t.Run("Delete workspace", func(t *testing.T) {
-		deleteResult, _ := callTool(t, s, "delete_workspace_safely", map[string]any{
+		deleteResult, deleteResultText := callTool(t, s, "delete_workspace_safely", map[string]any{
 			"workspace_id": wsID,
 		})
 		require.False(t, deleteResult.IsError, "delete_workspace_safely should not return an error")
+		if officialEndpoint() {
+			assert.Equal(t, wsID, gjson.Get(deleteResultText, "workspace_id").String(), "delete_workspace_safely should return the workspace ID")
+			assert.Equal(t, wsName, gjson.Get(deleteResultText, "workspace_name").String(), "delete_workspace_safely should return the workspace name")
+			assert.True(t, gjson.Get(deleteResultText, "deleted").Bool(), "delete_workspace_safely should report the workspace as deleted")
+		}
 
 		// Get workspace details after delete — confirm it no longer exists
 		getResult, _ := callTool(t, s, "get_workspace_details", map[string]any{
@@ -239,7 +244,7 @@ func runVariablesTest(t *testing.T, s *mcp.ClientSession, wsName string) {
 	t.Helper()
 	t.Run("Workspace variables", func(t *testing.T) {
 		// Create variable
-		createVarResult, _ := callTool(t, s, "create_workspace_variable", map[string]any{
+		createVarResult, createVarResultText := callTool(t, s, "create_workspace_variable", map[string]any{
 			"terraform_org_name":            tfeOrgName,
 			"workspace_name":                wsName,
 			pick("key", "variable_key"):     "test_key",
@@ -248,6 +253,11 @@ func runVariablesTest(t *testing.T, s *mcp.ClientSession, wsName string) {
 			"description":                   "Created by integration test",
 		})
 		require.False(t, createVarResult.IsError, "create_workspace_variable should not return an error")
+		if officialEndpoint() {
+			assert.Equal(t, "test_key", gjson.Get(createVarResultText, "key").String(), "created variable key should match")
+			assert.Equal(t, "initial_value", gjson.Get(createVarResultText, "value").String(), "created variable value should match")
+			assert.Equal(t, "terraform", gjson.Get(createVarResultText, "category").String(), "created variable category should match")
+		}
 
 		// List variables — confirm the variable exists and capture its ID
 		listVarsResult, listVarsResultText := callTool(t, s, "list_workspace_variables", map[string]any{
@@ -264,7 +274,7 @@ func runVariablesTest(t *testing.T, s *mcp.ClientSession, wsName string) {
 		assert.Equal(t, "initial_value", gjson.Get(listVarsResultText, pick("data.0.attributes.value", "items.0.value")).String(), "variable value should match initial value")
 
 		// Update variable
-		updateVarResult, _ := callTool(t, s, "update_workspace_variable", map[string]any{
+		updateVarResult, updateVarResultText := callTool(t, s, "update_workspace_variable", map[string]any{
 			"terraform_org_name":            tfeOrgName,
 			"workspace_name":                wsName,
 			"variable_id":                   varID,
@@ -272,6 +282,10 @@ func runVariablesTest(t *testing.T, s *mcp.ClientSession, wsName string) {
 			pick("value", "variable_value"): "updated_value",
 		})
 		require.False(t, updateVarResult.IsError, "update_workspace_variable should not return an error")
+		if officialEndpoint() {
+			assert.Equal(t, "test_key", gjson.Get(updateVarResultText, "key").String(), "updated variable key should match")
+			assert.Equal(t, "updated_value", gjson.Get(updateVarResultText, "value").String(), "updated variable value should match")
+		}
 
 		// List again — confirm the updated value
 		listAfterResult, listAfterResultText := callTool(t, s, "list_workspace_variables", map[string]any{
@@ -393,24 +407,28 @@ func TestWorkspaceErrorPaths(t *testing.T) {
 
 	// create_workspace_variable — non-existent workspace
 	t.Run("create_workspace_variable non-existent workspace", func(t *testing.T) {
-		result, _ := callTool(t, s, "create_workspace_variable", map[string]any{
+		result, resultText := callTool(t, s, "create_workspace_variable", map[string]any{
 			"terraform_org_name":            tfeOrgName,
 			"workspace_name":                nonExistentWs,
 			pick("key", "variable_key"):     "some_key",
 			pick("value", "variable_value"): "some_value",
+			"category":                      "terraform",
 		})
 		assert.True(t, result.IsError, "create_workspace_variable with a non-existent workspace should return an error")
+		assert.NotContains(t, resultText, "missing properties", "should fail on the workspace lookup, not schema validation")
 	})
 
 	// create_workspace_variable — non-existent org
 	t.Run("create_workspace_variable non-existent org", func(t *testing.T) {
-		result, _ := callTool(t, s, "create_workspace_variable", map[string]any{
+		result, resultText := callTool(t, s, "create_workspace_variable", map[string]any{
 			"terraform_org_name":            nonExistentOrg,
 			"workspace_name":                nonExistentWs,
 			pick("key", "variable_key"):     "some_key",
 			pick("value", "variable_value"): "some_value",
+			"category":                      "terraform",
 		})
 		assert.True(t, result.IsError, "create_workspace_variable with a non-existent org should return an error")
+		assert.NotContains(t, resultText, "missing properties", "should fail on the org lookup, not schema validation")
 	})
 
 	// update_workspace_variable — non-existent workspace
