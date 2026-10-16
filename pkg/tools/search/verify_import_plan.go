@@ -146,21 +146,21 @@ func importRunUIURL(base url.URL, org, workspace, runID string) string {
 
 func validateImportContext(c *ImportContext, bindings []ImportBinding, target *tfe.Workspace) (map[string]ImportContextSelection, map[string]string, error) {
 	if c == nil || strings.TrimSpace(c.QueryRunID) == "" || c.Target.WorkspaceID != target.ID || target.Organization == nil || !strings.EqualFold(c.Target.OrganizationName, target.Organization.Name) || len(c.SelectedResults) < 1 || len(bindings) != len(c.SelectedResults) || len(c.LockedProviders) == 0 {
-		return nil, nil, queryEvidenceError("import_context_invalid")
+		return nil, nil, searchDiagnosticError(importContextInvalidCode)
 	}
 	digest, err := importDigest(*c)
 	if err != nil || digest != c.SelectionDigest {
-		return nil, nil, queryEvidenceError("import_context_digest_mismatch")
+		return nil, nil, searchDiagnosticError(importContextDigestMismatchCode)
 	}
 	selected, addresses, seen := map[string]ImportContextSelection{}, map[string]string{}, map[string]bool{}
 	for _, s := range c.SelectedResults {
 		provider, ok := c.Providers[s.ListType]
 		if !ok || !importTypePattern.MatchString(s.ManagedType) || s.SearchIdentityVersion < 0 || len(s.Identity) == 0 || !exactLockedVersion.MatchString(c.LockedProviders[provider.Source]) {
-			return nil, nil, queryEvidenceError("import_context_invalid")
+			return nil, nil, searchDiagnosticError(importContextInvalidCode)
 		}
 		marker, err := queryResultMarker(c.QueryRunID, provider, s.ListType, s.Identity)
 		if err != nil || marker != s.QueryResultMarker || seen[marker] {
-			return nil, nil, queryEvidenceError("import_context_marker_invalid")
+			return nil, nil, searchDiagnosticError(importContextMarkerInvalidCode)
 		}
 		seen[marker] = true
 		selected[marker] = s
@@ -168,7 +168,7 @@ func validateImportContext(c *ImportContext, bindings []ImportBinding, target *t
 	seen = map[string]bool{}
 	for _, binding := range bindings {
 		if _, exists := selected[binding.QueryResultMarker]; !exists || seen[binding.QueryResultMarker] || len(binding.TargetAddress) > 512 || !importAddressPattern.MatchString(binding.TargetAddress) || seen["address:"+binding.TargetAddress] {
-			return nil, nil, queryEvidenceError("binding_invalid")
+			return nil, nil, searchDiagnosticError(bindingInvalidCode)
 		}
 		seen[binding.QueryResultMarker] = true
 		seen["address:"+binding.TargetAddress] = true
@@ -187,15 +187,15 @@ func ReadVerifyImportPlan(ctx context.Context, c *tfe.Client, input VerifyImport
 // HCP identifiers have been trimmed and indexes requested Terraform addresses.
 func validateNormalizedVerifyImportRequest(input VerifyImportInput, config verifyImportPollConfig) (map[string]bool, error) {
 	if input.OrganizationName == "" || input.WorkspaceName == "" || input.RunID == "" {
-		return nil, queryEvidenceError("verify_input_invalid")
+		return nil, searchDiagnosticError(verifyInputInvalidCode)
 	}
 	if config.wait <= 0 || config.interval <= 0 {
-		return nil, queryEvidenceError("verify_config_invalid")
+		return nil, searchDiagnosticError(verifyConfigInvalidCode)
 	}
 	details := map[string]bool{}
 	for _, address := range input.DetailAddresses {
 		if address == "" || len(address) > 512 || !importAddressPattern.MatchString(address) || details[address] {
-			return nil, queryEvidenceError("verify_input_invalid")
+			return nil, searchDiagnosticError(verifyInputInvalidCode)
 		}
 		details[address] = true
 	}
@@ -206,7 +206,7 @@ func validateNormalizedVerifyImportRequest(input VerifyImportInput, config verif
 func readVerifyImportTarget(ctx context.Context, c *tfe.Client, input VerifyImportInput) (*tfe.Workspace, error) {
 	w, err := c.Workspaces.Read(ctx, input.OrganizationName, input.WorkspaceName)
 	if err != nil || w == nil || w.ID == "" || w.Name != input.WorkspaceName || w.Organization == nil || !strings.EqualFold(w.Organization.Name, input.OrganizationName) {
-		return nil, queryEvidenceError("target_read_unavailable")
+		return nil, searchDiagnosticError(targetReadUnavailableCode)
 	}
 	return w, nil
 }
@@ -228,7 +228,7 @@ func observeImportRun(ctx context.Context, c *tfe.Client, input VerifyImportInpu
 	}
 	var run importRunEvidence
 	if decodeQueryEvidence(raw, &run) != nil || run.Data.ID != input.RunID {
-		return nil, nil, queryEvidenceError(runEvidenceInvalidCode)
+		return nil, nil, searchDiagnosticError(runEvidenceInvalidCode)
 	}
 
 	out.RunID, out.RunStatus, out.PlanOnly, out.AutoApply = run.Data.ID, run.Data.Attributes.Status, run.Data.Attributes.PlanOnly, run.Data.Attributes.AutoApply
@@ -261,7 +261,7 @@ func observeImportRun(ctx context.Context, c *tfe.Client, input VerifyImportInpu
 func readAssociatedImportPlan(ctx context.Context, c *tfe.Client, out *VerifyImportResult, planID string) (*tfe.Plan, *VerifyImportResult, error) {
 	plan, err := c.Plans.Read(ctx, planID)
 	if err != nil {
-		return nil, nil, queryEvidenceError("plan_read_unavailable")
+		return nil, nil, searchDiagnosticError(planReadUnavailableCode)
 	}
 	if plan == nil || plan.ID != planID {
 		result, err := stopVerifyImport(out, "blocked", "plan_association_unverified", "The associated Plan ID could not be verified.")
@@ -350,12 +350,12 @@ func readVerifyImportPlanWithConfig(ctx context.Context, c *tfe.Client, input Ve
 	for {
 		run, result, err := observeImportRun(deadlineCtx, c, input, target, out)
 		if err != nil {
-			if code, ok := queryEvidenceErrorCode(err); ok && code == runEvidenceInvalidCode {
+			if code, ok := searchDiagnosticCodeFromError(err); ok && code == runEvidenceInvalidCode {
 				return nil, err
 			}
 			// Caller cancellation or failed backend reads are not pending.
 			if ctx.Err() != nil || !observed || deadlineCtx.Err() == nil {
-				return nil, queryEvidenceError("run_read_unavailable")
+				return nil, searchDiagnosticError(runReadUnavailableCode)
 			}
 			break
 		}
@@ -382,7 +382,7 @@ func readVerifyImportPlanWithConfig(ctx context.Context, c *tfe.Client, input Ve
 		}
 		select {
 		case <-ctx.Done():
-			return nil, queryEvidenceError("verify_canceled")
+			return nil, searchDiagnosticError(verifyCanceledCode)
 		case <-deadlineCtx.Done():
 			break
 		case <-time.After(config.interval):
@@ -391,7 +391,7 @@ func readVerifyImportPlanWithConfig(ctx context.Context, c *tfe.Client, input Ve
 		break
 	}
 	if ctx.Err() != nil || !observed {
-		return nil, queryEvidenceError("verify_canceled")
+		return nil, searchDiagnosticError(verifyCanceledCode)
 	}
 	out.Status, out.Diagnostics, out.NextAction, out.RetryAfterSeconds = "pending", []string{"run_pending"}, "Poll verify_import_plan with the same Run ID; import_context/bindings can wait until the associated Plan is finished. Do not start another Run.", 5
 	return out, nil
@@ -456,7 +456,7 @@ func unsupportedImportPlan(out *VerifyImportResult, code, guidance string) *Veri
 func readImportPlanJSON(ctx context.Context, c *tfe.Client, out *VerifyImportResult, planID string) (*importPlanJSON, *VerifyImportResult, error) {
 	raw, err := c.Plans.ReadJSONOutput(ctx, planID)
 	if err != nil {
-		return nil, nil, queryEvidenceError("plan_read_unavailable")
+		return nil, nil, searchDiagnosticError(planReadUnavailableCode)
 	}
 	if len(raw) == 0 {
 		return nil, unsupportedImportPlan(out, "plan_json_empty", "The associated Plan JSON response was empty."), nil
@@ -500,7 +500,7 @@ func analyzeImportPlan(plan *importPlanJSON, out *VerifyImportResult, selectedAd
 	out.Unselected = &ImportUnselected{Addresses: []ImportUnselectedAddress{}}
 	for _, drift := range plan.ResourceDrift {
 		if drift.Address == "" || len(drift.Address) > 512 || !importAddressPattern.MatchString(drift.Address) || len(drift.Change.Actions) == 0 {
-			return nil, nil, queryEvidenceError("plan_drift_evidence_invalid")
+			return nil, nil, searchDiagnosticError(planDriftEvidenceInvalidCode)
 		}
 		addUnselectedImportAddress(out, drift.Address, "drift")
 	}
@@ -509,14 +509,14 @@ func analyzeImportPlan(plan *importPlanJSON, out *VerifyImportResult, selectedAd
 	for _, raw := range plan.OutputChanges {
 		var change importPlanOutputChange
 		if decodeQueryEvidence(raw, &change) != nil {
-			return nil, nil, queryEvidenceError("plan_evidence_invalid")
+			return nil, nil, searchDiagnosticError(planEvidenceInvalidCode)
 		}
 		actions := change.Actions
 		if len(actions) == 0 && change.Change != nil {
 			actions = change.Change.Actions
 		}
 		if len(actions) == 0 {
-			return nil, nil, queryEvidenceError("plan_evidence_invalid")
+			return nil, nil, searchDiagnosticError(planEvidenceInvalidCode)
 		}
 		if len(actions) != 1 || actions[0] != "no-op" {
 			out.Plan.OutputChanges++
@@ -526,19 +526,19 @@ func analyzeImportPlan(plan *importPlanJSON, out *VerifyImportResult, selectedAd
 	byAddress := map[string]int{}
 	for i, resource := range plan.ResourceChanges {
 		if resource.Address == "" || len(resource.Address) > 512 || byAddress[resource.Address] != 0 || !importAddressPattern.MatchString(resource.Address) || len(resource.Change.Actions) == 0 || resource.Mode != "managed" && resource.Mode != "data" {
-			return nil, nil, queryEvidenceError("plan_evidence_invalid")
+			return nil, nil, searchDiagnosticError(planEvidenceInvalidCode)
 		}
 		for _, action := range resource.Change.Actions {
 			switch action {
 			case "no-op", "create", "read", "update", "delete":
 			default:
-				return nil, nil, queryEvidenceError("plan_actions_unsupported")
+				return nil, nil, searchDiagnosticError(planActionsUnsupportedCode)
 			}
 		}
 		if jsonPresent(resource.Change.AfterIdentity) {
 			var after map[string]any
 			if decodeQueryEvidence(resource.Change.AfterIdentity, &after) != nil || len(after) == 0 {
-				return nil, nil, queryEvidenceError("plan_identity_evidence_invalid")
+				return nil, nil, searchDiagnosticError(planIdentityEvidenceInvalidCode)
 			}
 		}
 		byAddress[resource.Address] = i + 1
@@ -573,7 +573,7 @@ func classifyImportActions(actions []string) (string, error) {
 	case len(actions) == 2 && (actions[0] == "delete" || actions[1] == "delete"):
 		return "replace_or_destroy", nil
 	default:
-		return "", queryEvidenceError("plan_actions_unsupported")
+		return "", searchDiagnosticError(planActionsUnsupportedCode)
 	}
 }
 
@@ -602,7 +602,7 @@ func classifySelectedImport(plan *importPlanJSON, importContext *ImportContext, 
 
 	var importing importPlanImporting
 	if decodeQueryEvidence(resource.Change.Importing, &importing) != nil {
-		return item, detail, queryEvidenceError("plan_import_evidence_invalid")
+		return item, detail, searchDiagnosticError(planImportEvidenceInvalidCode)
 	}
 	detail.ImportIDPresent = jsonPresent(importing.ID)
 	if importing.Unknown || jsonPresent(importing.ID) == jsonPresent(importing.Identity) {
@@ -742,12 +742,12 @@ type importPlanModule struct {
 
 func collectImportPlanVersions(module importPlanModule, versions map[string]uint64, depth int) error {
 	if depth > 32 {
-		return queryEvidenceError("plan_module_depth_limit")
+		return searchDiagnosticError(planModuleDepthLimitCode)
 	}
 	for _, resource := range module.Resources {
 		if resource.IdentitySchemaVersion != nil {
 			if _, exists := versions[resource.Address]; exists {
-				return queryEvidenceError("plan_identity_version_duplicate")
+				return searchDiagnosticError(planIdentityVersionDuplicateCode)
 			}
 			versions[resource.Address] = *resource.IdentitySchemaVersion
 		}

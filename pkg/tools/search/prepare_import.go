@@ -124,7 +124,7 @@ func importDigest(c ImportContext) (string, error) {
 		SelectedResults: c.SelectedResults,
 	})
 	if err != nil {
-		return "", queryEvidenceError("import_context_invalid")
+		return "", searchDiagnosticError(importContextInvalidCode)
 	}
 	return fmt.Sprintf("sha256:%x", sha256.Sum256(data)), nil
 }
@@ -132,7 +132,7 @@ func importDigest(c ImportContext) (string, error) {
 func FormatImportResult(v any) (string, error) {
 	data, err := json.Marshal(v)
 	if err != nil {
-		return "", queryEvidenceError("import_response_invalid")
+		return "", searchDiagnosticError(importResponseInvalidCode)
 	}
 	return string(data), nil
 }
@@ -224,24 +224,24 @@ func ReadPrepareImport(ctx context.Context, c *tfe.Client, input PrepareImportIn
 	input.WorkspaceID = strings.TrimSpace(input.WorkspaceID)
 	input.QueryRunID = strings.TrimSpace(input.QueryRunID)
 	if !validNormalizedPrepareImportInput(input) {
-		return nil, queryEvidenceError("prepare_input_invalid")
+		return nil, searchDiagnosticError(prepareInputInvalidCode)
 	}
 	prov, err := readQueryDiscoveryProvenance(ctx, c, input.QueryRunID)
 	if err != nil {
 		return nil, err
 	}
 	if !strings.EqualFold(prov.Organization, input.OrganizationName) {
-		return nil, queryEvidenceError("query_organization_mismatch")
+		return nil, searchDiagnosticError(queryOrganizationMismatchCode)
 	}
 	w, err := c.Workspaces.Read(ctx, input.OrganizationName, input.WorkspaceName)
 	if err != nil || w == nil {
-		return nil, queryEvidenceError("target_read_unavailable")
+		return nil, searchDiagnosticError(targetReadUnavailableCode)
 	}
 	if w.ID == "" || w.Name != input.WorkspaceName || w.Organization == nil || !strings.EqualFold(w.Organization.Name, prov.Organization) {
-		return nil, queryEvidenceError("target_ownership_unverified")
+		return nil, searchDiagnosticError(targetOwnershipUnverifiedCode)
 	}
 	if prov.WorkspaceID == "" || prov.WorkspaceName == "" {
-		return nil, queryEvidenceError("target_evidence_invalid")
+		return nil, searchDiagnosticError(targetEvidenceInvalidCode)
 	}
 	out := &PrepareImportResult{Status: "blocked", Diagnostics: []string{}, QueryRunID: input.QueryRunID,
 		SourceOrganizationName: prov.Organization, SourceWorkspaceName: prov.WorkspaceName, SourceWorkspaceID: prov.WorkspaceID,
@@ -267,7 +267,7 @@ func ReadPrepareImport(ctx context.Context, c *tfe.Client, input PrepareImportIn
 		return nil, err
 	}
 	if checkedSource == nil || checkedSource.WorkspaceID != prov.WorkspaceID || !strings.EqualFold(checkedSource.Organization, prov.Organization) {
-		return nil, queryEvidenceError("query_provenance_changed")
+		return nil, searchDiagnosticError(queryProvenanceChangedCode)
 	}
 	byMarker := make(map[string]queryResultEvidence, len(evidence.Results))
 	for _, result := range evidence.Results {
@@ -281,10 +281,10 @@ func ReadPrepareImport(ctx context.Context, c *tfe.Client, input PrepareImportIn
 		// Keep the caller-proposed managed type and Search list type separate;
 		// the optional target schema and finished Plan supply target-side checks.
 		if !ok || !providerSourcePattern.MatchString(found.Provider.Source) || !exactLockedVersion.MatchString(found.Provider.Version) || !strings.HasPrefix(selection.ManagedType, strings.Split(found.Provider.Source, "/")[2]+"_") {
-			return nil, queryEvidenceError("selection_invalid")
+			return nil, searchDiagnosticError(selectionInvalidCode)
 		}
 		if _, ok := input.LockedProviders[found.Provider.Source]; !ok {
-			return nil, queryEvidenceError("lock_versions_invalid")
+			return nil, searchDiagnosticError(lockVersionsInvalidCode)
 		}
 		out.SelectedResults = append(out.SelectedResults, found)
 		importContext.Providers[found.ResourceType] = found.Provider

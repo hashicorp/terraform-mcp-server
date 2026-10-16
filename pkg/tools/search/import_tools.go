@@ -27,7 +27,7 @@ const VerifyImportPlanDescription = `Read-only check of the exact CLI-originated
 func decodeImportArguments(raw any, target any) error {
 	data, err := json.Marshal(raw)
 	if err != nil {
-		return queryEvidenceError("import_arguments_invalid")
+		return searchDiagnosticError(importArgumentsInvalidCode)
 	}
 	if err := validateQueryEvidenceJSON(data, 0, 0); err != nil {
 		return err
@@ -36,10 +36,10 @@ func decodeImportArguments(raw any, target any) error {
 	dec.DisallowUnknownFields()
 	dec.UseNumber()
 	if dec.Decode(target) != nil {
-		return queryEvidenceError("import_arguments_invalid")
+		return searchDiagnosticError(importArgumentsInvalidCode)
 	}
 	if _, err := dec.Token(); err != io.EOF {
-		return queryEvidenceError("import_arguments_invalid")
+		return searchDiagnosticError(importArgumentsInvalidCode)
 	}
 	return nil
 }

@@ -14,40 +14,6 @@ import (
 	"strings"
 )
 
-type queryEvidenceCode string
-
-const (
-	queryNotSelectableCode              queryEvidenceCode = "query_not_selectable"
-	queryIdentityVersionInvalidCode     queryEvidenceCode = "query_identity_version_invalid"
-	queryEvidenceIncompleteCode         queryEvidenceCode = "query_evidence_incomplete"
-	queryDuplicateOrInvalidIdentityCode queryEvidenceCode = "query_duplicate_or_invalid_identity"
-	queryIdentityInvalidCode            queryEvidenceCode = "query_identity_invalid"
-	queryReportedErrorCode              queryEvidenceCode = "query_reported_error"
-	queryGeneratedBlockConflictCode     queryEvidenceCode = "query_generated_block_conflict"
-	queryProviderSourceUnresolvedCode   queryEvidenceCode = "query_provider_source_unresolved"
-	runEvidenceInvalidCode              queryEvidenceCode = "run_evidence_invalid"
-)
-
-type queryEvidenceFailure struct {
-	code queryEvidenceCode
-}
-
-func (e *queryEvidenceFailure) Error() string { return string(e.code) }
-
-// queryEvidenceError creates a value-free error identified by a stable diagnostic code.
-func queryEvidenceError(code queryEvidenceCode) error {
-	return &queryEvidenceFailure{code: code}
-}
-
-// queryEvidenceErrorCode extracts a diagnostic code through wrapped errors.
-func queryEvidenceErrorCode(err error) (queryEvidenceCode, bool) {
-	var failure *queryEvidenceFailure
-	if !errors.As(err, &failure) {
-		return "", false
-	}
-	return failure.code, true
-}
-
 type queryResultProvider struct {
 	Source  string `json:"source"`
 	Version string `json:"version"`
@@ -121,7 +87,7 @@ func queryResultMarker(queryID string, provider queryResultProvider, listType st
 		Identity:        identity,
 	})
 	if err != nil {
-		return "", queryEvidenceError(queryIdentityInvalidCode)
+		return "", searchDiagnosticError(queryIdentityInvalidCode)
 	}
 	return fmt.Sprintf("qrm1-%x", sha256.Sum256(canonical)), nil
 }
@@ -153,7 +119,7 @@ func decodeQueryEvidenceLimit(raw []byte, target any, maxBytes, maxDepth int) er
 	decoder := json.NewDecoder(bytes.NewReader(raw))
 	decoder.UseNumber()
 	if err := decoder.Decode(target); err != nil {
-		return queryEvidenceError("query_evidence_invalid")
+		return searchDiagnosticError(queryEvidenceInvalidCode)
 	}
 	return nil
 }
@@ -166,25 +132,25 @@ func validateQueryEvidenceJSON(raw []byte, maxBytes, maxDepth int) error {
 	// uses the unbounded strict decoder above; explicit limits remain for
 	// callers decoding plan and schema artifacts.
 	if maxBytes > 0 && len(raw) > maxBytes {
-		return queryEvidenceError("query_evidence_size_limit")
+		return searchDiagnosticError(queryEvidenceSizeLimitCode)
 	}
 	decoder := json.NewDecoder(bytes.NewReader(raw))
 	decoder.UseNumber()
 	var walk func(int) error
 	walk = func(depth int) error {
 		if maxDepth > 0 && depth > maxDepth {
-			return queryEvidenceError("query_evidence_depth_limit")
+			return searchDiagnosticError(queryEvidenceDepthLimitCode)
 		}
 		token, err := decoder.Token()
 		if err != nil {
-			return queryEvidenceError("query_evidence_invalid")
+			return searchDiagnosticError(queryEvidenceInvalidCode)
 		}
 		delim, isDelim := token.(json.Delim)
 		if !isDelim {
 			return nil
 		}
 		if delim != '{' && delim != '[' {
-			return queryEvidenceError("query_evidence_invalid")
+			return searchDiagnosticError(queryEvidenceInvalidCode)
 		}
 		keys := make(map[string]bool)
 		for decoder.More() {
@@ -192,7 +158,7 @@ func validateQueryEvidenceJSON(raw []byte, maxBytes, maxDepth int) error {
 				key, err := decoder.Token()
 				name, ok := key.(string)
 				if err != nil || !ok || keys[name] {
-					return queryEvidenceError("query_evidence_invalid")
+					return searchDiagnosticError(queryEvidenceInvalidCode)
 				}
 				keys[name] = true
 			}
@@ -201,7 +167,7 @@ func validateQueryEvidenceJSON(raw []byte, maxBytes, maxDepth int) error {
 			}
 		}
 		if _, err := decoder.Token(); err != nil {
-			return queryEvidenceError("query_evidence_invalid")
+			return searchDiagnosticError(queryEvidenceInvalidCode)
 		}
 		return nil
 	}
@@ -209,7 +175,7 @@ func validateQueryEvidenceJSON(raw []byte, maxBytes, maxDepth int) error {
 		return err
 	}
 	if _, err := decoder.Token(); !errors.Is(err, io.EOF) {
-		return queryEvidenceError("query_evidence_invalid")
+		return searchDiagnosticError(queryEvidenceInvalidCode)
 	}
 	return nil
 }
@@ -219,7 +185,7 @@ func validateQueryEvidenceJSON(raw []byte, maxBytes, maxDepth int) error {
 // incomplete list totals. It never returns a partial selection on failure.
 func parseQueryEvidence(queryID string, data []byte, providers map[string]queryResultProvider) (*queryEvidence, error) {
 	if queryID == "" {
-		return nil, queryEvidenceError("query_evidence_invalid")
+		return nil, searchDiagnosticError(queryEvidenceInvalidCode)
 	}
 	out := &queryEvidence{Results: []queryResultEvidence{}, ByType: map[string]int{}}
 	counts, totals, seen := map[string]int{}, map[string]int{}, map[string]bool{}
@@ -235,35 +201,35 @@ func parseQueryEvidence(queryID string, data []byte, providers map[string]queryR
 		// unexpected JSON array. The complete log is still checked below.
 		if !bytes.HasPrefix(line, []byte{'{'}) {
 			if bytes.HasPrefix(line, []byte{'['}) || bytes.Contains(line, []byte("list_resource_found")) || bytes.Contains(line, []byte("list_complete")) || bytes.Contains(line, []byte("diagnostic")) {
-				return nil, queryEvidenceError("query_evidence_invalid")
+				return nil, searchDiagnosticError(queryEvidenceInvalidCode)
 			}
 			continue
 		}
 		var record queryLogRecord
 		if decodeQueryEvidence(line, &record) != nil {
-			return nil, queryEvidenceError("query_evidence_invalid")
+			return nil, searchDiagnosticError(queryEvidenceInvalidCode)
 		}
 		switch record.Type {
 		case "list_resource_found":
 			f := record.Found
 			if f == nil || f.Address == "" || f.ResourceType == "" || len(f.Identity) == 0 {
-				return nil, queryEvidenceError(queryIdentityInvalidCode)
+				return nil, searchDiagnosticError(queryIdentityInvalidCode)
 			}
 			version, ok := validIdentityVersion(f.Version)
 			if !ok {
-				return nil, queryEvidenceError(queryIdentityVersionInvalidCode)
+				return nil, searchDiagnosticError(queryIdentityVersionInvalidCode)
 			}
 			provider, ok := providers[f.ResourceType]
 			if !ok || provider.Source == "" || provider.Version == "" {
-				return nil, queryEvidenceError(queryProviderSourceUnresolvedCode)
+				return nil, searchDiagnosticError(queryProviderSourceUnresolvedCode)
 			}
 			marker, err := queryResultMarker(queryID, provider, f.ResourceType, f.Identity)
 			if err != nil || seen[marker] {
-				return nil, queryEvidenceError(queryDuplicateOrInvalidIdentityCode)
+				return nil, searchDiagnosticError(queryDuplicateOrInvalidIdentityCode)
 			}
 			seen[marker] = true
 			if f.Config != nil && f.Configuration != nil && *f.Config != *f.Configuration || f.ImportConfig != nil && f.ImportBlock != nil && *f.ImportConfig != *f.ImportBlock {
-				return nil, queryEvidenceError(queryGeneratedBlockConflictCode)
+				return nil, searchDiagnosticError(queryGeneratedBlockConflictCode)
 			}
 			result := queryResultEvidence{Marker: marker, Address: f.Address, ResourceType: f.ResourceType, DisplayName: f.DisplayName, Identity: f.Identity, IdentityVersion: version, Provider: provider, ResourceObject: f.Resource}
 			if f.Config != nil {
@@ -277,53 +243,53 @@ func parseQueryEvidence(queryID string, data []byte, providers map[string]queryR
 				result.ImportConfig = *f.ImportBlock
 			}
 			if len(result.Configuration) > 32<<10 || len(result.ImportConfig) > 32<<10 {
-				return nil, queryEvidenceError("query_generated_block_size_limit")
+				return nil, searchDiagnosticError(queryGeneratedBlockSizeLimitCode)
 			}
 			out.Results = append(out.Results, result)
 			out.ByType[f.ResourceType]++
 			counts[f.Address]++
 		case "list_complete":
 			if record.Complete == nil || record.Complete.Address == "" || record.Complete.Total < 0 {
-				return nil, queryEvidenceError("query_evidence_invalid")
+				return nil, searchDiagnosticError(queryEvidenceInvalidCode)
 			}
 			if _, ok := totals[record.Complete.Address]; ok {
-				return nil, queryEvidenceError("query_evidence_invalid")
+				return nil, searchDiagnosticError(queryEvidenceInvalidCode)
 			}
 			totals[record.Complete.Address] = record.Complete.Total
 			completeTypes[record.Complete.Address] = record.Complete.ResourceType
 		case "diagnostic":
 			if record.Diagnostic == nil || strings.ToLower(record.Diagnostic.Severity) != "warning" {
-				return nil, queryEvidenceError(queryReportedErrorCode)
+				return nil, searchDiagnosticError(queryReportedErrorCode)
 			}
 		case "version", "log", "list_start":
 			if record.Found != nil || record.Complete != nil || record.Diagnostic != nil {
-				return nil, queryEvidenceError("query_evidence_invalid")
+				return nil, searchDiagnosticError(queryEvidenceInvalidCode)
 			}
 		default:
 			// Progress and policy messages do not contribute result rows. Keep
 			// unknown result-bearing records nonselectable rather than mistaking
 			// them for benign progress messages.
 			if record.Found != nil || record.Complete != nil || record.Diagnostic != nil || strings.Contains(record.Type, "resource_found") || strings.HasPrefix(record.Type, "list_") || strings.Contains(record.Type, "diagnostic") {
-				return nil, queryEvidenceError("query_evidence_invalid")
+				return nil, searchDiagnosticError(queryEvidenceInvalidCode)
 			}
 		}
 	}
 	if len(totals) == 0 {
-		return nil, queryEvidenceError(queryEvidenceIncompleteCode)
+		return nil, searchDiagnosticError(queryEvidenceIncompleteCode)
 	}
 	for addr, total := range totals {
 		if counts[addr] != total {
-			return nil, queryEvidenceError(queryEvidenceIncompleteCode)
+			return nil, searchDiagnosticError(queryEvidenceIncompleteCode)
 		}
 	}
 	for addr := range counts {
 		if _, ok := totals[addr]; !ok {
-			return nil, queryEvidenceError(queryEvidenceIncompleteCode)
+			return nil, searchDiagnosticError(queryEvidenceIncompleteCode)
 		}
 	}
 	for _, result := range out.Results {
 		if kind := completeTypes[result.Address]; kind != "" && kind != result.ResourceType {
-			return nil, queryEvidenceError(queryEvidenceIncompleteCode)
+			return nil, searchDiagnosticError(queryEvidenceIncompleteCode)
 		}
 	}
 	return out, nil

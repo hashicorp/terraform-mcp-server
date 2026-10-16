@@ -61,11 +61,11 @@ type queryDiscoveryProvenance struct {
 func readQueryBackendJSON(ctx context.Context, c *tfe.Client, endpoint string) ([]byte, error) {
 	req, err := c.NewRequest(http.MethodGet, endpoint, nil)
 	if err != nil {
-		return nil, queryEvidenceError("query_backend_unavailable")
+		return nil, searchDiagnosticError(queryBackendUnavailableCode)
 	}
 	var buf bytes.Buffer
 	if err := req.Do(ctx, &buf); err != nil {
-		return nil, queryEvidenceError("query_backend_unavailable")
+		return nil, searchDiagnosticError(queryBackendUnavailableCode)
 	}
 	return buf.Bytes(), nil
 }
@@ -130,21 +130,21 @@ type queryStoredResourceBody struct {
 func readQueryDiscoveryProvenance(ctx context.Context, c *tfe.Client, queryID string) (*queryDiscoveryProvenance, error) {
 	run, err := c.QueryRuns.Read(ctx, queryID)
 	if err != nil {
-		return nil, queryEvidenceError("query_run_unavailable")
+		return nil, searchDiagnosticError(queryRunUnavailableCode)
 	}
 	if run == nil || run.ID != queryID || run.Workspace == nil || run.Workspace.ID == "" {
-		return nil, queryEvidenceError("query_ownership_unverified")
+		return nil, searchDiagnosticError(queryOwnershipUnverifiedCode)
 	}
 	w, err := c.Workspaces.ReadByID(ctx, run.Workspace.ID)
 	if err != nil || w == nil || w.ID != run.Workspace.ID || w.Name == "" || w.Organization == nil || w.Organization.Name == "" {
-		return nil, queryEvidenceError("query_ownership_unverified")
+		return nil, searchDiagnosticError(queryOwnershipUnverifiedCode)
 	}
 	prov := &queryDiscoveryProvenance{QueryRunID: queryID, Organization: w.Organization.Name, WorkspaceName: w.Name, WorkspaceID: w.ID}
 	if run.Status == tfe.QueryRunErrored || run.Status == tfe.QueryRunCanceled {
-		return prov, queryEvidenceError(queryNotSelectableCode)
+		return prov, searchDiagnosticError(queryNotSelectableCode)
 	}
 	if run.Status != tfe.QueryRunFinished {
-		return prov, queryEvidenceError("query_not_finished")
+		return prov, searchDiagnosticError(queryNotFinishedCode)
 	}
 	raw, err := readQueryBackendJSON(ctx, c, "queries/"+url.PathEscape(queryID))
 	if err != nil {
@@ -156,7 +156,7 @@ func readQueryDiscoveryProvenance(ctx context.Context, c *tfe.Client, queryID st
 	}
 	nc, ws := wire.Data.Relationships.NoCode.Data, wire.Data.Relationships.Workspace.Data
 	if wire.Data.ID != queryID || nc == nil || strings.TrimSpace(nc.ID) == "" || nc.Type != "no-code-queries" || ws == nil || ws.ID != w.ID {
-		return nil, queryEvidenceError("query_provenance_unavailable")
+		return nil, searchDiagnosticError(queryProvenanceUnavailableCode)
 	}
 	raw, err = readQueryBackendJSON(ctx, c, "search/no-code-query/"+url.PathEscape(nc.ID))
 	if err != nil {
@@ -164,12 +164,12 @@ func readQueryDiscoveryProvenance(ctx context.Context, c *tfe.Client, queryID st
 	}
 	var stored queryStoredNoCodeResponse
 	if decodeQueryEvidence(raw, &stored) != nil || stored.Data.ID != nc.ID || stored.Data.Relationships.Workspace.Data == nil || stored.Data.Relationships.Workspace.Data.ID != w.ID {
-		return nil, queryEvidenceError("query_provenance_unavailable")
+		return nil, searchDiagnosticError(queryProvenanceUnavailableCode)
 	}
 	providers := map[string]queryResultProvider{}
 	for _, p := range stored.Data.Attributes.Providers {
 		if p.Namespace == "" || p.Name == "" || p.Version == "" {
-			return nil, queryEvidenceError(queryProviderSourceUnresolvedCode)
+			return nil, searchDiagnosticError(queryProviderSourceUnresolvedCode)
 		}
 		provider := queryResultProvider{Source: "registry.terraform.io/" + p.Namespace + "/" + p.Name, Version: p.Version}
 		for _, r := range p.Resources {
@@ -178,16 +178,16 @@ func readQueryDiscoveryProvenance(ctx context.Context, c *tfe.Client, queryID st
 				kind = r.Body.HyphenType
 			}
 			if kind == "" || r.Body.Type != "" && r.Body.HyphenType != "" && r.Body.Type != r.Body.HyphenType {
-				return nil, queryEvidenceError(queryProviderSourceUnresolvedCode)
+				return nil, searchDiagnosticError(queryProviderSourceUnresolvedCode)
 			}
 			if previous, exists := providers[kind]; exists && previous != provider {
-				return nil, queryEvidenceError("query_provider_ambiguous")
+				return nil, searchDiagnosticError(queryProviderAmbiguousCode)
 			}
 			providers[kind] = provider
 		}
 	}
 	if len(providers) == 0 {
-		return nil, queryEvidenceError(queryProviderSourceUnresolvedCode)
+		return nil, searchDiagnosticError(queryProviderSourceUnresolvedCode)
 	}
 	prov.Providers = providers
 	return prov, nil
@@ -200,11 +200,11 @@ func readQueryDiscovery(ctx context.Context, c *tfe.Client, queryID string) (*qu
 	}
 	reader, err := c.QueryRuns.Logs(ctx, queryID)
 	if err != nil {
-		return prov, nil, queryEvidenceError("query_log_unavailable")
+		return prov, nil, searchDiagnosticError(queryLogUnavailableCode)
 	}
 	data, err := io.ReadAll(reader)
 	if err != nil {
-		return prov, nil, queryEvidenceError("query_log_unavailable")
+		return prov, nil, searchDiagnosticError(queryLogUnavailableCode)
 	}
 	evidence, err := parseQueryEvidence(queryID, data, prov.Providers)
 	if err != nil {
@@ -271,8 +271,8 @@ func summarizeQueryDiscovery(prov *queryDiscoveryProvenance, evidence *queryEvid
 }
 
 // nonselectableQueryEvidenceCode identifies evidence failures that safely produce a factual nonselectable result.
-func nonselectableQueryEvidenceCode(err error) (queryEvidenceCode, bool) {
-	code, ok := queryEvidenceErrorCode(err)
+func nonselectableQueryEvidenceCode(err error) (searchDiagnosticCode, bool) {
+	code, ok := searchDiagnosticCodeFromError(err)
 	if !ok {
 		return "", false
 	}
@@ -296,7 +296,7 @@ func nonselectableQueryEvidenceCode(err error) (queryEvidenceCode, bool) {
 func ReadQueryDiscoverySummary(ctx context.Context, c *tfe.Client, queryID string, filter QueryDiscoveryFilter) (*QueryDiscoverySummary, error) {
 	queryID = strings.TrimSpace(queryID)
 	if queryID == "" {
-		return nil, queryEvidenceError("query_run_id_invalid")
+		return nil, searchDiagnosticError(queryRunIDInvalidCode)
 	}
 	prov, evidence, err := readQueryDiscovery(ctx, c, queryID)
 	if err != nil {
@@ -313,7 +313,7 @@ func ReadQueryDiscoverySummary(ctx context.Context, c *tfe.Client, queryID strin
 func FormatQueryDiscoverySummary(summary *QueryDiscoverySummary) (string, error) {
 	data, err := json.Marshal(summary)
 	if err != nil {
-		return "", queryEvidenceError("query_summary_unserializable")
+		return "", searchDiagnosticError(querySummaryUnserializableCode)
 	}
 	return string(data), nil
 }
