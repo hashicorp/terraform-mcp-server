@@ -287,6 +287,9 @@ construct the payload directly from an ordinary managed-resource name.
 EXECUTION APPROVAL: Before execution, show the confirmed source and query
 selections and wait for their approval. If either changes, obtain approval again. This guidance is
 agent-driven; the server does not enforce a separate approval parameter.
+Do not add a requested condition that is absent from the list-resource schema;
+follow the generator guidance for generate_config_out when later selection
+depends on additional result data.
 
 Established success returns only query_run_id. Pass that exact ID to
 get_query_status. If creation does not return a trustworthy ID, reconcile the

@@ -387,6 +387,12 @@ func TestWriteInstructions_ContainsPreConditions(t *testing.T) {
 		"100",
 		"ordinary managed resources are not automatically list resources",
 		"never infer or substitute a provider version",
+		"requested condition is absent from this schema",
+		"cannot filter the query",
+		"do not invent it",
+		"generate_config_out: true",
+		"capture is requested, not guaranteed",
+		"only fields actually projected by `get_query_summary`",
 	}
 	for _, want := range checks {
 		if !strings.Contains(out, want) {
@@ -432,6 +438,9 @@ func TestWriteExamplePayload_ContainsGenerateConfigOut(t *testing.T) {
 	if !strings.Contains(out, "generate_config_out") {
 		t.Error("example payload output must still mention generate_config_out (in the comment)")
 	}
+	if !strings.Contains(out, "additional result data unavailable as a schema-supported query filter") || !strings.Contains(out, "does not guarantee capture") {
+		t.Error("example guidance must explain the qualified unsupported-condition path")
+	}
 	if !strings.Contains(out, `"limit": 100`) {
 		t.Error("example payload must contain default limit of 100")
 	}
@@ -471,6 +480,8 @@ func TestWriteVariableNotes_ContainsMistakeRows(t *testing.T) {
 		"nesting_mode",
 		"UI default is 100",
 		"assuming an S3 bucket can use `aws_s3_bucket`",
+		"Inventing a filter for an unsupported selection condition",
+		"capture is not guaranteed",
 	}
 	for _, want := range checks {
 		if !strings.Contains(out, want) {

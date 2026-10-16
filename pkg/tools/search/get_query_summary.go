@@ -88,6 +88,14 @@ prove a resource is untagged, and attributes_captured=false means tag evidence
 is unknown. A marker provides QueryRun continuity, not authorization, an import
 ID or proof of cloud-object identity.
 
+Only schema-present list-resource attributes can filter the original query.
+When selection depends on additional result data and matching rows have
+attributes_captured=false, ask before a new QueryRun. If approved and not
+already enabled, repeat the same schema-backed query with generate_config_out
+true while preserving supported filters. This requests generated HCL and
+provider resource objects but does not guarantee capture; a new QueryRun has
+new markers, and this summary does not expose arbitrary resource attributes.
+
 For Search-only intent, report selectable results and stop without requesting a
 target workspace or local path. For explicit import intent, ask the user to
 select one or more displayed markers; never select a first-N subset

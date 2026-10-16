@@ -224,6 +224,9 @@ func PrepareImportTool() *mcp.Tool {
 }
 
 func PrepareImportFunc(ctx context.Context, req *mcp.CallToolRequest, input searchlogic.PrepareImportInput) (*mcp.CallToolResult, *searchlogic.PrepareImportResult, error) {
+	if err := searchlogic.ValidatePrepareImportInput(input); err != nil {
+		return nil, nil, fmt.Errorf("validating prepare_import arguments: %w", err)
+	}
 	c, err := client.GetTfeClient(ctx, client.SessionIDFromRequest(req))
 	if err != nil {
 		return nil, nil, searchlogic.TerraformClientUnavailableError(err)

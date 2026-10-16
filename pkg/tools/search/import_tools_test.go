@@ -277,14 +277,21 @@ func TestPrepareImportKeepsSameNameSearchListAndManagedType(t *testing.T) {
 	require.NotContains(t, prepared.NextAction, ".envrc")
 	require.Contains(t, PrepareImportDescription, "does not read")
 	require.Contains(t, PrepareImportDescription, "exact provider releases")
-	require.Contains(t, PrepareImportDescription, "by source")
+	require.Contains(t, PrepareImportDescription, "hostname/namespace/type source")
 	require.Contains(t, PrepareImportDescription, "Search list types do not prove managed types")
 	require.Contains(t, VerifyImportPlanDescription, "search for or substitute")
 	require.Contains(t, VerifyImportPlanDescription, "continue to terraform apply")
 	require.Contains(t, VerifyImportPlanDescription, "terraform import or apply_run")
 
-	input.Selections[0].ManagedType = "google_sqs_queue"
+	input.LockedProviders = map[string]string{"registry.example.com/hashicorp/aws": "6.18.0"}
 	blocked, err := ReadPrepareImport(context.Background(), c, input)
+	require.Nil(t, blocked)
+	require.ErrorContains(t, err, "lock_versions_invalid")
+	require.ErrorContains(t, err, `"registry.terraform.io/hashicorp/aws"`)
+	input.LockedProviders = map[string]string{provider.Source: "6.18.0"}
+
+	input.Selections[0].ManagedType = "google_sqs_queue"
+	blocked, err = ReadPrepareImport(context.Background(), c, input)
 	require.Nil(t, blocked)
 	require.EqualError(t, err, "selection_invalid", "provider-source mismatch still fails")
 
@@ -670,6 +677,23 @@ func TestImportToolUnknownArgumentFailsWithoutBackend(t *testing.T) {
 	require.Equal(t, "decoding verify_import_plan arguments: import_arguments_invalid", text.Text)
 }
 
+func TestPrepareImportShorthandProviderSourceIsActionableOnMark3labsWire(t *testing.T) {
+	request := mcp.CallToolRequest{Params: mcp.CallToolParams{Arguments: map[string]any{
+		"organization_name": "org", "workspace_name": "target", "query_run_id": "qry-example",
+		"selections":       []any{map[string]any{"query_result_marker": "qrm1-" + strings.Repeat("a", 64), "managed_type": "aws_s3_bucket"}},
+		"locked_providers": map[string]any{"hashicorp/aws": "6.18.0"},
+	}}}
+	result, err := PrepareImport(silentLogger()).Handler(context.Background(), request)
+	require.NoError(t, err)
+	require.True(t, result.IsError)
+	require.Nil(t, result.StructuredContent)
+	text, ok := mcp.AsTextContent(result.Content[0])
+	require.True(t, ok)
+	require.Contains(t, text.Text, "locked_provider_source_invalid")
+	require.Contains(t, text.Text, `locked_providers key "hashicorp/aws"`)
+	require.Contains(t, text.Text, `"registry.terraform.io/hashicorp/aws"`)
+}
+
 func TestVerifyImportStopsOnFailedPlanWhileRunLags(t *testing.T) {
 	backend, reads := importWireBackend(t, "planning", "errored")
 	c, err := tfe.NewClient(&tfe.Config{Address: backend.URL, Token: "test-token", HTTPClient: backend.Client()})
@@ -692,6 +716,9 @@ func TestImportToolDescriptionsAndSchemas(t *testing.T) {
 	prepare := PrepareImport(silentLogger()).Tool
 	require.Contains(t, prepare.InputSchema.Required, "selections")
 	require.Contains(t, prepare.InputSchema.Required, "locked_providers")
+	lockedProvidersSchema := prepare.InputSchema.Properties["locked_providers"].(map[string]any)
+	require.Contains(t, lockedProvidersSchema["description"], "hostname/namespace/type")
+	require.Contains(t, lockedProvidersSchema["description"], "do not abbreviate")
 	require.Contains(t, prepare.OutputSchema.Properties, "import_context")
 	require.NotContains(t, string(prepare.RawInputSchema), `"maxItems":100`)
 	require.NotContains(t, prepare.Description, "1–100")
