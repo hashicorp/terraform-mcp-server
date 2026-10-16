@@ -332,45 +332,25 @@ func doProviderRequest(ctx context.Context, request *tfe.ClientRequest, response
 	return json.Unmarshal(body.Bytes(), response)
 }
 
-const providerListSchemaListDescription = `Fetches list_resource_schemas for a search-compatible Terraform provider from the
-HCP Terraform no-code stub endpoint (GET /api/v2/search/provider-versions).
+const providerListSchemaListDescription = `Lists Search-compatible providers or fetches one provider's list-resource
+schemas for an HCP Terraform source workspace.
 
-Scope arguments are optional. Use configured environment defaults unless the user explicitly
-specifies an organization or workspace; pass those explicit values as arguments to override
-the corresponding defaults. Do not invent scope arguments. The server uses
-TF_MCP_QUERY_WORKSPACE for queries; TF_MCP_IMPORT_WORKSPACE is
-a separate import target. If the query variable is absent, use TF_WORKSPACE.
-For organization, use TF_CLOUD_ORGANIZATION unless explicitly overridden. Use configured environment
-values directly without confirmation. If inputs are missing, ask only for those inputs.
-The server never makes an unscoped API request. An input_required result is a normal response, not a tool
-failure. Use its context and guidance to ask the user only for the missing inputs, then
-retry with those values as explicit arguments, preserving resolved context.
+The organization_name and workspace_name source arguments are optional. Omit
+them to resolve the proposed source from TF_CLOUD_ORGANIZATION and
+TF_MCP_QUERY_WORKSPACE, then TF_WORKSPACE. Before a new query, show that source
+and ask the user to confirm it; pass explicit user corrections as argument
+overrides. An input_required result is a normal request for only the missing
+source fields, and no unscoped API request is made.
 
-The tool has two modes:
+In LIST mode, omit both provider_namespace and provider_name; the result contains
+the providers available in the Search catalog. In FETCH mode, provide both
+identifiers; the tool returns the catalog-selected provider metadata and
+list_resource_schemas. The provider version comes from the catalog and must not
+be inferred or supplied from model knowledge or the public Registry.
 
-LIST mode (no provider identifiers supplied; scope resolved by the server):
-  Returns all providers currently in the search-compatible catalog so the agent
-  can choose one. Each entry includes namespace, name, and version.
-
-FETCH mode (provider_namespace and provider_name supplied; scope resolved by the server):
-  Returns the full list_resource_schemas for the requested provider, ready to
-  pass directly into generate_query_configuration.
-  - The provider version is always read from the provider catalog response. Never infer or
-    supply a version from model knowledge, examples, or the public Terraform Registry.
-  - If the provider is not found in the catalog, an error is returned with a hint
-    to use search_providers to find the provider in the public Terraform Registry.
-
-Typical agent workflow:
-If the user already supplied an explicit organization or workspace, pass it as a scope argument to override that default throughout this workflow. Otherwise follow the default-first steps below.
-  1. Call without scope args first; if the result reports a missing value, ask the user for only that value and retry.
-  2. Use the LIST response to discover available providers.
-  3. Call provider_list_schema_list with provider_namespace and provider_name to fetch the catalog-selected version and its schema. Reuse any explicit scope inputs from step 1.
-  4. Pass the returned list_resource_schemas to generate_query_configuration to get
-     a full guide and example query configuration.
-  5. Select only an exact resource type key present in list_resource_schemas. Never infer list
-     support from an ordinary managed resource name. If no key matches the user's request,
-     explain that the selected provider version cannot list that resource and stop.
-  6. Fill in the configuration and pass it to execute_query, reusing any explicit scope inputs from step 1; otherwise let the server resolve configured scope values.
-
-Requires TFE_TOKEN and TFE_ADDRESS to be configured (same credentials used for
-other HCP Terraform tools).`
+After LIST, choose a catalog provider with the user and call FETCH. After FETCH,
+pass the returned provider metadata and list_resource_schemas to
+generate_query_configuration. A searchable resource_type must be an exact key
+in list_resource_schemas; an ordinary managed-resource name does not establish
+Search list support. List-resource schemas are not target managed-resource
+schemas.`

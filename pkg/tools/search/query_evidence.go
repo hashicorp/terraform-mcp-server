@@ -109,11 +109,7 @@ func validIdentityVersion(raw json.RawMessage) (int, bool) {
 // decodeQueryEvidence rejects duplicate JSON keys before decoding. It does not
 // return or log untrusted JSON on failure.
 func decodeQueryEvidence(raw []byte, target any) error {
-	return decodeQueryEvidenceLimit(raw, target, 0, 0)
-}
-
-func decodeQueryEvidenceLimit(raw []byte, target any, maxBytes, maxDepth int) error {
-	if err := validateQueryEvidenceJSON(raw, maxBytes, maxDepth); err != nil {
+	if err := validateQueryEvidenceJSON(raw); err != nil {
 		return err
 	}
 	decoder := json.NewDecoder(bytes.NewReader(raw))
@@ -124,23 +120,13 @@ func decodeQueryEvidenceLimit(raw []byte, target any, maxBytes, maxDepth int) er
 	return nil
 }
 
-// validateQueryEvidenceJSON rejects duplicate keys, trailing JSON values, and
-// optional caller-defined size or depth violations without decoding into a
-// destination value.
-func validateQueryEvidenceJSON(raw []byte, maxBytes, maxDepth int) error {
-	// A zero limit disables that optional guard. QueryRun evidence currently
-	// uses the unbounded strict decoder above; explicit limits remain for
-	// callers decoding plan and schema artifacts.
-	if maxBytes > 0 && len(raw) > maxBytes {
-		return searchDiagnosticError(queryEvidenceSizeLimitCode)
-	}
+// validateQueryEvidenceJSON rejects duplicate keys and trailing JSON values
+// without imposing application-defined byte or nesting-depth limits.
+func validateQueryEvidenceJSON(raw []byte) error {
 	decoder := json.NewDecoder(bytes.NewReader(raw))
 	decoder.UseNumber()
-	var walk func(int) error
-	walk = func(depth int) error {
-		if maxDepth > 0 && depth > maxDepth {
-			return searchDiagnosticError(queryEvidenceDepthLimitCode)
-		}
+	var walk func() error
+	walk = func() error {
 		token, err := decoder.Token()
 		if err != nil {
 			return searchDiagnosticError(queryEvidenceInvalidCode)
@@ -162,7 +148,7 @@ func validateQueryEvidenceJSON(raw []byte, maxBytes, maxDepth int) error {
 				}
 				keys[name] = true
 			}
-			if err := walk(depth + 1); err != nil {
+			if err := walk(); err != nil {
 				return err
 			}
 		}
@@ -171,7 +157,7 @@ func validateQueryEvidenceJSON(raw []byte, maxBytes, maxDepth int) error {
 		}
 		return nil
 	}
-	if err := walk(0); err != nil {
+	if err := walk(); err != nil {
 		return err
 	}
 	if _, err := decoder.Token(); !errors.Is(err, io.EOF) {
@@ -241,9 +227,6 @@ func parseQueryEvidence(queryID string, data []byte, providers map[string]queryR
 				result.ImportConfig = *f.ImportConfig
 			} else if f.ImportBlock != nil {
 				result.ImportConfig = *f.ImportBlock
-			}
-			if len(result.Configuration) > 32<<10 || len(result.ImportConfig) > 32<<10 {
-				return nil, searchDiagnosticError(queryGeneratedBlockSizeLimitCode)
 			}
 			out.Results = append(out.Results, result)
 			out.ByType[f.ResourceType]++

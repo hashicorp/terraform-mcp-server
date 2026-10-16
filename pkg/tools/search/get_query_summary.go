@@ -75,18 +75,21 @@ func ReadQuerySummary(ctx context.Context, tfeClient *tfe.Client, queryRunID str
 	return FormatQueryDiscoverySummary(summary)
 }
 
-const getQuerySummaryDescription = `Returns bounded, backend-scoped Search results from a finished QueryRun.
+const getQuerySummaryDescription = `Returns one complete parsed Search-result summary for a finished, authorized
+QueryRun and any supplied presentation filters. It does not return raw QueryRun
+logs or backend artifact URLs.
 
-Call get_query_status first, then use the same query_run_id; an existing
-authorized QueryRun ID can also be used. Selectable lists[].results[] include
+Call get_query_status first and pass the same query_run_id, or use an existing
+authorized terminal QueryRun ID. Selectable results include
 query_result_marker, identity, identity_version, attributes_captured and any
-scalar tags from the captured resource object. Keep the marker, display_name
-and any tags for each result shown to the user, including in script output.
-There is no tag filter; choose from the returned rows with the user. Missing
-tags do not prove a resource is untagged. If attributes_captured is false and
-tags matter, ask before a new query (for example with generate_config_out true).
-It has new markers and may still lack tags. The response contains every result
-matching any supplied summary filters. A nonselectable result is returned only
-when the validated QueryRun evidence does not support selection. A marker is
-continuity, not an import ID,
-authorization or proof of object identity.`
+projected scalar tags. Keep each displayed marker, display_name and available
+tags together. Summary filters affect presentation only; missing tags do not
+prove a resource is untagged, and attributes_captured=false means tag evidence
+is unknown. A marker provides QueryRun continuity, not authorization, an import
+ID or proof of cloud-object identity.
+
+For Search-only intent, report selectable results and stop without requesting a
+target workspace or local path. For explicit import intent, ask the user to
+select one or more displayed markers; never select a first-N subset
+automatically. A nonselectable result contains no markers and must not be used
+for import.`

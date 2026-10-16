@@ -45,6 +45,24 @@ func TestOfficialSearchArgumentsAndValidation(t *testing.T) {
 	require.ErrorContains(t, err, "invalid query_configuration")
 }
 
+func TestOfficialSearchDescriptionsUseSharedValues(t *testing.T) {
+	tests := []struct {
+		tool *mcp.Tool
+		want string
+	}{
+		{ProviderListSchemaListTool(), searchlogic.ProviderListSchemaListDescription},
+		{GenerateQueryConfigurationTool(), searchlogic.GenerateQueryConfigurationDescription},
+		{ExecuteQueryTool(), searchlogic.ExecuteQueryDescription},
+		{GetQueryStatusTool(), searchlogic.GetQueryStatusDescription},
+		{GetQuerySummaryTool(), searchlogic.GetQuerySummaryDescription},
+		{PrepareImportTool(), searchlogic.PrepareImportDescription},
+		{VerifyImportPlanTool(), searchlogic.VerifyImportPlanDescription},
+	}
+	for _, test := range tests {
+		require.Equal(t, test.want, test.tool.Description, test.tool.Name)
+	}
+}
+
 func TestOfficialSearchToolAnnotations(t *testing.T) {
 	for _, tool := range []*mcp.Tool{GenerateQueryConfigurationTool(), ProviderListSchemaListTool(), GetQueryStatusTool(), GetQuerySummaryTool()} {
 		require.True(t, tool.Annotations.ReadOnlyHint)

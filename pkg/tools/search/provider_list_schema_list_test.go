@@ -516,12 +516,13 @@ func TestProviderListSchemaList_ToolDefinition(t *testing.T) {
 	assert.NotContains(t, tool.Tool.InputSchema.Required, "organization_name")
 	assert.NotContains(t, tool.Tool.InputSchema.Required, "workspace_name")
 	assert.Contains(t, tool.Tool.Description, "TF_MCP_QUERY_WORKSPACE")
-	assert.Contains(t, tool.Tool.Description, "values directly without confirmation")
-	assert.Contains(t, tool.Tool.Description, "Call without scope args first; if the result reports a missing value, ask the user for only that value and retry.")
+	assert.Contains(t, tool.Tool.Description, "ask the user to confirm")
+	assert.Contains(t, tool.Tool.Description, "input_required")
 	assert.NotContains(t, tool.Tool.Description, "\t")
 	assert.NotContains(t, props["organization_name"].(map[string]any), "default")
 	assert.NotContains(t, props["workspace_name"].(map[string]any), "default")
-	assert.Contains(t, tool.Tool.Description, "always read from the provider catalog response")
+	assert.Contains(t, tool.Tool.Description, "provider version comes from the catalog")
+	assert.Contains(t, tool.Tool.Description, "does not establish")
 }
 
 func TestProviderListSchemaList_RequestsMissingScopeBeforeRequest(t *testing.T) {

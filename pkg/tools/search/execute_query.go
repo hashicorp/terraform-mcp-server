@@ -271,44 +271,23 @@ func submitExecuteQuery(ctx context.Context, tfeClient *tfe.Client, workspaceID 
 	return &ExecuteQueryResponse{QueryRunID: payload.Data.Relationships.LatestQueryRun.Data.ID}, nil
 }
 
-const executeQueryDescription = `Creates and immediately executes an HCP Terraform Search query.
-
-MANDATORY WORKFLOW: Before calling this tool, call provider_list_schema_list and then
-generate_query_configuration. Do not skip generate_query_configuration or construct the payload
-directly. Pass the provider/resource configuration produced from its guidance.
-Omit scope arguments to use configured environment defaults unless the user explicitly
-specifies an organization or workspace; pass those explicit values as arguments to override
-the corresponding defaults. Do not invent scope arguments or ask the user to confirm defaults. Use
-TF_MCP_QUERY_WORKSPACE for queries; TF_MCP_IMPORT_WORKSPACE is a separate import target.
-If TF_MCP_QUERY_WORKSPACE is absent, use TF_WORKSPACE. For organization, use
-TF_CLOUD_ORGANIZATION when no organization override is supplied.
-Use configured scope values directly without scope confirmation. Ask only for missing inputs.
-If this tool returns input_required, treat
-it as normal clarification, not a failure: ask the user only for the missing inputs,
-then retry with those values as explicit arguments, preserving resolved context.
-
-EXECUTION APPROVAL: After discovery and configuration generation, but before calling this tool,
-show the user the resolved organization, workspace, and query selections (provider, resource
-types, and filters, if any). Explain that execution starts a query run but does not create or
-modify infrastructure. Ask the user to approve this execution and wait for their approval.
-Do not call execute_query if approval is declined or absent. If the target scope or query
-selections change, show the updated summary and obtain approval again before execution.
-This is agent-driven execution approval, not confirmation of environment defaults and not a
-server-enforced approval parameter or status. Discovery and configuration generation do not
-require this execution approval.
-
-Never construct resource_type from an ordinary managed resource name: it must be an exact key
-in list_resource_schemas for the selected provider version. If no matching key exists, do not
-call this tool. The tool resolves the workspace
-with go-tfe, constructs the JSON:API request, and
-calls POST /api/v2/search/no-code-query, which persists the selections, uploads generated
-Terraform query configuration, and starts a query run. It does not create or modify
+const executeQueryDescription = `Creates and immediately executes one HCP Terraform No-Code Search query. It
+creates Search query records and a QueryRun, but does not create or modify cloud
 infrastructure.
 
-The response includes only query_run_id. Pass that query run ID to get_query_status.
-After it returns a terminal status, pass the same ID to
-get_query_summary to retrieve the parsed result. Do not use curl or call the HCP
-Terraform query API directly.
+Before calling, confirm the source organization/workspace, then use
+provider_list_schema_list and generate_query_configuration for that same source.
+Omitted source arguments resolve from TF_CLOUD_ORGANIZATION and
+TF_MCP_QUERY_WORKSPACE, then TF_WORKSPACE; pass explicit user corrections as
+overrides. Treat input_required as a request for only the missing source fields.
+Pass the schema-backed provider/resource configuration produced from that
+guidance; resource_type must be an exact list_resource_schemas key. Do not
+construct the payload directly from an ordinary managed-resource name.
 
-Requires an authenticated HCP Terraform session and a workspace using a supported
-Terraform version.`
+EXECUTION APPROVAL: Before execution, show the confirmed source and query
+selections and wait for their approval. If either changes, obtain approval again. This guidance is
+agent-driven; the server does not enforce a separate approval parameter.
+
+Established success returns only query_run_id. Pass that exact ID to
+get_query_status. If creation does not return a trustworthy ID, reconcile the
+outcome before another submission; do not blindly execute the query again.`

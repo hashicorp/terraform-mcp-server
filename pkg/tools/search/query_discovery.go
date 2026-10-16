@@ -269,14 +269,9 @@ func summarizeQueryDiscovery(prov *queryDiscoveryProvenance, evidence *queryEvid
 		}
 		summary.Lists[index].Results = append(summary.Lists[index].Results, row)
 	}
-	if filter.ResourceType != "" || filter.Address != "" || filter.NameContains != "" {
-		summary.NextAction = "These are all results matching the supplied summary filters, not all results of the query or all cloud resources. Choose query_result_marker values with the user only if import is requested."
-	} else {
-		summary.NextAction = "These are all results of this query, not all cloud resources. Choose query_result_marker values with the user only if import is requested."
-	}
-	summary.NextAction += " Keep each shown result's query_result_marker, display_name and any tags, including in script output; tag filtering is not supported. Missing tags do not prove a resource is untagged."
+	summary.NextAction = "For a Search-only request, report these results and stop; do not request a target workspace or local path. If import is requested, ask the user to select one or more displayed query_result_marker values. Keep each displayed marker, display_name and available tags together; supplied filters affect presentation only, and missing tags do not prove a resource is untagged."
 	if summary.RowsWithoutAttributes > 0 {
-		summary.NextAction += " For rows with attributes_captured false, tags are unknown. If tags matter, ask before a new query (for example with generate_config_out true); it creates new markers and may still lack tags."
+		summary.NextAction += " For rows with attributes_captured false, tags are unknown; if tags are necessary for selection, ask before a new query and explain that new markers may still lack tags."
 	}
 	return summary, nil
 }
@@ -301,6 +296,27 @@ func nonselectableQueryEvidenceCode(err error) (searchDiagnosticCode, bool) {
 	}
 }
 
+func nonselectableQueryNextAction(code searchDiagnosticCode) string {
+	switch code {
+	case queryNotSelectableCode:
+		return "Report that this QueryRun failed or was canceled and has no selectable result. Do not import from it; ask the user before starting another query."
+	case queryIdentityVersionInvalidCode:
+		return "The entire QueryRun is nonselectable because identity-version evidence is invalid. Do not select any result; review with the user before another query."
+	case queryEvidenceIncompleteCode:
+		return "Required whole-query evidence is incomplete. Do not present a prefix as complete or select from it; ask the user before another query."
+	case queryDuplicateOrInvalidIdentityCode:
+		return "Duplicate or conflicting identity evidence makes the entire QueryRun nonselectable. Stop selection and ask the user before another query."
+	case queryIdentityInvalidCode:
+		return "Required result identity evidence is invalid. Stop selection, do not import, and ask the user before another query."
+	case queryReportedErrorCode:
+		return "Report that the QueryRun output recorded an error and has no selectable result. Review it with the user before another query."
+	case queryGeneratedBlockConflictCode:
+		return "Generated configuration evidence conflicts. Stop selection and review the query configuration with the user before another query."
+	default:
+		return "This QueryRun has no selectable result. Do not import from it; review with the user before another query."
+	}
+}
+
 // ReadQueryDiscoverySummary shares Search discovery across the two MCP SDKs.
 // Only a safely observed completed QueryRun with invalid result evidence can
 // return a factual nonselectable result; backend/transport failures are errors.
@@ -313,7 +329,7 @@ func ReadQueryDiscoverySummary(ctx context.Context, c *tfe.Client, queryID strin
 	if err != nil {
 		if prov != nil {
 			if code, ok := nonselectableQueryEvidenceCode(err); ok {
-				return &QueryDiscoverySummary{QueryRunID: queryID, Status: "nonselectable", SourceOrganizationName: prov.Organization, SourceWorkspaceName: prov.WorkspaceName, SourceWorkspaceID: prov.WorkspaceID, Selectable: false, Diagnostics: []string{string(code)}, NextAction: "This QueryRun does not have complete selectable evidence. Do not select or import from it; review the query and ask before starting another."}, nil
+				return &QueryDiscoverySummary{QueryRunID: queryID, Status: "nonselectable", SourceOrganizationName: prov.Organization, SourceWorkspaceName: prov.WorkspaceName, SourceWorkspaceID: prov.WorkspaceID, Selectable: false, Diagnostics: []string{string(code)}, NextAction: nonselectableQueryNextAction(code)}, nil
 			}
 		}
 		return nil, err

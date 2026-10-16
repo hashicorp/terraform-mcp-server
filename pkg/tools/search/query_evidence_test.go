@@ -4,6 +4,7 @@
 package search
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 	"testing"
@@ -88,6 +89,25 @@ func TestQueryEvidenceDoesNotApplyByteOrDepthCaps(t *testing.T) {
 	raw := []byte(strings.Repeat("[", 40) + `{"value":"` + strings.Repeat("x", 128*1024) + `"}` + strings.Repeat("]", 40))
 	var value any
 	require.NoError(t, decodeQueryEvidence(raw, &value))
+}
+
+func TestQueryEvidencePreservesGeneratedBlocksBeyondFormerLimit(t *testing.T) {
+	configuration := strings.Repeat("# generated configuration\n", 2000)
+	importBlock := strings.Repeat("# generated import block\n", 2000)
+	found, err := json.Marshal(map[string]any{
+		"type": "list_resource_found",
+		"list_resource_found": map[string]any{
+			"address": "list.aws_s3_buckets.all", "resource_type": "aws_s3_buckets",
+			"identity": map[string]any{"bucket": "example"}, "identity_version": 0,
+			"configuration": configuration, "import_configuration": importBlock,
+		},
+	})
+	require.NoError(t, err)
+	log := string(found) + "\n" + `{"type":"list_complete","list_complete":{"address":"list.aws_s3_buckets.all","resource_type":"aws_s3_buckets","total":1}}`
+	evidence, err := parseQueryEvidence("qry-one", []byte(log), testQueryProviders())
+	require.NoError(t, err)
+	require.Equal(t, configuration, evidence.Results[0].Configuration)
+	require.Equal(t, importBlock, evidence.Results[0].ImportConfig)
 }
 
 func TestQueryEvidenceRejectsUnknownProviderWithoutPartialResults(t *testing.T) {

@@ -213,7 +213,7 @@ func readHistoricalSchema(ctx context.Context, c *tfe.Client, workspaceID string
 	}
 	// The historical schema is not required for preparation. Reject malformed
 	// or unsupported artifacts without treating them as evidence of absence.
-	if buf.Len() == 0 || decodeQueryEvidenceLimit(buf.Bytes(), &artifact, 32<<20, 64) != nil || !terraformPlanFormatVersionPattern.MatchString(artifact.FormatVersion) {
+	if buf.Len() == 0 || decodeQueryEvidence(buf.Bytes(), &artifact) != nil || !terraformPlanFormatVersionPattern.MatchString(artifact.FormatVersion) {
 		return source, nil, nil
 	}
 	resources, identities := map[string]json.RawMessage{}, map[string]json.RawMessage{}
@@ -261,19 +261,19 @@ func ReadPrepareImport(ctx context.Context, c *tfe.Client, input PrepareImportIn
 		SourceOrganizationName: prov.Organization, SourceWorkspaceName: prov.WorkspaceName, SourceWorkspaceID: prov.WorkspaceID,
 		OrganizationName: w.Organization.Name, TargetWorkspaceName: w.Name, WorkspaceID: w.ID, ExecutionMode: w.ExecutionMode,
 		TargetTerraformSetting: w.TerraformVersion, VCSLinked: w.VCSRepo != nil}
-	blocked := func(code, action string) (*PrepareImportResult, error) {
+	blocked := func(code string) (*PrepareImportResult, error) {
 		out.Diagnostics = []string{code}
-		out.NextAction = action
+		out.NextAction = prepareImportBlockedAction(code)
 		return out, nil
 	}
 	if input.WorkspaceID != "" && input.WorkspaceID != w.ID {
-		return blocked("target_mismatch", "Confirm the intended target workspace before preparing again; nothing was uploaded or planned.")
+		return blocked("target_mismatch")
 	}
 	if w.ExecutionMode != "remote" && w.ExecutionMode != "agent" {
-		return blocked("target_execution_mode_not_hcp", "This target cannot provide the intended HCP-executed speculative Plan; do not plan with this workflow.")
+		return blocked("target_execution_mode_not_hcp")
 	}
 	if old, known := terraformImportSyntaxVersion(w.TerraformVersion); known && old {
-		return blocked("target_terraform_below_floor", "The target's current Terraform setting is below 1.5; do not silently change it or run a plan.")
+		return blocked("target_terraform_below_floor")
 	}
 	// The log is read only after the inexpensive source and target checks.
 	evidence, err := readQueryEvidence(ctx, c, input.QueryRunID, prov)
@@ -324,7 +324,7 @@ func ReadPrepareImport(ctx context.Context, c *tfe.Client, input PrepareImportIn
 		if _, exists := resourceSchemas[kind]; exists {
 			out.Types[i].ManagedTypeSupport = "supported_historically"
 			var schema map[string]any
-			if raw := resourceSchemas[kind]; len(raw) < 16<<10 && decodeQueryEvidenceLimit(raw, &schema, 16<<10, 32) == nil {
+			if raw := resourceSchemas[kind]; decodeQueryEvidence(raw, &schema) == nil {
 				out.Types[i].ManagedSchema = schema
 			} else {
 				out.Types[i].SchemaStatus = "unavailable"
@@ -333,7 +333,7 @@ func ReadPrepareImport(ctx context.Context, c *tfe.Client, input PrepareImportIn
 			}
 			if _, found := identitySchemas[kind]; found {
 				var identity map[string]any
-				if raw := identitySchemas[kind]; len(raw) < 16<<10 && decodeQueryEvidenceLimit(raw, &identity, 16<<10, 32) == nil {
+				if raw := identitySchemas[kind]; decodeQueryEvidence(raw, &identity) == nil {
 					out.Types[i].IdentitySupport = "supported_historically"
 					out.Types[i].IdentitySchema = identity
 				}
@@ -351,9 +351,21 @@ func ReadPrepareImport(ctx context.Context, c *tfe.Client, input PrepareImportIn
 	}
 	out.ImportContext = importContext
 	out.Status = "prepared"
-	out.NextAction = "Inspect the existing user-designated local tree, exact lock releases, selected observations, relevant module calls and instances, provider mappings, and existing variables and references. The proposed managed type is not proved by the Search list type, and historical schema does not attest the lock, a proposed import block, or provider scope. First author for the selected identities, effective provider scope and target locked provider's managed/identity schema. Consult that release's resource/import documentation and the target Terraform version's official import and module documentation; search_providers with the locked provider_version followed by get_provider_details can help when available. Treat generated blocks as drafts, make evidence-backed adaptations and author one reviewed resource and import block per result at distinct exact addresses. If the intended address is in an editable local module, check its calls and instances for sibling effects; do not edit remote-source modules. Review changed files and sensitive upload scope. " +
-		"In the execution context that will run Terraform, review the user-approved cloud or remote-backend configuration and confirm the effective CLI host, organization, project (when relevant) and workspace with the user. Explicit cloud settings take precedence over their fallbacks; account for applicable CLI fallbacks and workspace-selection overrides without dumping environment contents; if the mapping is ambiguous, consult Terraform's cloud-connection and CLI-environment documentation and ask the user to resolve it. Confirm only that authentication for the intended host is available through the user's existing CLI setup. Do not read, print, request, copy or set credential values. MCP server configuration and authentication are separate from Terraform CLI configuration and authentication. Resolve a specific destination mismatch before starting a Run. Confirm both initiating CLI and HCP execution support import blocks (>=1.5); an init that creates a workspace/project or migrates state needs separate permission. After explicit approval for one speculative plan, an example from the confirmed directory is terraform plan -no-color -input=false (or terraform -chdir=<directory> plan -no-color -input=false), without -out or apply. These flags aid non-interactive review, not proof of a plan-only Run. The CLI, not Search MCP, uploads the configuration and creates the Run. Compare its Run URL with the intended host/org/workspace, then verify the exact Run's workspace and plan_only=true. If its Run URL or outcome is uncertain, reconcile before retrying; keep import context unchanged for verification. Approval is for one speculative plan only. This Search-to-import workflow ends after Plan review and handoff of the proposed HCL and findings; do not apply or run terraform import as its next step."
+	out.NextAction = "Inspect the confirmed existing local tree and author one resource and import block per selected result at reviewed exact addresses, using the target's exact locked provider releases and effective provider scope. Treat returned drafts and historical schema as qualified evidence, then review changed files with the user. A speculative Plan requires separate approval."
 	return out, nil
+}
+
+func prepareImportBlockedAction(code string) string {
+	switch code {
+	case "target_mismatch":
+		return "Confirm the intended target workspace before preparing again; nothing was uploaded or planned."
+	case "target_execution_mode_not_hcp":
+		return "Choose a target with supported HCP execution mode or stop; do not change workspace mode automatically."
+	case "target_terraform_below_floor":
+		return "Resolve target Terraform-version compatibility; do not change the workspace version or plan automatically."
+	default:
+		return "Resolve the target eligibility issue before preparing again; nothing was uploaded or planned."
+	}
 }
 
 func terraformVersionBefore(setting string, minimum *version.Version) (bool, bool) {

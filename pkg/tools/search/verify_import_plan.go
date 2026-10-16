@@ -308,7 +308,19 @@ func verifyFinishedImportRun(ctx context.Context, c *tfe.Client, input VerifyImp
 	}
 	selected, addresses, err := validateImportContext(input.ImportContext, input.Bindings, target)
 	if err != nil {
-		return stopVerifyImport(out, "blocked", err.Error(), "The import context or bindings are inconsistent. Do not classify this Plan; recheck the reviewed selection and addresses.")
+		code, _ := searchDiagnosticCodeFromError(err)
+		action := "Correct the verifier input for this same Run; no Plan classification is available."
+		switch code {
+		case importContextInvalidCode:
+			action = "Recopy the complete unchanged import_context; do not reconstruct or partially edit it. Use the same Run."
+		case importContextDigestMismatchCode:
+			action = "Recopy the unchanged import_context; do not edit or recompute selection_digest. Use the same Run."
+		case importContextMarkerInvalidCode:
+			action = "Use the exact carried markers. If selection or target changed, prepare again rather than editing markers."
+		case bindingInvalidCode:
+			action = "Supply exactly one binding per selected marker with unique reviewed addresses for this same Run."
+		}
+		return stopVerifyImport(out, "blocked", string(code), action)
 	}
 	selectedAddresses := make(map[string]bool, len(addresses))
 	for _, address := range addresses {
@@ -316,7 +328,7 @@ func verifyFinishedImportRun(ctx context.Context, c *tfe.Client, input VerifyImp
 	}
 	for requested := range details {
 		if !selectedAddresses[requested] {
-			return stopVerifyImport(out, "blocked", "detail_address_not_selected", "Detail requests must name selected target addresses; review bindings before retrying.")
+			return stopVerifyImport(out, "blocked", "detail_address_not_selected", "Remove or correct detail addresses so each exactly matches a selected binding; use the same Run.")
 		}
 	}
 	return classifyImportPlan(ctx, c, out, plan.ID, input.ImportContext, selected, addresses, details)
@@ -408,7 +420,7 @@ func readVerifyImportPlanWithConfig(ctx context.Context, c *tfe.Client, input Ve
 	if ctx.Err() != nil || !observed {
 		return nil, searchDiagnosticError(verifyCanceledCode)
 	}
-	out.Status, out.Diagnostics, out.NextAction, out.RetryAfterSeconds = "pending", []string{"run_pending"}, "Poll verify_import_plan with the same Run ID; import_context/bindings can wait until the associated Plan is finished. Do not start another Run.", 5
+	out.Status, out.Diagnostics, out.NextAction, out.RetryAfterSeconds = "pending", []string{"run_pending"}, "Poll verify_import_plan again with the same Run ID after retry_after_seconds. Do not create another Run.", 5
 	return out, nil
 }
 
@@ -461,10 +473,32 @@ type importPlanImporting struct {
 	Unknown  bool            `json:"unknown"`
 }
 
-// unsupportedImportPlan returns a value-free blocked result for unsafe Plan JSON.
-func unsupportedImportPlan(out *VerifyImportResult, code, guidance string) *VerifyImportResult {
-	out.Status, out.Diagnostics, out.NextAction = "blocked", []string{code}, guidance+" Review the exact Run and full Plan in HCP Terraform; do not apply or start another Run to diagnose this response."
+// unsupportedImportPlan returns a value-free factual result for a safely
+// classified Plan preflight state.
+func unsupportedImportPlan(out *VerifyImportResult, code string) *VerifyImportResult {
+	out.Status, out.Diagnostics, out.NextAction = "blocked", []string{code}, safePlanPreflightAction(code)
 	return out
+}
+
+func safePlanPreflightAction(code string) string {
+	if code == "plan_terraform_version_unsupported" {
+		return "Reconcile the below-1.5 execution version; do not change settings automatically. Any new Plan requires review and separate approval."
+	}
+	action := "Review the same exact Plan through run_ui_url or, with the user's choice and an available get_plan_json_output tool, this result's plan_id; raw Plan JSON may contain sensitive values, so summarize without reproducing them."
+	switch code {
+	case "plan_json_empty":
+		return action + " No new Run is needed merely to diagnose the empty response."
+	case "plan_json_incomplete", "plan_json_errored":
+		return action + " Do not claim structured findings or start another Run merely to diagnose it."
+	case "plan_format_unsupported":
+		return action + " The verifier cannot classify this format."
+	case "plan_terraform_version_unavailable":
+		return action + " Reconcile Terraform-version evidence; no structured findings are available."
+	case "plan_change_limit":
+		return action + " Bounded classification is unavailable; no new Run is needed merely to diagnose it."
+	default:
+		return "Review the same exact Plan; the verifier did not produce structured findings."
+	}
 }
 
 // readImportPlanJSON reads and validates the Plan JSON envelope before classification.
@@ -474,28 +508,28 @@ func readImportPlanJSON(ctx context.Context, c *tfe.Client, out *VerifyImportRes
 		return nil, nil, searchDiagnosticError(planReadUnavailableCode)
 	}
 	if len(raw) == 0 {
-		return nil, unsupportedImportPlan(out, "plan_json_empty", "The associated Plan JSON response was empty."), nil
+		return nil, unsupportedImportPlan(out, "plan_json_empty"), nil
 	}
 	var plan importPlanJSON
 	if err := decodeQueryEvidence(raw, &plan); err != nil {
-		return nil, unsupportedImportPlan(out, "plan_json_invalid", "The associated Plan JSON could not be safely decoded."), nil
+		return nil, nil, searchDiagnosticError(planJSONInvalidCode)
 	}
 	if !terraformPlanFormatVersionPattern.MatchString(plan.FormatVersion) {
-		return nil, unsupportedImportPlan(out, "plan_format_unsupported", "The Plan JSON format is missing or is not a supported 1.x format."), nil
+		return nil, unsupportedImportPlan(out, "plan_format_unsupported"), nil
 	}
 	if plan.Complete == nil || !*plan.Complete {
-		return nil, unsupportedImportPlan(out, "plan_json_incomplete", "The Plan JSON does not report complete=true, even if the Run and Plan statuses are finished."), nil
+		return nil, unsupportedImportPlan(out, "plan_json_incomplete"), nil
 	}
 	if plan.Errored {
-		return nil, unsupportedImportPlan(out, "plan_json_errored", "The Plan JSON reports errored=true despite the finished Plan status."), nil
+		return nil, unsupportedImportPlan(out, "plan_json_errored"), nil
 	}
 	if old, known := terraformImportSyntaxVersion(plan.TerraformVersion); !known {
-		return nil, unsupportedImportPlan(out, "plan_terraform_version_unavailable", "The Plan JSON lacks a recognized Terraform release or prerelease version; import-block support cannot be checked from this evidence."), nil
+		return nil, unsupportedImportPlan(out, "plan_terraform_version_unavailable"), nil
 	} else if old {
-		return nil, unsupportedImportPlan(out, "plan_terraform_version_unsupported", "The Plan JSON reports a Terraform release before 1.5, which cannot support import blocks."), nil
+		return nil, unsupportedImportPlan(out, "plan_terraform_version_unsupported"), nil
 	}
 	if len(plan.ResourceChanges) > 10000 || len(plan.ResourceDrift) > 100 || len(plan.DeferredChanges) > 10000 {
-		return nil, unsupportedImportPlan(out, "plan_change_limit", "The Plan exceeds verification's resource, drift or deferred-change limits."), nil
+		return nil, unsupportedImportPlan(out, "plan_change_limit"), nil
 	}
 	return &plan, nil, nil
 }
@@ -634,19 +668,17 @@ func classifySelectedImport(plan *importPlanJSON, importContext *ImportContext, 
 }
 
 // finalizeImportPlanResult adds diagnostics and review guidance after classification.
-func finalizeImportPlanResult(out *VerifyImportResult, selected int) {
+func finalizeImportPlanResult(out *VerifyImportResult) {
 	out.Status, out.Diagnostics = "plan_available", []string{}
-	out.NextAction = "Attention lists only selected results with a non-no-op change or identity needing review; an empty list does not clear other Plan actions, outputs or drift. Report identity uncertainty and mismatches separately from Plan actions. Ask the user whether to review the full Plan outside this session via run_ui_url (or the confirmed CLI browser Run URL if absent), or to preview it here. Only if the user chooses in-session review and get_plan_json_output is available, call it with this result's plan_id; raw Plan JSON may contain sensitive values visible to the agent, so summarize actions without reproducing secrets or sensitive attributes. Review other managed actions, outputs, drift and provider scope; this bounded result does not attest the uploaded bytes or authorize apply."
+	out.NextAction = "Review the exact full Plan through run_ui_url or, if the user chooses in-session review and get_plan_json_output is available, using this result's plan_id; raw Plan JSON may contain sensitive values, so summarize without reproducing them. Then report selected Plan actions and object identity independently, followed by unselected actions, outputs, deferred changes and drift."
 	if out.ObjectIdentity["unverified"]+out.ObjectIdentity["mismatched"]+out.ObjectIdentity["unsupported"] > 0 {
 		out.Diagnostics = append(out.Diagnostics, "identity_requires_review")
-		out.NextAction = importIdentityReviewAction(out, selected)
+		out.NextAction += " Report identity uncertainty or mismatch before reassuring Plan summaries. Do not create another Plan solely because object identity is unverified."
 	}
 	if out.Changes["update"]+out.Changes["create"]+out.Changes["replace_or_destroy"]+out.Plan.ExtraImports+out.Plan.OtherManagedActions+out.Plan.OutputChanges+out.Plan.DeferredChanges+out.Plan.ResourceDrift > 0 {
 		out.Diagnostics = append(out.Diagnostics, "plan_actions_require_review")
-		out.NextAction += " The Plan contains changes beyond a no-op import (or other changes/drift). Review the full attribute-level diff and reconcile the existing local configuration with the user; this Plan is not safe to apply as an import-only change. If configuration is revised, a separately approved new speculative plan must be verified under its own Run ID."
+		out.NextAction += " This is not an import-only Plan. Review the additional actions with the user. If reviewed HCL is intentionally changed, a new speculative Plan requires separate approval and verification under its own Run ID."
 	}
-	out.NextAction += " An import-only Plan or N-to-import summary is not identity proof; review separate identity findings, other actions, module instances, outputs and drift. If the full Plan is satisfactory and the user wants a refinement, adjust only the proposed imported resources and necessary editable local-module interfaces to follow the existing workspace's variables, references and coding practices. Check that changes preserve intended identities, addresses and provider scope; review the diff and obtain separate approval for a new speculative plan of the revised HCL, then verify its own Run ID. A satisfactory first Plan requires no second Plan; identity uncertainty alone does not require changing HCL or starting another Run. After full-Plan review, report the separate action and identity findings and hand off the proposed HCL. Do not run terraform apply, terraform import or apply_run as a continuation of this Search-to-import workflow; any eventual apply belongs to a separate, independently reviewed and authorized workflow."
-	out.NextAction += " In the user-facing report, first summarize selected imports with both change=none and object_identity=matched; group them if numerous. Then report selected Plan changes by action, identifying affected addresses as useful. Separately group identities that are not matched by status and identity_reason, explaining in plain language what the evidence means and what remains uncertain; identify affected addresses as useful. A selection can appear in both exception sections. Use attention and the selected bindings for this breakdown, not an inferred overlap between the independent changes and object_identity count maps. Unverified is neither a match nor proof of a mismatch; mismatched needs user review; unsupported means this identity could not be checked with available evidence. Matched is only a bounded comparison, not proof of provider scope or the selected cloud object. Keep unselected actions, outputs and drift separate."
 }
 
 // classifyImportPlan projects a finished Plan into value-free import findings.
@@ -685,66 +717,8 @@ func classifyImportPlan(ctx context.Context, c *tfe.Client, out *VerifyImportRes
 			out.Attention = append(out.Attention, item)
 		}
 	}
-	finalizeImportPlanResult(out, len(selected))
+	finalizeImportPlanResult(out)
 	return out, nil
-}
-
-// Keep the two axes distinct and describe only bounded, value-free evidence.
-// Attention contains every non-matched selection, even when its Plan action is
-// a no-op; version pairs come only from these already-classified entries.
-func importIdentityReviewAction(out *VerifyImportResult, selected int) string {
-	var versionDiffers, versionMissing int
-	var searchVersion int
-	var planVersion uint64
-	onePair := true
-	for _, item := range out.Attention {
-		switch item.IdentityReason {
-		case "identity_schema_version_differs":
-			versionDiffers++
-			if item.PlanIdentityVersion == nil {
-				onePair = false
-			} else if versionDiffers == 1 {
-				searchVersion, planVersion = item.SearchIdentityVersion, *item.PlanIdentityVersion
-			} else if searchVersion != item.SearchIdentityVersion || planVersion != *item.PlanIdentityVersion {
-				onePair = false
-			}
-		case "identity_schema_version_not_compared":
-			versionMissing++
-		}
-	}
-	var identity []string
-	if versionDiffers > 0 {
-		reason := fmt.Sprintf("%d selected object identities are unverified because Search and Plan identity schema versions differ", versionDiffers)
-		if onePair {
-			reason += fmt.Sprintf(" (Search %d, Plan %d)", searchVersion, planVersion)
-		} else {
-			reason += " (see attention for each version pair)"
-		}
-		identity = append(identity, reason+"; equal-looking values or no-op imports do not establish an identity match.")
-	}
-	if versionMissing > 0 {
-		identity = append(identity, fmt.Sprintf("%d selected object identities are unverified because the Plan identity schema version was not reported for their addresses; values cannot be confirmed comparable.", versionMissing))
-	}
-	if other := out.ObjectIdentity["unverified"] - versionDiffers - versionMissing; other > 0 {
-		identity = append(identity, fmt.Sprintf("%d other selected object identities are unverified (see identity_reason in attention).", other))
-	}
-	if count := out.ObjectIdentity["mismatched"]; count > 0 {
-		identity = append(identity, fmt.Sprintf("Identity mismatches: %d; stop and review the affected selections with the user.", count))
-	}
-	if count := out.ObjectIdentity["unsupported"]; count > 0 {
-		identity = append(identity, fmt.Sprintf("%d selected object identities could not be checked with the available target evidence.", count))
-	}
-	parts := []string{"Identity needs review: " + strings.Join(identity, " ")}
-	if out.Changes["none"] == selected {
-		parts = append(parts, fmt.Sprintf("Plan actions, separately: all %d selected imports have no-op actions; this does not prove the selected cloud objects.", selected))
-	} else {
-		parts = append(parts, fmt.Sprintf("Plan actions, separately: %d of %d selected imports have no-op actions; inspect changes and attention for the others.", out.Changes["none"], selected))
-	}
-	parts = append(parts, "Review unselected actions, outputs, deferred changes, drift and provider scope independently; this bounded result does not attest uploaded bytes or authorize apply. Ask whether the user prefers full Plan review via run_ui_url (or the confirmed CLI browser Run URL if absent), or an in-session preview. Only with the user's choice and an available get_plan_json_output tool, use this result's plan_id; raw Plan JSON may contain sensitive values visible to the agent, so summarize without reproducing secrets or sensitive attributes.")
-	if versionDiffers+versionMissing > 0 {
-		parts = append(parts, "If the user asks to investigate identity uncertainty, consult the target's locked provider-release documentation and effective provider configuration, including aliases and module mappings. With the user's chosen Plan review route, compare documented identity and scope meanings with provider-returned Plan identity, relevant resource attributes and available Search observations. Report corroboration, unknowns and conflicts without reproducing sensitive values; stop for user review on a conflict. Keep object_identity unverified even if evidence increases confidence; identity uncertainty alone does not require changing configuration or starting another Run.")
-	}
-	return strings.Join(parts, " ")
 }
 
 type importPlanModule struct {
