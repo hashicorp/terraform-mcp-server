@@ -277,7 +277,7 @@ func TestPrepareImportKeepsSameNameSearchListAndManagedType(t *testing.T) {
 	require.NotContains(t, prepared.NextAction, ".envrc")
 	require.Contains(t, PrepareImportDescription, "does not read")
 	require.Contains(t, PrepareImportDescription, "exact provider releases")
-	require.Contains(t, PrepareImportDescription, "hostname/namespace/type source")
+	require.Contains(t, PrepareImportDescription, "custom/private sources require")
 	require.Contains(t, PrepareImportDescription, "Search list types do not prove managed types")
 	require.Contains(t, VerifyImportPlanDescription, "search for or substitute")
 	require.Contains(t, VerifyImportPlanDescription, "continue to terraform apply")
@@ -658,13 +658,14 @@ func TestPrepareImportAllowsCallerProposedDifferentNameWithoutClaimingSupport(t 
 	prepared, err := ReadPrepareImport(context.Background(), c, PrepareImportInput{
 		OrganizationName: "org", WorkspaceName: "target", QueryRunID: "qry-example",
 		Selections:      []ImportSelection{{QueryResultMarker: marker, ManagedType: "aws_s3_bucket_logging"}},
-		LockedProviders: map[string]string{provider.Source: "6.18.0"},
+		LockedProviders: map[string]string{"hashicorp/aws": "6.18.0"},
 	})
 	require.NoError(t, err)
 	require.Equal(t, "prepared", prepared.Status)
 	require.Equal(t, "aws_s3_buckets", prepared.ImportContext.SelectedResults[0].ListType)
 	require.Equal(t, "aws_s3_bucket_logging", prepared.ImportContext.SelectedResults[0].ManagedType)
 	require.Equal(t, "unknown", prepared.Types[0].ManagedTypeSupport, "different-name pairing is not proof of target support")
+	require.Equal(t, map[string]string{provider.Source: "6.18.0"}, prepared.ImportContext.LockedProviders)
 }
 
 func TestImportToolUnknownArgumentFailsWithoutBackend(t *testing.T) {
@@ -677,11 +678,11 @@ func TestImportToolUnknownArgumentFailsWithoutBackend(t *testing.T) {
 	require.Equal(t, "decoding verify_import_plan arguments: import_arguments_invalid", text.Text)
 }
 
-func TestPrepareImportShorthandProviderSourceIsActionableOnMark3labsWire(t *testing.T) {
+func TestPrepareImportInvalidProviderSourceIsActionableOnMark3labsWire(t *testing.T) {
 	request := mcp.CallToolRequest{Params: mcp.CallToolParams{Arguments: map[string]any{
 		"organization_name": "org", "workspace_name": "target", "query_run_id": "qry-example",
 		"selections":       []any{map[string]any{"query_result_marker": "qrm1-" + strings.Repeat("a", 64), "managed_type": "aws_s3_bucket"}},
-		"locked_providers": map[string]any{"hashicorp/aws": "6.18.0"},
+		"locked_providers": map[string]any{"aws": "6.18.0"},
 	}}}
 	result, err := PrepareImport(silentLogger()).Handler(context.Background(), request)
 	require.NoError(t, err)
@@ -690,8 +691,8 @@ func TestPrepareImportShorthandProviderSourceIsActionableOnMark3labsWire(t *test
 	text, ok := mcp.AsTextContent(result.Content[0])
 	require.True(t, ok)
 	require.Contains(t, text.Text, "locked_provider_source_invalid")
-	require.Contains(t, text.Text, `locked_providers key "hashicorp/aws"`)
-	require.Contains(t, text.Text, `"registry.terraform.io/hashicorp/aws"`)
+	require.Contains(t, text.Text, `locked_providers key "aws"`)
+	require.Contains(t, text.Text, "lacks a provider namespace")
 }
 
 func TestVerifyImportStopsOnFailedPlanWhileRunLags(t *testing.T) {
@@ -717,8 +718,8 @@ func TestImportToolDescriptionsAndSchemas(t *testing.T) {
 	require.Contains(t, prepare.InputSchema.Required, "selections")
 	require.Contains(t, prepare.InputSchema.Required, "locked_providers")
 	lockedProvidersSchema := prepare.InputSchema.Properties["locked_providers"].(map[string]any)
-	require.Contains(t, lockedProvidersSchema["description"], "hostname/namespace/type")
-	require.Contains(t, lockedProvidersSchema["description"], "do not abbreviate")
+	require.Contains(t, lockedProvidersSchema["description"], "namespace/type shorthand")
+	require.Contains(t, lockedProvidersSchema["description"], "custom/private sources require hostname/namespace/type")
 	require.Contains(t, prepare.OutputSchema.Properties, "import_context")
 	require.NotContains(t, string(prepare.RawInputSchema), `"maxItems":100`)
 	require.NotContains(t, prepare.Description, "1–100")

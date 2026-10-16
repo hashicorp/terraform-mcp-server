@@ -25,7 +25,10 @@ require (
 	golang.org/x/time v0.16.0
 )
 
-require github.com/google/jsonschema-go v0.4.3
+require (
+	github.com/google/jsonschema-go v0.4.3
+	github.com/hashicorp/terraform-registry-address v0.4.0
+)
 
 require (
 	github.com/cenkalti/backoff/v5 v5.0.3 // indirect
@@ -35,6 +38,7 @@ require (
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/google/pprof v0.0.0-20250630185457-6e76a2b096b5 // indirect
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.30.0 // indirect
+	github.com/hashicorp/terraform-svchost v0.1.1 // indirect
 	github.com/looplab/fsm v1.0.3 // indirect
 	github.com/opentracing/opentracing-go v1.2.0 // indirect
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.2 // indirect

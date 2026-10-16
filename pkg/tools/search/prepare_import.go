@@ -17,6 +17,7 @@ import (
 
 	"github.com/hashicorp/go-tfe"
 	version "github.com/hashicorp/go-version"
+	tfaddr "github.com/hashicorp/terraform-registry-address"
 )
 
 var exactLockedVersion = regexp.MustCompile(`^[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z][0-9A-Za-z.-]*)?$`)
@@ -39,7 +40,7 @@ type PrepareImportInput struct {
 	WorkspaceID      string            `json:"workspace_id,omitempty"`
 	QueryRunID       string            `json:"query_run_id"`
 	Selections       []ImportSelection `json:"selections"`
-	LockedProviders  map[string]string `json:"locked_providers" jsonschema:"Exact versions keyed by the complete quoted hostname/namespace/type source copied from .terraform.lock.hcl, including custom registry hosts; do not abbreviate registry.terraform.io/hashicorp/aws to hashicorp/aws"`
+	LockedProviders  map[string]string `json:"locked_providers" jsonschema:"Exact versions keyed by provider source from .terraform.lock.hcl. Public namespace/type shorthand is accepted; custom/private sources require hostname/namespace/type. Sources are returned in canonical complete form."`
 }
 
 type ImportContextTarget struct {
@@ -61,7 +62,7 @@ type ImportContext struct {
 	QueryRunID      string                         `json:"query_run_id" jsonschema:"QueryRun containing the selected Search results"`
 	Providers       map[string]queryResultProvider `json:"providers" jsonschema:"QueryRun provider source and version by list-resource type"`
 	Target          ImportContextTarget            `json:"target" jsonschema:"Backend-derived target workspace context"`
-	LockedProviders map[string]string              `json:"locked_providers" jsonschema:"Agent-reported exact lock-file versions keyed by the complete hostname/namespace/type source copied from .terraform.lock.hcl; do not abbreviate registry.terraform.io/hashicorp/aws to hashicorp/aws"`
+	LockedProviders map[string]string              `json:"locked_providers" jsonschema:"Agent-reported exact lock-file versions keyed by canonical hostname/namespace/type provider source"`
 	SelectedResults []ImportContextSelection       `json:"selected_results" jsonschema:"Selected QueryRun results carried into Plan verification"`
 	SelectionDigest string                         `json:"selection_digest" jsonschema:"Copy-forward integrity digest for the import context"`
 }
@@ -173,7 +174,7 @@ func ValidatePrepareImportInput(input PrepareImportInput) error {
 	if input.OrganizationName == "" || input.WorkspaceName == "" || input.QueryRunID == "" || len(input.Selections) == 0 || len(input.LockedProviders) == 0 {
 		return searchDiagnosticError(prepareInputInvalidCode)
 	}
-	if err := validateLockedProviders(input.LockedProviders); err != nil {
+	if _, err := canonicalizeLockedProviders(input.LockedProviders); err != nil {
 		return err
 	}
 	seen := map[string]bool{}
@@ -186,29 +187,62 @@ func ValidatePrepareImportInput(input PrepareImportInput) error {
 	return nil
 }
 
-func validateLockedProviders(locked map[string]string) error {
+func canonicalizeLockedProviders(locked map[string]string) (map[string]string, error) {
 	sources := make([]string, 0, len(locked))
 	for source := range locked {
 		sources = append(sources, source)
 	}
 	sort.Strings(sources)
+	canonical := make(map[string]string, len(locked))
 	for _, source := range sources {
 		version := locked[source]
 		if len(source) > 256 {
-			return searchDiagnosticErrorWithDetail(lockedProviderSourceInvalidCode, "locked_providers keys must use the complete hostname/namespace/type address copied from .terraform.lock.hcl")
+			return nil, invalidLockedProviderSource(source)
 		}
-		parts := strings.Split(source, "/")
-		if len(parts) == 2 && importTypePattern.MatchString(parts[0]) && importTypePattern.MatchString(parts[1]) {
-			return searchDiagnosticErrorWithDetail(lockedProviderSourceInvalidCode, fmt.Sprintf("locked_providers key %q is abbreviated; copy the complete hostname/namespace/type address from .terraform.lock.hcl, using %q for this public-registry shorthand", source, "registry.terraform.io/"+source))
+		provider, err := tfaddr.ParseProviderSource(source)
+		if err != nil {
+			return nil, invalidLockedProviderSource(source)
 		}
-		if !providerSourcePattern.MatchString(source) {
-			return searchDiagnosticErrorWithDetail(lockedProviderSourceInvalidCode, "locked_providers keys must use the complete hostname/namespace/type address copied from .terraform.lock.hcl")
+		if !provider.HasKnownNamespace() {
+			detail := "locked_providers provider sources require a namespace; use public namespace/type shorthand or the complete hostname/namespace/type address from .terraform.lock.hcl"
+			if safeProviderSourceForDiagnostic(source) {
+				detail = fmt.Sprintf("locked_providers key %q lacks a provider namespace; use public namespace/type shorthand or the complete hostname/namespace/type address from .terraform.lock.hcl", source)
+			}
+			return nil, searchDiagnosticErrorWithDetail(lockedProviderSourceInvalidCode, detail)
+		}
+		if err := provider.Validate(); err != nil {
+			return nil, invalidLockedProviderSource(source)
 		}
 		if len(version) > 128 || !exactLockedVersion.MatchString(version) {
-			return searchDiagnosticErrorWithDetail(lockVersionsInvalidCode, fmt.Sprintf("locked_providers[%q] must contain the exact selected version from .terraform.lock.hcl, not a constraint", source))
+			return nil, searchDiagnosticErrorWithDetail(lockVersionsInvalidCode, fmt.Sprintf("locked_providers[%q] must contain the exact selected version from .terraform.lock.hcl, not a constraint", provider.String()))
+		}
+		canonicalSource := provider.String()
+		if previous, exists := canonical[canonicalSource]; exists && previous != version {
+			return nil, searchDiagnosticErrorWithDetail(lockVersionsInvalidCode, fmt.Sprintf("multiple locked_providers entries resolve to %q but report different exact versions", canonicalSource))
+		}
+		canonical[canonicalSource] = version
+	}
+	return canonical, nil
+}
+
+func invalidLockedProviderSource(source string) error {
+	detail := "locked_providers key is not a valid provider source; use public namespace/type shorthand or a complete hostname/namespace/type address from .terraform.lock.hcl"
+	if safeProviderSourceForDiagnostic(source) {
+		detail = fmt.Sprintf("locked_providers key %q is not a valid provider source; use public namespace/type shorthand or a complete hostname/namespace/type address from .terraform.lock.hcl", source)
+	}
+	return searchDiagnosticErrorWithDetail(lockedProviderSourceInvalidCode, detail)
+}
+
+func safeProviderSourceForDiagnostic(source string) bool {
+	if source == "" || len(source) > 256 {
+		return false
+	}
+	for _, r := range source {
+		if r < 0x20 || r == 0x7f {
+			return false
 		}
 	}
-	return nil
+	return true
 }
 
 func terraformImportSyntaxVersion(setting string) (old, known bool) {
@@ -276,6 +310,11 @@ func ReadPrepareImport(ctx context.Context, c *tfe.Client, input PrepareImportIn
 	if err := ValidatePrepareImportInput(input); err != nil {
 		return nil, err
 	}
+	canonicalLockedProviders, err := canonicalizeLockedProviders(input.LockedProviders)
+	if err != nil {
+		return nil, err
+	}
+	input.LockedProviders = canonicalLockedProviders
 	prov, err := readQueryDiscoveryProvenance(ctx, c, input.QueryRunID)
 	if err != nil {
 		return nil, err
