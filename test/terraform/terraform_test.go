@@ -11,6 +11,7 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -103,6 +104,9 @@ func newTestingSession(t *testing.T) *mcp.ClientSession {
 	}, nil)
 	if err != nil {
 		t.Fatalf("Failed to create MCP client session: %v", err)
+	}
+	if res := session.InitializeResult(); res != nil && res.ServerInfo != nil {
+		officialServer.Store(res.ServerInfo.Name == officialServerName)
 	}
 
 	return session
@@ -298,7 +302,31 @@ func uploadConfiguration(t *testing.T, client *tfe.Client, workspaceID string, c
 // server. mark3labs wraps get and create responses in a jsonapi
 // envelope the official sdk returns the resource as a flat typed struct.
 func officialEndpoint() bool {
-	return strings.HasSuffix(mcpEndpoint, "/official")
+	return officialServer.Load()
+}
+
+const officialServerName = "terraform-mcp-official"
+
+// officialServer is set by newTestingSession from the initialize response, so
+// the tests know which shape to expect without guessing from the url.
+var officialServer atomic.Bool
+
+// pick returns legacy on mark3labs and official on the official server, for
+// paths where the two shapes differ by more than the jsonapi nesting.
+func pick(legacy, official string) string {
+	if officialEndpoint() {
+		return official
+	}
+	return legacy
+}
+
+// listPath returns the gjson path for the items in a list response. mark3labs
+// returns them under data, the official sdk is under items.
+func listPath() string {
+	if officialEndpoint() {
+		return "items"
+	}
+	return "data"
 }
 
 // idPath returns the gjson path for the resource id in a get or create resp
@@ -326,6 +354,11 @@ var availableTools sync.Map
 // tool that still lives on mark3labs only.
 func requireTool(t *testing.T, s *mcp.ClientSession, name string) {
 	t.Helper()
+	// only skip on official. on mark3labs every tool should be there, so a
+	// missing one is a real regression and should fail.
+	if !officialEndpoint() {
+		return
+	}
 	names, ok := availableTools.Load(s)
 	if !ok {
 		tools, err := s.ListTools(t.Context(), nil)

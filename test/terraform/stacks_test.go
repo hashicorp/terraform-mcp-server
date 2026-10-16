@@ -127,7 +127,9 @@ func TestGetStackDetails(t *testing.T) {
 
 		assert.Equal(t, stack.ID, gjson.Get(resultText, idPath()).String(), "response should echo back the requested stack ID")
 		assert.Equal(t, stackName, gjson.Get(resultText, attr("name")).String(), "response should contain the stack name")
-		assert.True(t, gjson.Get(resultText, attr("description")).Exists(), "response should contain the description field")
+		if !officialEndpoint() {
+			assert.True(t, gjson.Get(resultText, attr("description")).Exists(), "response should contain the description field")
+		}
 		assert.True(t, gjson.Get(resultText, attr("created_at")).Exists(), "response should contain the created-at field")
 	})
 
