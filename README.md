@@ -23,7 +23,8 @@ automation and interaction capabilities for Infrastructure as Code (IaC) develop
 <a href="#installation">Installation</a><br>
 <a href="#usage-with-visual-studio-code">Visual Studio Code</a><br>
 <a href="#usage-with-cursor">Cursor</a><br>
-<a href="#usage-with-claude-desktop--amazon-q-developer--kiro-cli">Claude Desktop, Amazon Q Developer, and Kiro CLI</a><br>
+<a href="#usage-with-claude-desktop--amazon-q-developer">Claude Desktop, Amazon Q Developer</a><br>
+<a href="#usage-with-kiro">Kiro</a><br>
 <a href="#usage-with-claude-code">Claude Code</a><br>
 <a href="#usage-with-codex-cli">Codex CLI</a><br>
 <a href="#usage-with-gemini-extensions">Gemini extensions</a><br>
@@ -337,9 +338,64 @@ Add this to your Cursor config (`~/.cursor/mcp.json`) or via Settings → Cursor
   <img alt="Add terraform MCP server to Cursor" src="https://cursor.com/deeplink/mcp-install-dark.png" height="32" />
 </a>
 
-### Usage with Claude Desktop / Amazon Q Developer / Kiro CLI
+### Usage with Claude Desktop / Amazon Q Developer
 
-More about using MCP server tools in Claude Desktop [user documentation](https://modelcontextprotocol.io/quickstart/user). Read more about using MCP server in [Amazon Q Developer](https://docs.aws.amazon.com/amazonq/latest/qdeveloper-ug/qdev-mcp.html) and [Kiro CLI](https://kiro.dev/docs/mcp/).
+More about using MCP server tools in Claude Desktop [user documentation](https://modelcontextprotocol.io/quickstart/user). Read more about using MCP server in [Amazon Q Developer](https://docs.aws.amazon.com/amazonq/latest/qdeveloper-ug/qdev-mcp.html).
+
+<table>
+<tr><th>Version 0.3.0+ or greater</th><th>Version 0.2.3 or lower</th></tr>
+<tr valign=top>
+<td>
+
+```json
+{
+  "mcpServers": {
+    "terraform": {
+      "command": "docker",
+      "args": [
+        "run",
+        "-i",
+        "--rm",
+        "-e", "TFE_ADDRESS=<<PASTE_TFE_ADDRESS_HERE>>",
+        "-e", "TFE_TOKEN=<<PASTE_TFE_TOKEN_HERE>>",
+        "hashicorp/terraform-mcp-server:1.3.0"
+      ]
+    }
+  }
+}
+```
+
+</td>
+<td>
+
+```json
+{
+  "mcpServers": {
+    "terraform": {
+      "command": "docker",
+      "args": [
+        "run",
+        "-i",
+        "--rm",
+        "hashicorp/terraform-mcp-server:0.2.3"
+      ]
+    }
+  }
+}
+```
+</td>
+</tr>
+</table>
+
+### Usage with Kiro
+
+Kiro supports one-click installation using an install link. Click the button below and confirm the server in the dialog Kiro shows before it writes your configuration.
+
+<a href="https://kiro.dev/launch/mcp/add?name=terraform&config=%7B%22command%22%3A%22docker%22%2C%22args%22%3A%5B%22run%22%2C%22-i%22%2C%22--rm%22%2C%22hashicorp%2Fterraform-mcp-server%22%5D%7D">
+  <img alt="Add to Kiro" src="https://kiro.dev/images/add-to-kiro.svg" height="32" />
+</a>
+
+Alternatively, follow the MCP Servers [documentation](https://kiro.dev/docs/mcp/) and add the server to your Kiro MCP config (JSON):
 
 <table>
 <tr><th>Version 0.3.0+ or greater</th><th>Version 0.2.3 or lower</th></tr>
