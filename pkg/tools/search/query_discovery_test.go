@@ -20,7 +20,7 @@ import (
 )
 
 func TestNonselectableQueryEvidenceCode(t *testing.T) {
-	for _, expected := range []queryEvidenceCode{
+	for _, expected := range []searchDiagnosticCode{
 		queryNotSelectableCode,
 		queryIdentityVersionInvalidCode,
 		queryEvidenceIncompleteCode,
@@ -30,13 +30,13 @@ func TestNonselectableQueryEvidenceCode(t *testing.T) {
 		queryGeneratedBlockConflictCode,
 	} {
 		t.Run(string(expected), func(t *testing.T) {
-			actual, ok := nonselectableQueryEvidenceCode(fmt.Errorf("wrapped: %w", queryEvidenceError(expected)))
+			actual, ok := nonselectableQueryEvidenceCode(fmt.Errorf("wrapped: %w", searchDiagnosticError(expected)))
 			require.True(t, ok)
 			require.Equal(t, expected, actual)
 		})
 	}
 
-	for _, err := range []error{errors.New("query_not_selectable"), queryEvidenceError(queryProviderSourceUnresolvedCode)} {
+	for _, err := range []error{errors.New("query_not_selectable"), searchDiagnosticError(queryProviderSourceUnresolvedCode)} {
 		code, ok := nonselectableQueryEvidenceCode(err)
 		require.False(t, ok)
 		require.Empty(t, code)
