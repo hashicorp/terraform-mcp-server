@@ -174,7 +174,8 @@ func GetQuerySummaryTool() *mcp.Tool {
 }
 
 func GetQuerySummaryFunc(ctx context.Context, req *mcp.CallToolRequest, input QuerySummaryArguments) (*mcp.CallToolResult, *searchlogic.QueryDiscoverySummary, error) {
-	if strings.TrimSpace(input.QueryRunID) == "" {
+	queryRunID := strings.TrimSpace(input.QueryRunID)
+	if queryRunID == "" {
 		return nil, nil, fmt.Errorf("missing required input: query_run_id")
 	}
 	tfeClient, err := client.GetTfeClient(ctx, client.SessionIDFromRequest(req))
@@ -182,7 +183,7 @@ func GetQuerySummaryFunc(ctx context.Context, req *mcp.CallToolRequest, input Qu
 		return nil, nil, fmt.Errorf("failed to get Terraform client; check session configuration")
 	}
 	filter := searchlogic.QueryDiscoveryFilter{ResourceType: input.ResourceType, Address: input.Address, NameContains: input.NameContains}
-	summary, err := searchlogic.ReadQueryDiscoverySummary(ctx, tfeClient, input.QueryRunID, filter)
+	summary, err := searchlogic.ReadQueryDiscoverySummary(ctx, tfeClient, queryRunID, filter)
 	if err != nil {
 		return nil, nil, fmt.Errorf("query summary unavailable: %w", err)
 	}
