@@ -137,6 +137,20 @@ func FormatImportResult(v any) (string, error) {
 	return string(data), nil
 }
 
+// PrepareImportToolOutput performs the transport-independent prepare_import
+// call and returns both representations required by the MCP SDK adapters.
+func PrepareImportToolOutput(ctx context.Context, c *tfe.Client, input PrepareImportInput) (*PrepareImportResult, string, error) {
+	result, err := ReadPrepareImport(ctx, c, input)
+	if err != nil {
+		return nil, "", fmt.Errorf("preparing the import selection: %w", err)
+	}
+	text, err := FormatImportResult(result)
+	if err != nil {
+		return nil, "", fmt.Errorf("formatting the prepare_import result: %w", err)
+	}
+	return result, text, nil
+}
+
 // validNormalizedPrepareImportInput validates an input after its opaque HCP
 // identifiers have been trimmed by ReadPrepareImport.
 func validNormalizedPrepareImportInput(input PrepareImportInput) bool {

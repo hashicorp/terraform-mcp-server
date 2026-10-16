@@ -6,6 +6,7 @@ package search
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -172,6 +173,35 @@ func TestImportArgumentDecodingRetainsStrictStructureChecks(t *testing.T) {
 func TestVerifyImportRejectsDuplicateDetailAddresses(t *testing.T) {
 	_, err := ReadVerifyImportPlan(context.Background(), nil, VerifyImportInput{OrganizationName: "org", WorkspaceName: "target", RunID: "run-example", DetailAddresses: []string{"aws_s3_bucket.sample", "aws_s3_bucket.sample"}})
 	require.EqualError(t, err, "verify_input_invalid")
+}
+
+func TestImportToolOutputsAddContextAndPreserveDiagnosticCodes(t *testing.T) {
+	_, _, err := PrepareImportToolOutput(context.Background(), nil, PrepareImportInput{})
+	require.EqualError(t, err, "preparing the import selection: prepare_input_invalid")
+	code, ok := searchDiagnosticCodeFromError(err)
+	require.True(t, ok)
+	require.Equal(t, prepareInputInvalidCode, code)
+
+	_, _, err = VerifyImportPlanToolOutput(context.Background(), nil, VerifyImportInput{
+		OrganizationName: "org",
+		WorkspaceName:    "target",
+		RunID:            "run-example",
+		DetailAddresses:  []string{"aws_s3_bucket.sample", "aws_s3_bucket.sample"},
+	})
+	require.EqualError(t, err, "verifying the import plan: verify_input_invalid")
+	code, ok = searchDiagnosticCodeFromError(err)
+	require.True(t, ok)
+	require.Equal(t, verifyInputInvalidCode, code)
+}
+
+func TestTerraformClientUnavailableErrorPreservesCodeAndCause(t *testing.T) {
+	cause := errors.New("session is not configured")
+	err := TerraformClientUnavailableError(cause)
+	require.EqualError(t, err, "getting Terraform client: client_unavailable")
+	require.ErrorIs(t, err, cause)
+	code, ok := searchDiagnosticCodeFromError(err)
+	require.True(t, ok)
+	require.Equal(t, clientUnavailableCode, code)
 }
 
 func TestVerifyImportRequestDoesNotAssumeHCPIdentifierFormats(t *testing.T) {

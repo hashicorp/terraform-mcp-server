@@ -226,13 +226,9 @@ func PrepareImportTool() *mcp.Tool {
 func PrepareImportFunc(ctx context.Context, req *mcp.CallToolRequest, input searchlogic.PrepareImportInput) (*mcp.CallToolResult, *searchlogic.PrepareImportResult, error) {
 	c, err := client.GetTfeClient(ctx, client.SessionIDFromRequest(req))
 	if err != nil {
-		return nil, nil, fmt.Errorf("client_unavailable")
+		return nil, nil, searchlogic.TerraformClientUnavailableError(err)
 	}
-	result, err := searchlogic.ReadPrepareImport(ctx, c, input)
-	if err != nil {
-		return nil, nil, err
-	}
-	text, err := searchlogic.FormatImportResult(result)
+	result, text, err := searchlogic.PrepareImportToolOutput(ctx, c, input)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -252,13 +248,9 @@ func VerifyImportPlanTool() *mcp.Tool {
 func VerifyImportPlanFunc(ctx context.Context, req *mcp.CallToolRequest, input searchlogic.VerifyImportInput) (*mcp.CallToolResult, *searchlogic.VerifyImportResult, error) {
 	c, err := client.GetTfeClient(ctx, client.SessionIDFromRequest(req))
 	if err != nil {
-		return nil, nil, fmt.Errorf("client_unavailable")
+		return nil, nil, searchlogic.TerraformClientUnavailableError(err)
 	}
-	result, err := searchlogic.ReadVerifyImportPlan(ctx, c, input)
-	if err != nil {
-		return nil, nil, err
-	}
-	text, err := searchlogic.FormatImportResult(result)
+	result, text, err := searchlogic.VerifyImportPlanToolOutput(ctx, c, input)
 	if err != nil {
 		return nil, nil, err
 	}
