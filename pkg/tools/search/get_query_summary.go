@@ -53,10 +53,6 @@ func getQuerySummaryHandler(ctx context.Context, request mcp.CallToolRequest, lo
 }
 
 func getQuerySummaryWithClient(ctx context.Context, tfeClient *tfe.Client, queryRunID string, filter QueryDiscoveryFilter, logger *log.Logger) (*mcp.CallToolResult, error) {
-	queryRunID = strings.TrimSpace(queryRunID)
-	if queryRunID == "" {
-		return toolErrorf(logger, "get_query_summary", "missing required input: query_run_id")
-	}
 	summary, err := ReadQueryDiscoverySummary(ctx, tfeClient, queryRunID, filter)
 	if err != nil {
 		return toolErrorf(logger, "get_query_summary", "query summary unavailable: %v", err)
@@ -72,7 +68,7 @@ func getQuerySummaryWithClient(ctx context.Context, tfeClient *tfe.Client, query
 // before V1. It now returns only bounded, provenance-checked
 // Search results, not raw log rows or backend diagnostic detail.
 func ReadQuerySummary(ctx context.Context, tfeClient *tfe.Client, queryRunID string) (string, error) {
-	summary, err := ReadQueryDiscoverySummary(ctx, tfeClient, strings.TrimSpace(queryRunID), QueryDiscoveryFilter{})
+	summary, err := ReadQueryDiscoverySummary(ctx, tfeClient, queryRunID, QueryDiscoveryFilter{})
 	if err != nil {
 		return "", err
 	}

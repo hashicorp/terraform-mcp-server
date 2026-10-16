@@ -294,7 +294,8 @@ func nonselectableQueryEvidenceCode(err error) (queryEvidenceCode, bool) {
 // Only a safely observed completed QueryRun with invalid result evidence can
 // return a factual nonselectable result; backend/transport failures are errors.
 func ReadQueryDiscoverySummary(ctx context.Context, c *tfe.Client, queryID string, filter QueryDiscoveryFilter) (*QueryDiscoverySummary, error) {
-	if strings.TrimSpace(queryID) == "" {
+	queryID = strings.TrimSpace(queryID)
+	if queryID == "" {
 		return nil, queryEvidenceError("query_run_id_invalid")
 	}
 	prov, evidence, err := readQueryDiscovery(ctx, c, queryID)
