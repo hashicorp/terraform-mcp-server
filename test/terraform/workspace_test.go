@@ -83,7 +83,7 @@ func TestCreateNoCodeWorkspace(t *testing.T) {
 	require.False(t, result.IsError, "create_no_code_workspace should not return an error: %s", resultText)
 	require.NotEmpty(t, resultText, "create_no_code_workspace result should not be empty")
 
-	workspaceID := gjson.Get(resultText, "data.attributes.workspace_id").String()
+	workspaceID := gjson.Get(resultText, pick("data.attributes.workspace_id", "workspace_id")).String()
 	require.NotEmpty(t, workspaceID, "create_no_code_workspace should return a workspace_id")
 
 	workspace, err := client.Workspaces.ReadByID(t.Context(), workspaceID)
@@ -118,11 +118,9 @@ func TestWorkspaceHappyPath(t *testing.T) {
 	require.False(t, createResult.IsError, "create_workspace should not return an error")
 	require.NotEmpty(t, createResultText, "create_workspace result should not be empty")
 
-	assert.Equal(t, wsName, gjson.Get(createResultText, "data.attributes.workspace.name").String(), "Created workspace name should match the requested name") // Legacy SDK
-	// Official SDK: assert.Equal(t, wsName, gjson.Get(createResultText, "workspace_name").String(), "Created workspace name should match the requested name")
+	assert.Equal(t, wsName, gjson.Get(createResultText, pick("data.attributes.workspace.name", "workspace_name")).String(), "Created workspace name should match the requested name")
 
-	wsID := gjson.Get(createResultText, "data.attributes.workspace_id").String() // Legacy SDK
-	// Official SDK: wsID := gjson.Get(createResultText, "workspace_id").String()
+	wsID := gjson.Get(createResultText, pick("data.attributes.workspace_id", "workspace_id")).String()
 	require.NotEmpty(t, wsID, "create_workspace should return a workspace_id")
 
 	// Ensure the workspace is deleted at the end of the test using the TFE client
@@ -158,12 +156,11 @@ func TestWorkspaceHappyPath(t *testing.T) {
 			"workspace_name":     wsName,
 		})
 		require.False(t, getResult.IsError, "get_workspace_details should not return an error")
-		assert.True(t, gjson.Get(getResultText, "data.attributes.success").Bool(), "Response should indicate success")                                   // Legacy SDK
-		assert.Equal(t, wsName, gjson.Get(getResultText, "data.attributes.workspace.name").String(), "Workspace name should match")                      // Legacy SDK
-		assert.Equal(t, wsID, gjson.Get(getResultText, "data.attributes.workspace_id").String(), "get_workspace_details should return the workspace ID") // Legacy SDK
-		// Official SDK: assert.Equal(t, wsName, gjson.Get(getResultText, "workspace_name").String(), "Workspace name should match")
-		// Official SDK: assert.Equal(t, wsID, gjson.Get(getResultText, "workspace_id").String(), "get_workspace_details should return the workspace ID")
-		// Official SDK: assert.NotEmpty(t, gjson.Get(getResultText, "readme").String(), "get_workspace_details should return README content")
+		if !officialEndpoint() {
+			assert.True(t, gjson.Get(getResultText, "data.attributes.success").Bool(), "Response should indicate success")
+		}
+		assert.Equal(t, wsName, gjson.Get(getResultText, pick("data.attributes.workspace.name", "workspace_name")).String(), "Workspace name should match")
+		assert.Equal(t, wsID, gjson.Get(getResultText, pick("data.attributes.workspace_id", "workspace_id")).String(), "get_workspace_details should return the workspace ID")
 	})
 
 	// Workspace variables tests
@@ -181,8 +178,7 @@ func TestWorkspaceHappyPath(t *testing.T) {
 			"description":        updatedDescription,
 		})
 		require.False(t, updateResult.IsError, "update_workspace should not return an error")
-		assert.Equal(t, updatedDescription, gjson.Get(updateResultText, "data.attributes.description").String(), "Updated description should be reflected in the response") // Legacy SDK
-		// Official SDK: assert.Equal(t, updatedDescription, gjson.Get(updateResultText, "description").String(), "Updated description should be reflected in the response")
+		assert.Equal(t, updatedDescription, gjson.Get(updateResultText, pick("data.attributes.description", "description")).String(), "Updated description should be reflected in the response")
 
 		// Get workspace details after update — confirm the description change persisted
 		getResult, getResultText := callTool(t, s, "get_workspace_details", map[string]any{
@@ -190,19 +186,20 @@ func TestWorkspaceHappyPath(t *testing.T) {
 			"workspace_name":     wsName,
 		})
 		require.False(t, getResult.IsError, "get_workspace_details after update should not return an error")
-		assert.Equal(t, updatedDescription, gjson.Get(getResultText, "data.attributes.workspace.description").String(), "get_workspace_details should reflect the updated description") // Legacy SDK
-		// Official SDK: assert.Equal(t, updatedDescription, gjson.Get(getResultText, "description").String(), "get_workspace_details should reflect the updated description")
+		assert.Equal(t, updatedDescription, gjson.Get(getResultText, pick("data.attributes.workspace.description", "description")).String(), "get_workspace_details should reflect the updated description")
 	})
 
 	// Delete workspace
 	t.Run("Delete workspace", func(t *testing.T) {
-		deleteResult, _ := callTool(t, s, "delete_workspace_safely", map[string]any{
+		deleteResult, deleteResultText := callTool(t, s, "delete_workspace_safely", map[string]any{
 			"workspace_id": wsID,
 		})
 		require.False(t, deleteResult.IsError, "delete_workspace_safely should not return an error")
-		// Official SDK: assert.Equal(t, wsID, gjson.Get(deleteResultText, "workspace_id").String(), "delete_workspace_safely should return the workspace ID")
-		// Official SDK: assert.Equal(t, wsName, gjson.Get(deleteResultText, "workspace_name").String(), "delete_workspace_safely should return the workspace name")
-		// Official SDK: assert.True(t, gjson.Get(deleteResultText, "deleted").Bool(), "delete_workspace_safely should report the workspace as deleted")
+		if officialEndpoint() {
+			assert.Equal(t, wsID, gjson.Get(deleteResultText, "workspace_id").String(), "delete_workspace_safely should return the workspace ID")
+			assert.Equal(t, wsName, gjson.Get(deleteResultText, "workspace_name").String(), "delete_workspace_safely should return the workspace name")
+			assert.True(t, gjson.Get(deleteResultText, "deleted").Bool(), "delete_workspace_safely should report the workspace as deleted")
+		}
 
 		// Get workspace details after delete — confirm it no longer exists
 		getResult, _ := callTool(t, s, "get_workspace_details", map[string]any{
@@ -247,20 +244,20 @@ func runVariablesTest(t *testing.T, s *mcp.ClientSession, wsName string) {
 	t.Helper()
 	t.Run("Workspace variables", func(t *testing.T) {
 		// Create variable
-		createVarResult, _ := callTool(t, s, "create_workspace_variable", map[string]any{
-			"terraform_org_name": tfeOrgName,
-			"workspace_name":     wsName,
-			"key":                "test_key", // Legacy SDK
-			// Official SDK: "variable_key": "test_key",
-			"value": "initial_value", // Legacy SDK
-			// Official SDK: "variable_value": "initial_value",
-			"category":    "terraform",
-			"description": "Created by integration test",
+		createVarResult, createVarResultText := callTool(t, s, "create_workspace_variable", map[string]any{
+			"terraform_org_name":            tfeOrgName,
+			"workspace_name":                wsName,
+			pick("key", "variable_key"):     "test_key",
+			pick("value", "variable_value"): "initial_value",
+			"category":                      "terraform",
+			"description":                   "Created by integration test",
 		})
 		require.False(t, createVarResult.IsError, "create_workspace_variable should not return an error")
-		// Official SDK: assert.Equal(t, "test_key", gjson.Get(createVarResultText, "key").String(), "Created variable key should match")
-		// Official SDK: assert.Equal(t, "initial_value", gjson.Get(createVarResultText, "value").String(), "Created variable value should match")
-		// Official SDK: assert.Equal(t, "terraform", gjson.Get(createVarResultText, "category").String(), "Created variable category should match")
+		if officialEndpoint() {
+			assert.Equal(t, "test_key", gjson.Get(createVarResultText, "key").String(), "created variable key should match")
+			assert.Equal(t, "initial_value", gjson.Get(createVarResultText, "value").String(), "created variable value should match")
+			assert.Equal(t, "terraform", gjson.Get(createVarResultText, "category").String(), "created variable category should match")
+		}
 
 		// List variables — confirm the variable exists and capture its ID
 		listVarsResult, listVarsResultText := callTool(t, s, "list_workspace_variables", map[string]any{
@@ -269,30 +266,26 @@ func runVariablesTest(t *testing.T, s *mcp.ClientSession, wsName string) {
 		})
 
 		require.False(t, listVarsResult.IsError, "list_workspace_variables should not return an error")
-		require.Greater(t, int(gjson.Get(listVarsResultText, "data.#").Int()), 0, "Legacy SDK variable list should not be empty after creation")
-		// Official SDK: require.Greater(t, int(gjson.Get(listVarsResultText, "items.#").Int()), 0, "Variable list should not be empty after creation")
+		require.Greater(t, int(gjson.Get(listVarsResultText, listPath()+".#").Int()), 0, "variable list should not be empty after creation")
 
-		varID := gjson.Get(listVarsResultText, "data.0.id").String() // Legacy SDK
-		// Official SDK: varID := gjson.Get(listVarsResultText, "items.0.id").String()
+		varID := gjson.Get(listVarsResultText, pick("data.0.id", "items.0.id")).String()
 		require.NotEmpty(t, varID, "Variable should have an ID")
-		assert.Equal(t, "test_key", gjson.Get(listVarsResultText, "data.0.attributes.key").String(), "Legacy SDK variable key should match")
-		// Official SDK: assert.Equal(t, "test_key", gjson.Get(listVarsResultText, "items.0.key").String(), "Variable key should match")
-		assert.Equal(t, "initial_value", gjson.Get(listVarsResultText, "data.0.attributes.value").String(), "Legacy SDK variable value should match initial value")
-		// Official SDK: assert.Equal(t, "initial_value", gjson.Get(listVarsResultText, "items.0.value").String(), "Variable value should match initial value")
+		assert.Equal(t, "test_key", gjson.Get(listVarsResultText, pick("data.0.attributes.key", "items.0.key")).String(), "variable key should match")
+		assert.Equal(t, "initial_value", gjson.Get(listVarsResultText, pick("data.0.attributes.value", "items.0.value")).String(), "variable value should match initial value")
 
 		// Update variable
-		updateVarResult, _ := callTool(t, s, "update_workspace_variable", map[string]any{
-			"terraform_org_name": tfeOrgName,
-			"workspace_name":     wsName,
-			"variable_id":        varID,
-			"key":                "test_key", // Legacy SDK
-			// Official SDK: "variable_key": "test_key",
-			"value": "updated_value", // Legacy SDK
-			// Official SDK: "variable_value": "updated_value",
+		updateVarResult, updateVarResultText := callTool(t, s, "update_workspace_variable", map[string]any{
+			"terraform_org_name":            tfeOrgName,
+			"workspace_name":                wsName,
+			"variable_id":                   varID,
+			pick("key", "variable_key"):     "test_key",
+			pick("value", "variable_value"): "updated_value",
 		})
 		require.False(t, updateVarResult.IsError, "update_workspace_variable should not return an error")
-		// Official SDK: assert.Equal(t, "test_key", gjson.Get(updateVarResultText, "key").String(), "Updated variable key should match")
-		// Official SDK: assert.Equal(t, "updated_value", gjson.Get(updateVarResultText, "value").String(), "Updated variable value should match")
+		if officialEndpoint() {
+			assert.Equal(t, "test_key", gjson.Get(updateVarResultText, "key").String(), "updated variable key should match")
+			assert.Equal(t, "updated_value", gjson.Get(updateVarResultText, "value").String(), "updated variable value should match")
+		}
 
 		// List again — confirm the updated value
 		listAfterResult, listAfterResultText := callTool(t, s, "list_workspace_variables", map[string]any{
@@ -300,8 +293,7 @@ func runVariablesTest(t *testing.T, s *mcp.ClientSession, wsName string) {
 			"workspace_name":     wsName,
 		})
 		require.False(t, listAfterResult.IsError, "list_workspace_variables after update should not return an error")
-		assert.Equal(t, "updated_value", gjson.Get(listAfterResultText, "data.0.attributes.value").String(), "Legacy SDK variable value should reflect the update")
-		// Official SDK: assert.Equal(t, "updated_value", gjson.Get(listAfterResultText, "items.0.value").String(), "Variable value should reflect the update")
+		assert.Equal(t, "updated_value", gjson.Get(listAfterResultText, pick("data.0.attributes.value", "items.0.value")).String(), "variable value should reflect the update")
 	})
 }
 
@@ -350,8 +342,7 @@ func TestWorkspaceErrorPaths(t *testing.T) {
 		require.False(t, first.IsError, "first create_workspace should succeed")
 
 		// Register cleanup using the workspace ID returned directly by create_workspace.
-		wsID := gjson.Get(firstText, "data.attributes.workspace_id").String() // Legacy SDK
-		// Official SDK: wsID := gjson.Get(firstText, "workspace_id").String()
+		wsID := gjson.Get(firstText, pick("data.attributes.workspace_id", "workspace_id")).String()
 		require.NotEmpty(t, wsID, "workspace should appear in list after first create")
 		defer client.Workspaces.SafeDeleteByID(t.Context(), wsID)
 
@@ -416,42 +407,38 @@ func TestWorkspaceErrorPaths(t *testing.T) {
 
 	// create_workspace_variable — non-existent workspace
 	t.Run("create_workspace_variable non-existent workspace", func(t *testing.T) {
-		result, _ := callTool(t, s, "create_workspace_variable", map[string]any{
-			"terraform_org_name": tfeOrgName,
-			"workspace_name":     nonExistentWs,
-			"key":                "some_key", // Legacy SDK
-			// Official SDK: "variable_key": "some_key",
-			"value": "some_value", // Legacy SDK
-			// Official SDK: "variable_value": "some_value",
-			// Official SDK: "category": "terraform",
+		result, resultText := callTool(t, s, "create_workspace_variable", map[string]any{
+			"terraform_org_name":            tfeOrgName,
+			"workspace_name":                nonExistentWs,
+			pick("key", "variable_key"):     "some_key",
+			pick("value", "variable_value"): "some_value",
+			"category":                      "terraform",
 		})
 		assert.True(t, result.IsError, "create_workspace_variable with a non-existent workspace should return an error")
+		assert.NotContains(t, resultText, "missing properties", "should fail on the workspace lookup, not schema validation")
 	})
 
 	// create_workspace_variable — non-existent org
 	t.Run("create_workspace_variable non-existent org", func(t *testing.T) {
-		result, _ := callTool(t, s, "create_workspace_variable", map[string]any{
-			"terraform_org_name": nonExistentOrg,
-			"workspace_name":     nonExistentWs,
-			"key":                "some_key", // Legacy SDK
-			// Official SDK: "variable_key": "some_key",
-			"value": "some_value", // Legacy SDK
-			// Official SDK: "variable_value": "some_value",
-			// Official SDK: "category": "terraform",
+		result, resultText := callTool(t, s, "create_workspace_variable", map[string]any{
+			"terraform_org_name":            nonExistentOrg,
+			"workspace_name":                nonExistentWs,
+			pick("key", "variable_key"):     "some_key",
+			pick("value", "variable_value"): "some_value",
+			"category":                      "terraform",
 		})
 		assert.True(t, result.IsError, "create_workspace_variable with a non-existent org should return an error")
+		assert.NotContains(t, resultText, "missing properties", "should fail on the org lookup, not schema validation")
 	})
 
 	// update_workspace_variable — non-existent workspace
 	t.Run("update_workspace_variable non-existent workspace", func(t *testing.T) {
 		result, _ := callTool(t, s, "update_workspace_variable", map[string]any{
-			"terraform_org_name": tfeOrgName,
-			"workspace_name":     nonExistentWs,
-			"variable_id":        nonExistentVarID,
-			"key":                "some_key", // Legacy SDK
-			// Official SDK: "variable_key": "some_key",
-			"value": "some_value", // Legacy SDK
-			// Official SDK: "variable_value": "some_value",
+			"terraform_org_name":            tfeOrgName,
+			"workspace_name":                nonExistentWs,
+			"variable_id":                   nonExistentVarID,
+			pick("key", "variable_key"):     "some_key",
+			pick("value", "variable_value"): "some_value",
 		})
 		assert.True(t, result.IsError, "update_workspace_variable with a non-existent workspace should return an error")
 	})
@@ -467,19 +454,16 @@ func TestWorkspaceErrorPaths(t *testing.T) {
 		})
 		require.False(t, createResult.IsError, "setup create_workspace should succeed")
 
-		wsID := gjson.Get(createText, "data.attributes.workspace_id").String() // Legacy SDK
-		// Official SDK: wsID := gjson.Get(createText, "workspace_id").String()
+		wsID := gjson.Get(createText, pick("data.attributes.workspace_id", "workspace_id")).String()
 		require.NotEmpty(t, wsID)
 		defer client.Workspaces.SafeDeleteByID(t.Context(), wsID)
 
 		result, _ := callTool(t, s, "update_workspace_variable", map[string]any{
-			"terraform_org_name": tfeOrgName,
-			"workspace_name":     wsName,
-			"variable_id":        nonExistentVarID,
-			"key":                "some_key", // Legacy SDK
-			// Official SDK: "variable_key": "some_key",
-			"value": "some_value", // Legacy SDK
-			// Official SDK: "variable_value": "some_value",
+			"terraform_org_name":            tfeOrgName,
+			"workspace_name":                wsName,
+			"variable_id":                   nonExistentVarID,
+			pick("key", "variable_key"):     "some_key",
+			pick("value", "variable_value"): "some_value",
 		})
 		assert.True(t, result.IsError, "update_workspace_variable with a non-existent variable ID should return an error")
 	})

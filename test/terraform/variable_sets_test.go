@@ -65,10 +65,7 @@ func TestVariableSetHappyPath(t *testing.T) {
 		require.False(t, listResult.IsError, "list_variable_sets should not return an error")
 		require.NotEmpty(t, listResultText, "list_variable_sets result should not be empty")
 
-		// The official SDK response uses "items.#". Keep "data.#" while this shared
-		// HCPT test must remain compatible with the legacy JSON:API response.
-		// gjson.Get(listResultText, "items.#") – Update after migration
-		assert.Greater(t, int(gjson.Get(listResultText, "data.#").Int()), 0,
+		assert.Greater(t, int(gjson.Get(listResultText, listPath()+".#").Int()), 0,
 			"list_variable_sets should return at least one item after creation")
 		assert.Contains(t, listResultText, varSetID,
 			"list_variable_sets response should include the created variable set ID")

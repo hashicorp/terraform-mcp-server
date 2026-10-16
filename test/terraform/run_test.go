@@ -47,6 +47,9 @@ func TestRunLifecycle(t *testing.T) {
 
 	s := newTestingSession(t)
 	defer s.Close()
+	// create_run gets called inside a subtest, and skipping there only skips that
+	// subtest, the rest keep going with an empty run id. so check here first.
+	requireTool(t, s, "create_run")
 
 	// Create an isolated remote workspace for the run lifecycle.
 	client := tfeClient(t)
