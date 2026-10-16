@@ -33,7 +33,6 @@ const (
 	queryNotSelectableCode              searchDiagnosticCode = "query_not_selectable"
 	queryOrganizationMismatchCode       searchDiagnosticCode = "query_organization_mismatch"
 	queryOwnershipUnverifiedCode        searchDiagnosticCode = "query_ownership_unverified"
-	queryProvenanceChangedCode          searchDiagnosticCode = "query_provenance_changed"
 	queryProvenanceUnavailableCode      searchDiagnosticCode = "query_provenance_unavailable"
 	queryProviderAmbiguousCode          searchDiagnosticCode = "query_provider_ambiguous"
 	queryProviderSourceUnresolvedCode   searchDiagnosticCode = "query_provider_source_unresolved"

@@ -276,12 +276,9 @@ func ReadPrepareImport(ctx context.Context, c *tfe.Client, input PrepareImportIn
 		return blocked("target_terraform_below_floor", "The target's current Terraform setting is below 1.5; do not silently change it or run a plan.")
 	}
 	// The log is read only after the inexpensive source and target checks.
-	checkedSource, evidence, err := readQueryDiscovery(ctx, c, input.QueryRunID)
+	evidence, err := readQueryEvidence(ctx, c, input.QueryRunID, prov)
 	if err != nil {
 		return nil, err
-	}
-	if checkedSource == nil || checkedSource.WorkspaceID != prov.WorkspaceID || !strings.EqualFold(checkedSource.Organization, prov.Organization) {
-		return nil, searchDiagnosticError(queryProvenanceChangedCode)
 	}
 	byMarker := make(map[string]queryResultEvidence, len(evidence.Results))
 	for _, result := range evidence.Results {

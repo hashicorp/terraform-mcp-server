@@ -198,19 +198,30 @@ func readQueryDiscovery(ctx context.Context, c *tfe.Client, queryID string) (*qu
 	if err != nil {
 		return prov, nil, err
 	}
-	reader, err := c.QueryRuns.Logs(ctx, queryID)
-	if err != nil {
-		return prov, nil, searchDiagnosticError(queryLogUnavailableCode)
-	}
-	data, err := io.ReadAll(reader)
-	if err != nil {
-		return prov, nil, searchDiagnosticError(queryLogUnavailableCode)
-	}
-	evidence, err := parseQueryEvidence(queryID, data, prov.Providers)
+	evidence, err := readQueryEvidence(ctx, c, queryID, prov)
 	if err != nil {
 		return prov, nil, err
 	}
 	return prov, evidence, nil
+}
+
+// readQueryEvidence reads and validates a QueryRun log using already-verified
+// backend provenance. Callers that have resolved provenance should reuse it
+// rather than repeat the QueryRun, workspace, and stored-query reads.
+func readQueryEvidence(ctx context.Context, c *tfe.Client, queryID string, prov *queryDiscoveryProvenance) (*queryEvidence, error) {
+	reader, err := c.QueryRuns.Logs(ctx, queryID)
+	if err != nil {
+		return nil, searchDiagnosticError(queryLogUnavailableCode)
+	}
+	data, err := io.ReadAll(reader)
+	if err != nil {
+		return nil, searchDiagnosticError(queryLogUnavailableCode)
+	}
+	evidence, err := parseQueryEvidence(queryID, data, prov.Providers)
+	if err != nil {
+		return nil, err
+	}
+	return evidence, nil
 }
 
 func queryDiscoveryTags(value map[string]any) map[string]any {
