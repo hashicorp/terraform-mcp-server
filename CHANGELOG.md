@@ -1,3 +1,9 @@
+# Unreleased
+
+IMPROVEMENTS
+
+* Add an [Agent Plugins](https://agent-plugins.org) manifest in the `power/` directory (`power/plugin.json` and `power/mcp.json`), so clients that support the format, such as Kiro, can install the server as a power.
+
 # 1.4.2
 
 IMPROVEMENTS

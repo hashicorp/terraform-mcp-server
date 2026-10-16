@@ -1,0 +1,17 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/mcp.schema.json",
+  "mcpServers": {
+    "terraform-mcp": {
+      "type": "stdio",
+      "command": "docker",
+      "args": [
+        "run",
+        "-i",
+        "--rm",
+        "-e", "TFE_ADDRESS",
+        "-e", "TFE_TOKEN",
+        "hashicorp/terraform-mcp-server:1.3.0"
+      ]
+    }
+  }
+}
