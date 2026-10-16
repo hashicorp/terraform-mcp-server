@@ -137,8 +137,10 @@ func FormatImportResult(v any) (string, error) {
 	return string(data), nil
 }
 
-func validImportInput(input PrepareImportInput) bool {
-	if strings.TrimSpace(input.OrganizationName) == "" || strings.TrimSpace(input.WorkspaceName) == "" || strings.TrimSpace(input.QueryRunID) == "" || len(input.Selections) == 0 || len(input.LockedProviders) == 0 {
+// validNormalizedPrepareImportInput validates an input after its opaque HCP
+// identifiers have been trimmed by ReadPrepareImport.
+func validNormalizedPrepareImportInput(input PrepareImportInput) bool {
+	if input.OrganizationName == "" || input.WorkspaceName == "" || input.QueryRunID == "" || len(input.Selections) == 0 || len(input.LockedProviders) == 0 {
 		return false
 	}
 	for source, version := range input.LockedProviders {
@@ -221,7 +223,7 @@ func ReadPrepareImport(ctx context.Context, c *tfe.Client, input PrepareImportIn
 	input.WorkspaceName = strings.TrimSpace(input.WorkspaceName)
 	input.WorkspaceID = strings.TrimSpace(input.WorkspaceID)
 	input.QueryRunID = strings.TrimSpace(input.QueryRunID)
-	if !validImportInput(input) {
+	if !validNormalizedPrepareImportInput(input) {
 		return nil, queryEvidenceError("prepare_input_invalid")
 	}
 	prov, err := readQueryDiscoveryProvenance(ctx, c, input.QueryRunID)
@@ -238,7 +240,7 @@ func ReadPrepareImport(ctx context.Context, c *tfe.Client, input PrepareImportIn
 	if w.ID == "" || w.Name != input.WorkspaceName || w.Organization == nil || !strings.EqualFold(w.Organization.Name, prov.Organization) {
 		return nil, queryEvidenceError("target_ownership_unverified")
 	}
-	if strings.TrimSpace(w.ID) == "" || strings.TrimSpace(prov.WorkspaceID) == "" || strings.TrimSpace(prov.WorkspaceName) == "" {
+	if prov.WorkspaceID == "" || prov.WorkspaceName == "" {
 		return nil, queryEvidenceError("target_evidence_invalid")
 	}
 	out := &PrepareImportResult{Status: "blocked", Diagnostics: []string{}, QueryRunID: input.QueryRunID,

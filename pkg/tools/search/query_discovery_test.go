@@ -131,6 +131,31 @@ func TestQueryProvenanceChecksBackendAssociations(t *testing.T) {
 	require.Equal(t, "registry.terraform.io/hashicorp/aws", prov.Providers["aws_s3_buckets"].Source)
 }
 
+func TestQueryProvenanceRejectsWhitespaceOnlyRawRelationshipID(t *testing.T) {
+	var noCodeQueryReads int
+	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/vnd.api+json")
+		switch r.URL.Path {
+		case "/api/v2/ping":
+			w.WriteHeader(http.StatusOK)
+		case "/api/v2/queries/qry-test":
+			_, _ = fmt.Fprint(w, `{"data":{"type":"queries","id":"qry-test","attributes":{"status":"finished"},"relationships":{"workspace":{"data":{"type":"workspaces","id":"ws-test"}},"no-code-query":{"data":{"type":"no-code-queries","id":" "}}}}}`)
+		case "/api/v2/workspaces/ws-test":
+			_, _ = fmt.Fprint(w, `{"data":{"type":"workspaces","id":"ws-test","attributes":{"name":"ws"},"relationships":{"organization":{"data":{"type":"organizations","id":"org"}}}}}`)
+		default:
+			noCodeQueryReads++
+			http.NotFound(w, r)
+		}
+	}))
+	defer backend.Close()
+	client, err := tfe.NewClient(&tfe.Config{Address: backend.URL, Token: "test-token", HTTPClient: backend.Client()})
+	require.NoError(t, err)
+
+	_, err = readQueryDiscoveryProvenance(context.Background(), client, "qry-test")
+	require.EqualError(t, err, "query_provenance_unavailable")
+	require.Zero(t, noCodeQueryReads)
+}
+
 func TestLegacyQuerySummaryProjectsBoundedSelectableResults(t *testing.T) {
 	var backend *httptest.Server
 	backend = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

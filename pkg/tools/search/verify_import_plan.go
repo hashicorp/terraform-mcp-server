@@ -183,9 +183,10 @@ func ReadVerifyImportPlan(ctx context.Context, c *tfe.Client, input VerifyImport
 	return readVerifyImportPlanWithConfig(ctx, c, input, defaultVerifyImportPollConfig())
 }
 
-// validateVerifyImportRequest validates caller input and indexes requested detail addresses.
-func validateVerifyImportRequest(input VerifyImportInput, config verifyImportPollConfig) (map[string]bool, error) {
-	if strings.TrimSpace(input.OrganizationName) == "" || strings.TrimSpace(input.WorkspaceName) == "" || strings.TrimSpace(input.RunID) == "" {
+// validateNormalizedVerifyImportRequest validates caller input after its opaque
+// HCP identifiers have been trimmed and indexes requested Terraform addresses.
+func validateNormalizedVerifyImportRequest(input VerifyImportInput, config verifyImportPollConfig) (map[string]bool, error) {
+	if input.OrganizationName == "" || input.WorkspaceName == "" || input.RunID == "" {
 		return nil, queryEvidenceError("verify_input_invalid")
 	}
 	if config.wait <= 0 || config.interval <= 0 {
@@ -204,7 +205,7 @@ func validateVerifyImportRequest(input VerifyImportInput, config verifyImportPol
 // readVerifyImportTarget resolves and validates the user-confirmed target workspace.
 func readVerifyImportTarget(ctx context.Context, c *tfe.Client, input VerifyImportInput) (*tfe.Workspace, error) {
 	w, err := c.Workspaces.Read(ctx, input.OrganizationName, input.WorkspaceName)
-	if err != nil || w == nil || strings.TrimSpace(w.ID) == "" || w.Name != input.WorkspaceName || w.Organization == nil || !strings.EqualFold(w.Organization.Name, input.OrganizationName) {
+	if err != nil || w == nil || w.ID == "" || w.Name != input.WorkspaceName || w.Organization == nil || !strings.EqualFold(w.Organization.Name, input.OrganizationName) {
 		return nil, queryEvidenceError("target_read_unavailable")
 	}
 	return w, nil
@@ -218,6 +219,9 @@ func stopVerifyImport(out *VerifyImportResult, status, code, guidance string) (*
 
 // observeImportRun reads the exact Run and verifies its target and plan-only properties.
 func observeImportRun(ctx context.Context, c *tfe.Client, input VerifyImportInput, target *tfe.Workspace, out *VerifyImportResult) (*importRunEvidence, *VerifyImportResult, error) {
+	// Keep the raw projection until go-tfe can preserve attribute presence and
+	// JSON:API relationship types; tfe.Run currently collapses missing booleans
+	// to false and does not expose relationship resource types.
 	raw, err := readQueryBackendJSON(ctx, c, "runs/"+url.PathEscape(input.RunID))
 	if err != nil {
 		return nil, nil, err
@@ -271,7 +275,7 @@ func readAssociatedImportPlan(ctx context.Context, c *tfe.Client, out *VerifyImp
 func verifyFinishedImportRun(ctx context.Context, c *tfe.Client, input VerifyImportInput, target *tfe.Workspace, out *VerifyImportResult, run *importRunEvidence, details map[string]bool) (*VerifyImportResult, error) {
 	cv := run.Data.Relationships.ConfigurationVersion.Data
 	planRelation := run.Data.Relationships.Plan.Data
-	if cv == nil || cv.ID == "" || cv.Type != "configuration-versions" || planRelation == nil || planRelation.ID == "" || planRelation.Type != "plans" {
+	if cv == nil || strings.TrimSpace(cv.ID) == "" || cv.Type != "configuration-versions" || planRelation == nil || strings.TrimSpace(planRelation.ID) == "" || planRelation.Type != "plans" {
 		return stopVerifyImport(out, "blocked", "run_plan_unassociated", "The terminal Run lacks an observed Plan or configuration-version association; do not guess an ID or classify a Plan.")
 	}
 	plan, result, err := readAssociatedImportPlan(ctx, c, out, planRelation.ID)
@@ -309,7 +313,7 @@ func inspectPendingImportPlan(ctx context.Context, c *tfe.Client, out *VerifyImp
 	if planRelation == nil {
 		return nil, nil
 	}
-	if planRelation.Type != "plans" || planRelation.ID == "" {
+	if planRelation.Type != "plans" || strings.TrimSpace(planRelation.ID) == "" {
 		return stopVerifyImport(out, "blocked", "run_plan_unassociated", "The Run has an invalid Plan relationship. Inspect it in HCP Terraform.")
 	}
 	plan, result, err := readAssociatedImportPlan(ctx, c, out, planRelation.ID)
@@ -331,7 +335,7 @@ func readVerifyImportPlanWithConfig(ctx context.Context, c *tfe.Client, input Ve
 	input.OrganizationName = strings.TrimSpace(input.OrganizationName)
 	input.WorkspaceName = strings.TrimSpace(input.WorkspaceName)
 	input.RunID = strings.TrimSpace(input.RunID)
-	details, err := validateVerifyImportRequest(input, config)
+	details, err := validateNormalizedVerifyImportRequest(input, config)
 	if err != nil {
 		return nil, err
 	}

@@ -33,12 +33,45 @@ func TestPrepareImportInputsRequireExactLockAndExplicitSelection(t *testing.T) {
 	input := PrepareImportInput{OrganizationName: "org", WorkspaceName: "target", QueryRunID: "qry-example", LockedProviders: map[string]string{"registry.terraform.io/hashicorp/aws": "6.66.0"}}
 	importContext, _, _ := importTestImportContext(t)
 	input.Selections = []ImportSelection{{QueryResultMarker: importContext.SelectedResults[0].QueryResultMarker, ManagedType: "aws_s3_bucket"}}
-	require.True(t, validImportInput(input))
+	require.True(t, validNormalizedPrepareImportInput(input))
 	input.LockedProviders["registry.terraform.io/hashicorp/aws"] = ">= 6.0"
-	require.False(t, validImportInput(input))
+	require.False(t, validNormalizedPrepareImportInput(input))
 	input.LockedProviders["registry.terraform.io/hashicorp/aws"] = "6.66.0"
 	input.Selections = append(input.Selections, input.Selections[0])
-	require.False(t, validImportInput(input))
+	require.False(t, validNormalizedPrepareImportInput(input))
+}
+
+func TestPrepareImportPreservesTerraformDomainValidation(t *testing.T) {
+	validMarker := "qrm1-" + strings.Repeat("a", 64)
+	for _, tc := range []struct {
+		name           string
+		providerSource string
+		marker         string
+		managedType    string
+	}{
+		{name: "invalid provider source", providerSource: "hashicorp/aws", marker: validMarker, managedType: "aws_s3_bucket"},
+		{name: "invalid query result marker", providerSource: "registry.terraform.io/hashicorp/aws", marker: "opaque-result", managedType: "aws_s3_bucket"},
+		{name: "invalid managed type", providerSource: "registry.terraform.io/hashicorp/aws", marker: validMarker, managedType: "aws-s3-bucket"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			input := PrepareImportInput{
+				OrganizationName: "org",
+				WorkspaceName:    "target",
+				QueryRunID:       "opaque query run id",
+				Selections:       []ImportSelection{{QueryResultMarker: tc.marker, ManagedType: tc.managedType}},
+				LockedProviders:  map[string]string{tc.providerSource: "6.66.0"},
+			}
+			require.False(t, validNormalizedPrepareImportInput(input))
+		})
+	}
+
+	_, err := validateNormalizedVerifyImportRequest(VerifyImportInput{
+		OrganizationName: "org",
+		WorkspaceName:    "target",
+		RunID:            "opaque run id",
+		DetailAddresses:  []string{"aws_s3_bucket.invalid?address"},
+	}, defaultVerifyImportPollConfig())
+	require.EqualError(t, err, "verify_input_invalid")
 }
 
 func TestVerifyImportContextAndBindingIntegrity(t *testing.T) {
@@ -92,7 +125,7 @@ func TestImportInputsAndResultsHaveNoApplicationSizeLimit(t *testing.T) {
 		Selections:       selections,
 		LockedProviders:  map[string]string{"registry.terraform.io/hashicorp/aws": "6.66.0"},
 	}
-	require.True(t, validImportInput(input))
+	require.True(t, validNormalizedPrepareImportInput(input))
 
 	text, err := FormatImportResult(PrepareImportResult{Status: "prepared", NextAction: strings.Repeat("x", 256<<10)})
 	require.NoError(t, err)
@@ -108,7 +141,7 @@ func TestImportInputDoesNotAssumeHCPIdentifierFormats(t *testing.T) {
 		Selections:       []ImportSelection{{QueryResultMarker: "qrm1-" + strings.Repeat("a", 64), ManagedType: "aws_s3_bucket"}},
 		LockedProviders:  map[string]string{"registry.terraform.io/hashicorp/aws": "6.66.0"},
 	}
-	require.True(t, validImportInput(input))
+	require.True(t, validNormalizedPrepareImportInput(input))
 }
 
 func TestImportArgumentDecodingHasNoApplicationSizeOrDepthLimit(t *testing.T) {
@@ -142,7 +175,7 @@ func TestVerifyImportRejectsDuplicateDetailAddresses(t *testing.T) {
 }
 
 func TestVerifyImportRequestDoesNotAssumeHCPIdentifierFormats(t *testing.T) {
-	details, err := validateVerifyImportRequest(VerifyImportInput{
+	details, err := validateNormalizedVerifyImportRequest(VerifyImportInput{
 		OrganizationName: "organization.example",
 		WorkspaceName:    "workspace/name",
 		RunID:            "opaque run id",
