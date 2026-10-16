@@ -99,6 +99,18 @@ func TestImportInputsAndResultsHaveNoApplicationSizeLimit(t *testing.T) {
 	require.Contains(t, text, `"status":"prepared"`)
 }
 
+func TestImportInputDoesNotAssumeHCPIdentifierFormats(t *testing.T) {
+	input := PrepareImportInput{
+		OrganizationName: "organization.example",
+		WorkspaceName:    "workspace/name",
+		WorkspaceID:      "opaque workspace id",
+		QueryRunID:       "opaque query run id",
+		Selections:       []ImportSelection{{QueryResultMarker: "qrm1-" + strings.Repeat("a", 64), ManagedType: "aws_s3_bucket"}},
+		LockedProviders:  map[string]string{"registry.terraform.io/hashicorp/aws": "6.66.0"},
+	}
+	require.True(t, validImportInput(input))
+}
+
 func TestImportArgumentDecodingHasNoApplicationSizeOrDepthLimit(t *testing.T) {
 	type arguments struct {
 		Value any `json:"value"`
@@ -127,6 +139,16 @@ func TestImportArgumentDecodingRetainsStrictStructureChecks(t *testing.T) {
 func TestVerifyImportRejectsDuplicateDetailAddresses(t *testing.T) {
 	_, err := ReadVerifyImportPlan(context.Background(), nil, VerifyImportInput{OrganizationName: "org", WorkspaceName: "target", RunID: "run-example", DetailAddresses: []string{"aws_s3_bucket.sample", "aws_s3_bucket.sample"}})
 	require.EqualError(t, err, "verify_input_invalid")
+}
+
+func TestVerifyImportRequestDoesNotAssumeHCPIdentifierFormats(t *testing.T) {
+	details, err := validateVerifyImportRequest(VerifyImportInput{
+		OrganizationName: "organization.example",
+		WorkspaceName:    "workspace/name",
+		RunID:            "opaque run id",
+	}, defaultVerifyImportPollConfig())
+	require.NoError(t, err)
+	require.Empty(t, details)
 }
 
 func TestVerifyImportDetailAddressesHaveNoApplicationCountLimit(t *testing.T) {

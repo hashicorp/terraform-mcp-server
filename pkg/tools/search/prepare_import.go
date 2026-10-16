@@ -138,7 +138,7 @@ func FormatImportResult(v any) (string, error) {
 }
 
 func validImportInput(input PrepareImportInput) bool {
-	if !validImportWorkspaceName(input.OrganizationName) || !validImportWorkspaceName(input.WorkspaceName) || input.WorkspaceID != "" && !validImportWorkspaceName(input.WorkspaceID) || strings.TrimSpace(input.QueryRunID) == "" || len(input.Selections) == 0 || len(input.LockedProviders) == 0 {
+	if strings.TrimSpace(input.OrganizationName) == "" || strings.TrimSpace(input.WorkspaceName) == "" || strings.TrimSpace(input.QueryRunID) == "" || len(input.Selections) == 0 || len(input.LockedProviders) == 0 {
 		return false
 	}
 	for source, version := range input.LockedProviders {
@@ -155,10 +155,6 @@ func validImportInput(input PrepareImportInput) bool {
 	}
 	return true
 }
-
-var importWorkspaceNamePattern = regexp.MustCompile(`^[a-zA-Z0-9_-]{1,256}$`)
-
-func validImportWorkspaceName(name string) bool { return importWorkspaceNamePattern.MatchString(name) }
 
 func terraformImportSyntaxVersion(setting string) (old, known bool) {
 	return terraformVersionBefore(setting, minimumImportBlockVersion)
@@ -221,6 +217,10 @@ func readHistoricalSchema(ctx context.Context, c *tfe.Client, workspaceID string
 }
 
 func ReadPrepareImport(ctx context.Context, c *tfe.Client, input PrepareImportInput) (*PrepareImportResult, error) {
+	input.OrganizationName = strings.TrimSpace(input.OrganizationName)
+	input.WorkspaceName = strings.TrimSpace(input.WorkspaceName)
+	input.WorkspaceID = strings.TrimSpace(input.WorkspaceID)
+	input.QueryRunID = strings.TrimSpace(input.QueryRunID)
 	if !validImportInput(input) {
 		return nil, queryEvidenceError("prepare_input_invalid")
 	}
@@ -238,7 +238,7 @@ func ReadPrepareImport(ctx context.Context, c *tfe.Client, input PrepareImportIn
 	if w.ID == "" || w.Name != input.WorkspaceName || w.Organization == nil || !strings.EqualFold(w.Organization.Name, prov.Organization) {
 		return nil, queryEvidenceError("target_ownership_unverified")
 	}
-	if !validImportWorkspaceName(w.ID) || !validImportWorkspaceName(prov.WorkspaceID) || !validImportWorkspaceName(prov.WorkspaceName) {
+	if strings.TrimSpace(w.ID) == "" || strings.TrimSpace(prov.WorkspaceID) == "" || strings.TrimSpace(prov.WorkspaceName) == "" {
 		return nil, queryEvidenceError("target_evidence_invalid")
 	}
 	out := &PrepareImportResult{Status: "blocked", Diagnostics: []string{}, QueryRunID: input.QueryRunID,

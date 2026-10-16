@@ -206,8 +206,8 @@ func TestImportRunUIURLOnlyForKnownHTTPSBrowserHosts(t *testing.T) {
 	for _, tc := range []struct {
 		base, org, workspace, runID, want string
 	}{
-		{"https://app.terraform.io/api/v2/", "my-org", "my_workspace", "run-example", "https://app.terraform.io/app/my-org/my_workspace/runs/run-example"},
-		{"https://app.staging.terraform.io/api/v2/", "my-org", "my_workspace", "run-example", "https://app.staging.terraform.io/app/my-org/my_workspace/runs/run-example"},
+		{"https://app.terraform.io/api/v2/", "my-org", "my_workspace", "run-example", "https://app.terraform.io/app/my-org/workspaces/my_workspace/runs/run-example"},
+		{"https://app.staging.terraform.io/api/v2/", "my-org", "my_workspace", "run-example", "https://app.staging.terraform.io/app/my-org/workspaces/my_workspace/runs/run-example"},
 		{"http://app.terraform.io/api/v2/", "my-org", "my_workspace", "run-example", ""},
 		{"https://user:secret@app.terraform.io/api/v2/", "my-org", "my_workspace", "run-example", ""},
 		{"https://app.terraform.io/api/v2/?token=secret", "my-org", "my_workspace", "run-example", ""},
@@ -215,8 +215,9 @@ func TestImportRunUIURLOnlyForKnownHTTPSBrowserHosts(t *testing.T) {
 		{"https://app.terraform.io:8443/api/v2/", "my-org", "my_workspace", "run-example", ""},
 		{"https://api.internal.example/api/v2/", "my-org", "my_workspace", "run-example", ""},
 		{"https://app.terraform.io.evil.example/api/v2/", "my-org", "my_workspace", "run-example", ""},
-		{"https://app.terraform.io/api/v2/", "bad/org", "my_workspace", "run-example", ""},
-		{"https://app.terraform.io/api/v2/", "my-org", "my_workspace", "run-bad?token=secret", ""},
+		{"https://app.terraform.io/api/v2/", "bad/org", "my_workspace", "run-example", "https://app.terraform.io/app/bad%2Forg/workspaces/my_workspace/runs/run-example"},
+		{"https://app.terraform.io/api/v2/", "my-org", "my_workspace", "opaque?run", "https://app.terraform.io/app/my-org/workspaces/my_workspace/runs/opaque%3Frun"},
+		{"https://app.terraform.io/api/v2/", "", "my_workspace", "opaque-run", ""},
 	} {
 		t.Run(tc.base+"/"+tc.org+"/"+tc.runID, func(t *testing.T) {
 			base, err := url.Parse(tc.base)
@@ -239,10 +240,10 @@ func TestVerifyImportPlanReturnsKnownHostRunUIURLAfterAssociationCheck(t *testin
 	require.NoError(t, err)
 	require.Equal(t, "plan_available", result.Status)
 	require.Equal(t, "plan-example", result.PlanID)
-	require.Equal(t, "https://app.staging.terraform.io/app/org/target/runs/run-example", result.RunUIURL)
+	require.Equal(t, "https://app.staging.terraform.io/app/org/workspaces/target/runs/run-example", result.RunUIURL)
 	encoded, err := json.Marshal(result)
 	require.NoError(t, err)
-	require.Contains(t, string(encoded), `"run_ui_url":"https://app.staging.terraform.io/app/org/target/runs/run-example"`)
+	require.Contains(t, string(encoded), `"run_ui_url":"https://app.staging.terraform.io/app/org/workspaces/target/runs/run-example"`)
 }
 
 func TestPrepareImportKeepsSameNameSearchListAndManagedType(t *testing.T) {
