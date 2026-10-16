@@ -54,17 +54,13 @@ func PrepareImport(logger *log.Logger) server.ServerTool {
 		Handler: func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			var input PrepareImportInput
 			if err := decodeImportArguments(request.GetRawArguments(), &input); err != nil {
-				return toolErrorf(logger, "prepare_import", "%v", err)
+				return toolErrorf(logger, "prepare_import", "decoding prepare_import arguments: %v", err)
 			}
 			c, err := client.GetTfeClientFromContext(ctx, logger)
 			if err != nil {
-				return toolErrorf(logger, "prepare_import", "client_unavailable")
+				return toolErrorf(logger, "prepare_import", "%v", TerraformClientUnavailableError(err))
 			}
-			result, err := ReadPrepareImport(ctx, c, input)
-			if err != nil {
-				return toolErrorf(logger, "prepare_import", "%v", err)
-			}
-			text, err := FormatImportResult(result)
+			result, text, err := PrepareImportToolOutput(ctx, c, input)
 			if err != nil {
 				return toolErrorf(logger, "prepare_import", "%v", err)
 			}
@@ -80,17 +76,13 @@ func VerifyImportPlan(logger *log.Logger) server.ServerTool {
 		Handler: func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			var input VerifyImportInput
 			if err := decodeImportArguments(request.GetRawArguments(), &input); err != nil {
-				return toolErrorf(logger, "verify_import_plan", "%v", err)
+				return toolErrorf(logger, "verify_import_plan", "decoding verify_import_plan arguments: %v", err)
 			}
 			c, err := client.GetTfeClientFromContext(ctx, logger)
 			if err != nil {
-				return toolErrorf(logger, "verify_import_plan", "client_unavailable")
+				return toolErrorf(logger, "verify_import_plan", "%v", TerraformClientUnavailableError(err))
 			}
-			result, err := ReadVerifyImportPlan(ctx, c, input)
-			if err != nil {
-				return toolErrorf(logger, "verify_import_plan", "%v", err)
-			}
-			text, err := FormatImportResult(result)
+			result, text, err := VerifyImportPlanToolOutput(ctx, c, input)
 			if err != nil {
 				return toolErrorf(logger, "verify_import_plan", "%v", err)
 			}

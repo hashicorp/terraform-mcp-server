@@ -3,10 +3,18 @@
 
 package search
 
-import "errors"
+import (
+	"errors"
+	"fmt"
+)
 
-// searchDiagnosticCode identifies a stable, value-free Search tool failure.
+// searchDiagnosticCode identifies a stable Search tool failure category.
 type searchDiagnosticCode string
+
+// Shared tool infrastructure diagnostics.
+const (
+	clientUnavailableCode searchDiagnosticCode = "client_unavailable"
+)
 
 // Query evidence and discovery diagnostics.
 const (
@@ -69,14 +77,31 @@ const (
 )
 
 type searchDiagnosticFailure struct {
-	code searchDiagnosticCode
+	code  searchDiagnosticCode
+	cause error
 }
 
-func (e *searchDiagnosticFailure) Error() string { return string(e.code) }
+func (e *searchDiagnosticFailure) Error() string {
+	return string(e.code)
+}
+
+func (e *searchDiagnosticFailure) Unwrap() error { return e.cause }
 
 // searchDiagnosticError creates a value-free error identified by a stable code.
 func searchDiagnosticError(code searchDiagnosticCode) error {
 	return &searchDiagnosticFailure{code: code}
+}
+
+// searchDiagnosticErrorWithCause retains an operational cause for Go error
+// inspection without adding backend details to the value-free diagnostic.
+func searchDiagnosticErrorWithCause(code searchDiagnosticCode, cause error) error {
+	return &searchDiagnosticFailure{code: code, cause: cause}
+}
+
+// TerraformClientUnavailableError gives both MCP SDK adapters the same
+// contextual, classifiable error for client acquisition failures.
+func TerraformClientUnavailableError(err error) error {
+	return fmt.Errorf("getting Terraform client: %w", searchDiagnosticErrorWithCause(clientUnavailableCode, err))
 }
 
 // searchDiagnosticCodeFromError extracts a diagnostic code through wrapped errors.

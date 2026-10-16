@@ -633,6 +633,9 @@ func TestImportToolUnknownArgumentFailsWithoutBackend(t *testing.T) {
 	result, err := VerifyImportPlan(silentLogger()).Handler(context.Background(), request)
 	require.NoError(t, err)
 	require.True(t, result.IsError)
+	text, ok := mcp.AsTextContent(result.Content[0])
+	require.True(t, ok)
+	require.Equal(t, "decoding verify_import_plan arguments: import_arguments_invalid", text.Text)
 }
 
 func TestVerifyImportStopsOnFailedPlanWhileRunLags(t *testing.T) {

@@ -183,6 +183,21 @@ func ReadVerifyImportPlan(ctx context.Context, c *tfe.Client, input VerifyImport
 	return readVerifyImportPlanWithConfig(ctx, c, input, defaultVerifyImportPollConfig())
 }
 
+// VerifyImportPlanToolOutput performs the transport-independent
+// verify_import_plan call and returns both representations required by the MCP
+// SDK adapters.
+func VerifyImportPlanToolOutput(ctx context.Context, c *tfe.Client, input VerifyImportInput) (*VerifyImportResult, string, error) {
+	result, err := ReadVerifyImportPlan(ctx, c, input)
+	if err != nil {
+		return nil, "", fmt.Errorf("verifying the import plan: %w", err)
+	}
+	text, err := FormatImportResult(result)
+	if err != nil {
+		return nil, "", fmt.Errorf("formatting the verify_import_plan result: %w", err)
+	}
+	return result, text, nil
+}
+
 // validateNormalizedVerifyImportRequest validates caller input after its opaque
 // HCP identifiers have been trimmed and indexes requested Terraform addresses.
 func validateNormalizedVerifyImportRequest(input VerifyImportInput, config verifyImportPollConfig) (map[string]bool, error) {
