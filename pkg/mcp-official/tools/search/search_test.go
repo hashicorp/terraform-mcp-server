@@ -45,23 +45,23 @@ func TestOfficialSearchArgumentsAndValidation(t *testing.T) {
 	require.ErrorContains(t, err, "invalid query_configuration")
 }
 
-func TestOfficialPrepareImportRejectsAbbreviatedProviderBeforeClientUse(t *testing.T) {
+func TestOfficialPrepareImportRejectsInvalidProviderBeforeClientUse(t *testing.T) {
 	input := searchlogic.PrepareImportInput{
 		OrganizationName: "org", WorkspaceName: "target", QueryRunID: "qry-example",
 		Selections:      []searchlogic.ImportSelection{{QueryResultMarker: "qrm1-" + strings.Repeat("a", 64), ManagedType: "aws_s3_bucket"}},
-		LockedProviders: map[string]string{"hashicorp/aws": "6.18.0"},
+		LockedProviders: map[string]string{"aws": "6.18.0"},
 	}
 	result, output, err := PrepareImportFunc(context.Background(), nil, input)
 	require.Nil(t, result)
 	require.Nil(t, output)
 	require.ErrorContains(t, err, "locked_provider_source_invalid")
-	require.ErrorContains(t, err, `locked_providers key "hashicorp/aws"`)
-	require.ErrorContains(t, err, `"registry.terraform.io/hashicorp/aws"`)
+	require.ErrorContains(t, err, `locked_providers key "aws"`)
+	require.ErrorContains(t, err, "lacks a provider namespace")
 
 	schema, err := jsonschema.For[searchlogic.PrepareImportInput](nil)
 	require.NoError(t, err)
-	require.Contains(t, schema.Properties["locked_providers"].Description, "complete quoted hostname/namespace/type")
-	require.Contains(t, schema.Properties["locked_providers"].Description, "do not abbreviate")
+	require.Contains(t, schema.Properties["locked_providers"].Description, "Public namespace/type shorthand is accepted")
+	require.Contains(t, schema.Properties["locked_providers"].Description, "custom/private sources require hostname/namespace/type")
 }
 
 func TestOfficialSearchDescriptionsUseSharedValues(t *testing.T) {

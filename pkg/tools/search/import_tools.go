@@ -24,13 +24,10 @@ organization and an existing local configuration directory. The agent must
 inspect that directory's .terraform.lock.hcl. If the lock file is missing or
 ambiguous, alert the user that exact target provider releases cannot be determined;
 do not run terraform init, select versions, substitute Search catalog versions or
-call this tool, and wait for further instructions. Pass
-exact provider releases keyed by the complete quoted
-hostname/namespace/type source, including custom or private registry hosts. For example, provider
-"registry.terraform.io/hashicorp/aws" with version "6.18.0" becomes
-locked_providers {"registry.terraform.io/hashicorp/aws":"6.18.0"}; do not
-abbreviate the key to "hashicorp/aws". Also pass a proposed managed_type for
-each selected marker. The server
+call this tool, and wait for further instructions. Pass exact provider releases
+by source and a proposed managed_type for each selected marker. Public
+namespace/type shorthand is accepted; custom/private sources require
+hostname/namespace/type. The server canonicalizes sources, then
 revalidates complete QueryRun evidence, target eligibility and optional
 historical schema.
 
@@ -97,7 +94,7 @@ func PrepareImport(logger *log.Logger) server.ServerTool {
 		mcp.WithTitleAnnotation("Prepare explicit Search import selection"), mcp.WithReadOnlyHintAnnotation(true), mcp.WithDestructiveHintAnnotation(false), mcp.WithOpenWorldHintAnnotation(true),
 		mcp.WithString("organization_name", mcp.Required()), mcp.WithString("workspace_name", mcp.Required()), mcp.WithString("workspace_id", mcp.Description("Optional mismatch check only.")), mcp.WithString("query_run_id", mcp.Required()),
 		mcp.WithArray("selections", mcp.Required(), mcp.MinItems(1), mcp.Items(map[string]any{"type": "object", "required": []string{"query_result_marker", "managed_type"}, "properties": map[string]any{"query_result_marker": map[string]any{"type": "string"}, "managed_type": map[string]any{"type": "string"}}, "additionalProperties": false})),
-		mcp.WithObject("locked_providers", mcp.Required(), mcp.Description("Exact local .terraform.lock.hcl versions keyed by the complete quoted hostname/namespace/type provider source, including custom registry hosts. For example: registry.terraform.io/hashicorp/aws; do not abbreviate it to hashicorp/aws. Agent-reported, not server-attested.")),
+		mcp.WithObject("locked_providers", mcp.Required(), mcp.Description("Exact local .terraform.lock.hcl versions keyed by provider source. Public namespace/type shorthand is accepted; custom/private sources require hostname/namespace/type. Sources are canonicalized. Agent-reported, not server-attested.")),
 		mcp.WithSchemaAdditionalProperties(false), mcp.WithOutputSchema[PrepareImportResult]()),
 		Handler: func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			var input PrepareImportInput
