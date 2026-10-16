@@ -283,24 +283,16 @@ func submitExecuteQuery(ctx context.Context, tfeClient *tfe.Client, workspaceID 
 	return &ExecuteQueryResponse{QueryRunID: payload.Data.Relationships.LatestQueryRun.Data.ID}, nil
 }
 
-const executeQueryDescription = `Creates and immediately executes an HCP Terraform Search query.
-
-MANDATORY WORKFLOW: Before calling this tool, call provider_list_schema_list and then
-generate_query_configuration. Do not skip generate_query_configuration or construct the payload
-directly. Pass an organization name, workspace name, and the provider/resource configuration
-produced from its guidance.
-Never construct resource_type from an ordinary managed resource name: it must be an exact key
-in list_resource_schemas for the selected provider version. If no matching key exists, do not
-call this tool. The tool resolves the workspace
-with go-tfe, constructs the JSON:API request, and
-calls POST /api/v2/search/no-code-query, which persists the selections, uploads generated
-Terraform query configuration, and starts a query run. It does not create or modify
+const executeQueryDescription = `Creates and immediately executes one HCP Terraform No-Code Search query. It
+creates Search query records and a QueryRun, but does not create or modify cloud
 infrastructure.
 
-The response includes only query_run_id. Pass that query run ID to get_query_status.
-After it returns a terminal status, pass the same ID to
-get_query_summary to retrieve the parsed result. Do not use curl or call the HCP
-Terraform query API directly.
+Before calling, use provider_list_schema_list and
+generate_query_configuration for the same source organization/workspace. Pass
+the schema-backed provider/resource configuration produced from that guidance;
+resource_type must be an exact list_resource_schemas key. Do not construct the
+payload directly from an ordinary managed-resource name.
 
-Requires an authenticated HCP Terraform session and a workspace using a supported
-Terraform version.`
+Established success returns only query_run_id. Pass that exact ID to
+get_query_status. If creation does not return a trustworthy ID, reconcile the
+outcome before another submission; do not blindly execute the query again.`

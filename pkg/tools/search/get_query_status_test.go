@@ -61,16 +61,14 @@ func TestGetQueryStatusDefinition(t *testing.T) {
 
 	assert.Equal(t, "get_query_status", tool.Tool.Name)
 	assert.Contains(t, tool.Tool.InputSchema.Required, "query_run_id")
-	assert.Contains(t, tool.Tool.Description, "go-tfe")
-	assert.Contains(t, tool.Tool.Description, "pending")
-	assert.Contains(t, tool.Tool.Description, "finished, errored, or canceled")
-	assert.Contains(t, tool.Tool.Description, "same query_run_id")
-	assert.Contains(t, tool.Tool.Description, "existing authorized QueryRun ID")
+	assert.Contains(t, tool.Tool.Description, "bounded call")
+	assert.Contains(t, tool.Tool.Description, "same ID")
+	assert.Contains(t, tool.Tool.Description, "finished, errored or canceled")
+	assert.Contains(t, tool.Tool.Description, "existing authorized")
 	assert.NotContains(t, tool.Tool.Description, "latest-query-run")
 	assert.Contains(t, tool.Tool.Description, "get_query_summary")
-	assert.Contains(t, tool.Tool.Description, "every three seconds")
-	assert.Contains(t, tool.Tool.Description, "at most 40 seconds")
-	assert.Contains(t, tool.Tool.Description, "retry_after_seconds is omitted")
+	assert.Contains(t, tool.Tool.Description, "do not execute another query")
+	assert.Contains(t, tool.Tool.Description, "Terminal status does not imply selectable")
 	assert.Equal(t, "object", tool.Tool.OutputSchema.Type)
 	assert.Contains(t, tool.Tool.OutputSchema.Properties, "query_run_id")
 	assert.Contains(t, tool.Tool.OutputSchema.Properties, "status")
@@ -141,6 +139,7 @@ func TestWaitForQueryStatusReturnsNonterminalStatus(t *testing.T) {
 	assert.Equal(t, tfe.QueryRunStatus("running"), response.Status)
 	assert.Equal(t, 5, response.RetryAfterSeconds)
 	assert.Contains(t, response.Message, "same query_run_id")
+	assert.Contains(t, response.Message, "do not execute another query")
 	assert.Equal(t, int32(1), reads.Load())
 }
 
@@ -162,6 +161,7 @@ func TestWaitForQueryStatusReturnsEachTerminalStatus(t *testing.T) {
 			assert.True(t, response.Terminal)
 			assert.Zero(t, response.RetryAfterSeconds)
 			assert.Contains(t, response.Message, "get_query_summary")
+			assert.Contains(t, response.Message, "does not imply selectable")
 			assert.Equal(t, int32(1), reads.Load())
 		})
 	}

@@ -15,13 +15,53 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-const PrepareImportDescription = `Read-only preparation for explicitly chosen Search results, not a configuration upload or a Terraform plan.
+const PrepareImportDescription = `Read-only preparation for explicitly selected Search results; it does not read
+local files, upload configuration or create a Terraform Plan or Run.
 
-Before calling: ask whether the import target is the Search workspace or another workspace in the same organization. Confirm the user-designated existing local directory; the MCP server cannot read it. Inspect its .terraform.lock.hcl and pass exact versions by provider source. Select one or more query_result_marker values from get_query_summary and propose each managed_type. No V0 candidate_id alias. This call checks full QueryRun evidence, target execution mode and optional historical schema (which never attests the locked release). A prepared result contains selected observations/HCL drafts for agent review and an unchanged import_context for finished-plan verification. For authoring, inspect intended resource or editable local-module placement, existing inputs and references, exact addresses and effective provider mappings in the local tree. Treat generated HCL as drafts: prioritize Search-to-target identity and managed-schema differences using the locked provider release's resource/import documentation and the target Terraform version's official import and module documentation. Do not substitute a Search list schema for the target managed schema or guess an identity mapping. No archive, CV, Run or local path is accepted; the separately approved Terraform CLI plan belongs to the agent after authoring. Before planning, review the existing CLI cloud or remote-backend configuration and confirm the effective host, organization, project (when relevant) and workspace with the user, respecting explicit cloud settings, applicable CLI fallbacks and workspace-selection overrides without dumping the environment. Confirm authentication is available for that host without reading or printing credentials; MCP server configuration and authentication are separate from Terraform CLI configuration and authentication. Follow next_action; a marker is continuity, not authorization or an import ID. Approval in this Search-to-import workflow is for one speculative plan only; preparation does not authorize apply. Hand off the proposed HCL and findings after Plan review.`
+Call only after the user requests import, selects displayed
+query_result_marker values and confirms a target workspace in the source
+organization and an existing local configuration directory. The agent must
+inspect that directory's .terraform.lock.hcl and pass exact provider releases
+by source, plus a proposed managed_type for each selected marker. The server
+revalidates complete QueryRun evidence, target eligibility and optional
+historical schema.
 
-const VerifyImportPlanDescription = `Read-only check of the exact CLI-originated HCP Terraform speculative Run, not a way to start a Plan.
+A prepared result contains selected observations, HCL drafts and unchanged
+import_context for finished-Plan verification. Markers are continuity values,
+not import IDs or authorization. Search list types do not prove managed types;
+generated HCL is a draft, and historical schema does not attest the locked
+release, provider scope, identity mapping or valid final HCL. Use locked-release
+resource/import documentation and the target Terraform version while reviewing
+exact addresses, effective provider mappings and editable local-module effects.
 
- After preparing/authoring in the existing user-designated tree, review changed files, known upload scope, provider aliases/import forms and CLI/HCP version >=1.5 with the user. Confirm CLI host/organization/workspace against the intended target (CLI and MCP authentication are separate); Terraform init can create workspaces or migrate state and must not do so without separate approval. After explicit approval for one speculative plan, run plain terraform plan from that directory (cd or terraform -chdir=<path>), without -out; never run apply or terraform import. The CLI handles upload/Run creation, not Search MCP. Compare the CLI's human Run URL host/org/workspace with the confirmed target and pass only its unambiguous run-… ID here. Missing URL or uncertain command outcome requires reconciliation, not latest-Run guessing or blind retry. Poll pending with the same ID; supply unchanged prepare_import import_context and every query_result_marker-to-target_address binding for finished classification. If Plan JSON is blocked, use the value-free diagnostic to inspect the same Run/Plan rather than starting a new Run. For a finished Plan, ask whether the user prefers the Run UI link to review it outside the session or an in-session summary. Only with the user's choice and an available get_plan_json_output tool, use the observed plan_id; raw Plan JSON can contain sensitive values visible in this session, so summarize without reproducing them. run_ui_url is an optional browser navigation link for known HCP hosts, not a signed Plan artifact URL; otherwise reuse the confirmed CLI browser Run URL. An import with update actions requires configuration/diff review, not apply. Report identity uncertainty before Plan actions; if identity schema versions differ or a Plan version is absent, offer further investigation only on request and keep object_identity unverified regardless of corroboration. change and object_identity are independent. After full-Plan review, report both findings and hand off the proposed HCL. Do not run terraform apply, terraform import or apply_run as a continuation of this Search-to-import workflow; any eventual apply belongs to a separate, independently reviewed and authorized workflow.`
+On a prepared result, author and review the proposed local changes with the
+user. Any HCP-connected speculative Plan requires separate approval.`
+
+const VerifyImportPlanDescription = `Read-only verification of one exact ordinary HCP Terraform speculative Run; it
+does not create a Run, modify configuration or apply changes.
+
+Pass the unambiguous run_id retained from the reviewed CLI Run URL for the
+confirmed target organization/workspace. Do not search for or substitute a
+newer Run. import_context and bindings may be omitted while polling, but a
+finished Plan requires the unchanged prepare_import context and exactly one
+selected marker-to-address binding per selection. The tool checks the Run's
+backend workspace association, plan-only/no-auto-apply evidence, Plan and
+configuration-version relationships, lifecycle state and—when eligible—the
+associated Plan JSON.
+
+Follow the returned status and next_action. Poll pending with the same Run ID.
+Blocked or failed results do not provide successful Plan classification. A
+plan_available result contains bounded facts about selected actions, object
+identity and other Plan effects; change and object_identity are independent,
+and neither the summary nor a no-op import proves identity, uploaded bytes,
+provider scope or apply safety.
+
+Review the exact full Plan through run_ui_url or, only if the user chooses
+in-session review and the Terraform toolset exposes get_plan_json_output, with
+the backend-observed plan_id. Raw Plan JSON can contain sensitive values;
+summarize without reproducing them and state if full review was not completed.
+This Search-to-import workflow ends with reviewed HCL and findings; it does not
+continue to terraform apply, terraform import or apply_run.`
 
 // decodeImportArguments validates strict JSON structure and decodes one tool input value.
 func decodeImportArguments(raw any, target any) error {
@@ -29,7 +69,7 @@ func decodeImportArguments(raw any, target any) error {
 	if err != nil {
 		return searchDiagnosticError(importArgumentsInvalidCode)
 	}
-	if err := validateQueryEvidenceJSON(data, 0, 0); err != nil {
+	if err := validateQueryEvidenceJSON(data); err != nil {
 		return err
 	}
 	dec := json.NewDecoder(bytes.NewReader(data))

@@ -54,7 +54,7 @@ func TestOfficialSearchRegistrationAndConfigurationCall(t *testing.T) {
 			if tool.Name == "prepare_import" || tool.Name == "verify_import_plan" {
 				require.NotNil(t, tool.OutputSchema)
 				require.True(t, tool.Annotations.ReadOnlyHint)
-				require.Contains(t, tool.Description, "CLI")
+				require.Contains(t, tool.Description, "Run")
 			}
 		}
 	}
@@ -218,6 +218,7 @@ func TestOfficialImportVerifyObservedFailureAndNoPlanJSON(t *testing.T) {
 
 func TestOfficialImportPrepareAndFinishedPlan(t *testing.T) {
 	var backend *httptest.Server
+	var invalidPlanJSON atomic.Bool
 	backend = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/vnd.api+json")
 		if r.Method != http.MethodGet {
@@ -250,6 +251,10 @@ func TestOfficialImportPrepareAndFinishedPlan(t *testing.T) {
 		case "/api/v2/plans/plan-test":
 			_, _ = fmt.Fprint(w, `{"data":{"type":"plans","id":"plan-test","attributes":{"status":"finished"}}}`)
 		case "/api/v2/plans/plan-test/json-output":
+			if invalidPlanJSON.Load() {
+				_, _ = fmt.Fprint(w, `{"private":"sentinel"} invalid-private-sentinel`)
+				return
+			}
 			_, _ = fmt.Fprint(w, `{"format_version":"1.2","terraform_version":"1.14.0","complete":true,"errored":false,"planned_values":{"root_module":{"resources":[{"address":"aws_s3_bucket.sample","identity_schema_version":1}]}},"resource_changes":[{"address":"aws_s3_bucket.sample","mode":"managed","type":"aws_s3_bucket","provider_name":"registry.terraform.io/hashicorp/aws","change":{"actions":["no-op"],"importing":{"id":"secret-id-sentinel"},"after_identity":{"bucket":"sample"}}}],"resource_drift":[]}`)
 		default:
 			http.NotFound(w, r)
@@ -281,6 +286,15 @@ func TestOfficialImportPrepareAndFinishedPlan(t *testing.T) {
 	require.Equal(t, float64(1), facts["object_identity"].(map[string]any)["matched"])
 	require.NotContains(t, fmt.Sprint(verify.Content), "secret-id-sentinel")
 	require.NotContains(t, fmt.Sprint(verify.StructuredContent), "secret-id-sentinel")
+
+	invalidPlanJSON.Store(true)
+	invalid, err := session.CallTool(ctx, &mcp.CallToolParams{Name: "verify_import_plan", Arguments: map[string]any{"organization_name": "org", "workspace_name": "target", "run_id": "run-example", "import_context": prepared["import_context"], "bindings": []any{map[string]any{"query_result_marker": marker, "target_address": "aws_s3_bucket.sample"}}}})
+	require.NoError(t, err)
+	require.True(t, invalid.IsError)
+	require.Nil(t, invalid.StructuredContent)
+	require.Contains(t, invalid.Content[0].(*mcp.TextContent).Text, "plan_json_invalid")
+	require.NotContains(t, fmt.Sprint(invalid.Content), "invalid-private-sentinel")
+	require.NotContains(t, fmt.Sprint(invalid.Content), `"status":"blocked"`)
 }
 
 func TestOfficialSearchQuerySummarySelectableAndNonselectable(t *testing.T) {

@@ -344,39 +344,19 @@ func doProviderRequest(ctx context.Context, request *tfe.ClientRequest, response
 	return json.Unmarshal(body.Bytes(), response)
 }
 
-const providerListSchemaListDescription = `Fetches list_resource_schemas for a search-compatible Terraform provider from the
-HCP Terraform no-code stub endpoint (GET /api/v2/search/provider-versions).
+const providerListSchemaListDescription = `Lists Search-compatible providers or fetches one provider's list-resource
+schemas for an HCP Terraform source workspace.
 
-Every call must be scoped with organization_name and workspace_name. Never call this tool
-without them. If either value is not present in the user's request, ask the user to provide
-both values before making any tool call. Do not attempt an unscoped request first.
+Every call requires organization_name and workspace_name. In LIST mode, omit
+both provider_namespace and provider_name; the result contains the providers
+available in the Search catalog. In FETCH mode, provide both identifiers; the
+tool returns the catalog-selected provider metadata and list_resource_schemas.
+The provider version comes from the catalog and must not be inferred or supplied
+from model knowledge or the public Registry.
 
-The tool has two modes:
-
-LIST mode (organization_name and workspace_name supplied; no provider identifiers supplied):
-  Returns all providers currently in the search-compatible catalog so the agent
-  can choose one. Each entry includes namespace, name, and version.
-
-  FETCH mode (organization_name, workspace_name, provider_namespace, and provider_name supplied):
-  Returns the full list_resource_schemas for the requested provider, ready to
-  pass directly into generate_query_configuration.
-  - The provider version is always read from the provider catalog response. Never infer or
-    supply a version from model knowledge, examples, or the public Terraform Registry.
-  - If the provider is not found in the catalog, an error is returned with a hint
-    to use search_providers to find the provider in the public Terraform Registry.
-
-Typical agent workflow:
-  1. Obtain organization_name and workspace_name from the user's request. If either is absent,
-     ask the user for both and wait for their response.
-  2. Call provider_list_schema_list(organization_name, workspace_name) to discover available providers.
-  3. Call provider_list_schema_list(organization_name, workspace_name, provider_namespace,
-     provider_name) to fetch the catalog-selected version and its schema.
-  4. Pass the returned list_resource_schemas to generate_query_configuration to get
-     a full guide and example query configuration.
-  5. Select only an exact resource type key present in list_resource_schemas. Never infer list
-     support from an ordinary managed resource name. If no key matches the user's request,
-     explain that the selected provider version cannot list that resource and stop.
-  6. Fill in the configuration and pass it with organization_name and workspace_name to execute_query.
-
-Requires TFE_TOKEN and TFE_ADDRESS to be configured (same credentials used for
-other HCP Terraform tools).`
+After LIST, choose a catalog provider with the user and call FETCH. After FETCH,
+pass the returned provider metadata and list_resource_schemas to
+generate_query_configuration. A searchable resource_type must be an exact key
+in list_resource_schemas; an ordinary managed-resource name does not establish
+Search list support. List-resource schemas are not target managed-resource
+schemas.`

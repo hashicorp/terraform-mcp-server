@@ -43,6 +43,30 @@ func TestNonselectableQueryEvidenceCode(t *testing.T) {
 	}
 }
 
+func TestNonselectableQueryNextActionsAreDiagnosticSpecific(t *testing.T) {
+	tests := []struct {
+		code      searchDiagnosticCode
+		required  string
+		forbidden string
+	}{
+		{queryNotSelectableCode, "failed or was canceled", "select one"},
+		{queryIdentityVersionInvalidCode, "identity-version evidence", "partial"},
+		{queryEvidenceIncompleteCode, "Do not present a prefix", "import from it"},
+		{queryDuplicateOrInvalidIdentityCode, "Duplicate or conflicting", "continue selection"},
+		{queryIdentityInvalidCode, "identity evidence is invalid", "select one"},
+		{queryReportedErrorCode, "recorded an error", "import from it"},
+		{queryGeneratedBlockConflictCode, "configuration evidence conflicts", "select one"},
+	}
+	for _, test := range tests {
+		t.Run(string(test.code), func(t *testing.T) {
+			action := nonselectableQueryNextAction(test.code)
+			require.Contains(t, action, test.required)
+			require.NotContains(t, action, test.forbidden)
+			require.Contains(t, action, "another query")
+		})
+	}
+}
+
 func testDiscovery(t *testing.T, ids ...string) (*queryDiscoveryProvenance, *queryEvidence) {
 	t.Helper()
 	var lines []string
@@ -64,13 +88,15 @@ func TestSummarizeQueryDiscoveryReturnsEveryMatchingResult(t *testing.T) {
 	require.Equal(t, 3, summary.TotalMatching)
 	require.Len(t, summary.Lists[0].Results, 3)
 	require.Equal(t, evidence.Results[0].Marker, summary.Lists[0].Results[0].Marker)
-	require.Contains(t, summary.NextAction, "all results of this query")
+	require.Contains(t, summary.NextAction, "report these results and stop")
+	require.Contains(t, summary.NextAction, "do not request a target workspace or local path")
+	require.Contains(t, summary.NextAction, "query_result_marker")
 
 	filtered, err := summarizeQueryDiscovery(prov, evidence, QueryDiscoveryFilter{NameContains: "second"})
 	require.NoError(t, err)
 	require.Equal(t, 1, filtered.TotalMatching)
 	require.Equal(t, evidence.Results[1].Marker, filtered.Lists[0].Results[0].Marker)
-	require.Contains(t, filtered.NextAction, "all results matching the supplied summary filters")
+	require.Contains(t, filtered.NextAction, "supplied filters affect presentation only")
 }
 
 func TestSummarizeQueryDiscoveryProjectsTagsAndExplainsMissingAttributes(t *testing.T) {

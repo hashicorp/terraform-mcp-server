@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/google/jsonschema-go/jsonschema"
+	searchlogic "github.com/hashicorp/terraform-mcp-server/pkg/tools/search"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/require"
 )
@@ -41,6 +42,24 @@ func TestOfficialSearchArgumentsAndValidation(t *testing.T) {
 		OrganizationName: "org", WorkspaceName: "ws", QueryConfiguration: `{`,
 	})
 	require.ErrorContains(t, err, "invalid query_configuration")
+}
+
+func TestOfficialSearchDescriptionsUseSharedValues(t *testing.T) {
+	tests := []struct {
+		tool *mcp.Tool
+		want string
+	}{
+		{ProviderListSchemaListTool(), searchlogic.ProviderListSchemaListDescription},
+		{GenerateQueryConfigurationTool(), searchlogic.GenerateQueryConfigurationDescription},
+		{ExecuteQueryTool(), searchlogic.ExecuteQueryDescription},
+		{GetQueryStatusTool(), searchlogic.GetQueryStatusDescription},
+		{GetQuerySummaryTool(), searchlogic.GetQuerySummaryDescription},
+		{PrepareImportTool(), searchlogic.PrepareImportDescription},
+		{VerifyImportPlanTool(), searchlogic.VerifyImportPlanDescription},
+	}
+	for _, test := range tests {
+		require.Equal(t, test.want, test.tool.Description, test.tool.Name)
+	}
 }
 
 func TestOfficialSearchToolAnnotations(t *testing.T) {

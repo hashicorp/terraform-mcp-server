@@ -514,8 +514,9 @@ func TestProviderListSchemaList_ToolDefinition(t *testing.T) {
 	assert.Contains(t, props, "organization_name")
 	assert.Contains(t, props, "workspace_name")
 	assert.ElementsMatch(t, []string{"organization_name", "workspace_name"}, tool.Tool.InputSchema.Required)
-	assert.Contains(t, tool.Tool.Description, "Do not attempt an unscoped request first")
-	assert.Contains(t, tool.Tool.Description, "always read from the provider catalog response")
+	assert.Contains(t, tool.Tool.Description, "Every call requires organization_name and workspace_name")
+	assert.Contains(t, tool.Tool.Description, "provider version comes from the catalog")
+	assert.Contains(t, tool.Tool.Description, "does not establish")
 }
 
 func TestProviderListSchemaList_RejectsMissingScopeBeforeRequest(t *testing.T) {

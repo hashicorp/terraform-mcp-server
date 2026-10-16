@@ -245,12 +245,12 @@ func TestVerifyImportDetailAddressesHaveNoApplicationCountLimit(t *testing.T) {
 
 func TestVerifyImportRunGuardsPlanJSONRead(t *testing.T) {
 	for _, tc := range []struct {
-		name, workspace, planOnly, autoApply, want string
+		name, workspace, planOnly, autoApply, want, required, forbidden string
 	}{
-		{"wrong workspace", "ws-other", "true", "false", "run_workspace_mismatch"},
-		{"missing plan-only", "ws-example", "null", "false", "run_not_plan_only"},
-		{"missing auto-apply", "ws-example", "true", "null", "run_not_plan_only"},
-		{"auto-apply enabled", "ws-example", "true", "true", "run_not_plan_only"},
+		{"wrong workspace", "ws-other", "true", "false", "run_workspace_mismatch", "exact Run", "latest"},
+		{"missing plan-only", "ws-example", "null", "false", "run_not_plan_only", "plan-only=true", "classify this Run as successful"},
+		{"missing auto-apply", "ws-example", "true", "null", "run_not_plan_only", "auto-apply=false", "classify this Run as successful"},
+		{"auto-apply enabled", "ws-example", "true", "true", "run_not_plan_only", "auto-apply=false", "classify this Run as successful"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			var planReads int
@@ -275,6 +275,11 @@ func TestVerifyImportRunGuardsPlanJSONRead(t *testing.T) {
 			require.NoError(t, err)
 			require.Equal(t, "blocked", out.Status)
 			require.Equal(t, []string{tc.want}, out.Diagnostics)
+			require.Contains(t, out.NextAction, tc.required)
+			require.NotContains(t, out.NextAction, tc.forbidden)
+			require.Nil(t, out.Plan)
+			require.Nil(t, out.Changes)
+			require.Nil(t, out.ObjectIdentity)
 			require.Zero(t, planReads, "no Plan metadata or JSON read is allowed")
 		})
 	}
@@ -303,11 +308,61 @@ func TestVerifyImportReturnsPendingWithinWaitBudget(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "pending", out.Status)
 	require.Equal(t, []string{"run_pending"}, out.Diagnostics)
+	require.Contains(t, out.NextAction, "same Run ID")
+	require.Contains(t, out.NextAction, "retry_after_seconds")
+	require.Contains(t, out.NextAction, "Do not create another Run")
 	require.Less(t, time.Since(started), time.Second)
 }
 
 func TestVerifyImportWaitLeavesHTTPWriteHeadroom(t *testing.T) {
 	require.Less(t, verifyImportWait, 30*time.Second)
+}
+
+func TestPrepareImportBlockedActionsAreStateSpecific(t *testing.T) {
+	tests := []struct {
+		code, required, forbidden string
+	}{
+		{"target_mismatch", "intended target workspace", "change workspace mode"},
+		{"target_execution_mode_not_hcp", "supported HCP execution mode", "change workspace mode automatically"},
+		{"target_terraform_below_floor", "Terraform-version compatibility", "change the workspace version"},
+	}
+	for _, test := range tests {
+		t.Run(test.code, func(t *testing.T) {
+			action := prepareImportBlockedAction(test.code)
+			require.Contains(t, action, test.required)
+			if test.code == "target_mismatch" {
+				require.NotContains(t, action, test.forbidden)
+			} else {
+				require.Contains(t, action, "do not")
+				require.Contains(t, action, test.forbidden)
+			}
+			require.NotContains(t, action, "terraform apply")
+		})
+	}
+}
+
+func TestSafePlanPreflightActionsUseExactPlanWithoutClaimingFindings(t *testing.T) {
+	for _, code := range []string{
+		"plan_json_empty", "plan_json_incomplete", "plan_json_errored",
+		"plan_format_unsupported", "plan_terraform_version_unavailable", "plan_change_limit",
+	} {
+		t.Run(code, func(t *testing.T) {
+			action := safePlanPreflightAction(code)
+			require.Contains(t, action, "same exact Plan")
+			require.Contains(t, action, "run_ui_url")
+			require.Contains(t, action, "user's choice")
+			require.Contains(t, action, "available get_plan_json_output")
+			require.Contains(t, action, "this result's plan_id")
+			require.Contains(t, action, "raw Plan JSON may contain sensitive values")
+			require.NotContains(t, action, "Plan actions are")
+			require.NotContains(t, action, "object identity")
+			require.NotContains(t, action, "terraform apply")
+		})
+	}
+	unsupported := safePlanPreflightAction("plan_terraform_version_unsupported")
+	require.Contains(t, unsupported, "below-1.5")
+	require.Contains(t, unsupported, "separate approval")
+	require.Contains(t, unsupported, "do not change settings automatically")
 }
 
 func TestVerifyImportPreservesCallerCancellation(t *testing.T) {

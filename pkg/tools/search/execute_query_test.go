@@ -48,12 +48,13 @@ func TestExecuteQueryDefinition(t *testing.T) {
 	assert.False(t, *tool.Tool.Annotations.DestructiveHint)
 	require.NotNil(t, tool.Tool.Annotations.OpenWorldHint)
 	assert.True(t, *tool.Tool.Annotations.OpenWorldHint)
+	assert.Contains(t, tool.Tool.Description, "provider_list_schema_list")
+	assert.Contains(t, tool.Tool.Description, "generate_query_configuration")
 	assert.Contains(t, tool.Tool.Description, "get_query_status")
-	assert.Contains(t, tool.Tool.Description, "get_query_summary")
-	assert.Contains(t, tool.Tool.Description, "Do not use curl")
-	assert.Contains(t, tool.Tool.Description, "exact key")
-	assert.Contains(t, tool.Tool.Description, "ordinary managed resource name")
-	assert.Contains(t, tool.Tool.Description, "MANDATORY WORKFLOW")
+	assert.Contains(t, tool.Tool.Description, "exact list_resource_schemas key")
+	assert.Contains(t, tool.Tool.Description, "ordinary managed-resource name")
+	assert.Contains(t, tool.Tool.Description, "reconcile")
+	assert.Contains(t, tool.Tool.Description, "do not blindly execute")
 	assert.Contains(t, tool.Tool.OutputSchema.Required, "query_run_id")
 }
 

@@ -187,12 +187,12 @@ func waitForQueryStatus(parentCtx, pollCtx context.Context, tfeClient *tfe.Clien
 		}
 		response := queryStatusResponseFromRun(queryRun)
 		if isTerminalQueryStatus(queryRun.Status) {
-			response.Message = fmt.Sprintf("Query run reached terminal status %q. Call get_query_summary with the same query_run_id to retrieve the result summary.", queryRun.Status)
+			response.Message = fmt.Sprintf("Query run reached terminal status %q. Call get_query_summary with the same query_run_id; terminal status does not imply selectable results.", queryRun.Status)
 			logQueryStatusPoll(logger, queryRunID, reads, startedAt, &response, "terminal", nil)
 			return &response, nil
 		}
 		response.RetryAfterSeconds = queryStatusRetryAfterSeconds
-		response.Message = fmt.Sprintf("Query run is still %q. Call get_query_status again with the same query_run_id after %d seconds.", queryRun.Status, response.RetryAfterSeconds)
+		response.Message = fmt.Sprintf("Query run is still %q. Call get_query_status again with the same query_run_id after %d seconds; do not execute another query.", queryRun.Status, response.RetryAfterSeconds)
 		lastResponse = &response
 		logQueryStatusPoll(logger, queryRunID, reads, startedAt, lastResponse, "status_read", nil)
 
@@ -293,13 +293,12 @@ func queryStatusTimestamps(timestamps *tfe.QueryRunStatusTimestamps) *queryStatu
 	return response
 }
 
-const getQueryStatusDescription = `Fetches an HCP Terraform query run using go-tfe.
+const getQueryStatusDescription = `Reads and polls one HCP Terraform QueryRun within a bounded call, without
+returning its raw backend record or log capability.
 
-Pass the query_run_id returned by execute_query, or an existing authorized QueryRun ID.
-This tool checks every three seconds while status is pending,
-queued, or running and returns once status is finished, errored, or canceled. One call
-waits for at most 40 seconds. If the run is still active, the tool returns its current
-status and instructs you to call this tool again with the same query_run_id after
-retry_after_seconds. retry_after_seconds is omitted for a terminal status. After a
-terminal status is returned, call get_query_summary with the same ID. Do not use curl or
-call the HCP Terraform query API directly.`
+Pass the query_run_id returned by execute_query or an existing authorized
+QueryRun ID. If the QueryRun remains active when this call's wait budget ends,
+the result includes its last observed status and retry_after_seconds; call
+get_query_status again with the same ID and do not execute another query. For a
+terminal finished, errored or canceled status, call get_query_summary with the
+same ID. Terminal status does not imply selectable results.`

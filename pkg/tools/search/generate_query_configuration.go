@@ -646,33 +646,17 @@ func sortedKeys[T any](m map[string]T) []string {
 }
 
 // generateQueryConfigDescription is the MCP tool description seen by the LLM.
-const generateQueryConfigDescription = `Generates a No-Code Query Configuration guide for a specific Terraform provider version.
+const generateQueryConfigDescription = `Generates schema-backed guidance and an example configuration for one HCP
+Terraform No-Code Search query; it does not execute the query.
 
-Given a 'list_resource_schemas' JSON object (returned by the provider_list_schema_list tool
-or produced by 'terraform providers schema -json'), this tool:
+Pass list_resource_schemas and the exact provider namespace, name and version
+returned by provider_list_schema_list. Any requested resource type must be an
+exact schema key. The result describes supported scalar and nested attributes,
+required values, nesting/cardinality, variable syntax and generate_config_out
+so the query_configuration for execute_query can be constructed without
+inventing fields. Required schema attributes remain required.
 
-1. Explains the query_configuration structure accepted by execute_query, which calls
-   POST /api/v2/search/no-code-query to immediately run a No-Code Search query.
-2. Documents the workspace Terraform version pre-condition and how to monitor the
-   resulting query run with get_query_status.
-3. Catalogs every resource type with its scalar attributes AND block-type attributes
-   (name, type, required/optional, nesting_mode, sub-attributes, description)
-   so the agent knows exactly which filters can be applied and how to express them.
-4. Explains block-type (nested object) attributes and cardinality from nesting_mode,
-   min_items and max_items; list/set blocks with max_items 1 are not repeatable.
-5. Documents the generate_config_out flag that controls HCL scaffolding output.
-6. Provides a ready-to-use example payload pre-filled with placeholder values for
-   required scalar and block-type attributes.
-7. Documents variable injection syntax (${var.<name>}) and common mistakes.
-8. Directs the agent to pass organization_name and workspace_name separately when calling execute_query.
-
-Always use this tool before constructing a no-code query payload. The output is self-contained
-guidance — the agent must use it to generate a correct, schema-validated query
-configuration without needing to consult external documentation.
-
-IMPORTANT: provider_version must be copied from provider_list_schema_list, not inferred.
-resource_type must be an exact key present in list_resource_schemas.
-Do not infer list support from a provider's ordinary managed resources or data sources.
-If the user's requested resource has no matching key, explain that this provider version
-cannot list it and do not call execute_query. Only attributes present in the schema for
-the chosen resource type may appear in 'attributes'. Required attributes must always be included.`
+Review and fill the generated configuration, then call execute_query with the
+same source organization/workspace. If the requested resource has no exact
+list-resource schema key, report that it is not searchable with this catalog
+provider version and do not call execute_query.`

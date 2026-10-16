@@ -4,13 +4,13 @@ The Terraform MCP server provides tools for generating better Terraform code thr
 
 ## Tool Usage Guidelines
 
-**BEFORE generating any Terraform code**: Query registries for latest provider/module versions and styling guidelines. When enterprise tools are enabled AND a Terraform token is provided, search private registries first, then fall back to public.
+**Version selection**: For new standalone configuration with no governing existing constraints or lock selections, query the available registries for current compatible provider/module versions and guidance. When editing existing configuration, preserve its constraints and exact `.terraform.lock.hcl` selections unless the user separately requests an upgrade. For Search-to-import, the target's exact locked provider releases govern authoring; the Search catalog version is source-query evidence, not a target-version recommendation.
 
-**Provider Consistency**: All modules in a project must use compatible provider versions. Verify with get_provider_details before generating code.
+**Provider consistency**: Use provider versions compatible with the complete configuration and module constraints. `get_provider_details` can provide version-specific documentation, but does not override an existing lock selection.
 
-**Validation Flow**: Run terraform validate immediately after generation, then terraform plan only if validation passes. Use terraform fmt to format code as needed.
+**Validation and planning**: `terraform fmt` and `validate` are diagnostics, not authorization for a Plan. Run `terraform plan` only when the active workflow and the user authorize it. Search-to-import permits one separately approved plain HCP-connected speculative Plan after local authoring review; validation success does not grant that approval.
 
-**User Confirmation Required**: ALWAYS get explicit yes/no confirmation before: `create_run`, `apply_run`, `discard_run`, `cancel_run`.
+**User confirmation required**: Always get explicit confirmation before `create_run`, `apply_run`, `discard_run` or `cancel_run`, and before the client-side Search-to-import speculative `terraform plan`.
 
 ## Always Available Tools
 
@@ -23,7 +23,7 @@ The Terraform MCP server provides tools for generating better Terraform code thr
 
 - **Policy Discovery**: `search_policies` → `get_policy_details`
 
-- Use these to ensure generated code uses current versions and follows best practices
+- Use Registry tools for version-specific capabilities and guidance. Choose current compatible versions only when existing configuration, constraints and lock selections do not govern.
 
 ## HCP Terraform/TFE Tools (When enterprise tools are enabled AND a Terraform token is provided)
 
@@ -57,12 +57,16 @@ The Terraform MCP server provides tools for generating better Terraform code thr
 ## Workflow Patterns
 
 **Terraform Search (when Search tools are available)**:
-1. Before a new workspace-scoped query, confirm its organization and source workspace (A). Use `provider_list_schema_list` → `generate_query_configuration` → `execute_query`; retain the returned `query_run_id` and reviewed creation-time inputs separately. An existing QueryRun ID can be used to review the same result without starting another query.
-2. Call `get_query_status` with that ID until terminal, then `get_query_summary`. Follow its selectability guidance; a selectable response contains every result matching any supplied summary filters. Search-only requests end here—do not ask for an import target or local path.
+For a new query, confirm the source organization and workspace, then use `provider_list_schema_list` → `generate_query_configuration` → `execute_query` → `get_query_status` → `get_query_summary`. Poll with the same `query_run_id`; do not submit another query merely because polling remains active. An existing authorized QueryRun ID may resume status/summary review.
+
+For Search-only intent, report the summary and stop. Do not request an import target or local path. A selectable summary contains every result matching its presentation filters, not every cloud resource; selection is explicit and only for requested import.
 
 **Search-to-import (only when `prepare_import` and `verify_import_plan` are available and import is requested)**:
-1. Confirm the target (same Search workspace A or another workspace B in the same organization), the user's existing local configuration path and explicit result selections. Review its exact locked provider versions; retain `query_result_marker` values unchanged—they are neither import IDs nor proof of the cloud object. Follow `prepare_import`'s description and `next_action` for authoring and limitations.
-2. With explicit approval, use the Terraform CLI from that existing tree for one plain speculative `terraform plan` (no `-out` or apply), not a Search upload/Run tool. Check the CLI Run URL against the intended target, then call `verify_import_plan` with its exact Run ID; follow the tool description and `next_action`. Review the full HCP Plan separately. Neither tool certifies object identity or authorizes apply. This Search-to-import workflow ends with full-Plan review and handoff of the proposed HCL and findings. Do not run `terraform apply`, `terraform import`, or `apply_run` as its continuation; any eventual apply belongs to a separate, independently reviewed and authorized workflow.
+After the user selects displayed `query_result_marker` values, confirm the target workspace in the same organization and the existing user-designated local configuration directory. Inspect that tree and its exact locked provider releases before `prepare_import`. Markers provide continuity, not import IDs, authorization or identity proof.
+
+After preparation, author and review local HCL. Obtain separate approval for one plain HCP-connected speculative `terraform plan`, retain and reconcile its exact CLI Run URL/`run_id`, and call `verify_import_plan`. Poll the same Run ID; never guess the latest Run or blindly create another. Review the exact full Plan and report Plan actions and object identity independently.
+
+This workflow ends with reviewed HCL and findings. It does not continue to `terraform apply`, `terraform import` or `apply_run`; any eventual apply is a separate, independently reviewed and authorized workflow.
 
 **Code Generation**:
 1. `search_modules`/`search_providers` for available resources
