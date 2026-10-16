@@ -25,15 +25,15 @@ type GenerateQueryConfigurationArguments struct {
 }
 
 type ProviderListSchemaListArguments struct {
-	OrganizationName  string `json:"organization_name,omitempty" jsonschema:"Optional organization; explicit input overrides TF_CLOUD_ORGANIZATION and TFC_ORGANIZATION candidates, which require user confirmation"`
-	WorkspaceName     string `json:"workspace_name,omitempty" jsonschema:"Optional query workspace; explicit input overrides TF_MCP_QUERY_WORKSPACE, then TF_WORKSPACE requires user confirmation; never defaults to TF_MCP_IMPORT_WORKSPACE"`
+	OrganizationName  string `json:"organization_name,omitempty"`
+	WorkspaceName     string `json:"workspace_name,omitempty"`
 	ProviderNamespace string `json:"provider_namespace,omitempty" jsonschema:"Namespace; supply together with provider_name to fetch a schema"`
 	ProviderName      string `json:"provider_name,omitempty" jsonschema:"Short name; supply together with provider_namespace to fetch a schema"`
 }
 
 type ExecuteQueryArguments struct {
-	OrganizationName   string `json:"organization_name,omitempty" jsonschema:"Optional organization; explicit input overrides TF_CLOUD_ORGANIZATION and TFC_ORGANIZATION candidates, which require user confirmation"`
-	WorkspaceName      string `json:"workspace_name,omitempty" jsonschema:"Optional query workspace; explicit input overrides TF_MCP_QUERY_WORKSPACE, then TF_WORKSPACE requires user confirmation; never defaults to TF_MCP_IMPORT_WORKSPACE"`
+	OrganizationName   string `json:"organization_name,omitempty"`
+	WorkspaceName      string `json:"workspace_name,omitempty"`
 	QueryConfiguration string `json:"query_configuration" jsonschema:"JSON no-code query configuration produced using provider_list_schema_list and generate_query_configuration"`
 }
 
@@ -72,9 +72,22 @@ func GenerateQueryConfigurationFunc(_ context.Context, _ *mcp.CallToolRequest, i
 	return textResult(text), nil, nil
 }
 
+// searchScopeInputSchema applies shared descriptions that cannot be referenced in struct tags.
+func searchScopeInputSchema[T any]() *jsonschema.Schema {
+	schema, err := jsonschema.For[T](nil)
+	if err != nil {
+		panic(err)
+	}
+	schema.Properties["organization_name"].Description = searchlogic.QueryOrganizationDescription
+	schema.Properties["workspace_name"].Description = searchlogic.QueryWorkspaceDescription
+	return schema
+}
+
 func ProviderListSchemaListTool() *mcp.Tool {
-	return tool("provider_list_schema_list", searchlogic.ProviderListSchemaListDescription,
+	providerTool := tool("provider_list_schema_list", searchlogic.ProviderListSchemaListDescription,
 		"Fetch list_resource_schemas for a search-compatible provider", true, true)
+	providerTool.InputSchema = searchScopeInputSchema[ProviderListSchemaListArguments]()
+	return providerTool
 }
 
 func ProviderListSchemaListFunc(ctx context.Context, req *mcp.CallToolRequest, input ProviderListSchemaListArguments) (*mcp.CallToolResult, any, error) {
@@ -94,8 +107,10 @@ func ProviderListSchemaListFunc(ctx context.Context, req *mcp.CallToolRequest, i
 }
 
 func ExecuteQueryTool() *mcp.Tool {
-	return tool("execute_query", searchlogic.ExecuteQueryDescription,
+	queryTool := tool("execute_query", searchlogic.ExecuteQueryDescription,
 		"Create and execute an HCP Terraform no-code query", false, true)
+	queryTool.InputSchema = searchScopeInputSchema[ExecuteQueryArguments]()
+	return queryTool
 }
 
 func ExecuteQueryFunc(ctx context.Context, req *mcp.CallToolRequest, input ExecuteQueryArguments) (*mcp.CallToolResult, any, error) {

@@ -10,62 +10,54 @@ import (
 )
 
 type SearchScopeValue struct {
-	Value                string `json:"value"`
-	Source               string `json:"source,omitempty"`
-	RequiresConfirmation bool   `json:"requires_confirmation"`
+	Value  string `json:"value"`
+	Source string `json:"source,omitempty"`
 }
 
-// SearchScope carries context and confirmation metadata for either MCP transport.
+// SearchScope carries resolved context and its sources for either MCP transport.
 type SearchScope struct {
 	Organization SearchScopeValue `json:"organization_name"`
 	Workspace    SearchScopeValue `json:"workspace_name"`
 }
 
-// ResolveSearchScope preserves explicit inputs and treats Terraform defaults as candidates.
+// ResolveSearchScope uses explicit scope overrides, otherwise configured environment defaults.
 func ResolveSearchScope(organization, workspace string) SearchScope {
 	return SearchScope{
-		Organization: resolveSearchScopeValue(organization, "", "TF_CLOUD_ORGANIZATION", "TFC_ORGANIZATION"),
+		Organization: resolveSearchScopeValue(organization, "TF_CLOUD_ORGANIZATION"),
 		Workspace:    resolveSearchScopeValue(workspace, "TF_MCP_QUERY_WORKSPACE", "TF_WORKSPACE"),
 	}
 }
 
-func resolveSearchScopeValue(explicit, mcpEnv string, defaults ...string) SearchScopeValue {
+func resolveSearchScopeValue(explicit string, envNames ...string) SearchScopeValue {
 	if value := strings.TrimSpace(explicit); value != "" {
 		return SearchScopeValue{Value: value, Source: "argument"}
 	}
-	if mcpEnv != "" {
-		if value := strings.TrimSpace(os.Getenv(mcpEnv)); value != "" {
-			return SearchScopeValue{Value: value, Source: mcpEnv}
-		}
-	}
-	for _, name := range defaults {
+	for _, name := range envNames {
 		if value := strings.TrimSpace(os.Getenv(name)); value != "" {
-			return SearchScopeValue{Value: value, Source: name, RequiresConfirmation: true}
+			return SearchScopeValue{Value: value, Source: name}
 		}
 	}
 	return SearchScopeValue{}
 }
 
 func (s SearchScope) Ready() bool {
-	return s.Organization.Value != "" && s.Workspace.Value != "" &&
-		!s.Organization.RequiresConfirmation && !s.Workspace.RequiresConfirmation
+	return s.Organization.Value != "" && s.Workspace.Value != ""
 }
 
 // InputRequest exposes only organization/workspace identifiers, never credentials.
 func (s SearchScope) InputRequest() string {
 	missing := []string{}
+	messages := []string{}
 	if s.Organization.Value == "" {
 		missing = append(missing, "organization_name")
+		messages = append(messages, "organization_name is missing (TF_CLOUD_ORGANIZATION is unset); ask the user for it.")
 	}
 	if s.Workspace.Value == "" {
 		missing = append(missing, "workspace_name")
+		messages = append(messages, "workspace_name is missing (TF_MCP_QUERY_WORKSPACE and TF_WORKSPACE are unset); ask the user for it.")
 	}
 	status := "input_required"
-	message := "organization_name and workspace_name are required; ask the user for the missing inputs, then retry with explicit arguments."
-	if s.Organization.RequiresConfirmation || s.Workspace.RequiresConfirmation {
-		status = "confirmation_required"
-		message = "Terraform defaults are candidates only; ask the user whether to use these defaults or supply their own. Ask for any missing inputs too. Wait for their response, then retry with accepted or replacement values as explicit arguments. Do not make scoped API requests before confirmation."
-	}
+	message := strings.Join(messages, " ")
 	payload, _ := json.Marshal(struct {
 		Status  string      `json:"status"`
 		Message string      `json:"message"`
@@ -75,6 +67,6 @@ func (s SearchScope) InputRequest() string {
 	return string(payload)
 }
 
-const QueryOrganizationDescription = "HCP Terraform organization containing the query workspace. Explicit input overrides environment values. TF_CLOUD_ORGANIZATION, then TFC_ORGANIZATION, are candidates only: ask the user to confirm or replace them before passing the value. If absent, ask the user for organization_name."
+const QueryOrganizationDescription = "Optional. HCP Terraform organization containing the query workspace. Omit to use TF_CLOUD_ORGANIZATION automatically without confirmation. If the user explicitly specifies an organization, pass it here to override the default. Only ask the user if the tool reports it missing."
 
-const QueryWorkspaceDescription = "HCP Terraform workspace for queries. Explicit input overrides TF_MCP_QUERY_WORKSPACE. If neither is set, TF_WORKSPACE is a candidate only: ask the user to confirm or replace it before passing the value. If absent, ask the user for workspace_name. TF_MCP_IMPORT_WORKSPACE is a separate import target, not a query default."
+const QueryWorkspaceDescription = "Optional. HCP Terraform workspace for queries. Omit to use TF_MCP_QUERY_WORKSPACE, then TF_WORKSPACE, automatically without confirmation. If the user explicitly specifies a workspace, pass it here to override the default. Only ask the user if the tool reports it missing. TF_MCP_IMPORT_WORKSPACE is a separate import target, not a query default."

@@ -52,6 +52,11 @@ func TestExecuteQueryDefinition(t *testing.T) {
 	assert.Contains(t, tool.Tool.Description, "exact key")
 	assert.Contains(t, tool.Tool.Description, "ordinary managed resource name")
 	assert.Contains(t, tool.Tool.Description, "MANDATORY WORKFLOW")
+	assert.Contains(t, tool.Tool.Description, "EXECUTION APPROVAL")
+	assert.Contains(t, tool.Tool.Description, "resolved organization, workspace, and query selections")
+	assert.Contains(t, tool.Tool.Description, "wait for their approval")
+	assert.Contains(t, tool.Tool.Description, "Do not call execute_query if approval is declined or absent")
+	assert.Contains(t, tool.Tool.Description, "obtain approval again before execution")
 }
 
 func TestParseExecuteQueryConfiguration(t *testing.T) {

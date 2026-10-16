@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/google/jsonschema-go/jsonschema"
+	searchlogic "github.com/hashicorp/terraform-mcp-server/pkg/tools/search"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/require"
 )
@@ -38,18 +39,21 @@ func TestOfficialSearchToolAnnotations(t *testing.T) {
 		require.False(t, *tool.Annotations.DestructiveHint)
 	}
 	require.False(t, ExecuteQueryTool().Annotations.ReadOnlyHint)
+	require.Equal(t, searchlogic.ExecuteQueryDescription, ExecuteQueryTool().Description)
+	require.Contains(t, ExecuteQueryTool().Description, "EXECUTION APPROVAL")
+	require.Contains(t, ExecuteQueryTool().Description, "wait for their approval")
 }
 
 func TestOfficialSearchScopeSchemas(t *testing.T) {
-	providerSchema, err := jsonschema.For[ProviderListSchemaListArguments](nil)
-	require.NoError(t, err)
-	querySchema, err := jsonschema.For[ExecuteQueryArguments](nil)
-	require.NoError(t, err)
+	providerSchema, ok := ProviderListSchemaListTool().InputSchema.(*jsonschema.Schema)
+	require.True(t, ok)
+	querySchema, ok := ExecuteQueryTool().InputSchema.(*jsonschema.Schema)
+	require.True(t, ok)
 	for _, schema := range []*jsonschema.Schema{providerSchema, querySchema} {
 		require.NotContains(t, schema.Required, "organization_name")
 		require.NotContains(t, schema.Required, "workspace_name")
-		require.Contains(t, schema.Properties["organization_name"].Description, "TF_CLOUD_ORGANIZATION")
-		require.Contains(t, schema.Properties["workspace_name"].Description, "TF_MCP_QUERY_WORKSPACE")
+		require.Equal(t, searchlogic.QueryOrganizationDescription, schema.Properties["organization_name"].Description)
+		require.Equal(t, searchlogic.QueryWorkspaceDescription, schema.Properties["workspace_name"].Description)
 	}
 	require.Equal(t, []string{"query_configuration"}, querySchema.Required)
 }
@@ -73,13 +77,12 @@ func TestOfficialSearchScopeClarification(t *testing.T) {
 		missing                                    []string
 	}{
 		{"missing", "", "", "", "input_required", []string{"organization_name", "workspace_name"}},
-		{"candidates", "org", "ws", "", "confirmation_required", []string{}},
-		{"partial", "", "ws", "", "confirmation_required", []string{"organization_name"}},
-		{"MCP workspace with organization candidate", "org", "", "query", "confirmation_required", []string{}},
+		{"missing organization with Terraform workspace", "", "ws", "", "input_required", []string{"organization_name"}},
+		{"missing workspace with Terraform organization", "org", "", "", "input_required", []string{"workspace_name"}},
+		{"missing organization with MCP workspace", "", "", "query", "input_required", []string{"organization_name"}},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			t.Setenv("TF_CLOUD_ORGANIZATION", test.org)
-			t.Setenv("TFC_ORGANIZATION", "")
 			t.Setenv("TF_WORKSPACE", test.workspace)
 			t.Setenv("TF_MCP_QUERY_WORKSPACE", test.mcpWorkspace)
 			for _, name := range []string{"provider_list_schema_list", "execute_query"} {
@@ -104,6 +107,22 @@ func TestOfficialSearchScopeClarification(t *testing.T) {
 				require.Equal(t, test.missing, payload.Missing)
 				require.Contains(t, payload.Message, "ask the user")
 			}
+		})
+	}
+}
+
+func TestOfficialExecuteQueryUsesEnvironmentScopeDirectly(t *testing.T) {
+	for _, workspaceEnv := range []string{"TF_WORKSPACE", "TF_MCP_QUERY_WORKSPACE"} {
+		t.Run(workspaceEnv, func(t *testing.T) {
+			t.Setenv("TF_CLOUD_ORGANIZATION", "org")
+			t.Setenv("TF_WORKSPACE", "")
+			t.Setenv("TF_MCP_QUERY_WORKSPACE", "")
+			t.Setenv(workspaceEnv, "workspace")
+			_, _, err := ExecuteQueryFunc(context.Background(), nil, ExecuteQueryArguments{
+				QueryConfiguration: "{",
+			})
+			// Resolved environment scope must reach validation, not request user input.
+			require.ErrorContains(t, err, "invalid query_configuration")
 		})
 	}
 }
