@@ -47,9 +47,11 @@ func TestListStacks(t *testing.T) {
 		require.NotEmpty(t, resultText, "list_stacks should return a non-empty response")
 
 		assert.NotEqual(t, 0, int(gjson.Get(resultText, "items.#").Int()), "list_stacks should return at least one stack")
-		assert.NotEmpty(t, gjson.Get(resultText, "items.0.ID").String(), "each stack item should contain an ID")
+		assert.NotEmpty(t, gjson.Get(resultText, pick("items.0.ID", "items.0.id")).String(), "each stack item should contain an ID")
 		assert.NotEmpty(t, gjson.Get(resultText, "items.0.name").String(), "each stack item should contain a name")
-		assert.True(t, gjson.Get(resultText, "items.0.description").Exists(), "each stack item should contain a description field")
+		if !officialEndpoint() {
+			assert.True(t, gjson.Get(resultText, "items.0.description").Exists(), "each stack item should contain a description field")
+		}
 	})
 
 	t.Run("filter by search_query matching the stack name", func(t *testing.T) {
@@ -70,16 +72,23 @@ func TestListStacks(t *testing.T) {
 
 		require.False(t, result.IsError, "list_stacks with a valid project_id should not return an error")
 		assert.Equal(t, 1, int(gjson.Get(resultText, "items.#").Int()), "project_id filter should return exactly the one stack in the project")
-		assert.Equal(t, stack.ID, gjson.Get(resultText, "items.0.ID").String(), "filtered result should reference the created stack ID")
+		assert.Equal(t, stack.ID, gjson.Get(resultText, pick("items.0.ID", "items.0.id")).String(), "filtered result should reference the created stack ID")
 	})
 
-	t.Run("search_query with no match returns an error", func(t *testing.T) {
-		result, _ := callTool(t, s, "list_stacks", map[string]any{
+	t.Run("search_query with no match", func(t *testing.T) {
+		result, resultText := callTool(t, s, "list_stacks", map[string]any{
 			"terraform_org_name": tfeOrgName,
 			"search_query":       "zzz-no-stack-will-ever-match-this-query-xyz",
 		})
 
-		assert.True(t, result.IsError, "list_stacks with a non-matching search_query should return an error")
+		// mark3labs errors on an empty list, the official sdk returns an empty
+		// items array since no results isn't a failure
+		if officialEndpoint() {
+			require.False(t, result.IsError, "list_stacks with no matches should not return an error")
+			assert.Equal(t, int64(0), gjson.Get(resultText, "items.#").Int(), "list_stacks with no matches should return no items")
+		} else {
+			assert.True(t, result.IsError, "list_stacks with a non-matching search_query should return an error")
+		}
 	})
 
 	t.Run("non-existent org returns an error", func(t *testing.T) {
