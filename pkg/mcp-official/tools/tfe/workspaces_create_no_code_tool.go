@@ -107,11 +107,6 @@ func CreateNoCodeWorkspaceFunc(ctx context.Context, request *mcp.CallToolRequest
 		return nil, nil, fmt.Errorf("project_id must not be blank")
 	}
 
-	session, ok := request.GetSession().(*mcp.ServerSession)
-	if !ok || session == nil {
-		return nil, nil, fmt.Errorf("request does not have an active MCP server session")
-	}
-
 	tfeClient, err := client.GetTfeClient(ctx, client.SessionIDFromRequest(request))
 	if err != nil {
 		return nil, nil, fmt.Errorf("getting Terraform client: %w", err)
@@ -123,15 +118,11 @@ func CreateNoCodeWorkspaceFunc(ctx context.Context, request *mcp.CallToolRequest
 	}
 
 	elicitationSchema := buildNoCodeElicitationSchema(moduleMetadata, noCodeModule)
-	result, err := session.Elicit(ctx, &mcp.ElicitParams{
-		Message:         fmt.Sprintf("The No Code module '%s' requires %d variable(s) to create the workspace. Please provide values for the required variables.", noCodeModuleID, len(elicitationSchema.schema.Required)),
-		RequestedSchema: elicitationSchema.schema,
-	})
-	if err != nil {
-		return nil, nil, fmt.Errorf("requesting variable values: %w", err)
+	var session *mcp.ServerSession
+	if request != nil {
+		session, _ = request.GetSession().(*mcp.ServerSession)
 	}
-
-	variables, err := processNoCodeElicitationResponse(result, elicitationSchema)
+	variables, err := collectNoCodeVariables(ctx, session, noCodeModuleID, elicitationSchema)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -146,19 +137,50 @@ func CreateNoCodeWorkspaceFunc(ctx context.Context, request *mcp.CallToolRequest
 		return nil, nil, fmt.Errorf("creating No Code module workspace %q: %w", workspaceName, err)
 	}
 
-	return nil, &CreateNoCodeWorkspaceResponse{
-		WorkspaceID:    workspace.ID,
-		WorkspaceName:  workspace.Name,
-		ProjectID:      projectID,
-		NoCodeModuleID: noCodeModuleID,
-		AutoApply:      input.AutoApply,
-	}, nil
+	response := noCodeWorkspaceResponse(workspace, noCodeModuleID)
+	return nil, &response, nil
 }
 
 type noCodeElicitationSchema struct {
 	schema        *jsonschema.Schema
 	variableNames []string
 	requiredSet   map[string]struct{}
+}
+
+func collectNoCodeVariables(ctx context.Context, session *mcp.ServerSession, noCodeModuleID string, schema *noCodeElicitationSchema) ([]*tfe.Variable, error) {
+	if len(schema.variableNames) == 0 {
+		return nil, nil
+	}
+	if session == nil {
+		return nil, fmt.Errorf("request does not have an active MCP server session")
+	}
+
+	result, err := session.Elicit(ctx, &mcp.ElicitParams{
+		Message:         fmt.Sprintf("The No Code module '%s' requires %d variable(s) to create the workspace. Please provide values for the required variables.", noCodeModuleID, len(schema.schema.Required)),
+		RequestedSchema: schema.schema,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("requesting variable values: %w", err)
+	}
+
+	return processNoCodeElicitationResponse(result, schema)
+}
+
+func noCodeWorkspaceResponse(workspace *tfe.Workspace, noCodeModuleID string) CreateNoCodeWorkspaceResponse {
+	response := CreateNoCodeWorkspaceResponse{
+		NoCodeModuleID: noCodeModuleID,
+	}
+	if workspace == nil {
+		return response
+	}
+
+	response.WorkspaceID = workspace.ID
+	response.WorkspaceName = workspace.Name
+	response.AutoApply = workspace.AutoApply
+	if workspace.Project != nil {
+		response.ProjectID = workspace.Project.ID
+	}
+	return response
 }
 
 func mapTerraformTypeToJSON(terraformType string) string {

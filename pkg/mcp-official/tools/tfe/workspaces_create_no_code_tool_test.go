@@ -105,6 +105,46 @@ func TestProcessNoCodeElicitationResponse(t *testing.T) {
 	}
 }
 
+func TestCollectNoCodeVariablesSkipsElicitationForEmptyModule(t *testing.T) {
+	schema := buildNoCodeElicitationSchema(&tfeclient.ModuleMetadata{}, &tfe.RegistryNoCodeModule{})
+
+	variables, err := collectNoCodeVariables(t.Context(), nil, "nocode-123", schema)
+	require.NoError(t, err)
+	assert.Nil(t, variables)
+}
+
+func TestCollectNoCodeVariablesRequiresSessionWhenVariablesExist(t *testing.T) {
+	schema := buildNoCodeElicitationSchema(testNoCodeModuleMetadata(t), &tfe.RegistryNoCodeModule{})
+
+	_, err := collectNoCodeVariables(t.Context(), nil, "nocode-123", schema)
+	require.EqualError(t, err, "request does not have an active MCP server session")
+}
+
+func TestNoCodeWorkspaceResponseUsesWorkspaceValues(t *testing.T) {
+	response := noCodeWorkspaceResponse(&tfe.Workspace{
+		ID:        "ws-123",
+		Name:      "created-workspace",
+		AutoApply: true,
+		Project:   &tfe.Project{ID: "prj-123"},
+	}, "nocode-123")
+
+	assert.Equal(t, CreateNoCodeWorkspaceResponse{
+		WorkspaceID:    "ws-123",
+		WorkspaceName:  "created-workspace",
+		ProjectID:      "prj-123",
+		NoCodeModuleID: "nocode-123",
+		AutoApply:      true,
+	}, response)
+}
+
+func TestNoCodeWorkspaceResponseHandlesMissingProject(t *testing.T) {
+	response := noCodeWorkspaceResponse(&tfe.Workspace{ID: "ws-123", AutoApply: false}, "nocode-123")
+
+	assert.Equal(t, "ws-123", response.WorkspaceID)
+	assert.Empty(t, response.ProjectID)
+	assert.False(t, response.AutoApply)
+}
+
 func TestNoCodeVariableConversions(t *testing.T) {
 	tests := []struct {
 		name         string
