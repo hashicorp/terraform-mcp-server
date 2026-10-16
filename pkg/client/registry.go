@@ -11,7 +11,9 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"regexp"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/hashicorp/go-cleanhttp"
@@ -23,10 +25,90 @@ import (
 
 const DefaultPublicRegistryURL = "https://registry.terraform.io"
 
+var retryLogURLPattern = regexp.MustCompile(`[A-Za-z][A-Za-z0-9+.-]*://[^\s"'<>]+`)
+
+// Signed query parameters make the URL itself a bearer capability.
+var signedURLQueryKeys = map[string]struct{}{
+	"signature":        {},
+	"sig":              {},
+	"x-amz-signature":  {},
+	"x-goog-signature": {},
+}
+
+type redactingRetryLogger struct {
+	logger *log.Logger
+}
+
+func (l redactingRetryLogger) Printf(format string, args ...interface{}) {
+	message := fmt.Sprintf(format, args...)
+	l.logger.Print(retryLogURLPattern.ReplaceAllStringFunc(message, redactRetryURL))
+}
+
+// redactRetryURL preserves useful URL context while removing capability-bearing
+// Archivist paths, signed queries, and embedded credentials.
+func redactRetryURL(raw string) string {
+	trailing := ""
+	for len(raw) > 0 && strings.ContainsRune(".,;:!?)]}", rune(raw[len(raw)-1])) {
+		trailing = string(raw[len(raw)-1]) + trailing
+		raw = raw[:len(raw)-1]
+	}
+
+	u, err := url.Parse(raw)
+	if err != nil || u.Scheme == "" || u.Host == "" {
+		return "[redacted-url]" + trailing
+	}
+
+	if u.User != nil {
+		u.User = url.User("redacted")
+	}
+
+	hostIsArchivist := strings.Contains(strings.ToLower(u.Hostname()), "archivist")
+	objectPath := "/v1/object/"
+	if idx := strings.Index(strings.ToLower(u.Path), objectPath); idx >= 0 {
+		u.Path = u.Path[:idx+len(objectPath)] + "___REDACTED___"
+		u.RawPath = ""
+		u.RawQuery = ""
+		u.Fragment = ""
+		return u.String() + trailing
+	}
+
+	if hostIsArchivist {
+		u.Path = "/___REDACTED___"
+		u.RawPath = ""
+		u.RawQuery = ""
+		u.Fragment = ""
+		return u.String() + trailing
+	}
+
+	for parameter := range strings.SplitSeq(u.RawQuery, "&") {
+		key := parameter
+		if idx := strings.IndexByte(key, '='); idx >= 0 {
+			key = key[:idx]
+		}
+		key, err = url.QueryUnescape(key)
+		if err != nil {
+			continue
+		}
+		if _, ok := signedURLQueryKeys[strings.ToLower(key)]; ok {
+			u.RawQuery = "___REDACTED___"
+			u.Fragment = ""
+			return u.String() + trailing
+		}
+	}
+
+	return u.String() + trailing
+}
+
 // CreateHTTPClient initializes a retryable HTTP client
 func CreateHTTPClient(insecureSkipVerify bool, logger *log.Logger) *http.Client {
 	retryClient := retryablehttp.NewClient()
-	retryClient.Logger = logger
+	if logger == nil {
+		// Assign an untyped nil interface: a typed nil *logrus.Logger would
+		// still satisfy retryablehttp.Logger and panic on the first request.
+		retryClient.Logger = nil
+	} else {
+		retryClient.Logger = redactingRetryLogger{logger: logger}
+	}
 
 	transport := &http.Transport{
 		TLSClientConfig: &tls.Config{InsecureSkipVerify: insecureSkipVerify},
