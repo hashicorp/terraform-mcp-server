@@ -191,11 +191,27 @@ var officialFactories = map[string]func(svr *mcp.Server, logger *slog.Logger){
 	},
 }
 
+// officialSpecialFactories contains tools whose registration depends on
+// runtime configuration and therefore cannot use officialFactories directly.
+var officialSpecialFactories = map[string]func(svr *mcp.Server, logger *slog.Logger, tfOpsEnabled bool){
+	"create_run": func(svr *mcp.Server, _ *slog.Logger, tfOpsEnabled bool) {
+		if tfOpsEnabled {
+			mcp.AddTool(svr, tfeTools.CreateRunTool(), tfeTools.CreateRunFunc)
+			return
+		}
+		mcp.AddTool(svr, tfeTools.CreateRunSafeTool(), tfeTools.CreateRunSafeFunc)
+	},
+}
+
 func RegisterTools(svr *mcp.Server, logger *slog.Logger, filter toolsets.ToolFilter) {
 	tfOpsEnabled := strings.EqualFold(os.Getenv("ENABLE_TF_OPERATIONS"), "true")
 
 	for _, td := range filter.EnabledTools(nil) {
 		if td.RequiresTFOps && !tfOpsEnabled {
+			continue
+		}
+		if register, ok := officialSpecialFactories[td.Name]; ok {
+			register(svr, logger, tfOpsEnabled)
 			continue
 		}
 		if register, ok := officialFactories[td.Name]; ok {
