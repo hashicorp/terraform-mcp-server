@@ -23,10 +23,11 @@ automation and interaction capabilities for Infrastructure as Code (IaC) develop
 <a href="#installation">Installation</a><br>
 <a href="#usage-with-visual-studio-code">Visual Studio Code</a><br>
 <a href="#usage-with-cursor">Cursor</a><br>
-<a href="#usage-with-claude-desktop--amazon-q-developer--kiro-cli">Claude Desktop, Amazon Q Developer, and Kiro CLI</a><br>
+<a href="#usage-with-claude-desktop--amazon-q-developer">Claude Desktop and Amazon Q Developer</a><br>
 <a href="#usage-with-claude-code">Claude Code</a><br>
 <a href="#usage-with-codex-cli">Codex CLI</a><br>
 <a href="#usage-with-gemini-extensions">Gemini extensions</a><br>
+<a href="#usage-with-kiro">Kiro</a><br>
 <a href="#usage-with-bob-ide--shell">Bob IDE and Shell</a>
 </td>
 <td width="33%" valign="top">
@@ -337,9 +338,9 @@ Add this to your Cursor config (`~/.cursor/mcp.json`) or via Settings → Cursor
   <img alt="Add terraform MCP server to Cursor" src="https://cursor.com/deeplink/mcp-install-dark.png" height="32" />
 </a>
 
-### Usage with Claude Desktop / Amazon Q Developer / Kiro CLI
+### Usage with Claude Desktop / Amazon Q Developer
 
-More about using MCP server tools in Claude Desktop [user documentation](https://modelcontextprotocol.io/quickstart/user). Read more about using MCP server in [Amazon Q Developer](https://docs.aws.amazon.com/amazonq/latest/qdeveloper-ug/qdev-mcp.html) and [Kiro CLI](https://kiro.dev/docs/mcp/).
+More about using MCP server tools in Claude Desktop [user documentation](https://modelcontextprotocol.io/quickstart/user). Read more about using MCP server in [Amazon Q Developer](https://docs.aws.amazon.com/amazonq/latest/qdeveloper-ug/qdev-mcp.html).
 
 <table>
 <tr><th>Version 0.3.0+ or greater</th><th>Version 0.2.3 or lower</th></tr>
@@ -444,6 +445,22 @@ Install the extension & run Gemini
 gemini extensions install https://github.com/hashicorp/terraform-mcp-server
 gemini
 ```
+
+### Usage with Kiro
+
+This repository ships an [Agent Plugin](https://agent-plugins.org) manifest in the [`power/`](./power) directory (`power/plugin.json` and `power/mcp.json`), so clients that support the format, such as [Kiro](https://kiro.dev/docs/powers/installation/), can install it. In Kiro, open the Powers panel, choose **Add Custom Power** > **Import power from GitHub**, and enter the URL of the `power/` directory:
+
+```
+https://github.com/hashicorp/terraform-mcp-server/tree/main/power
+```
+
+See [`power/README.md`](./power/README.md) for full setup and credential details.
+
+Or add the server to Kiro in one click:
+
+<a href="https://kiro.dev/launch/mcp/add?name=terraform-mcp&config=%7B%22command%22%3A%22docker%22%2C%22args%22%3A%5B%22run%22%2C%22-i%22%2C%22--rm%22%2C%22-e%22%2C%22TFE_ADDRESS%22%2C%22-e%22%2C%22TFE_TOKEN%22%2C%22hashicorp/terraform-mcp-server%3A1.3.0%22%5D%2C%22disabled%22%3Afalse%2C%22autoApprove%22%3A%5B%5D%7D">
+  <img alt="Add Terraform MCP server to Kiro" src="https://kiro.dev/images/add-to-kiro.svg" height="32" />
+</a>
 
 ### Usage with Bob IDE / Shell
 
