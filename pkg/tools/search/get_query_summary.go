@@ -4,11 +4,7 @@
 package search
 
 import (
-	"bufio"
 	"context"
-	"encoding/json"
-	"fmt"
-	"io"
 	"strings"
 
 	"github.com/hashicorp/go-tfe"
@@ -17,39 +13,6 @@ import (
 	"github.com/mark3labs/mcp-go/server"
 	log "github.com/sirupsen/logrus"
 )
-
-type querySummary struct {
-	ResourcesDiscovered int                   `json:"resources_discovered"`
-	Resources           []queryResource       `json:"resources"`
-	ListCompletions     []queryListCompletion `json:"list_completions"`
-	Diagnostics         []queryDiagnostic     `json:"diagnostics"`
-}
-
-type queryResource struct {
-	Address      string         `json:"address"`
-	DisplayName  string         `json:"display_name"`
-	Identity     map[string]any `json:"identity"`
-	ResourceType string         `json:"resource_type"`
-}
-
-type queryListCompletion struct {
-	Address      string `json:"address"`
-	ResourceType string `json:"resource_type"`
-	Total        int    `json:"total"`
-}
-
-type queryDiagnostic struct {
-	Severity string `json:"severity"`
-	Summary  string `json:"summary"`
-	Detail   string `json:"detail,omitempty"`
-}
-
-type queryLogRecord struct {
-	Type              string               `json:"type"`
-	ListResourceFound *queryResource       `json:"list_resource_found"`
-	ListComplete      *queryListCompletion `json:"list_complete"`
-	Diagnostic        *queryDiagnostic     `json:"diagnostic"`
-}
 
 // GetQuerySummary retrieves a completed query run's log and summarizes its results.
 func GetQuerySummary(logger *log.Logger) server.ServerTool {
@@ -62,8 +25,12 @@ func GetQuerySummary(logger *log.Logger) server.ServerTool {
 			mcp.WithDestructiveHintAnnotation(false),
 			mcp.WithString("query_run_id",
 				mcp.Required(),
-				mcp.Description("Query run ID previously passed to get_query_status."),
+				mcp.Description("Finished QueryRun ID from execute_query or an existing authorized QueryRun."),
 			),
+			mcp.WithString("resource_type", mcp.Description("Optional exact Search list-resource type filter.")),
+			mcp.WithString("address", mcp.Description("Optional exact list block address filter.")),
+			mcp.WithString("name_contains", mcp.Description("Optional case-insensitive display-name substring.")),
+			mcp.WithOutputSchema[QueryDiscoverySummary](),
 		),
 		Handler: func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			return getQuerySummaryHandler(ctx, request, logger)
@@ -79,87 +46,58 @@ func getQuerySummaryHandler(ctx context.Context, request mcp.CallToolRequest, lo
 
 	tfeClient, err := client.GetTfeClientFromContext(ctx, logger)
 	if err != nil {
-		return toolErrorf(logger, "get_query_summary", "failed to get Terraform client: %v", err)
+		return toolErrorf(logger, "get_query_summary", "failed to get Terraform client; check session configuration")
 	}
-	return getQuerySummaryWithClient(ctx, tfeClient, queryRunID, logger)
+	filter := QueryDiscoveryFilter{ResourceType: request.GetString("resource_type", ""), Address: request.GetString("address", ""), NameContains: request.GetString("name_contains", "")}
+	return getQuerySummaryWithClient(ctx, tfeClient, queryRunID, filter, logger)
 }
 
-func getQuerySummaryWithClient(ctx context.Context, tfeClient *tfe.Client, queryRunID string, logger *log.Logger) (*mcp.CallToolResult, error) {
-	queryRunID = strings.TrimSpace(queryRunID)
-	if queryRunID == "" {
-		return toolErrorf(logger, "get_query_summary", "missing required input: query_run_id")
-	}
-	summary, err := ReadQuerySummary(ctx, tfeClient, queryRunID)
+func getQuerySummaryWithClient(ctx context.Context, tfeClient *tfe.Client, queryRunID string, filter QueryDiscoveryFilter, logger *log.Logger) (*mcp.CallToolResult, error) {
+	summary, err := ReadQueryDiscoverySummary(ctx, tfeClient, queryRunID, filter)
 	if err != nil {
-		return toolErrorf(logger, "get_query_summary", "failed to get query summary for %q: %v", queryRunID, err)
+		return toolErrorf(logger, "get_query_summary", "query summary unavailable: %v", err)
 	}
-
-	return mcp.NewToolResultText(summary), nil
+	text, err := FormatQueryDiscoverySummary(summary)
+	if err != nil {
+		return toolErrorf(logger, "get_query_summary", "query summary unavailable: %v", err)
+	}
+	return mcp.NewToolResultStructured(summary, text), nil
 }
 
-// ReadQuerySummary parses the backend QueryRun log without MCP transport types.
+// ReadQuerySummary retains the plain-Go entry point for callers that used it
+// before V1. It now returns only bounded, provenance-checked
+// Search results, not raw log rows or backend diagnostic detail.
 func ReadQuerySummary(ctx context.Context, tfeClient *tfe.Client, queryRunID string) (string, error) {
-	return readQuerySummary(ctx, tfeClient, strings.TrimSpace(queryRunID))
-}
-
-func readQuerySummary(ctx context.Context, tfeClient *tfe.Client, queryRunID string) (string, error) {
-	logReader, err := tfeClient.QueryRuns.Logs(ctx, queryRunID)
+	summary, err := ReadQueryDiscoverySummary(ctx, tfeClient, queryRunID, QueryDiscoveryFilter{})
 	if err != nil {
 		return "", err
 	}
-
-	summary, err := parseQuerySummary(logReader)
-	if err != nil {
-		return "", err
-	}
-
-	response, err := json.Marshal(summary)
-	if err != nil {
-		return "", fmt.Errorf("marshaling query summary: %w", err)
-	}
-	return string(response), nil
+	return FormatQueryDiscoverySummary(summary)
 }
 
-func parseQuerySummary(reader io.Reader) (*querySummary, error) {
-	summary := &querySummary{
-		Resources:       []queryResource{},
-		ListCompletions: []queryListCompletion{},
-		Diagnostics:     []queryDiagnostic{},
-	}
-	lines := bufio.NewReader(reader)
+const getQuerySummaryDescription = `Returns one complete parsed Search-result summary for a finished, authorized
+QueryRun and any supplied presentation filters. It does not return raw QueryRun
+logs or backend artifact URLs.
 
-	for {
-		line, err := lines.ReadBytes('\n')
-		if len(line) > 0 {
-			var record queryLogRecord
-			if json.Unmarshal(line, &record) == nil {
-				switch {
-				case record.Type == "list_resource_found" && record.ListResourceFound != nil:
-					summary.Resources = append(summary.Resources, *record.ListResourceFound)
-				case record.Type == "list_complete" && record.ListComplete != nil:
-					summary.ResourcesDiscovered += record.ListComplete.Total
-					summary.ListCompletions = append(summary.ListCompletions, *record.ListComplete)
-				case record.Type == "diagnostic" && record.Diagnostic != nil:
-					summary.Diagnostics = append(summary.Diagnostics, *record.Diagnostic)
-				}
-			}
-		}
+Call get_query_status first and pass the same query_run_id, or use an existing
+authorized terminal QueryRun ID. Selectable results include
+query_result_marker, identity, identity_version, attributes_captured and any
+projected scalar tags. Keep each displayed marker, display_name and available
+tags together. Summary filters affect presentation only; missing tags do not
+prove a resource is untagged, and attributes_captured=false means tag evidence
+is unknown. A marker provides QueryRun continuity, not authorization, an import
+ID or proof of cloud-object identity.
 
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			return nil, fmt.Errorf("reading query log: %w", err)
-		}
-	}
+Only schema-present list-resource attributes can filter the original query.
+When selection depends on additional result data and matching rows have
+attributes_captured=false, ask before a new QueryRun. If approved and not
+already enabled, repeat the same schema-backed query with generate_config_out
+true while preserving supported filters. This requests generated HCL and
+provider resource objects but does not guarantee capture; a new QueryRun has
+new markers, and this summary does not expose arbitrary resource attributes.
 
-	return summary, nil
-}
-
-const getQuerySummaryDescription = `Retrieves and parses the NDJSON log for an HCP Terraform query run.
-
-Call get_query_status first and wait for it to return a terminal status, then pass the
-same query_run_id to this tool. The result contains resources_discovered and one
-resources entry per discovered resource with its display name and identity. It also
-contains one list_completions entry per list block with its address, resource_type,
-and total, plus any Terraform diagnostics that explain an errored query.`
+For Search-only intent, report selectable results and stop without requesting a
+target workspace or local path. For explicit import intent, ask the user to
+select one or more displayed markers; never select a first-N subset
+automatically. A nonselectable result contains no markers and must not be used
+for import.`

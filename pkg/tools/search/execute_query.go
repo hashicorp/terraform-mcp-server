@@ -73,6 +73,7 @@ func ExecuteQuery(logger *log.Logger) server.ServerTool {
 						"envelope and workspace relationship automatically.",
 				),
 			),
+			mcp.WithOutputSchema[ExecuteQueryResponse](),
 		),
 		Handler: func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			return executeQueryHandler(ctx, request, logger)
@@ -105,17 +106,26 @@ func executeQueryHandler(ctx context.Context, request mcp.CallToolRequest, logge
 
 	tfeClient, err := client.GetTfeClientFromContext(ctx, logger)
 	if err != nil {
-		return toolErrorf(logger, "execute_query", "failed to get Terraform client: %v", err)
+		return toolErrorf(logger, "execute_query", "failed to get Terraform client; check session configuration")
 	}
 	return executeQueryWithClient(ctx, tfeClient, organizationName, workspaceName, rawConfiguration, logger)
 }
 
 func executeQueryWithClient(ctx context.Context, tfeClient *tfe.Client, organizationName, workspaceName, rawConfiguration string, logger *log.Logger) (*mcp.CallToolResult, error) {
-	text, err := ExecuteQueryText(ctx, tfeClient, organizationName, workspaceName, rawConfiguration)
+	result, err := SubmitQuery(ctx, tfeClient, organizationName, workspaceName, rawConfiguration)
 	if err != nil {
 		return toolErrorf(logger, "execute_query", "%v", err)
 	}
-	return mcp.NewToolResultText(text), nil
+	text, err := json.Marshal(result)
+	if err != nil {
+		return toolErrorf(logger, "execute_query", "failed to format query result")
+	}
+	return mcp.NewToolResultStructured(result, string(text)), nil
+}
+
+// ExecuteQueryResponse contains the sole backend field exposed after query creation.
+type ExecuteQueryResponse struct {
+	QueryRunID string `json:"query_run_id"`
 }
 
 // ValidateQueryConfiguration rejects malformed no-code query inputs before any API call.
@@ -127,27 +137,41 @@ func ValidateQueryConfiguration(rawConfiguration string) error {
 // ExecuteQueryText validates the input and submits one no-code query to an existing workspace.
 // The caller supplies its transport's authenticated go-tfe client.
 func ExecuteQueryText(ctx context.Context, tfeClient *tfe.Client, organizationName, workspaceName, rawConfiguration string) (string, error) {
+	result, err := SubmitQuery(ctx, tfeClient, organizationName, workspaceName, rawConfiguration)
+	if err != nil {
+		return "", err
+	}
+	encoded, err := json.Marshal(result)
+	if err != nil {
+		return "", fmt.Errorf("failed to format query result")
+	}
+	return string(encoded), nil
+}
+
+// SubmitQuery makes one create request. A failed POST or untrustworthy response
+// has an unknown outcome: the caller must reconcile before submitting again.
+func SubmitQuery(ctx context.Context, tfeClient *tfe.Client, organizationName, workspaceName, rawConfiguration string) (*ExecuteQueryResponse, error) {
 	if organizationName = strings.TrimSpace(organizationName); organizationName == "" {
-		return "", fmt.Errorf("missing required input: organization_name")
+		return nil, fmt.Errorf("missing required input: organization_name")
 	}
 	if workspaceName = strings.TrimSpace(workspaceName); workspaceName == "" {
-		return "", fmt.Errorf("missing required input: workspace_name")
+		return nil, fmt.Errorf("missing required input: workspace_name")
 	}
 	if strings.TrimSpace(rawConfiguration) == "" {
-		return "", fmt.Errorf("missing required input: query_configuration")
+		return nil, fmt.Errorf("missing required input: query_configuration")
 	}
 	configuration, err := parseExecuteQueryConfiguration(rawConfiguration)
 	if err != nil {
-		return "", fmt.Errorf("invalid query_configuration: %w", err)
+		return nil, fmt.Errorf("invalid query_configuration: %w", err)
 	}
 	workspace, err := tfeClient.Workspaces.Read(ctx, organizationName, workspaceName)
 	if err != nil {
-		return "", fmt.Errorf("workspace %q not found in organization %q: %w", workspaceName, organizationName, err)
+		return nil, fmt.Errorf("unable to read source workspace; check access and workspace selection")
 	}
 
 	response, err := submitExecuteQuery(ctx, tfeClient, workspace.ID, configuration)
 	if err != nil {
-		return "", fmt.Errorf("failed to create no-code query: %w", err)
+		return nil, fmt.Errorf("query creation outcome unknown; reconcile before submitting another query")
 	}
 
 	return response, nil
@@ -203,6 +227,9 @@ func parseExecuteQueryConfiguration(raw string) (*executeQueryConfiguration, err
 					if !ok || !hasName || strings.TrimSpace(name) == "" {
 						return nil, fmt.Errorf("provider %d resource %d attribute %d name is required", providerIndex, resourceIndex, attributeIndex)
 					}
+					if _, hasValue := entry["value"]; !hasValue {
+						return nil, fmt.Errorf("provider %d resource %d attribute %d value is required", providerIndex, resourceIndex, attributeIndex)
+					}
 				}
 			}
 		}
@@ -212,19 +239,15 @@ func parseExecuteQueryConfiguration(raw string) (*executeQueryConfiguration, err
 }
 
 func isPositiveInteger(value any) bool {
-	switch v := value.(type) {
-	case json.Number:
-		n, err := strconv.ParseInt(v.String(), 10, 64)
-		return err == nil && n > 0
-	case string:
-		n, err := strconv.ParseInt(strings.TrimSpace(v), 10, 64)
-		return err == nil && n > 0
-	default:
+	v, ok := value.(json.Number)
+	if !ok {
 		return false
 	}
+	n, err := strconv.ParseInt(v.String(), 10, 64)
+	return err == nil && n > 0
 }
 
-func submitExecuteQuery(ctx context.Context, tfeClient *tfe.Client, workspaceID string, configuration *executeQueryConfiguration) (string, error) {
+func submitExecuteQuery(ctx context.Context, tfeClient *tfe.Client, workspaceID string, configuration *executeQueryConfiguration) (*ExecuteQueryResponse, error) {
 	options := &executeQueryOptions{
 		Source:            executeQuerySource,
 		GenerateConfigOut: configuration.GenerateConfigOut,
@@ -236,34 +259,43 @@ func submitExecuteQuery(ctx context.Context, tfeClient *tfe.Client, workspaceID 
 
 	request, err := tfeClient.NewRequest(http.MethodPost, "search/no-code-query", options)
 	if err != nil {
-		return "", fmt.Errorf("building request: %w", err)
+		return nil, fmt.Errorf("building request: %w", err)
 	}
 
 	var response bytes.Buffer
 	if err := request.Do(ctx, &response); err != nil {
-		return "", err
+		return nil, err
 	}
-	return response.String(), nil
+	var payload struct {
+		Data struct {
+			Relationships struct {
+				LatestQueryRun struct {
+					Data struct {
+						ID string `json:"id"`
+					} `json:"data"`
+				} `json:"latest-query-run"`
+			} `json:"relationships"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(response.Bytes(), &payload); err != nil || strings.TrimSpace(payload.Data.Relationships.LatestQueryRun.Data.ID) == "" {
+		return nil, fmt.Errorf("query create response did not contain a query run ID")
+	}
+	return &ExecuteQueryResponse{QueryRunID: payload.Data.Relationships.LatestQueryRun.Data.ID}, nil
 }
 
-const executeQueryDescription = `Creates and immediately executes an HCP Terraform Search query.
-
-MANDATORY WORKFLOW: Before calling this tool, call provider_list_schema_list and then
-generate_query_configuration. Do not skip generate_query_configuration or construct the payload
-directly. Pass an organization name, workspace name, and the provider/resource configuration
-produced from its guidance.
-Never construct resource_type from an ordinary managed resource name: it must be an exact key
-in list_resource_schemas for the selected provider version. If no matching key exists, do not
-call this tool. The tool resolves the workspace
-with go-tfe, constructs the JSON:API request, and
-calls POST /api/v2/search/no-code-query, which persists the selections, uploads generated
-Terraform query configuration, and starts a query run. It does not create or modify
+const executeQueryDescription = `Creates and immediately executes one HCP Terraform No-Code Search query. It
+creates Search query records and a QueryRun, but does not create or modify cloud
 infrastructure.
 
-The response includes data.relationships.latest-query-run.data.id. Pass that query
-run ID to get_query_status. After it returns a terminal status, pass the same ID to
-get_query_summary to retrieve the parsed result. Do not use curl or call the HCP
-Terraform query API directly.
+Before calling, use provider_list_schema_list and
+generate_query_configuration for the same source organization/workspace. Pass
+the schema-backed provider/resource configuration produced from that guidance;
+resource_type must be an exact list_resource_schemas key. Do not construct the
+payload directly from an ordinary managed-resource name.
+Do not add a requested condition that is absent from the list-resource schema;
+follow the generator guidance for generate_config_out when later selection
+depends on additional result data.
 
-Requires an authenticated HCP Terraform session and a workspace using a supported
-Terraform version.`
+Established success returns only query_run_id. Pass that exact ID to
+get_query_status. If creation does not return a trustworthy ID, reconcile the
+outcome before another submission; do not blindly execute the query again.`
