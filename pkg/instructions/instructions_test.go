@@ -23,11 +23,12 @@ func TestEmbeddedInstructionsPreserveSearchImportBoundaries(t *testing.T) {
 	importGuidance := Text[importStart:codeGenerationStart]
 
 	for _, required := range []string{
-		"supersede the generic Tool Usage Guidelines and Code Generation guidance",
-		"use the provider versions and schemas returned by the Search tools",
-		"do not replace them with a Registry latest-version lookup",
+		"supersede the generic Tool Usage Guidelines and Code Generation workflow",
+		"Use the provider versions and schemas returned by the Search tools",
+		"Do not replace them with `get_latest_provider_version`",
 		"Search catalog version is source-query evidence, not a target-version recommendation",
-		"Search-only intent, report the summary and stop",
+		"Stop for Search-only intent",
+		"Report the summary and stop",
 		"Do not request an import target or local path",
 	} {
 		require.Contains(t, searchGuidance, required)
@@ -36,23 +37,27 @@ func TestEmbeddedInstructionsPreserveSearchImportBoundaries(t *testing.T) {
 	for _, required := range []string{
 		"exact locked provider releases",
 		"provider source and exact version relevant to the selected imports",
-		"public namespace/type shorthand is accepted",
+		"Public namespace/type shorthand is accepted",
 		"custom/private sources retain their hostname",
-		"Use the target's locked releases, not the Search catalog versions",
-		"alert the user that exact target provider releases cannot be determined",
-		"do not run `terraform init`",
-		"or call `prepare_import`, and wait for further instructions",
+		"Use the target's locked releases, not Search catalog versions",
+		"alert the user that exact target releases cannot be determined",
+		"Do not run `terraform init`",
+		"or call `prepare_import`; wait for further instructions",
 		"documentation applicable to the locked release",
-		"do not use a latest-version lookup to replace or upgrade that selection",
+		"do not replace or upgrade it through a latest-version lookup",
 		"Format and, when appropriate, validate the authored HCL",
 		"diagnostics and do not authorize a Plan",
 		"Obtain separate approval for one plain HCP-connected speculative `terraform plan`",
 		"Poll the same Run ID",
 		"never guess the latest Run",
-		"does not continue to `terraform apply`, `terraform import` or `apply_run`",
+		"Do not continue to `terraform apply`, `terraform import` or `apply_run`",
 	} {
 		require.Contains(t, importGuidance, required)
 	}
+	require.Less(t, strings.Index(searchGuidance, "`execute_query`"), strings.Index(searchGuidance, "`get_query_status`"))
+	require.Less(t, strings.Index(importGuidance, "Inspect the target configuration tree"), strings.Index(importGuidance, "call `prepare_import`"))
+	require.Less(t, strings.Index(importGuidance, "Obtain separate approval"), strings.Index(importGuidance, "`terraform plan`"))
+	require.Less(t, strings.Index(importGuidance, "call `verify_import_plan`"), strings.Index(importGuidance, "Do not continue to `terraform apply`"))
 
 	require.NotContains(t, generalGuidance, "Search catalog version")
 	require.NotContains(t, generalGuidance, "Search-to-import speculative")
