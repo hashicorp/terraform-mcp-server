@@ -57,20 +57,18 @@ The Terraform MCP server provides tools for generating better Terraform code thr
 ## Workflow Patterns
 
 **Terraform Search (when Search tools are available)**:
-The Search workflows below supersede the generic Tool Usage Guidelines and Code Generation guidance for Search query configuration and import authoring.
-
-For a new query, confirm the source organization and workspace, then use `provider_list_schema_list` → `generate_query_configuration` → `execute_query` → `get_query_status` → `get_query_summary`. Poll with the same `query_run_id`; do not submit another query merely because polling remains active. An existing authorized QueryRun ID may resume status/summary review.
-
-For Search query configuration, use the provider versions and schemas returned by the Search tools; do not replace them with a Registry latest-version lookup. A Search catalog version is source-query evidence, not a target-version recommendation.
-
-For Search-only intent, report the summary and stop. Do not request an import target or local path. A selectable summary contains every result matching its presentation filters, not every cloud resource; selection is explicit and only for requested import.
+1. **Follow the Search workflow**: These steps supersede the generic Tool Usage Guidelines and Code Generation workflow for Search query configuration and import authoring.
+2. **Start or resume a query**: For a new query, confirm the source organization and workspace, then use `provider_list_schema_list` → `generate_query_configuration` → `execute_query` → `get_query_status` → `get_query_summary`. Poll with the same `query_run_id`; do not submit another query merely because polling remains active. An existing authorized QueryRun ID may resume status and summary review.
+3. **Keep query versions scoped to Search**: Use the provider versions and schemas returned by the Search tools. Do not replace them with `get_latest_provider_version`; a Search catalog version is source-query evidence, not a target-version recommendation.
+4. **Stop for Search-only intent**: Report the summary and stop. Do not request an import target or local path. A selectable summary contains every result matching its presentation filters, not every cloud resource; selection is explicit and only for requested import.
 
 **Search-to-import (only when `prepare_import` and `verify_import_plan` are available and import is requested)**:
-After the user selects displayed `query_result_marker` values, confirm the target workspace in the same organization and the existing user-designated local configuration directory. Inspect that target configuration tree and its exact locked provider releases before `prepare_import`. If `.terraform.lock.hcl` is missing or ambiguous, alert the user that exact target provider releases cannot be determined, do not run `terraform init`, select versions, substitute Search catalog versions or call `prepare_import`, and wait for further instructions. Pass each provider source and exact version relevant to the selected imports; public namespace/type shorthand is accepted, while custom/private sources retain their hostname. Use the target's locked releases, not the Search catalog versions. Markers provide continuity, not import IDs, authorization or identity proof.
-
-After preparation, author and review local HCL using the target's exact locked provider releases. When provider documentation is needed, use documentation applicable to the locked release; do not use a latest-version lookup to replace or upgrade that selection. Format and, when appropriate, validate the authored HCL. These are diagnostics and do not authorize a Plan. Obtain separate approval for one plain HCP-connected speculative `terraform plan`, retain and reconcile its exact CLI Run URL/`run_id`, and call `verify_import_plan`. Poll the same Run ID; never guess the latest Run or blindly create another. Review the exact full Plan and report Plan actions and object identity independently.
-
-This workflow ends with reviewed HCL and findings. It does not continue to `terraform apply`, `terraform import` or `apply_run`; any eventual apply is a separate, independently reviewed and authorized workflow.
+1. **Confirm selection and target**: After the user selects displayed `query_result_marker` values, confirm the target workspace in the same organization and the existing user-designated local configuration directory. Markers provide continuity, not import IDs, authorization or identity proof.
+2. **Require the target lock file**: Inspect the target configuration tree and its exact locked provider releases before `prepare_import`. If `.terraform.lock.hcl` is missing or ambiguous, alert the user that exact target releases cannot be determined. Do not run `terraform init`, select versions, substitute Search catalog versions or call `prepare_import`; wait for further instructions.
+3. **Prepare with locked releases**: Pass each provider source and exact version relevant to the selected imports. Public namespace/type shorthand is accepted; custom/private sources retain their hostname. Use the target's locked releases, not Search catalog versions.
+4. **Author and validate locally**: Author and review local HCL using the target's locked releases. Use provider documentation applicable to the locked release; do not replace or upgrade it through a latest-version lookup. Format and, when appropriate, validate the authored HCL. These are diagnostics and do not authorize a Plan.
+5. **Plan and verify after approval**: Obtain separate approval for one plain HCP-connected speculative `terraform plan`. Retain and reconcile its exact CLI Run URL and `run_id`, then call `verify_import_plan`. Poll the same Run ID; never guess the latest Run or blindly create another. Review the exact full Plan and report Plan actions and object identity independently.
+6. **Stop before apply**: End with reviewed HCL and findings. Do not continue to `terraform apply`, `terraform import` or `apply_run`; any eventual apply is a separate, independently reviewed and authorized workflow.
 
 **Code Generation**:
 1. `search_modules`/`search_providers` for available resources
