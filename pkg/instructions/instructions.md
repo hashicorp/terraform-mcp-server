@@ -56,6 +56,22 @@ The Terraform MCP server provides tools for generating better Terraform code thr
 
 ## Workflow Patterns
 
+**Query and Import Context**:
+1. Use server-configured environment values by default. Omit scope arguments unless the user explicitly specifies an organization or workspace; pass those values as arguments to override the corresponding defaults. Do not invent scope arguments or ask the user to select defaults again.
+2. Without an explicit workspace override, use MCP-specific workspace configuration first: `TF_MCP_QUERY_WORKSPACE` for discovery queries and `TF_MCP_IMPORT_WORKSPACE` for the import destination. These are independent; never use one as the other's default.
+3. If the relevant MCP variable is unset, use `TF_WORKSPACE`. Without an explicit organization override, use `TF_CLOUD_ORGANIZATION`; there is no MCP-specific organization variable. Overrides are per field: changing the organization does not discard the workspace default, or vice versa.
+4. Use configured environment values directly without asking the user to confirm. Ask only for missing inputs, preserving context already resolved rather than asking for both values again.
+5. Search tools return `input_required` as a normal, non-error response with resolved values, sources, and missing inputs when context is incomplete, without making scoped API requests. Treat this as a clarification request, not a failure: ask the user only for the missing inputs rather than presenting an error or raw JSON. Pass those values as explicit `organization_name` or `workspace_name` arguments and reuse resolved context throughout the query workflow.
+6. Resolve the import destination separately before any import workflow. Generated importable configuration does not itself import resources, and this server has no dedicated import tool. Do not treat the query workspace as the import destination or create an import run without the required operation approval.
+
+Environment variables must be passed to the MCP server process by the client configuration (for example, its environment settings) or deployment. Do not assume the server can read the agent's local shell environment or client configuration files. Never read or expose tokens while resolving context.
+
+**Query Execution Approval**:
+- Resolve configured scope automatically and perform provider discovery and query configuration generation without asking for scope confirmation. Ask only for missing scope values reported by `input_required`.
+- Before calling `execute_query`, show the resolved organization, workspace, and query selections (provider, resource types, and filters, if any). Explain that this starts a query run but does not create or modify infrastructure.
+- Ask the user to approve execution and wait for their approval. Do not execute if approval is declined or absent. If the target scope or query selections change, summarize the changes and obtain approval again.
+- This approval is agent-driven guidance, not a server-enforced parameter or status. It does not reintroduce confirmation of configured environment values.
+
 **Code Generation**:
 1. `search_modules`/`search_providers` for available resources
 2. `get_latest_provider_version` if no version available in existing code
