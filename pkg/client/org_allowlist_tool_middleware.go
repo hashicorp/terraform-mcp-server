@@ -5,6 +5,7 @@ package client
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -16,11 +17,39 @@ import (
 // OrgNameArgument is the tool argument holding the organization name for a tool call
 const OrgNameArgument = "terraform_org_name"
 
+var ErrOrganizationNotAllowed = errors.New("resolved Terraform organization is not allowed by this server")
+
+type organizationAllowlistContextKey struct{}
+
+// WithOrganizationAllowlist makes the configured organization policy available
+// to handlers that resolve an organization after argument middleware runs.
+func WithOrganizationAllowlist(ctx context.Context, allowlist []string) context.Context {
+	return context.WithValue(ctx, organizationAllowlistContextKey{}, BuildAllowedOrganizationsMap(allowlist))
+}
+
+// CheckOrganizationAllowlist enforces the configured policy against an
+// effective organization. A missing policy means no allowlist was configured.
+func CheckOrganizationAllowlist(ctx context.Context, organizationName string) error {
+	allowedOrganizations, ok := ctx.Value(organizationAllowlistContextKey{}).(map[string]struct{})
+	if !ok {
+		return nil
+	}
+	organizationName = strings.ToLower(strings.TrimSpace(organizationName))
+	if organizationName == "" {
+		return nil
+	}
+	if _, allowed := allowedOrganizations[organizationName]; !allowed {
+		return ErrOrganizationNotAllowed
+	}
+	return nil
+}
+
 func OrganizationAllowlistToolMiddleware(allowlist []string, logger *log.Logger) server.ToolHandlerMiddleware {
 	allowedOrganizations := BuildAllowedOrganizationsMap(allowlist)
 
 	return func(nextToolHandler server.ToolHandlerFunc) server.ToolHandlerFunc {
 		return func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			ctx = WithOrganizationAllowlist(ctx, allowlist)
 			// Skip allowlist enforcement for tools without an organization argument.
 			organizationName := strings.ToLower(strings.TrimSpace(request.GetString(OrgNameArgument, "")))
 			if organizationName == "" {
@@ -43,6 +72,7 @@ func OrganizationAllowlistToolMiddleware(allowlist []string, logger *log.Logger)
 func BuildAllowedOrganizationsMap(allowlist []string) map[string]struct{} {
 	allowedOrganizations := make(map[string]struct{}, len(allowlist))
 	for _, organizationName := range allowlist {
+		organizationName = strings.ToLower(strings.TrimSpace(organizationName))
 		if organizationName != "" {
 			allowedOrganizations[organizationName] = struct{}{}
 		}
