@@ -118,6 +118,14 @@ func TestSearchScopeInputRequestMessage(t *testing.T) {
 	}
 }
 
+func TestSearchScopeDescriptionsRequireSourceConfirmationAndSeparateImportTarget(t *testing.T) {
+	assert.Contains(t, QueryOrganizationDescription, "Confirm the resolved source")
+	assert.Contains(t, QueryWorkspaceDescription, "Confirm the resolved source")
+	assert.Contains(t, QueryWorkspaceDescription, "import target is selected and confirmed separately")
+	assert.NotContains(t, QueryOrganizationDescription, "without confirmation")
+	assert.NotContains(t, QueryWorkspaceDescription, "without confirmation")
+}
+
 func TestExecuteQueryUsesEnvironmentScopeDirectly(t *testing.T) {
 	for _, workspaceEnv := range []string{"TF_WORKSPACE", "TF_MCP_QUERY_WORKSPACE"} {
 		t.Run(workspaceEnv, func(t *testing.T) {

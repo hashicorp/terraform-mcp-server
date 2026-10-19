@@ -67,6 +67,6 @@ func (s SearchScope) InputRequest() string {
 	return string(payload)
 }
 
-const QueryOrganizationDescription = "Optional. HCP Terraform organization containing the query workspace. Omit to use TF_CLOUD_ORGANIZATION automatically without confirmation. If the user explicitly specifies an organization, pass it here to override the default. Only ask the user if the tool reports it missing."
+const QueryOrganizationDescription = "Optional. HCP Terraform organization containing the query workspace. Omit to resolve the proposed source from TF_CLOUD_ORGANIZATION. Confirm the resolved source with the user before the query workflow. If the user specifies a different organization, pass it here to override the default. Ask only for fields the tool reports missing."
 
-const QueryWorkspaceDescription = "Optional. HCP Terraform workspace for queries. Omit to use TF_MCP_QUERY_WORKSPACE, then TF_WORKSPACE, automatically without confirmation. If the user explicitly specifies a workspace, pass it here to override the default. Only ask the user if the tool reports it missing. TF_MCP_IMPORT_WORKSPACE is a separate import target, not a query default."
+const QueryWorkspaceDescription = "Optional. HCP Terraform source workspace for queries. Omit to resolve the proposed source from TF_MCP_QUERY_WORKSPACE, then TF_WORKSPACE. Confirm the resolved source with the user before the query workflow. If the user specifies a different workspace, pass it here to override the default. Ask only for fields the tool reports missing. The import target is selected and confirmed separately, never defaulted from query scope."

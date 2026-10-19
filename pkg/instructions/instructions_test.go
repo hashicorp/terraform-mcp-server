@@ -23,6 +23,16 @@ func TestEmbeddedInstructionsPreserveSearchImportBoundaries(t *testing.T) {
 	importGuidance := Text[importStart:codeGenerationStart]
 
 	for _, required := range []string{
+		"server-configured query defaults",
+		"ask the user to confirm them",
+		"Always prompt for and confirm the import destination separately",
+		"Never treat a query workspace default as import authorization",
+		"Pass the confirmed target explicitly to import tools",
+	} {
+		require.Contains(t, generalGuidance, required)
+	}
+
+	for _, required := range []string{
 		"supersede the generic Tool Usage Guidelines and Code Generation workflow",
 		"Use the provider versions and schemas returned by the Search tools",
 		"Do not replace them with `get_latest_provider_version`",
