@@ -419,19 +419,29 @@ func TestProviderListSchemaList_ToolDefinition(t *testing.T) {
 	assert.NotContains(t, props, "provider_version")
 	assert.Contains(t, props, "organization_name")
 	assert.Contains(t, props, "workspace_name")
-	assert.ElementsMatch(t, []string{"organization_name", "workspace_name"}, tool.Tool.InputSchema.Required)
-	assert.Contains(t, tool.Tool.Description, "Do not attempt an unscoped request first")
+	assert.NotContains(t, tool.Tool.InputSchema.Required, "organization_name")
+	assert.NotContains(t, tool.Tool.InputSchema.Required, "workspace_name")
+	assert.Contains(t, tool.Tool.Description, "TF_MCP_QUERY_WORKSPACE")
+	assert.Contains(t, tool.Tool.Description, "values directly without confirmation")
+	assert.Contains(t, tool.Tool.Description, "Call without scope args first; if the result reports a missing value, ask the user for only that value and retry.")
+	assert.NotContains(t, tool.Tool.Description, "\t")
+	assert.NotContains(t, props["organization_name"].(map[string]any), "default")
+	assert.NotContains(t, props["workspace_name"].(map[string]any), "default")
 	assert.Contains(t, tool.Tool.Description, "always read from the provider catalog response")
 }
 
-func TestProviderListSchemaList_RejectsMissingScopeBeforeRequest(t *testing.T) {
+func TestProviderListSchemaList_RequestsMissingScopeBeforeRequest(t *testing.T) {
+	for _, name := range []string{"TF_CLOUD_ORGANIZATION", "TF_MCP_QUERY_WORKSPACE", "TF_WORKSPACE"} {
+		t.Setenv(name, "")
+	}
 	result, err := providerListSchemaListHandler(context.Background(), mcp.CallToolRequest{}, silentLogger())
 
 	require.NoError(t, err)
-	require.True(t, result.IsError)
+	require.False(t, result.IsError)
 	tc, ok := mcp.AsTextContent(result.Content[0])
 	require.True(t, ok, "expected TextContent")
-	assert.Contains(t, tc.Text, "organization_name and workspace_name are required")
+	assert.Contains(t, tc.Text, "organization_name is missing (TF_CLOUD_ORGANIZATION is unset)")
+	assert.Contains(t, tc.Text, "workspace_name is missing (TF_MCP_QUERY_WORKSPACE and TF_WORKSPACE are unset)")
 	assert.Contains(t, tc.Text, "ask the user")
 }
 
