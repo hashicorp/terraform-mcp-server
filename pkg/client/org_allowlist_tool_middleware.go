@@ -27,6 +27,13 @@ func WithOrganizationAllowlist(ctx context.Context, allowlist []string) context.
 	return context.WithValue(ctx, organizationAllowlistContextKey{}, BuildAllowedOrganizationsMap(allowlist))
 }
 
+// OrganizationAllowlistConfigured reports whether an organization allowlist
+// policy was placed in the request context without exposing its values.
+func OrganizationAllowlistConfigured(ctx context.Context) bool {
+	_, ok := ctx.Value(organizationAllowlistContextKey{}).(map[string]struct{})
+	return ok
+}
+
 // CheckOrganizationAllowlist enforces the configured policy against an
 // effective organization. A missing policy means no allowlist was configured.
 func CheckOrganizationAllowlist(ctx context.Context, organizationName string) error {
