@@ -167,6 +167,143 @@ func TestWaitForQueryStatusReturnsEachTerminalStatus(t *testing.T) {
 	}
 }
 
+func TestWaitForQueryStatusChecksQueryRunOrganizationAllowlist(t *testing.T) {
+	tests := []struct {
+		name               string
+		queryRelationship  string
+		workspaceResponse  string
+		workspaceStatus    int
+		allowlist          []string
+		wantErr            error
+		wantWorkspaceReads int32
+	}{
+		{
+			name:               "allowed organization",
+			queryRelationship:  `,"relationships":{"workspace":{"data":{"type":"workspaces","id":"ws-test"}}}`,
+			workspaceResponse:  `{"data":{"type":"workspaces","id":"ws-test","attributes":{"name":"ws"},"relationships":{"organization":{"data":{"type":"organizations","id":"allowed-org"}}}}}`,
+			workspaceStatus:    http.StatusOK,
+			allowlist:          []string{"allowed-org"},
+			wantWorkspaceReads: 1,
+		},
+		{
+			name:               "disallowed organization",
+			queryRelationship:  `,"relationships":{"workspace":{"data":{"type":"workspaces","id":"ws-test"}}}`,
+			workspaceResponse:  `{"data":{"type":"workspaces","id":"ws-test","attributes":{"name":"ws"},"relationships":{"organization":{"data":{"type":"organizations","id":"blocked-org"}}}}}`,
+			workspaceStatus:    http.StatusOK,
+			allowlist:          []string{"allowed-org"},
+			wantErr:            client.ErrOrganizationNotAllowed,
+			wantWorkspaceReads: 1,
+		},
+		{
+			name:            "missing query workspace",
+			workspaceStatus: http.StatusOK,
+			allowlist:       []string{"allowed-org"},
+			wantErr:         searchDiagnosticError(queryOwnershipUnverifiedCode),
+		},
+		{
+			name:               "missing workspace organization",
+			queryRelationship:  `,"relationships":{"workspace":{"data":{"type":"workspaces","id":"ws-test"}}}`,
+			workspaceResponse:  `{"data":{"type":"workspaces","id":"ws-test","attributes":{"name":"ws"}}}`,
+			workspaceStatus:    http.StatusOK,
+			allowlist:          []string{"allowed-org"},
+			wantErr:            searchDiagnosticError(queryOwnershipUnverifiedCode),
+			wantWorkspaceReads: 1,
+		},
+		{
+			name:               "workspace read failure",
+			queryRelationship:  `,"relationships":{"workspace":{"data":{"type":"workspaces","id":"ws-test"}}}`,
+			workspaceResponse:  `{"errors":[{"detail":"workspace unavailable"}]}`,
+			workspaceStatus:    http.StatusInternalServerError,
+			allowlist:          []string{"allowed-org"},
+			wantErr:            searchDiagnosticError(queryOwnershipUnverifiedCode),
+			wantWorkspaceReads: 1,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			var workspaceReads atomic.Int32
+			server := queryStatusTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "application/vnd.api+json")
+				switch r.URL.Path {
+				case "/api/v2/queries/qry-test":
+					_, _ = fmt.Fprintf(w, `{"data":{"type":"queries","id":"qry-test","attributes":{"status":"finished"}%s}}`, test.queryRelationship)
+				case "/api/v2/workspaces/ws-test":
+					workspaceReads.Add(1)
+					w.WriteHeader(test.workspaceStatus)
+					_, _ = w.Write([]byte(test.workspaceResponse))
+				default:
+					http.NotFound(w, r)
+				}
+			})
+			tfeClient := queryStatusTFEClient(t, server)
+			ctx := client.WithOrganizationAllowlist(context.Background(), test.allowlist)
+
+			response, err := waitForQueryStatus(ctx, context.Background(), tfeClient, "qry-test", time.Millisecond, nil)
+
+			if test.wantErr != nil {
+				require.Error(t, err)
+				if errors.Is(test.wantErr, client.ErrOrganizationNotAllowed) {
+					assert.ErrorIs(t, err, client.ErrOrganizationNotAllowed)
+					assert.NotContains(t, err.Error(), "blocked-org")
+				} else {
+					assert.EqualError(t, err, test.wantErr.Error())
+				}
+				assert.Nil(t, response)
+			} else {
+				require.NoError(t, err)
+				require.NotNil(t, response)
+				assert.Equal(t, tfe.QueryRunFinished, response.Status)
+			}
+			assert.Equal(t, test.wantWorkspaceReads, workspaceReads.Load())
+		})
+	}
+}
+
+func TestWaitForQueryStatusChecksOrganizationPolicyOnlyWhenConfigured(t *testing.T) {
+	for _, test := range []struct {
+		name               string
+		configureAllowlist bool
+		wantWorkspaceReads int32
+	}{
+		{name: "no allowlist skips workspace read"},
+		{name: "allowlist reads workspace once across polls", configureAllowlist: true, wantWorkspaceReads: 1},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			var queryReads, workspaceReads atomic.Int32
+			server := queryStatusTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "application/vnd.api+json")
+				switch r.URL.Path {
+				case "/api/v2/queries/qry-test":
+					status := "running"
+					if queryReads.Add(1) > 1 {
+						status = "finished"
+					}
+					_, _ = fmt.Fprintf(w, `{"data":{"type":"queries","id":"qry-test","attributes":{"status":%q},"relationships":{"workspace":{"data":{"type":"workspaces","id":"ws-test"}}}}}`, status)
+				case "/api/v2/workspaces/ws-test":
+					workspaceReads.Add(1)
+					_, _ = w.Write([]byte(`{"data":{"type":"workspaces","id":"ws-test","attributes":{"name":"ws"},"relationships":{"organization":{"data":{"type":"organizations","id":"allowed-org"}}}}}`))
+				default:
+					http.NotFound(w, r)
+				}
+			})
+			tfeClient := queryStatusTFEClient(t, server)
+			ctx := context.Background()
+			if test.configureAllowlist {
+				ctx = client.WithOrganizationAllowlist(ctx, []string{"allowed-org"})
+			}
+
+			response, err := waitForQueryStatus(ctx, ctx, tfeClient, "qry-test", time.Millisecond, nil)
+
+			require.NoError(t, err)
+			require.NotNil(t, response)
+			assert.Equal(t, tfe.QueryRunFinished, response.Status)
+			assert.Equal(t, int32(2), queryReads.Load())
+			assert.Equal(t, test.wantWorkspaceReads, workspaceReads.Load())
+		})
+	}
+}
+
 func TestWaitForQueryStatusReturnsLastStatusWhenInternalBudgetExpires(t *testing.T) {
 	ctx, cancel := context.WithCancelCause(context.Background())
 	tfeClient := queryStatusStubClient(func(context.Context, string) (*tfe.QueryRun, error) {
@@ -264,6 +401,30 @@ func TestWaitForQueryStatusPreservesCallerCancellationDuringRead(t *testing.T) {
 	assert.Nil(t, response)
 	assert.ErrorIs(t, err, context.Canceled)
 	assert.Equal(t, int32(2), reads.Load())
+}
+
+func TestWaitForQueryStatusPreservesCallerCancellationDuringOrgPolicyRead(t *testing.T) {
+	ctx, cancel := context.WithCancelCause(context.Background())
+	callerErr := errors.New("MCP request canceled")
+	server := queryStatusTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/vnd.api+json")
+		switch r.URL.Path {
+		case "/api/v2/queries/qry-test":
+			_, _ = w.Write([]byte(`{"data":{"type":"queries","id":"qry-test","attributes":{"status":"running"},"relationships":{"workspace":{"data":{"type":"workspaces","id":"ws-test"}}}}}`))
+		case "/api/v2/workspaces/ws-test":
+			cancel(callerErr)
+			<-r.Context().Done()
+		default:
+			http.NotFound(w, r)
+		}
+	})
+	tfeClient := queryStatusTFEClient(t, server)
+	ctx = client.WithOrganizationAllowlist(ctx, []string{"allowed-org"})
+
+	response, err := waitForQueryStatus(ctx, ctx, tfeClient, "qry-test", time.Millisecond, nil)
+
+	assert.Nil(t, response)
+	assert.ErrorIs(t, err, callerErr)
 }
 
 func TestWaitForQueryStatusPreservesCallerCancellationAfterSuccessfulRead(t *testing.T) {

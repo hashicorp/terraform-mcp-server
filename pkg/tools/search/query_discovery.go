@@ -132,11 +132,11 @@ func readQueryDiscoveryProvenance(ctx context.Context, c *tfe.Client, queryID st
 	if err != nil {
 		return nil, searchDiagnosticError(queryRunUnavailableCode)
 	}
-	if run == nil || run.ID != queryID || run.Workspace == nil || run.Workspace.ID == "" {
-		return nil, searchDiagnosticError(queryOwnershipUnverifiedCode)
+	w, err := readQueryRunWorkspaceWithOrgPolicy(ctx, ctx, c, queryID, run)
+	if err != nil {
+		return nil, err
 	}
-	w, err := c.Workspaces.ReadByID(ctx, run.Workspace.ID)
-	if err != nil || w == nil || w.ID != run.Workspace.ID || w.Name == "" || w.Organization == nil || w.Organization.Name == "" {
+	if w.Name == "" {
 		return nil, searchDiagnosticError(queryOwnershipUnverifiedCode)
 	}
 	prov := &queryDiscoveryProvenance{QueryRunID: queryID, Organization: w.Organization.Name, WorkspaceName: w.Name, WorkspaceID: w.ID}

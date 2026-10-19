@@ -5,12 +5,12 @@ package search
 
 import (
 	"context"
-	"encoding/json"
 	"log/slog"
 	"strings"
 	"testing"
 
 	"github.com/google/jsonschema-go/jsonschema"
+	terraformclient "github.com/hashicorp/terraform-mcp-server/pkg/client"
 	searchlogic "github.com/hashicorp/terraform-mcp-server/pkg/tools/search"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/require"
@@ -52,9 +52,11 @@ func TestOfficialPrepareImportRejectsInvalidProviderBeforeClientUse(t *testing.T
 	t.Setenv("TF_MCP_QUERY_WORKSPACE", "source-must-not-be-import-target")
 	t.Setenv("TF_WORKSPACE", "fallback-must-not-win")
 	input := searchlogic.PrepareImportInput{
-		QueryRunID:      "qry-example",
-		Selections:      []searchlogic.ImportSelection{{QueryResultMarker: "qrm1-" + strings.Repeat("a", 64), ManagedType: "aws_s3_bucket"}},
-		LockedProviders: map[string]string{"aws": "6.18.0"},
+		OrganizationName: "org",
+		WorkspaceName:    "target",
+		QueryRunID:       "qry-example",
+		Selections:       []searchlogic.ImportSelection{{QueryResultMarker: "qrm1-" + strings.Repeat("a", 64), ManagedType: "aws_s3_bucket"}},
+		LockedProviders:  map[string]string{"aws": "6.18.0"},
 	}
 	result, output, err := PrepareImportFunc(context.Background(), nil, input)
 	require.Nil(t, result)
@@ -104,10 +106,11 @@ func TestOfficialSearchScopeSchemas(t *testing.T) {
 	querySchema, ok := ExecuteQueryTool().InputSchema.(*jsonschema.Schema)
 	require.True(t, ok)
 	for _, schema := range []*jsonschema.Schema{providerSchema, querySchema} {
-		require.NotContains(t, schema.Required, "organization_name")
+		require.NotContains(t, schema.Required, searchlogic.ScopeOrganizationInput)
 		require.NotContains(t, schema.Required, "workspace_name")
-		require.Equal(t, searchlogic.QueryOrganizationDescription, schema.Properties["organization_name"].Description)
+		require.Equal(t, searchlogic.QueryOrganizationDescription, schema.Properties[searchlogic.ScopeOrganizationInput].Description)
 		require.Equal(t, searchlogic.QueryWorkspaceDescription, schema.Properties["workspace_name"].Description)
+		require.NotContains(t, schema.Properties, "organization_name")
 	}
 	require.Equal(t, []string{"query_configuration"}, querySchema.Required)
 
@@ -115,10 +118,11 @@ func TestOfficialSearchScopeSchemas(t *testing.T) {
 		PrepareImportTool().InputSchema.(*jsonschema.Schema),
 		VerifyImportPlanTool().InputSchema.(*jsonschema.Schema),
 	} {
-		require.NotContains(t, schema.Required, "organization_name")
+		require.NotContains(t, schema.Required, searchlogic.ScopeOrganizationInput)
 		require.NotContains(t, schema.Required, "workspace_name")
-		require.Equal(t, searchlogic.ImportOrganizationDescription, schema.Properties["organization_name"].Description)
+		require.Equal(t, searchlogic.ImportOrganizationDescription, schema.Properties[searchlogic.ScopeOrganizationInput].Description)
 		require.Equal(t, searchlogic.ImportWorkspaceDescription, schema.Properties["workspace_name"].Description)
+		require.NotContains(t, schema.Properties, "organization_name")
 	}
 }
 
@@ -130,87 +134,80 @@ func TestOfficialImportToolsRequestMissingTargetScopeBeforeClientUse(t *testing.
 	prepareResult, prepareOutput, err := PrepareImportFunc(context.Background(), nil, searchlogic.PrepareImportInput{})
 	require.NoError(t, err)
 	require.Nil(t, prepareOutput)
-	require.False(t, prepareResult.IsError)
-	prepareText, ok := prepareResult.Content[0].(*mcp.TextContent)
-	require.True(t, ok)
-	require.Contains(t, prepareText.Text, `"status":"input_required"`)
-	require.Contains(t, prepareText.Text, "TF_MCP_IMPORT_WORKSPACE and TF_WORKSPACE are unset")
+	require.Contains(t, prepareResult.InputRequests, searchlogic.ScopeInputRequestID)
+	require.Empty(t, prepareResult.Content)
 
 	verifyResult, verifyOutput, err := VerifyImportPlanFunc(context.Background(), nil, searchlogic.VerifyImportInput{})
 	require.NoError(t, err)
 	require.Nil(t, verifyOutput)
-	require.False(t, verifyResult.IsError)
-	verifyText, ok := verifyResult.Content[0].(*mcp.TextContent)
-	require.True(t, ok)
-	require.Contains(t, verifyText.Text, `"status":"input_required"`)
-	require.Contains(t, verifyText.Text, "TF_MCP_IMPORT_WORKSPACE and TF_WORKSPACE are unset")
+	require.Contains(t, verifyResult.InputRequests, searchlogic.ScopeInputRequestID)
+	require.Empty(t, verifyResult.Content)
 }
 
-func TestOfficialSearchScopeClarification(t *testing.T) {
-	ctx := context.Background()
-	server := mcp.NewServer(&mcp.Implementation{Name: "test", Version: "test"}, nil)
-	mcp.AddTool(server, ProviderListSchemaListTool(), ProviderListSchemaListFunc)
-	mcp.AddTool(server, ExecuteQueryTool(), ExecuteQueryFunc)
-	serverTransport, clientTransport := mcp.NewInMemoryTransports()
-	serverSession, err := server.Connect(ctx, serverTransport, nil)
-	require.NoError(t, err)
-	defer serverSession.Close()
-	client := mcp.NewClient(&mcp.Implementation{Name: "test", Version: "test"}, nil)
-	session, err := client.Connect(ctx, clientTransport, nil)
-	require.NoError(t, err)
-	defer session.Close()
-
+func TestOfficialSearchScopeRequestsNativeInput(t *testing.T) {
 	for _, test := range []struct {
-		name, org, workspace, mcpWorkspace, status string
-		missing                                    []string
+		name, org, workspace, mcpWorkspace string
 	}{
-		{"missing", "", "", "", "input_required", []string{"organization_name", "workspace_name"}},
-		{"missing organization with Terraform workspace", "", "ws", "", "input_required", []string{"organization_name"}},
-		{"missing workspace with Terraform organization", "org", "", "", "input_required", []string{"workspace_name"}},
-		{"missing organization with MCP workspace", "", "", "query", "input_required", []string{"organization_name"}},
+		{"missing", "", "", ""},
+		{"complete environment defaults still require confirmation", "org", "ws", ""},
+		{"mixed explicit and default", "org", "", "query"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			t.Setenv("TF_CLOUD_ORGANIZATION", test.org)
 			t.Setenv("TF_WORKSPACE", test.workspace)
 			t.Setenv("TF_MCP_QUERY_WORKSPACE", test.mcpWorkspace)
-			for _, name := range []string{"provider_list_schema_list", "execute_query"} {
-				// Invalid configuration must not be validated until scope is resolved.
-				arguments := map[string]any{}
-				if name == "execute_query" {
-					arguments["query_configuration"] = "{"
-				}
-				result, err := session.CallTool(ctx, &mcp.CallToolParams{Name: name, Arguments: arguments})
-				require.NoError(t, err)
-				require.False(t, result.IsError)
-				require.Len(t, result.Content, 1)
-				text, ok := result.Content[0].(*mcp.TextContent)
-				require.True(t, ok)
-				var payload struct {
-					Status  string   `json:"status"`
-					Message string   `json:"message"`
-					Missing []string `json:"missing_inputs"`
-				}
-				require.NoError(t, json.Unmarshal([]byte(text.Text), &payload))
-				require.Equal(t, test.status, payload.Status)
-				require.Equal(t, test.missing, payload.Missing)
-				require.Contains(t, payload.Message, "ask the user")
-			}
+			result, _, err := ExecuteQueryFunc(context.Background(), nil, ExecuteQueryArguments{QueryConfiguration: "{"})
+			require.NoError(t, err)
+			require.Contains(t, result.InputRequests, searchlogic.ScopeInputRequestID)
+			require.Empty(t, result.RequestState)
+			require.Empty(t, result.Content)
+			request := result.InputRequests[searchlogic.ScopeInputRequestID].(*mcp.ElicitParams)
+			require.Contains(t, request.Message, searchlogic.ScopeOrganizationInput)
 		})
 	}
 }
 
-func TestOfficialExecuteQueryUsesEnvironmentScopeDirectly(t *testing.T) {
-	for _, workspaceEnv := range []string{"TF_WORKSPACE", "TF_MCP_QUERY_WORKSPACE"} {
-		t.Run(workspaceEnv, func(t *testing.T) {
-			t.Setenv("TF_CLOUD_ORGANIZATION", "org")
-			t.Setenv("TF_WORKSPACE", "")
-			t.Setenv("TF_MCP_QUERY_WORKSPACE", "")
-			t.Setenv(workspaceEnv, "workspace")
-			_, _, err := ExecuteQueryFunc(context.Background(), nil, ExecuteQueryArguments{
-				QueryConfiguration: "{",
-			})
-			// Resolved environment scope must reach validation, not request user input.
-			require.ErrorContains(t, err, "invalid query_configuration")
-		})
+func TestOfficialExecuteQueryValidatesAfterAcceptedScope(t *testing.T) {
+	request := &mcp.CallToolRequest{Params: &mcp.CallToolParamsRaw{InputResponses: mcp.InputResponseMap{
+		searchlogic.ScopeInputRequestID: &mcp.ElicitResult{Action: "accept", Content: map[string]any{
+			searchlogic.ScopeOrganizationInput: "org",
+			searchlogic.ScopeWorkspaceInput:    "workspace",
+		}},
+	}}}
+	_, _, err := ExecuteQueryFunc(context.Background(), request, ExecuteQueryArguments{QueryConfiguration: "{"})
+	require.ErrorContains(t, err, "invalid query_configuration")
+}
+
+func TestOfficialScopeRejectsResolvedOrganizationBeforeInputRequest(t *testing.T) {
+	ctx := terraformclient.WithOrganizationAllowlist(context.Background(), []string{"allowed-org"})
+	proposed := searchlogic.SearchScope{
+		Organization: searchlogic.SearchScopeValue{Value: "blocked-org", Source: "TF_CLOUD_ORGANIZATION"},
+		Workspace:    searchlogic.SearchScopeValue{Value: "workspace", Source: "TF_WORKSPACE"},
 	}
+
+	_, result, err := resolveOfficialScope(ctx, nil, proposed, searchlogic.QuerySourceScope)
+
+	require.ErrorIs(t, err, terraformclient.ErrOrganizationNotAllowed)
+	require.Nil(t, result)
+	require.NotContains(t, err.Error(), "blocked-org")
+}
+
+func TestOfficialScopeRechecksAcceptedOrganization(t *testing.T) {
+	ctx := terraformclient.WithOrganizationAllowlist(context.Background(), []string{"allowed-org"})
+	request := &mcp.CallToolRequest{Params: &mcp.CallToolParamsRaw{InputResponses: mcp.InputResponseMap{
+		searchlogic.ScopeInputRequestID: &mcp.ElicitResult{Action: "accept", Content: map[string]any{
+			searchlogic.ScopeOrganizationInput: "blocked-org",
+			searchlogic.ScopeWorkspaceInput:    "workspace",
+		}},
+	}}}
+	proposed := searchlogic.SearchScope{
+		Organization: searchlogic.SearchScopeValue{Value: "allowed-org", Source: "TF_CLOUD_ORGANIZATION"},
+		Workspace:    searchlogic.SearchScopeValue{Value: "workspace", Source: "TF_WORKSPACE"},
+	}
+
+	_, result, err := resolveOfficialScope(ctx, request, proposed, searchlogic.QuerySourceScope)
+
+	require.ErrorIs(t, err, terraformclient.ErrOrganizationNotAllowed)
+	require.Nil(t, result)
+	require.NotContains(t, err.Error(), "blocked-org")
 }

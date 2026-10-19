@@ -31,12 +31,16 @@ func TestVerifyImportPlanInputSchemaMatchesOfficialSDK(t *testing.T) {
 	officialJSON, err := json.Marshal(official)
 	require.NoError(t, err)
 	require.JSONEq(t, string(officialJSON), string(legacy.Tool.RawInputSchema))
-	require.NotContains(t, official.Required, "organization_name")
+	require.NotContains(t, official.Required, ScopeOrganizationInput)
+	require.Contains(t, official.Properties, ScopeOrganizationInput)
+	require.NotContains(t, official.Properties, "organization_name")
 	require.NotContains(t, official.Required, "workspace_name")
 	require.Contains(t, official.Required, "run_id")
 
 	prepare := PrepareImport(silentLogger())
-	require.NotContains(t, prepare.Tool.InputSchema.Required, "organization_name")
+	require.NotContains(t, prepare.Tool.InputSchema.Required, ScopeOrganizationInput)
+	require.Contains(t, prepare.Tool.InputSchema.Properties, ScopeOrganizationInput)
+	require.NotContains(t, prepare.Tool.InputSchema.Properties, "organization_name")
 	require.NotContains(t, prepare.Tool.InputSchema.Required, "workspace_name")
 	require.Contains(t, prepare.Tool.InputSchema.Required, "query_run_id")
 }
@@ -53,8 +57,7 @@ func TestImportToolsRequestMissingTargetScopeBeforeClientUse(t *testing.T) {
 			text, ok := mcp.AsTextContent(result.Content[0])
 			require.True(t, ok)
 			require.Contains(t, text.Text, `"status":"input_required"`)
-			require.Contains(t, text.Text, "TF_MCP_IMPORT_WORKSPACE and TF_WORKSPACE are unset")
-			require.NotContains(t, text.Text, "TF_MCP_QUERY_WORKSPACE and TF_WORKSPACE are unset")
+			require.Contains(t, text.Text, `"missing_inputs":["terraform_org_name","workspace_name"]`)
 		})
 	}
 }
@@ -205,7 +208,7 @@ func TestImportToolsEndToEndLocalHTTPAndLegacyWire(t *testing.T) {
 	require.NotContains(t, string(encoded), "overall")
 	// A real mark3labs CallToolRequest must preserve the same structured/text
 	// response, not merely the plain-Go helper's result.
-	args := map[string]any{"run_id": "run-example", "import_context": prep.ImportContext, "bindings": bindings}
+	args := map[string]any{ScopeOrganizationInput: "org", ScopeWorkspaceInput: "target", "run_id": "run-example", "import_context": prep.ImportContext, "bindings": bindings}
 	ctx := server.NewMCPServer("test", "0").WithContext(context.Background(), importTestSession{})
 	wire, err := VerifyImportPlan(silentLogger()).Handler(ctx, mcp.CallToolRequest{Params: mcp.CallToolParams{Arguments: args}})
 	require.NoError(t, err)
@@ -216,7 +219,7 @@ func TestImportToolsEndToEndLocalHTTPAndLegacyWire(t *testing.T) {
 	require.Contains(t, text.Text, `"plan_available"`)
 	require.NotContains(t, text.Text, `"attention"`)
 	require.NotContains(t, text.Text, "private-import-id-sentinel")
-	prepareArgs := map[string]any{"query_run_id": "qry-example", "locked_providers": prep.ImportContext.LockedProviders, "selections": []ImportSelection{{QueryResultMarker: bindings[0].QueryResultMarker, ManagedType: "aws_s3_bucket"}}}
+	prepareArgs := map[string]any{ScopeOrganizationInput: "org", ScopeWorkspaceInput: "target", "query_run_id": "qry-example", "locked_providers": prep.ImportContext.LockedProviders, "selections": []ImportSelection{{QueryResultMarker: bindings[0].QueryResultMarker, ManagedType: "aws_s3_bucket"}}}
 	wire, err = PrepareImport(silentLogger()).Handler(ctx, mcp.CallToolRequest{Params: mcp.CallToolParams{Arguments: prepareArgs}})
 	require.NoError(t, err)
 	require.False(t, wire.IsError, "tool content: %#v", wire.Content)
@@ -308,7 +311,7 @@ func TestPrepareImportKeepsSameNameSearchListAndManagedType(t *testing.T) {
 		require.NotContains(t, prepared.NextAction, name, "tool output must not prescribe CLI environment overrides")
 	}
 	require.Contains(t, PrepareImportDescription, "TF_MCP_IMPORT_WORKSPACE")
-	require.Contains(t, VerifyImportPlanDescription, "TF_MCP_IMPORT_WORKSPACE")
+	require.Contains(t, VerifyImportPlanDescription, "requests confirmation")
 	require.NotContains(t, prepared.NextAction, ".envrc")
 	require.Contains(t, PrepareImportDescription, "does not read")
 	require.Contains(t, PrepareImportDescription, "exact provider releases")
@@ -397,7 +400,7 @@ func TestVerifyImportPlanVersionDifferenceKeepsPlanAndIdentitySeparateOnMark3lab
 	t.Setenv("TFE_ADDRESS", backend.URL)
 	t.Setenv("TFE_TOKEN", "test-token")
 	ctx := server.NewMCPServer("test", "0").WithContext(context.Background(), importTestSession{})
-	wire, err := VerifyImportPlan(silentLogger()).Handler(ctx, mcp.CallToolRequest{Params: mcp.CallToolParams{Arguments: map[string]any{"organization_name": "org", "workspace_name": "target", "run_id": "run-example", "import_context": importContext, "bindings": bindings}}})
+	wire, err := VerifyImportPlan(silentLogger()).Handler(ctx, mcp.CallToolRequest{Params: mcp.CallToolParams{Arguments: map[string]any{ScopeOrganizationInput: "org", ScopeWorkspaceInput: "target", "run_id": "run-example", "import_context": importContext, "bindings": bindings}}})
 	require.NoError(t, err)
 	require.False(t, wire.IsError)
 	data, err := json.Marshal(wire.StructuredContent)
@@ -715,7 +718,7 @@ func TestImportToolUnknownArgumentFailsWithoutBackend(t *testing.T) {
 
 func TestPrepareImportInvalidProviderSourceIsActionableOnMark3labsWire(t *testing.T) {
 	request := mcp.CallToolRequest{Params: mcp.CallToolParams{Arguments: map[string]any{
-		"organization_name": "org", "workspace_name": "target", "query_run_id": "qry-example",
+		ScopeOrganizationInput: "org", ScopeWorkspaceInput: "target", "query_run_id": "qry-example",
 		"selections":       []any{map[string]any{"query_result_marker": "qrm1-" + strings.Repeat("a", 64), "managed_type": "aws_s3_bucket"}},
 		"locked_providers": map[string]any{"aws": "6.18.0"},
 	}}}
@@ -747,7 +750,6 @@ func TestImportToolDescriptionsAndSchemas(t *testing.T) {
 		require.True(t, *tool.Annotations.ReadOnlyHint)
 		require.False(t, *tool.Annotations.DestructiveHint)
 		require.NotNil(t, tool.OutputSchema)
-		require.NotContains(t, tool.Description, "candidate_id")
 	}
 	prepare := PrepareImport(silentLogger()).Tool
 	require.Contains(t, prepare.InputSchema.Required, "selections")

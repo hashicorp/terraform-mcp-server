@@ -164,6 +164,7 @@ func waitForQueryStatus(parentCtx, pollCtx context.Context, tfeClient *tfe.Clien
 
 	startedAt := time.Now()
 	reads := 0
+	orgPolicyCheckPending := client.OrganizationAllowlistConfigured(parentCtx)
 	var lastResponse *queryStatusResponse
 	for {
 		if err := callerCancellation(parentCtx); err != nil {
@@ -184,6 +185,17 @@ func waitForQueryStatus(parentCtx, pollCtx context.Context, tfeClient *tfe.Clien
 			}
 			logQueryStatusPoll(logger, queryRunID, reads, startedAt, lastResponse, "read_error", err)
 			return nil, err
+		}
+		if orgPolicyCheckPending {
+			if _, err := readQueryRunWorkspaceWithOrgPolicy(parentCtx, pollCtx, tfeClient, queryRunID, queryRun); err != nil {
+				if callerErr := callerCancellation(parentCtx); callerErr != nil {
+					logQueryStatusPoll(logger, queryRunID, reads, startedAt, lastResponse, "caller_canceled", callerErr)
+					return nil, callerErr
+				}
+				logQueryStatusPoll(logger, queryRunID, reads, startedAt, lastResponse, "org_policy_error", err)
+				return nil, err
+			}
+			orgPolicyCheckPending = false
 		}
 		response := queryStatusResponseFromRun(queryRun)
 		if isTerminalQueryStatus(queryRun.Status) {
