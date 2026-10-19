@@ -56,20 +56,8 @@ func ProviderListSchemaList(logger *log.Logger) server.ServerTool {
 						"Required together with provider_namespace to fetch a schema directly.",
 				),
 			),
-			mcp.WithString("organization_name",
-				mcp.Required(),
-				mcp.Description(
-					"HCP Terraform organization name used to scope every provider catalog request. "+
-						"If the user has not supplied it, ask for both organization_name and workspace_name before calling this tool.",
-				),
-			),
-			mcp.WithString("workspace_name",
-				mcp.Required(),
-				mcp.Description(
-					"HCP Terraform workspace name that will execute the query. "+
-						"If the user has not supplied it, ask for both organization_name and workspace_name before calling this tool.",
-				),
-			),
+			mcp.WithString("organization_name", mcp.Description(QueryOrganizationDescription)),
+			mcp.WithString("workspace_name", mcp.Description(QueryWorkspaceDescription)),
 		),
 		Handler: func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			return providerListSchemaListHandler(ctx, request, logger)
@@ -80,11 +68,11 @@ func ProviderListSchemaList(logger *log.Logger) server.ServerTool {
 func providerListSchemaListHandler(ctx context.Context, request mcp.CallToolRequest, logger *log.Logger) (*mcp.CallToolResult, error) {
 	providerNamespace := strings.TrimSpace(request.GetString("provider_namespace", ""))
 	providerName := strings.TrimSpace(strings.ToLower(request.GetString("provider_name", "")))
-	orgName := strings.TrimSpace(request.GetString("organization_name", ""))
-	workspaceName := strings.TrimSpace(request.GetString("workspace_name", ""))
-	if orgName == "" || workspaceName == "" {
-		return toolErrorf(logger, "provider_list_schema_list", "organization_name and workspace_name are required; ask the user to provide both before fetching provider schemas")
+	scope := ResolveSearchScope(request.GetString("organization_name", ""), request.GetString("workspace_name", ""))
+	if !scope.Ready() {
+		return mcp.NewToolResultText(scope.InputRequest()), nil
 	}
+	orgName, workspaceName := scope.Organization.Value, scope.Workspace.Value
 
 	tfeClient, err := client.GetTfeClientFromContext(ctx, logger)
 	if err != nil {
@@ -323,17 +311,24 @@ func doProviderRequest(ctx context.Context, request *tfe.ClientRequest, response
 const providerListSchemaListDescription = `Fetches list_resource_schemas for a search-compatible Terraform provider from the
 HCP Terraform no-code stub endpoint (GET /api/v2/search/provider-versions).
 
-Every call must be scoped with organization_name and workspace_name. Never call this tool
-without them. If either value is not present in the user's request, ask the user to provide
-both values before making any tool call. Do not attempt an unscoped request first.
+Scope arguments are optional. Use configured environment defaults unless the user explicitly
+specifies an organization or workspace; pass those explicit values as arguments to override
+the corresponding defaults. Do not invent scope arguments. The server uses
+TF_MCP_QUERY_WORKSPACE for queries; TF_MCP_IMPORT_WORKSPACE is
+a separate import target. If the query variable is absent, use TF_WORKSPACE.
+For organization, use TF_CLOUD_ORGANIZATION unless explicitly overridden. Use configured environment
+values directly without confirmation. If inputs are missing, ask only for those inputs.
+The server never makes an unscoped API request. An input_required result is a normal response, not a tool
+failure. Use its context and guidance to ask the user only for the missing inputs, then
+retry with those values as explicit arguments, preserving resolved context.
 
 The tool has two modes:
 
-LIST mode (organization_name and workspace_name supplied; no provider identifiers supplied):
+LIST mode (no provider identifiers supplied; scope resolved by the server):
   Returns all providers currently in the search-compatible catalog so the agent
   can choose one. Each entry includes namespace, name, and version.
 
-  FETCH mode (organization_name, workspace_name, provider_namespace, and provider_name supplied):
+FETCH mode (provider_namespace and provider_name supplied; scope resolved by the server):
   Returns the full list_resource_schemas for the requested provider, ready to
   pass directly into generate_query_configuration.
   - The provider version is always read from the provider catalog response. Never infer or
@@ -342,17 +337,16 @@ LIST mode (organization_name and workspace_name supplied; no provider identifier
     to use search_providers to find the provider in the public Terraform Registry.
 
 Typical agent workflow:
-  1. Obtain organization_name and workspace_name from the user's request. If either is absent,
-     ask the user for both and wait for their response.
-  2. Call provider_list_schema_list(organization_name, workspace_name) to discover available providers.
-  3. Call provider_list_schema_list(organization_name, workspace_name, provider_namespace,
-     provider_name) to fetch the catalog-selected version and its schema.
+If the user already supplied an explicit organization or workspace, pass it as a scope argument to override that default throughout this workflow. Otherwise follow the default-first steps below.
+  1. Call without scope args first; if the result reports a missing value, ask the user for only that value and retry.
+  2. Use the LIST response to discover available providers.
+  3. Call provider_list_schema_list with provider_namespace and provider_name to fetch the catalog-selected version and its schema. Reuse any explicit scope inputs from step 1.
   4. Pass the returned list_resource_schemas to generate_query_configuration to get
      a full guide and example query configuration.
   5. Select only an exact resource type key present in list_resource_schemas. Never infer list
      support from an ordinary managed resource name. If no key matches the user's request,
      explain that the selected provider version cannot list that resource and stop.
-  6. Fill in the configuration and pass it with organization_name and workspace_name to execute_query.
+  6. Fill in the configuration and pass it to execute_query, reusing any explicit scope inputs from step 1; otherwise let the server resolve configured scope values.
 
 Requires TFE_TOKEN and TFE_ADDRESS to be configured (same credentials used for
 other HCP Terraform tools).`

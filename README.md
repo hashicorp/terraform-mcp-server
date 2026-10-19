@@ -105,6 +105,10 @@ automation and interaction capabilities for Infrastructure as Code (IaC) develop
 |----------|-------------|---------|
 | `TFE_ADDRESS` | Sets the Terraform Enterprise/HCP Terraform address for API calls. Must include the protocol (e.g., `https://app.terraform.io`). In streamable-http mode this is the only way to set the address; it cannot be supplied by clients via header or query parameter. | Optional |
 | `TFE_TOKEN` | Terraform Enterprise API token | `""` (empty) |
+| `TF_MCP_QUERY_WORKSPACE` | Default workspace used automatically by search/query tools unless the user explicitly supplies a workspace override. Independent of the import destination. | Unset; falls back to `TF_WORKSPACE` |
+| `TF_MCP_IMPORT_WORKSPACE` | Default import destination for agent workflows unless the user explicitly supplies a destination, separate from the query workspace. Used without confirmation. There is no dedicated import tool; the agent must resolve the destination before invoking import operations. | Unset; falls back to `TF_WORKSPACE` |
+| `TF_WORKSPACE` | Fallback workspace default for query and import contexts when no explicit override or MCP-specific workspace is supplied. | Unset |
+| `TF_CLOUD_ORGANIZATION` | Default Terraform organization used automatically unless the user explicitly supplies an organization override. | Unset |
 | `TF_MCP_SHARED_SECRET` | Shared secret sent as the `X-Tf-Mcp-Secret` header on requests to HCP Terraform / TFE, used to identify requests originating from a hosted MCP deployment. Should only be used over TLS. | `""` (empty) |
 | `TFE_SKIP_TLS_VERIFY` | Skip HCP Terraform or Terraform Enterprise TLS verification | `false` |
 | `LOG_LEVEL` | Logging level: `trace`, `debug`, `info`, `warn`, `error`, `fatal`, `panic` (overrides `--log-level` flag) | `info` |
@@ -134,6 +138,16 @@ automation and interaction capabilities for Infrastructure as Code (IaC) develop
 | `OTEL_METRICS_ENDPOINT` | URL of your OTel Collector or backend | `localhost:4318` |
 | `INSTANA_ENABLED` | Enable Instana instrumentation (metrics and HTTP request tracing) for the streamable-http server. Requires an Instana agent that is reachable by the server. | `false` |
 | `INSTANA_SERVICE_NAME` | If Instana instrumentation is enabled, the service name to use for the MCP server | `terraform-mcp-server` |
+
+**Query/import context selection:** Use server-configured environment values by default, without confirmation. Omit scope arguments unless the user explicitly specifies an organization or workspace; pass those values as arguments to override the corresponding defaults. Without an override, workspace uses the relevant MCP-specific workspace variable, then `TF_WORKSPACE`, and organization uses `TF_CLOUD_ORGANIZATION`. Overrides apply independently to each field. If no value is available, ask only for the missing input. Empty and whitespace-only values are treated as unset. No `TF_MCP_ORGANIZATION` variable is used.
+
+On a remote server, these environment variables are server-wide defaults shared by all users of that server. Explicit `organization_name` and `workspace_name` arguments override the corresponding defaults for that request; they do not change the server configuration or other users' requests. When arguments are omitted, the server uses its configured defaults automatically, without scope confirmation.
+
+When context is incomplete, search tools return a normal, non-error result containing JSON with `status` (`input_required`), `scope` (resolved values and sources), and `missing_inputs` before making any scoped API requests. This status requests missing inputs; it is not a tool failure. The agent asks only for those inputs and retries with them as explicit arguments, reusing the resolved context for subsequent query calls. When organization and workspace are available from arguments or environment values, scope resolution proceeds without confirmation.
+
+**Query execution approval:** Discovery and configuration generation can proceed without approval. Before calling `execute_query`, the agent must summarize the resolved organization, workspace, and query selections (provider, resource types, and filters, if any), explain that execution starts a query run without creating or modifying infrastructure, and wait for user approval. If the target scope or query selections change, approval must be obtained again. This is agent-driven guidance, not a server-enforced approval parameter or status; clients calling the tool directly are not blocked by an approval check.
+
+Pass workspace variables to the **MCP server process**, for example through the environment settings in OpenCode's JSON/JSONC configuration or an equivalent MCP-client configuration. A container or remote deployment must receive them in its own environment. The server does not read client configuration files or inherit the agent's separate shell environment. `TF_MCP_IMPORT_WORKSPACE` documents a separately resolved import destination for agent workflows; it does not add an import tool or change unrelated workspace-management tools.
 
 ```bash
 # Stdio mode

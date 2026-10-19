@@ -55,14 +55,8 @@ func ExecuteQuery(logger *log.Logger) server.ServerTool {
 			mcp.WithOpenWorldHintAnnotation(true),
 			mcp.WithReadOnlyHintAnnotation(false),
 			mcp.WithDestructiveHintAnnotation(false),
-			mcp.WithString("organization_name",
-				mcp.Required(),
-				mcp.Description("Name of the HCP Terraform organization containing the workspace."),
-			),
-			mcp.WithString("workspace_name",
-				mcp.Required(),
-				mcp.Description("Name of the HCP Terraform workspace in which to create and execute the query. The tool resolves its ID using go-tfe."),
-			),
+			mcp.WithString("organization_name", mcp.Description(QueryOrganizationDescription)),
+			mcp.WithString("workspace_name", mcp.Description(QueryWorkspaceDescription)),
 			mcp.WithString("query_configuration",
 				mcp.Required(),
 				mcp.Description(
@@ -81,17 +75,11 @@ func ExecuteQuery(logger *log.Logger) server.ServerTool {
 }
 
 func executeQueryHandler(ctx context.Context, request mcp.CallToolRequest, logger *log.Logger) (*mcp.CallToolResult, error) {
-	organizationName, err := request.RequireString("organization_name")
-	if err != nil || strings.TrimSpace(organizationName) == "" {
-		return toolErrorf(logger, "execute_query", "missing required input: organization_name")
+	scope := ResolveSearchScope(request.GetString("organization_name", ""), request.GetString("workspace_name", ""))
+	if !scope.Ready() {
+		return mcp.NewToolResultText(scope.InputRequest()), nil
 	}
-	organizationName = strings.TrimSpace(organizationName)
-
-	workspaceName, err := request.RequireString("workspace_name")
-	if err != nil || strings.TrimSpace(workspaceName) == "" {
-		return toolErrorf(logger, "execute_query", "missing required input: workspace_name")
-	}
-	workspaceName = strings.TrimSpace(workspaceName)
+	organizationName, workspaceName := scope.Organization.Value, scope.Workspace.Value
 
 	rawConfiguration, err := request.RequireString("query_configuration")
 	if err != nil || strings.TrimSpace(rawConfiguration) == "" {
@@ -250,8 +238,28 @@ const executeQueryDescription = `Creates and immediately executes an HCP Terrafo
 
 MANDATORY WORKFLOW: Before calling this tool, call provider_list_schema_list and then
 generate_query_configuration. Do not skip generate_query_configuration or construct the payload
-directly. Pass an organization name, workspace name, and the provider/resource configuration
-produced from its guidance.
+directly. Pass the provider/resource configuration produced from its guidance.
+Omit scope arguments to use configured environment defaults unless the user explicitly
+specifies an organization or workspace; pass those explicit values as arguments to override
+the corresponding defaults. Do not invent scope arguments or ask the user to confirm defaults. Use
+TF_MCP_QUERY_WORKSPACE for queries; TF_MCP_IMPORT_WORKSPACE is a separate import target.
+If TF_MCP_QUERY_WORKSPACE is absent, use TF_WORKSPACE. For organization, use
+TF_CLOUD_ORGANIZATION when no organization override is supplied.
+Use configured scope values directly without scope confirmation. Ask only for missing inputs.
+If this tool returns input_required, treat
+it as normal clarification, not a failure: ask the user only for the missing inputs,
+then retry with those values as explicit arguments, preserving resolved context.
+
+EXECUTION APPROVAL: After discovery and configuration generation, but before calling this tool,
+show the user the resolved organization, workspace, and query selections (provider, resource
+types, and filters, if any). Explain that execution starts a query run but does not create or
+modify infrastructure. Ask the user to approve this execution and wait for their approval.
+Do not call execute_query if approval is declined or absent. If the target scope or query
+selections change, show the updated summary and obtain approval again before execution.
+This is agent-driven execution approval, not confirmation of environment defaults and not a
+server-enforced approval parameter or status. Discovery and configuration generation do not
+require this execution approval.
+
 Never construct resource_type from an ordinary managed resource name: it must be an exact key
 in list_resource_schemas for the selected provider version. If no matching key exists, do not
 call this tool. The tool resolves the workspace
