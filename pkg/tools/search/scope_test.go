@@ -50,6 +50,34 @@ func TestResolveSearchScope(t *testing.T) {
 	}
 }
 
+func TestResolveImportScope(t *testing.T) {
+	for _, test := range []struct {
+		name                    string
+		organization, workspace string
+		env                     map[string]string
+		want                    SearchScope
+		ready                   bool
+	}{
+		{"explicit target overrides defaults", " user-org ", " user-target ", map[string]string{"TF_CLOUD_ORGANIZATION": "env-org", "TF_MCP_IMPORT_WORKSPACE": "env-target", "TF_WORKSPACE": "fallback"}, SearchScope{SearchScopeValue{"user-org", "argument"}, SearchScopeValue{"user-target", "argument"}}, true},
+		{"import workspace precedes Terraform workspace", "", "", map[string]string{"TF_CLOUD_ORGANIZATION": "org", "TF_MCP_IMPORT_WORKSPACE": "target", "TF_WORKSPACE": "fallback"}, SearchScope{SearchScopeValue{"org", "TF_CLOUD_ORGANIZATION"}, SearchScopeValue{"target", "TF_MCP_IMPORT_WORKSPACE"}}, true},
+		{"Terraform workspace is import fallback", "", "", map[string]string{"TF_CLOUD_ORGANIZATION": "org", "TF_WORKSPACE": "fallback"}, SearchScope{SearchScopeValue{"org", "TF_CLOUD_ORGANIZATION"}, SearchScopeValue{"fallback", "TF_WORKSPACE"}}, true},
+		{"query workspace never defaults import target", "org", "", map[string]string{"TF_MCP_QUERY_WORKSPACE": "query"}, SearchScope{Organization: SearchScopeValue{"org", "argument"}}, false},
+		{"missing target scope", "", "", nil, SearchScope{}, false},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			for _, name := range []string{"TF_CLOUD_ORGANIZATION", "TF_MCP_QUERY_WORKSPACE", "TF_MCP_IMPORT_WORKSPACE", "TF_WORKSPACE"} {
+				t.Setenv(name, "")
+			}
+			for name, value := range test.env {
+				t.Setenv(name, value)
+			}
+			got := ResolveImportScope(test.organization, test.workspace)
+			assert.Equal(t, test.want, got)
+			assert.Equal(t, test.ready, got.Ready())
+		})
+	}
+}
+
 func TestSearchToolsRequireResolvedScopeBeforeAPIRequests(t *testing.T) {
 	for _, tool := range []server.ServerTool{ProviderListSchemaList(silentLogger()), ExecuteQuery(silentLogger())} {
 		t.Run(tool.Tool.Name, func(t *testing.T) {
@@ -118,12 +146,28 @@ func TestSearchScopeInputRequestMessage(t *testing.T) {
 	}
 }
 
+func TestImportScopeInputRequestMessage(t *testing.T) {
+	var payload struct {
+		Status  string   `json:"status"`
+		Message string   `json:"message"`
+		Missing []string `json:"missing_inputs"`
+	}
+	require.NoError(t, json.Unmarshal([]byte((SearchScope{}).ImportInputRequest()), &payload))
+	assert.Equal(t, "input_required", payload.Status)
+	assert.Contains(t, payload.Message, "TF_MCP_IMPORT_WORKSPACE and TF_WORKSPACE are unset")
+	assert.NotContains(t, payload.Message, "TF_MCP_QUERY_WORKSPACE")
+	assert.Equal(t, []string{"organization_name", "workspace_name"}, payload.Missing)
+}
+
 func TestSearchScopeDescriptionsRequireSourceConfirmationAndSeparateImportTarget(t *testing.T) {
 	assert.Contains(t, QueryOrganizationDescription, "Confirm the resolved source")
 	assert.Contains(t, QueryWorkspaceDescription, "Confirm the resolved source")
 	assert.Contains(t, QueryWorkspaceDescription, "import target is selected and confirmed separately")
 	assert.NotContains(t, QueryOrganizationDescription, "without confirmation")
 	assert.NotContains(t, QueryWorkspaceDescription, "without confirmation")
+	assert.Contains(t, ImportOrganizationDescription, "confirmed")
+	assert.Contains(t, ImportWorkspaceDescription, "TF_MCP_IMPORT_WORKSPACE")
+	assert.Contains(t, ImportWorkspaceDescription, "Never use TF_MCP_QUERY_WORKSPACE")
 }
 
 func TestExecuteQueryUsesEnvironmentScopeDirectly(t *testing.T) {

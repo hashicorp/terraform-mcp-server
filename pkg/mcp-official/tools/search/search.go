@@ -215,6 +215,13 @@ func GetQuerySummaryFunc(ctx context.Context, req *mcp.CallToolRequest, input Qu
 
 func PrepareImportTool() *mcp.Tool {
 	t := tool("prepare_import", searchlogic.PrepareImportDescription, "Prepare explicit Search import selection", true, true)
+	inputSchema, err := jsonschema.For[searchlogic.PrepareImportInput](nil)
+	if err != nil {
+		panic(err)
+	}
+	inputSchema.Properties["organization_name"].Description = searchlogic.ImportOrganizationDescription
+	inputSchema.Properties["workspace_name"].Description = searchlogic.ImportWorkspaceDescription
+	t.InputSchema = inputSchema
 	schema, err := jsonschema.For[searchlogic.PrepareImportResult](nil)
 	if err != nil {
 		panic(err)
@@ -224,6 +231,11 @@ func PrepareImportTool() *mcp.Tool {
 }
 
 func PrepareImportFunc(ctx context.Context, req *mcp.CallToolRequest, input searchlogic.PrepareImportInput) (*mcp.CallToolResult, *searchlogic.PrepareImportResult, error) {
+	scope := searchlogic.ResolveImportScope(input.OrganizationName, input.WorkspaceName)
+	if !scope.Ready() {
+		return textResult(scope.ImportInputRequest()), nil, nil
+	}
+	input.OrganizationName, input.WorkspaceName = scope.Organization.Value, scope.Workspace.Value
 	if err := searchlogic.ValidatePrepareImportInput(input); err != nil {
 		return nil, nil, fmt.Errorf("validating prepare_import arguments: %w", err)
 	}
@@ -240,6 +252,13 @@ func PrepareImportFunc(ctx context.Context, req *mcp.CallToolRequest, input sear
 
 func VerifyImportPlanTool() *mcp.Tool {
 	t := tool("verify_import_plan", searchlogic.VerifyImportPlanDescription, "Inspect exact CLI speculative Run and Plan", true, true)
+	inputSchema, err := jsonschema.For[searchlogic.VerifyImportInput](nil)
+	if err != nil {
+		panic(err)
+	}
+	inputSchema.Properties["organization_name"].Description = searchlogic.ImportOrganizationDescription
+	inputSchema.Properties["workspace_name"].Description = searchlogic.ImportWorkspaceDescription
+	t.InputSchema = inputSchema
 	schema, err := jsonschema.For[searchlogic.VerifyImportResult](nil)
 	if err != nil {
 		panic(err)
@@ -249,6 +268,11 @@ func VerifyImportPlanTool() *mcp.Tool {
 }
 
 func VerifyImportPlanFunc(ctx context.Context, req *mcp.CallToolRequest, input searchlogic.VerifyImportInput) (*mcp.CallToolResult, *searchlogic.VerifyImportResult, error) {
+	scope := searchlogic.ResolveImportScope(input.OrganizationName, input.WorkspaceName)
+	if !scope.Ready() {
+		return textResult(scope.ImportInputRequest()), nil, nil
+	}
+	input.OrganizationName, input.WorkspaceName = scope.Organization.Value, scope.Workspace.Value
 	c, err := client.GetTfeClient(ctx, client.SessionIDFromRequest(req))
 	if err != nil {
 		return nil, nil, searchlogic.TerraformClientUnavailableError(err)

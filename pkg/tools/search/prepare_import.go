@@ -35,8 +35,8 @@ type ImportSelection struct {
 }
 
 type PrepareImportInput struct {
-	OrganizationName string            `json:"organization_name"`
-	WorkspaceName    string            `json:"workspace_name"`
+	OrganizationName string            `json:"organization_name,omitempty" jsonschema:"Optional confirmed target organization override; omit to use the confirmed TF_CLOUD_ORGANIZATION default"`
+	WorkspaceName    string            `json:"workspace_name,omitempty" jsonschema:"Optional confirmed target workspace override; omit to use the confirmed TF_MCP_IMPORT_WORKSPACE or TF_WORKSPACE default"`
 	WorkspaceID      string            `json:"workspace_id,omitempty"`
 	QueryRunID       string            `json:"query_run_id"`
 	Selections       []ImportSelection `json:"selections"`

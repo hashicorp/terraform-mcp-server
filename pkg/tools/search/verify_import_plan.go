@@ -39,8 +39,8 @@ type ImportBinding struct {
 }
 
 type VerifyImportInput struct {
-	OrganizationName string          `json:"organization_name" jsonschema:"Confirmed target organization name"`
-	WorkspaceName    string          `json:"workspace_name" jsonschema:"Confirmed target workspace name"`
+	OrganizationName string          `json:"organization_name,omitempty" jsonschema:"Optional confirmed target organization override; omit to use the confirmed TF_CLOUD_ORGANIZATION default"`
+	WorkspaceName    string          `json:"workspace_name,omitempty" jsonschema:"Optional confirmed target workspace override; omit to use the confirmed TF_MCP_IMPORT_WORKSPACE or TF_WORKSPACE default"`
 	RunID            string          `json:"run_id" jsonschema:"Exact CLI-originated plan-only HCP Terraform Run ID"`
 	ImportContext    *ImportContext  `json:"import_context,omitempty" jsonschema:"Unchanged context returned by prepare_import; required for finished Plan classification"`
 	Bindings         []ImportBinding `json:"bindings,omitempty" jsonschema:"One query result marker to exact target address binding per selection"`

@@ -31,6 +31,32 @@ func TestVerifyImportPlanInputSchemaMatchesOfficialSDK(t *testing.T) {
 	officialJSON, err := json.Marshal(official)
 	require.NoError(t, err)
 	require.JSONEq(t, string(officialJSON), string(legacy.Tool.RawInputSchema))
+	require.NotContains(t, official.Required, "organization_name")
+	require.NotContains(t, official.Required, "workspace_name")
+	require.Contains(t, official.Required, "run_id")
+
+	prepare := PrepareImport(silentLogger())
+	require.NotContains(t, prepare.Tool.InputSchema.Required, "organization_name")
+	require.NotContains(t, prepare.Tool.InputSchema.Required, "workspace_name")
+	require.Contains(t, prepare.Tool.InputSchema.Required, "query_run_id")
+}
+
+func TestImportToolsRequestMissingTargetScopeBeforeClientUse(t *testing.T) {
+	for _, name := range []string{"TF_CLOUD_ORGANIZATION", "TF_MCP_QUERY_WORKSPACE", "TF_MCP_IMPORT_WORKSPACE", "TF_WORKSPACE"} {
+		t.Setenv(name, "")
+	}
+	for _, tool := range []server.ServerTool{PrepareImport(silentLogger()), VerifyImportPlan(silentLogger())} {
+		t.Run(tool.Tool.Name, func(t *testing.T) {
+			result, err := tool.Handler(context.Background(), mcp.CallToolRequest{Params: mcp.CallToolParams{Arguments: map[string]any{}}})
+			require.NoError(t, err)
+			require.False(t, result.IsError)
+			text, ok := mcp.AsTextContent(result.Content[0])
+			require.True(t, ok)
+			require.Contains(t, text.Text, `"status":"input_required"`)
+			require.Contains(t, text.Text, "TF_MCP_IMPORT_WORKSPACE and TF_WORKSPACE are unset")
+			require.NotContains(t, text.Text, "TF_MCP_QUERY_WORKSPACE and TF_WORKSPACE are unset")
+		})
+	}
 }
 
 type importRewriteTransport struct {
@@ -141,6 +167,10 @@ func TestImportToolsEndToEndLocalHTTPAndLegacyWire(t *testing.T) {
 	backend, reads := importWireBackend(t, "planned_and_finished", "finished")
 	t.Setenv("TFE_ADDRESS", backend.URL)
 	t.Setenv("TFE_TOKEN", "test-token")
+	t.Setenv("TF_CLOUD_ORGANIZATION", "org")
+	t.Setenv("TF_MCP_IMPORT_WORKSPACE", "target")
+	t.Setenv("TF_MCP_QUERY_WORKSPACE", "source-must-not-be-import-target")
+	t.Setenv("TF_WORKSPACE", "fallback-must-not-win")
 	importContext, bindings, _ := importTestImportContext(t)
 	c, err := tfe.NewClient(&tfe.Config{Address: backend.URL, Token: "test-token", HTTPClient: backend.Client()})
 	require.NoError(t, err)
@@ -175,7 +205,7 @@ func TestImportToolsEndToEndLocalHTTPAndLegacyWire(t *testing.T) {
 	require.NotContains(t, string(encoded), "overall")
 	// A real mark3labs CallToolRequest must preserve the same structured/text
 	// response, not merely the plain-Go helper's result.
-	args := map[string]any{"organization_name": "org", "workspace_name": "target", "run_id": "run-example", "import_context": prep.ImportContext, "bindings": bindings}
+	args := map[string]any{"run_id": "run-example", "import_context": prep.ImportContext, "bindings": bindings}
 	ctx := server.NewMCPServer("test", "0").WithContext(context.Background(), importTestSession{})
 	wire, err := VerifyImportPlan(silentLogger()).Handler(ctx, mcp.CallToolRequest{Params: mcp.CallToolParams{Arguments: args}})
 	require.NoError(t, err)
@@ -186,7 +216,7 @@ func TestImportToolsEndToEndLocalHTTPAndLegacyWire(t *testing.T) {
 	require.Contains(t, text.Text, `"plan_available"`)
 	require.NotContains(t, text.Text, `"attention"`)
 	require.NotContains(t, text.Text, "private-import-id-sentinel")
-	prepareArgs := map[string]any{"organization_name": "org", "workspace_name": "target", "query_run_id": "qry-example", "locked_providers": prep.ImportContext.LockedProviders, "selections": []ImportSelection{{QueryResultMarker: bindings[0].QueryResultMarker, ManagedType: "aws_s3_bucket"}}}
+	prepareArgs := map[string]any{"query_run_id": "qry-example", "locked_providers": prep.ImportContext.LockedProviders, "selections": []ImportSelection{{QueryResultMarker: bindings[0].QueryResultMarker, ManagedType: "aws_s3_bucket"}}}
 	wire, err = PrepareImport(silentLogger()).Handler(ctx, mcp.CallToolRequest{Params: mcp.CallToolParams{Arguments: prepareArgs}})
 	require.NoError(t, err)
 	require.False(t, wire.IsError, "tool content: %#v", wire.Content)
@@ -270,10 +300,15 @@ func TestPrepareImportKeepsSameNameSearchListAndManagedType(t *testing.T) {
 		require.NotContains(t, prepared.NextAction, forbidden)
 	}
 	for _, guidance := range []string{prepared.NextAction, PrepareImportDescription, VerifyImportPlanDescription} {
-		for _, name := range []string{"TF_CLOUD_", "TF_WORKSPACE", "TF_TOKEN_", "TFE_ADDRESS", "TFE_HOSTNAME", "TFE_TOKEN"} {
+		for _, name := range []string{"TF_TOKEN_", "TFE_ADDRESS", "TFE_HOSTNAME", "TFE_TOKEN"} {
 			require.NotContains(t, guidance, name)
 		}
 	}
+	for _, name := range []string{"TF_CLOUD_", "TF_WORKSPACE", "TF_MCP_IMPORT_WORKSPACE"} {
+		require.NotContains(t, prepared.NextAction, name, "tool output must not prescribe CLI environment overrides")
+	}
+	require.Contains(t, PrepareImportDescription, "TF_MCP_IMPORT_WORKSPACE")
+	require.Contains(t, VerifyImportPlanDescription, "TF_MCP_IMPORT_WORKSPACE")
 	require.NotContains(t, prepared.NextAction, ".envrc")
 	require.Contains(t, PrepareImportDescription, "does not read")
 	require.Contains(t, PrepareImportDescription, "exact provider releases")

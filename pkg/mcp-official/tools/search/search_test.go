@@ -47,8 +47,12 @@ func TestOfficialSearchArgumentsAndValidation(t *testing.T) {
 }
 
 func TestOfficialPrepareImportRejectsInvalidProviderBeforeClientUse(t *testing.T) {
+	t.Setenv("TF_CLOUD_ORGANIZATION", "org")
+	t.Setenv("TF_MCP_IMPORT_WORKSPACE", "target")
+	t.Setenv("TF_MCP_QUERY_WORKSPACE", "source-must-not-be-import-target")
+	t.Setenv("TF_WORKSPACE", "fallback-must-not-win")
 	input := searchlogic.PrepareImportInput{
-		OrganizationName: "org", WorkspaceName: "target", QueryRunID: "qry-example",
+		QueryRunID:      "qry-example",
 		Selections:      []searchlogic.ImportSelection{{QueryResultMarker: "qrm1-" + strings.Repeat("a", 64), ManagedType: "aws_s3_bucket"}},
 		LockedProviders: map[string]string{"aws": "6.18.0"},
 	}
@@ -106,6 +110,40 @@ func TestOfficialSearchScopeSchemas(t *testing.T) {
 		require.Equal(t, searchlogic.QueryWorkspaceDescription, schema.Properties["workspace_name"].Description)
 	}
 	require.Equal(t, []string{"query_configuration"}, querySchema.Required)
+
+	for _, schema := range []*jsonschema.Schema{
+		PrepareImportTool().InputSchema.(*jsonschema.Schema),
+		VerifyImportPlanTool().InputSchema.(*jsonschema.Schema),
+	} {
+		require.NotContains(t, schema.Required, "organization_name")
+		require.NotContains(t, schema.Required, "workspace_name")
+		require.Equal(t, searchlogic.ImportOrganizationDescription, schema.Properties["organization_name"].Description)
+		require.Equal(t, searchlogic.ImportWorkspaceDescription, schema.Properties["workspace_name"].Description)
+	}
+}
+
+func TestOfficialImportToolsRequestMissingTargetScopeBeforeClientUse(t *testing.T) {
+	for _, name := range []string{"TF_CLOUD_ORGANIZATION", "TF_MCP_QUERY_WORKSPACE", "TF_MCP_IMPORT_WORKSPACE", "TF_WORKSPACE"} {
+		t.Setenv(name, "")
+	}
+
+	prepareResult, prepareOutput, err := PrepareImportFunc(context.Background(), nil, searchlogic.PrepareImportInput{})
+	require.NoError(t, err)
+	require.Nil(t, prepareOutput)
+	require.False(t, prepareResult.IsError)
+	prepareText, ok := prepareResult.Content[0].(*mcp.TextContent)
+	require.True(t, ok)
+	require.Contains(t, prepareText.Text, `"status":"input_required"`)
+	require.Contains(t, prepareText.Text, "TF_MCP_IMPORT_WORKSPACE and TF_WORKSPACE are unset")
+
+	verifyResult, verifyOutput, err := VerifyImportPlanFunc(context.Background(), nil, searchlogic.VerifyImportInput{})
+	require.NoError(t, err)
+	require.Nil(t, verifyOutput)
+	require.False(t, verifyResult.IsError)
+	verifyText, ok := verifyResult.Content[0].(*mcp.TextContent)
+	require.True(t, ok)
+	require.Contains(t, verifyText.Text, `"status":"input_required"`)
+	require.Contains(t, verifyText.Text, "TF_MCP_IMPORT_WORKSPACE and TF_WORKSPACE are unset")
 }
 
 func TestOfficialSearchScopeClarification(t *testing.T) {

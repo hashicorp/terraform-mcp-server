@@ -25,9 +25,12 @@ func TestEmbeddedInstructionsPreserveSearchImportBoundaries(t *testing.T) {
 	for _, required := range []string{
 		"server-configured query defaults",
 		"ask the user to confirm them",
-		"Always prompt for and confirm the import destination separately",
+		"`TF_MCP_IMPORT_WORKSPACE`, then `TF_WORKSPACE`",
+		"Always prompt for and confirm that destination",
 		"Never treat a query workspace default as import authorization",
-		"Pass the confirmed target explicitly to import tools",
+		"use `TF_MCP_QUERY_WORKSPACE` as the import target",
+		"omit target arguments to use the confirmed import defaults",
+		"pass the user's explicit selection as an override",
 	} {
 		require.Contains(t, generalGuidance, required)
 	}

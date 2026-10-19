@@ -21,7 +21,12 @@ local files, upload configuration or create a Terraform Plan or Run.
 Call only after the user requests import, selects displayed
 query_result_marker values and confirms a target workspace in the source
 organization and an existing local configuration directory. The agent must
-inspect that directory's .terraform.lock.hcl. If the lock file is missing or
+resolve the proposed target workspace from TF_MCP_IMPORT_WORKSPACE, then
+TF_WORKSPACE, unless the user supplies an explicit target. Always present and
+confirm the proposed target before calling this tool. After confirmation, omit
+the target arguments to use those confirmed defaults or pass the user's explicit
+selection as an override. Never use TF_MCP_QUERY_WORKSPACE as an import target.
+The agent must inspect that directory's .terraform.lock.hcl. If the lock file is missing or
 ambiguous, alert the user that exact target provider releases cannot be determined;
 do not run terraform init, select versions, substitute Search catalog versions or
 call this tool, and wait for further instructions. Pass exact provider releases
@@ -46,7 +51,10 @@ const VerifyImportPlanDescription = `Read-only verification of one exact ordinar
 does not create a Run, modify configuration or apply changes.
 
 Pass the unambiguous run_id retained from the reviewed CLI Run URL for the
-confirmed target organization/workspace. Do not search for or substitute a
+confirmed target organization/workspace. Reuse the target confirmed for
+prepare_import: omit target arguments only to use its confirmed
+TF_MCP_IMPORT_WORKSPACE/TF_WORKSPACE defaults, or pass explicit overrides. Do
+not use TF_MCP_QUERY_WORKSPACE as the target. Do not search for or substitute a
 newer Run. import_context and bindings may be omitted while polling, but a
 finished Plan requires the unchanged prepare_import context and exactly one
 selected marker-to-address binding per selection. The tool checks the Run's
@@ -92,7 +100,7 @@ func decodeImportArguments(raw any, target any) error {
 func PrepareImport(logger *log.Logger) server.ServerTool {
 	return server.ServerTool{Tool: mcp.NewTool("prepare_import", mcp.WithDescription(PrepareImportDescription),
 		mcp.WithTitleAnnotation("Prepare explicit Search import selection"), mcp.WithReadOnlyHintAnnotation(true), mcp.WithDestructiveHintAnnotation(false), mcp.WithOpenWorldHintAnnotation(true),
-		mcp.WithString("organization_name", mcp.Required()), mcp.WithString("workspace_name", mcp.Required()), mcp.WithString("workspace_id", mcp.Description("Optional mismatch check only.")), mcp.WithString("query_run_id", mcp.Required()),
+		mcp.WithString("organization_name", mcp.Description(ImportOrganizationDescription)), mcp.WithString("workspace_name", mcp.Description(ImportWorkspaceDescription)), mcp.WithString("workspace_id", mcp.Description("Optional mismatch check only.")), mcp.WithString("query_run_id", mcp.Required()),
 		mcp.WithArray("selections", mcp.Required(), mcp.MinItems(1), mcp.Items(map[string]any{"type": "object", "required": []string{"query_result_marker", "managed_type"}, "properties": map[string]any{"query_result_marker": map[string]any{"type": "string"}, "managed_type": map[string]any{"type": "string"}}, "additionalProperties": false})),
 		mcp.WithObject("locked_providers", mcp.Required(), mcp.Description("Exact local .terraform.lock.hcl versions keyed by provider source. Public namespace/type shorthand is accepted; custom/private sources require hostname/namespace/type. Sources are canonicalized. Agent-reported, not server-attested.")),
 		mcp.WithSchemaAdditionalProperties(false), mcp.WithOutputSchema[PrepareImportResult]()),
@@ -101,6 +109,11 @@ func PrepareImport(logger *log.Logger) server.ServerTool {
 			if err := decodeImportArguments(request.GetRawArguments(), &input); err != nil {
 				return toolErrorf(logger, "prepare_import", "decoding prepare_import arguments: %v", err)
 			}
+			scope := ResolveImportScope(input.OrganizationName, input.WorkspaceName)
+			if !scope.Ready() {
+				return mcp.NewToolResultText(scope.ImportInputRequest()), nil
+			}
+			input.OrganizationName, input.WorkspaceName = scope.Organization.Value, scope.Workspace.Value
 			if err := ValidatePrepareImportInput(input); err != nil {
 				return toolErrorf(logger, "prepare_import", "validating prepare_import arguments: %v", err)
 			}
@@ -126,6 +139,11 @@ func VerifyImportPlan(logger *log.Logger) server.ServerTool {
 			if err := decodeImportArguments(request.GetRawArguments(), &input); err != nil {
 				return toolErrorf(logger, "verify_import_plan", "decoding verify_import_plan arguments: %v", err)
 			}
+			scope := ResolveImportScope(input.OrganizationName, input.WorkspaceName)
+			if !scope.Ready() {
+				return mcp.NewToolResultText(scope.ImportInputRequest()), nil
+			}
+			input.OrganizationName, input.WorkspaceName = scope.Organization.Value, scope.Workspace.Value
 			c, err := client.GetTfeClientFromContext(ctx, logger)
 			if err != nil {
 				return toolErrorf(logger, "verify_import_plan", "%v", TerraformClientUnavailableError(err))
