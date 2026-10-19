@@ -23,20 +23,15 @@ func TestEmbeddedInstructionsPreserveSearchImportBoundaries(t *testing.T) {
 	importGuidance := Text[importStart:codeGenerationStart]
 
 	for _, required := range []string{
-		"server-configured query defaults",
-		"ask the user to confirm them",
-		"`TF_MCP_IMPORT_WORKSPACE`, then `TF_WORKSPACE`",
-		"Always prompt for and confirm that destination",
-		"Never treat a query workspace default as import authorization",
-		"use `TF_MCP_QUERY_WORKSPACE` as the import target",
-		"omit target arguments to use the confirmed import defaults",
-		"pass the user's explicit selection as an override",
-	} {
-		require.Contains(t, generalGuidance, required)
-	}
-
-	for _, required := range []string{
 		"supersede the generic Tool Usage Guidelines and Code Generation workflow",
+		"complete the tool's source-scope interaction when requested",
+		"`TF_CLOUD_ORGANIZATION` and `TF_MCP_QUERY_WORKSPACE`",
+		"`TF_WORKSPACE` as the workspace fallback",
+		"proposed defaults—not authorization",
+		"Do not assume the agent can inspect the server environment",
+		"reuse the accepted `terraform_org_name` and `workspace_name` explicitly",
+		"Source confirmation does not approve query execution",
+		"Immediately before `execute_query`",
 		"Use the provider versions and schemas returned by the Search tools",
 		"Do not replace them with `get_latest_provider_version`",
 		"Search catalog version is source-query evidence, not a target-version recommendation",
@@ -48,6 +43,16 @@ func TestEmbeddedInstructionsPreserveSearchImportBoundaries(t *testing.T) {
 	}
 
 	for _, required := range []string{
+		"Confirm selection and target independently",
+		"complete the tool's import-target interaction when requested",
+		"`TF_CLOUD_ORGANIZATION` and `TF_MCP_IMPORT_WORKSPACE`",
+		"`TF_WORKSPACE` as the workspace fallback",
+		"independent proposed defaults—not authorization",
+		"never use `TF_MCP_QUERY_WORKSPACE` as the import target",
+		"Query-source confirmation never confirms the import target",
+		"even when their values are equal",
+		"rather than assuming the agent can inspect the server environment",
+		"reuse the accepted `terraform_org_name` and `workspace_name` explicitly",
 		"exact locked provider releases",
 		"provider source and exact version relevant to the selected imports",
 		"Public namespace/type shorthand is accepted",
@@ -61,19 +66,27 @@ func TestEmbeddedInstructionsPreserveSearchImportBoundaries(t *testing.T) {
 		"Format and, when appropriate, validate the authored HCL",
 		"diagnostics and do not authorize a Plan",
 		"Obtain separate approval for one plain HCP-connected speculative `terraform plan`",
-		"Poll the same Run ID",
-		"never guess the latest Run",
-		"Do not continue to `terraform apply`, `terraform import` or `apply_run`",
+		"Do not continue automatically to `terraform apply`, `terraform import` or `apply_run`",
 	} {
 		require.Contains(t, importGuidance, required)
 	}
 	require.Less(t, strings.Index(searchGuidance, "`execute_query`"), strings.Index(searchGuidance, "`get_query_status`"))
 	require.Less(t, strings.Index(importGuidance, "Inspect the target configuration tree"), strings.Index(importGuidance, "call `prepare_import`"))
 	require.Less(t, strings.Index(importGuidance, "Obtain separate approval"), strings.Index(importGuidance, "`terraform plan`"))
-	require.Less(t, strings.Index(importGuidance, "call `verify_import_plan`"), strings.Index(importGuidance, "Do not continue to `terraform apply`"))
+	require.Less(t, strings.Index(importGuidance, "call `verify_import_plan`"), strings.Index(importGuidance, "Do not continue automatically"))
 
 	require.NotContains(t, generalGuidance, "Search catalog version")
 	require.NotContains(t, generalGuidance, "Search-to-import speculative")
+	require.NotContains(t, generalGuidance, "TF_MCP_QUERY_WORKSPACE")
+	require.NotContains(t, generalGuidance, "TF_MCP_IMPORT_WORKSPACE")
+	require.NotContains(t, generalGuidance, "TF_CLOUD_ORGANIZATION")
+	require.NotContains(t, searchGuidance, "TF_MCP_IMPORT_WORKSPACE")
+	require.NotContains(t, searchGuidance, "input_required")
+	require.NotContains(t, importGuidance, "input_required")
+	require.NotContains(t, searchGuidance, "`organization_name`")
+	require.NotContains(t, importGuidance, "`organization_name`")
+	require.NotContains(t, searchGuidance, "omit scope arguments")
+	require.NotContains(t, importGuidance, "omit target arguments")
 }
 
 func TestEmbeddedInstructionsPreserveGeneralWorkflowGuidance(t *testing.T) {
