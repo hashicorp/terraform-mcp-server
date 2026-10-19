@@ -511,15 +511,15 @@ func TestProviderListSchemaList_ToolDefinition(t *testing.T) {
 	assert.Contains(t, props, "provider_namespace")
 	assert.Contains(t, props, "provider_name")
 	assert.NotContains(t, props, "provider_version")
-	assert.Contains(t, props, "organization_name")
+	assert.Contains(t, props, ScopeOrganizationInput)
+	assert.NotContains(t, props, "organization_name")
 	assert.Contains(t, props, "workspace_name")
-	assert.NotContains(t, tool.Tool.InputSchema.Required, "organization_name")
+	assert.NotContains(t, tool.Tool.InputSchema.Required, ScopeOrganizationInput)
 	assert.NotContains(t, tool.Tool.InputSchema.Required, "workspace_name")
 	assert.Contains(t, tool.Tool.Description, "TF_MCP_QUERY_WORKSPACE")
-	assert.Contains(t, tool.Tool.Description, "ask the user to confirm")
-	assert.Contains(t, tool.Tool.Description, "input_required")
+	assert.Contains(t, tool.Tool.Description, "requires confirmation")
 	assert.NotContains(t, tool.Tool.Description, "\t")
-	assert.NotContains(t, props["organization_name"].(map[string]any), "default")
+	assert.NotContains(t, props[ScopeOrganizationInput].(map[string]any), "default")
 	assert.NotContains(t, props["workspace_name"].(map[string]any), "default")
 	assert.Contains(t, tool.Tool.Description, "provider version comes from the catalog")
 	assert.Contains(t, tool.Tool.Description, "does not establish")
@@ -535,9 +535,8 @@ func TestProviderListSchemaList_RequestsMissingScopeBeforeRequest(t *testing.T) 
 	require.False(t, result.IsError)
 	tc, ok := mcp.AsTextContent(result.Content[0])
 	require.True(t, ok, "expected TextContent")
-	assert.Contains(t, tc.Text, "organization_name is missing (TF_CLOUD_ORGANIZATION is unset)")
-	assert.Contains(t, tc.Text, "workspace_name is missing (TF_MCP_QUERY_WORKSPACE and TF_WORKSPACE are unset)")
-	assert.Contains(t, tc.Text, "ask the user")
+	assert.Contains(t, tc.Text, `"status":"input_required"`)
+	assert.Contains(t, tc.Text, `"missing_inputs":["terraform_org_name","workspace_name"]`)
 }
 
 func TestProviderListSchemaList_ValidatesWorkspaceBeforeProviderRequest(t *testing.T) {
@@ -591,8 +590,8 @@ func TestProviderListSchemaList_ValidatesWorkspaceBeforeProviderRequest(t *testi
 			mcpServer := new(server.MCPServer)
 			ctx := mcpServer.WithContext(context.Background(), server.NewInProcessSession(sessionID, nil))
 			request := mcp.CallToolRequest{Params: mcp.CallToolParams{Arguments: map[string]any{
-				"organization_name": "test-org",
-				"workspace_name":    "test-workspace",
+				ScopeOrganizationInput: "test-org",
+				ScopeWorkspaceInput:    "test-workspace",
 			}}}
 
 			result, err := providerListSchemaListHandler(ctx, request, silentLogger())

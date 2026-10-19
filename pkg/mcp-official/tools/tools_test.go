@@ -207,11 +207,11 @@ func TestOfficialSearchScopedCatalogAndQuerySubmission(t *testing.T) {
 	t.Setenv("TFE_TOKEN", "test-token")
 	ctx, session := newOfficialSearchSession(t)
 
-	result, err := session.CallTool(ctx, &mcp.CallToolParams{Name: "provider_list_schema_list", Arguments: map[string]any{"organization_name": "org", "workspace_name": "ws"}})
+	result, err := session.CallTool(ctx, &mcp.CallToolParams{Name: "provider_list_schema_list", Arguments: map[string]any{"terraform_org_name": "org", "workspace_name": "ws"}})
 	require.NoError(t, err)
 	require.False(t, result.IsError, "catalog result: %#v", result.Content)
 	require.Contains(t, result.Content[0].(*mcp.TextContent).Text, "supported_providers")
-	result, err = session.CallTool(ctx, &mcp.CallToolParams{Name: "provider_list_schema_list", Arguments: map[string]any{"organization_name": "org", "workspace_name": "ws", "provider_namespace": "hashicorp", "provider_name": "example"}})
+	result, err = session.CallTool(ctx, &mcp.CallToolParams{Name: "provider_list_schema_list", Arguments: map[string]any{"terraform_org_name": "org", "workspace_name": "ws", "provider_namespace": "hashicorp", "provider_name": "example"}})
 	require.NoError(t, err)
 	require.False(t, result.IsError, "schema detail without provider metadata: %#v", result.Content)
 	var fetched struct {
@@ -228,12 +228,12 @@ func TestOfficialSearchScopedCatalogAndQuerySubmission(t *testing.T) {
 	require.NoError(t, err)
 	require.False(t, result.IsError, "FETCH metadata must generate a guide: %#v", result.Content)
 	require.Contains(t, result.Content[0].(*mcp.TextContent).Text, "example_list")
-	result, err = session.CallTool(ctx, &mcp.CallToolParams{Name: "provider_list_schema_list", Arguments: map[string]any{"organization_name": "org", "workspace_name": "not-found"}})
+	result, err = session.CallTool(ctx, &mcp.CallToolParams{Name: "provider_list_schema_list", Arguments: map[string]any{"terraform_org_name": "org", "workspace_name": "not-found"}})
 	require.NoError(t, err)
 	require.True(t, result.IsError, "missing workspace must not be treated as authorized")
 
 	result, err = session.CallTool(ctx, &mcp.CallToolParams{Name: "execute_query", Arguments: map[string]any{
-		"organization_name": "org", "workspace_name": "ws",
+		"terraform_org_name": "org", "workspace_name": "ws",
 		"query_configuration": `{"no_code_query_providers":[{"namespace":"hashicorp","name":"example","version":"1.0.0","no_code_query_resources":[{"body":{"resource_type":"example_list"}}]}]}`,
 	}})
 	require.NoError(t, err)
@@ -266,7 +266,7 @@ func TestOfficialImportVerifyObservedFailureAndNoPlanJSON(t *testing.T) {
 	t.Setenv("TFE_TOKEN", "test-token")
 	t.Setenv("MCP_ORGANIZATION_ALLOWLIST", "org")
 	ctx, session := newOfficialSearchSession(t)
-	result, err := session.CallTool(ctx, &mcp.CallToolParams{Name: "verify_import_plan", Arguments: map[string]any{"organization_name": "org", "workspace_name": "target", "run_id": "run-example"}})
+	result, err := session.CallTool(ctx, &mcp.CallToolParams{Name: "verify_import_plan", Arguments: map[string]any{"terraform_org_name": "org", "workspace_name": "target", "run_id": "run-example"}})
 	require.NoError(t, err)
 	require.False(t, result.IsError, "observed failed Run is a factual domain result")
 	data := result.StructuredContent.(map[string]any)
@@ -275,7 +275,7 @@ func TestOfficialImportVerifyObservedFailureAndNoPlanJSON(t *testing.T) {
 	require.Equal(t, float64(0), float64(planReads.Load()))
 	require.Contains(t, result.Content[0].(*mcp.TextContent).Text, `"run_failed"`)
 	// Unknown fields and missing required inputs are tool errors, not domain failures.
-	invalid, err := session.CallTool(ctx, &mcp.CallToolParams{Name: "verify_import_plan", Arguments: map[string]any{"organization_name": "org", "workspace_name": "target", "run_id": "run-example", "configuration_version_id": "cv-forbidden"}})
+	invalid, err := session.CallTool(ctx, &mcp.CallToolParams{Name: "verify_import_plan", Arguments: map[string]any{"terraform_org_name": "org", "workspace_name": "target", "run_id": "run-example", "configuration_version_id": "cv-forbidden"}})
 	require.NoError(t, err)
 	require.True(t, invalid.IsError)
 }
@@ -335,7 +335,7 @@ func TestOfficialImportPrepareAndFinishedPlan(t *testing.T) {
 	require.Equal(t, "qry-test", summary.StructuredContent.(map[string]any)["query_run_id"])
 	lists := summary.StructuredContent.(map[string]any)["lists"].([]any)
 	marker := lists[0].(map[string]any)["results"].([]any)[0].(map[string]any)["query_result_marker"].(string)
-	prep, err := session.CallTool(ctx, &mcp.CallToolParams{Name: "prepare_import", Arguments: map[string]any{"organization_name": "org", "workspace_name": "target", "query_run_id": "qry-test", "selections": []any{map[string]any{"query_result_marker": marker, "managed_type": "aws_s3_bucket"}}, "locked_providers": map[string]string{"hashicorp/aws": "6.66.0"}}})
+	prep, err := session.CallTool(ctx, &mcp.CallToolParams{Name: "prepare_import", Arguments: map[string]any{"terraform_org_name": "org", "workspace_name": "target", "query_run_id": "qry-test", "selections": []any{map[string]any{"query_result_marker": marker, "managed_type": "aws_s3_bucket"}}, "locked_providers": map[string]string{"hashicorp/aws": "6.66.0"}}})
 	require.NoError(t, err)
 	require.False(t, prep.IsError, "prepare: %#v", prep.Content)
 	prepared := prep.StructuredContent.(map[string]any)
@@ -343,7 +343,7 @@ func TestOfficialImportPrepareAndFinishedPlan(t *testing.T) {
 	require.Equal(t, "source", prepared["source_workspace_name"])
 	require.Equal(t, "ws-target", prepared["workspace_id"])
 	require.Equal(t, "6.66.0", prepared["import_context"].(map[string]any)["locked_providers"].(map[string]any)["registry.terraform.io/hashicorp/aws"])
-	verify, err := session.CallTool(ctx, &mcp.CallToolParams{Name: "verify_import_plan", Arguments: map[string]any{"organization_name": "org", "workspace_name": "target", "run_id": "run-example", "import_context": prepared["import_context"], "bindings": []any{map[string]any{"query_result_marker": marker, "target_address": "aws_s3_bucket.sample"}}}})
+	verify, err := session.CallTool(ctx, &mcp.CallToolParams{Name: "verify_import_plan", Arguments: map[string]any{"terraform_org_name": "org", "workspace_name": "target", "run_id": "run-example", "import_context": prepared["import_context"], "bindings": []any{map[string]any{"query_result_marker": marker, "target_address": "aws_s3_bucket.sample"}}}})
 	require.NoError(t, err)
 	require.False(t, verify.IsError, "verify: %#v", verify.Content)
 	facts := verify.StructuredContent.(map[string]any)
@@ -353,7 +353,7 @@ func TestOfficialImportPrepareAndFinishedPlan(t *testing.T) {
 	require.NotContains(t, fmt.Sprint(verify.StructuredContent), "secret-id-sentinel")
 
 	invalidPlanJSON.Store(true)
-	invalid, err := session.CallTool(ctx, &mcp.CallToolParams{Name: "verify_import_plan", Arguments: map[string]any{"organization_name": "org", "workspace_name": "target", "run_id": "run-example", "import_context": prepared["import_context"], "bindings": []any{map[string]any{"query_result_marker": marker, "target_address": "aws_s3_bucket.sample"}}}})
+	invalid, err := session.CallTool(ctx, &mcp.CallToolParams{Name: "verify_import_plan", Arguments: map[string]any{"terraform_org_name": "org", "workspace_name": "target", "run_id": "run-example", "import_context": prepared["import_context"], "bindings": []any{map[string]any{"query_result_marker": marker, "target_address": "aws_s3_bucket.sample"}}}})
 	require.NoError(t, err)
 	require.True(t, invalid.IsError)
 	require.Nil(t, invalid.StructuredContent)
