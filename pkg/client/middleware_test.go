@@ -532,7 +532,92 @@ func TestOrganizationAllowlistUsesValidatedTokenDownstream(t *testing.T) {
 	assert.Equal(t, "Bearer allowed-token", upstreamAuthorization)
 	assert.Equal(t, "allowed-token", downstreamToken)
 }
+func TestRequireTerraformTokenMiddleware(t *testing.T) {
+	logger := log.New()
+	logger.SetLevel(log.ErrorLevel)
 
+	tests := []struct {
+		name             string
+		requireToken     string
+		authHeader       string
+		tfeTokenHeader   string
+		expectedStatus   int
+		expectedNextCall bool
+	}{
+		{
+			name:             "disabled when MCP_REQUIRE_TOKEN unset",
+			expectedStatus:   http.StatusOK,
+			expectedNextCall: true,
+		},
+		{
+			name:             "disabled when MCP_REQUIRE_TOKEN is not true",
+			requireToken:     "false",
+			expectedStatus:   http.StatusOK,
+			expectedNextCall: true,
+		},
+		{
+			name:           "missing Authorization rejected",
+			requireToken:   "true",
+			expectedStatus: http.StatusUnauthorized,
+		},
+		{
+			name:           "blank bearer token rejected",
+			requireToken:   "true",
+			authHeader:     "Bearer   ",
+			expectedStatus: http.StatusUnauthorized,
+		},
+		{
+			name:           "non-bearer Authorization rejected",
+			requireToken:   "true",
+			authHeader:     "Basic abc123",
+			expectedStatus: http.StatusUnauthorized,
+		},
+		{
+			name:           "TFE_TOKEN header alone rejected",
+			requireToken:   "true",
+			tfeTokenHeader: "header-token",
+			expectedStatus: http.StatusUnauthorized,
+		},
+		{
+			name:             "bearer token allowed",
+			requireToken:     "true",
+			authHeader:       "Bearer user-token",
+			expectedStatus:   http.StatusOK,
+			expectedNextCall: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv(RequireTokenEnv, tt.requireToken)
+
+			nextCalled := false
+			mockHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				nextCalled = true
+				w.WriteHeader(http.StatusOK)
+			})
+
+			handler := RequireTerraformTokenMiddleware(logger)(mockHandler)
+
+			req := httptest.NewRequest(http.MethodPost, "/mcp/official", nil)
+			if tt.authHeader != "" {
+				req.Header.Set("Authorization", tt.authHeader)
+			}
+			if tt.tfeTokenHeader != "" {
+				req.Header.Set(TerraformToken, tt.tfeTokenHeader)
+			}
+
+			rr := httptest.NewRecorder()
+			handler.ServeHTTP(rr, req)
+
+			assert.Equal(t, tt.expectedStatus, rr.Code)
+			assert.Equal(t, tt.expectedNextCall, nextCalled)
+			if tt.expectedStatus == http.StatusUnauthorized {
+				assert.Contains(t, rr.Body.String(), "Authorization bearer token is required")
+			}
+		})
+	}
+}
 func TestTokenHasAllowedOrganization(t *testing.T) {
 	tests := []struct {
 		name          string

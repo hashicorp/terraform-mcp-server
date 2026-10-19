@@ -20,6 +20,9 @@ import (
 
 const OrganizationAllowlistEnv = "MCP_ORGANIZATION_ALLOWLIST"
 
+// RequireTokenEnv turns on RequireTerraformTokenMiddleware when set to "true".
+const RequireTokenEnv = "MCP_REQUIRE_TOKEN"
+
 const (
 	// RemoteIPMethodEnv selects how the client IP is sourced for X-Forwarded-For.
 	// The valid values are: "RemoteAddr" (default), "X-Real-IP", "X-Forwarded-For".
@@ -221,6 +224,28 @@ func OrganizationAllowlistMiddleware(allowlist []string, logger *log.Logger) fun
 				return
 			}
 
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
+// RequireTerraformTokenMiddleware rejects requests without an Authorization
+// bearer token when MCP_REQUIRE_TOKEN is true. It keeps tokenless clients
+// off the hosted server once the organization allowlist is removed.
+func RequireTerraformTokenMiddleware(logger *log.Logger) func(http.Handler) http.Handler {
+	required := utils.GetEnv(RequireTokenEnv, "") == "true"
+	return func(next http.Handler) http.Handler {
+		if !required {
+			return next
+		}
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if strings.TrimSpace(getTokenFromAuthHeader(r)) == "" {
+				if logger != nil {
+					logger.Warn("Rejecting request: Authorization bearer token is required")
+				}
+				http.Error(w, "Authorization bearer token is required", http.StatusUnauthorized)
+				return
+			}
 			next.ServeHTTP(w, r)
 		})
 	}
