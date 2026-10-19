@@ -25,14 +25,14 @@ type GenerateQueryConfigurationArguments struct {
 }
 
 type ProviderListSchemaListArguments struct {
-	OrganizationName  string `json:"organization_name,omitempty"`
+	OrganizationName  string `json:"terraform_org_name,omitempty"`
 	WorkspaceName     string `json:"workspace_name,omitempty"`
 	ProviderNamespace string `json:"provider_namespace,omitempty" jsonschema:"Namespace; supply together with provider_name to fetch a schema"`
 	ProviderName      string `json:"provider_name,omitempty" jsonschema:"Short name; supply together with provider_namespace to fetch a schema"`
 }
 
 type ExecuteQueryArguments struct {
-	OrganizationName   string `json:"organization_name,omitempty"`
+	OrganizationName   string `json:"terraform_org_name,omitempty"`
 	WorkspaceName      string `json:"workspace_name,omitempty"`
 	QueryConfiguration string `json:"query_configuration" jsonschema:"JSON no-code query configuration produced using provider_list_schema_list and generate_query_configuration"`
 }
@@ -85,7 +85,7 @@ func searchScopeInputSchema[T any]() *jsonschema.Schema {
 	if err != nil {
 		panic(err)
 	}
-	schema.Properties["organization_name"].Description = searchlogic.QueryOrganizationDescription
+	schema.Properties[searchlogic.ScopeOrganizationInput].Description = searchlogic.QueryOrganizationDescription
 	schema.Properties["workspace_name"].Description = searchlogic.QueryWorkspaceDescription
 	return schema
 }
@@ -99,8 +99,9 @@ func ProviderListSchemaListTool() *mcp.Tool {
 
 func ProviderListSchemaListFunc(ctx context.Context, req *mcp.CallToolRequest, input ProviderListSchemaListArguments) (*mcp.CallToolResult, any, error) {
 	scope := searchlogic.ResolveSearchScope(input.OrganizationName, input.WorkspaceName)
-	if !scope.Ready() {
-		return textResult(scope.InputRequest()), nil, nil
+	scope, interactionResult, err := resolveOfficialScope(ctx, req, scope, searchlogic.QuerySourceScope)
+	if err != nil || interactionResult != nil {
+		return interactionResult, nil, err
 	}
 	tfeClient, err := client.GetTfeClient(ctx, client.SessionIDFromRequest(req))
 	if err != nil {
@@ -127,8 +128,9 @@ func ExecuteQueryTool() *mcp.Tool {
 
 func ExecuteQueryFunc(ctx context.Context, req *mcp.CallToolRequest, input ExecuteQueryArguments) (*mcp.CallToolResult, *searchlogic.ExecuteQueryResponse, error) {
 	scope := searchlogic.ResolveSearchScope(input.OrganizationName, input.WorkspaceName)
-	if !scope.Ready() {
-		return textResult(scope.InputRequest()), nil, nil
+	scope, interactionResult, err := resolveOfficialScope(ctx, req, scope, searchlogic.QuerySourceScope)
+	if err != nil || interactionResult != nil {
+		return interactionResult, nil, err
 	}
 	if strings.TrimSpace(input.QueryConfiguration) == "" {
 		return nil, nil, fmt.Errorf("missing required input: query_configuration")
@@ -219,7 +221,7 @@ func PrepareImportTool() *mcp.Tool {
 	if err != nil {
 		panic(err)
 	}
-	inputSchema.Properties["organization_name"].Description = searchlogic.ImportOrganizationDescription
+	inputSchema.Properties[searchlogic.ScopeOrganizationInput].Description = searchlogic.ImportOrganizationDescription
 	inputSchema.Properties["workspace_name"].Description = searchlogic.ImportWorkspaceDescription
 	t.InputSchema = inputSchema
 	schema, err := jsonschema.For[searchlogic.PrepareImportResult](nil)
@@ -232,8 +234,9 @@ func PrepareImportTool() *mcp.Tool {
 
 func PrepareImportFunc(ctx context.Context, req *mcp.CallToolRequest, input searchlogic.PrepareImportInput) (*mcp.CallToolResult, *searchlogic.PrepareImportResult, error) {
 	scope := searchlogic.ResolveImportScope(input.OrganizationName, input.WorkspaceName)
-	if !scope.Ready() {
-		return textResult(scope.ImportInputRequest()), nil, nil
+	scope, interactionResult, err := resolveOfficialScope(ctx, req, scope, searchlogic.ImportTargetScope)
+	if err != nil || interactionResult != nil {
+		return interactionResult, nil, err
 	}
 	input.OrganizationName, input.WorkspaceName = scope.Organization.Value, scope.Workspace.Value
 	if err := searchlogic.ValidatePrepareImportInput(input); err != nil {
@@ -256,7 +259,7 @@ func VerifyImportPlanTool() *mcp.Tool {
 	if err != nil {
 		panic(err)
 	}
-	inputSchema.Properties["organization_name"].Description = searchlogic.ImportOrganizationDescription
+	inputSchema.Properties[searchlogic.ScopeOrganizationInput].Description = searchlogic.ImportOrganizationDescription
 	inputSchema.Properties["workspace_name"].Description = searchlogic.ImportWorkspaceDescription
 	t.InputSchema = inputSchema
 	schema, err := jsonschema.For[searchlogic.VerifyImportResult](nil)
@@ -269,8 +272,9 @@ func VerifyImportPlanTool() *mcp.Tool {
 
 func VerifyImportPlanFunc(ctx context.Context, req *mcp.CallToolRequest, input searchlogic.VerifyImportInput) (*mcp.CallToolResult, *searchlogic.VerifyImportResult, error) {
 	scope := searchlogic.ResolveImportScope(input.OrganizationName, input.WorkspaceName)
-	if !scope.Ready() {
-		return textResult(scope.ImportInputRequest()), nil, nil
+	scope, interactionResult, err := resolveOfficialScope(ctx, req, scope, searchlogic.ImportTargetScope)
+	if err != nil || interactionResult != nil {
+		return interactionResult, nil, err
 	}
 	input.OrganizationName, input.WorkspaceName = scope.Organization.Value, scope.Workspace.Value
 	c, err := client.GetTfeClient(ctx, client.SessionIDFromRequest(req))

@@ -15,6 +15,7 @@ import (
 	"testing"
 
 	"github.com/hashicorp/go-tfe"
+	terraformclient "github.com/hashicorp/terraform-mcp-server/pkg/client"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/stretchr/testify/require"
 )
@@ -168,10 +169,74 @@ func TestQueryProvenanceChecksBackendAssociations(t *testing.T) {
 	defer backend.Close()
 	client, err := tfe.NewClient(&tfe.Config{Address: backend.URL, Token: "test-token", HTTPClient: backend.Client()})
 	require.NoError(t, err)
-	prov, err := readQueryDiscoveryProvenance(context.Background(), client, "qry-test")
+	ctx := terraformclient.WithOrganizationAllowlist(context.Background(), []string{"org"})
+	prov, err := readQueryDiscoveryProvenance(ctx, client, "qry-test")
 	require.NoError(t, err)
 	require.Equal(t, "org", prov.Organization)
 	require.Equal(t, "registry.terraform.io/hashicorp/aws", prov.Providers["aws_s3_buckets"].Source)
+}
+
+func TestQuerySummaryRejectsDisallowedOrganizationBeforeEvidenceDisclosure(t *testing.T) {
+	for _, status := range []tfe.QueryRunStatus{tfe.QueryRunFinished, tfe.QueryRunErrored, tfe.QueryRunCanceled} {
+		t.Run(string(status), func(t *testing.T) {
+			var queryReads, workspaceReads, evidenceReads int
+			backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "application/vnd.api+json")
+				switch r.URL.Path {
+				case "/api/v2/ping":
+					w.WriteHeader(http.StatusOK)
+				case "/api/v2/queries/qry-test":
+					queryReads++
+					_, _ = fmt.Fprintf(w, `{"data":{"type":"queries","id":"qry-test","attributes":{"status":%q,"log-read-url":"%s/logs"},"relationships":{"workspace":{"data":{"type":"workspaces","id":"ws-test"}}}}}`, status, "https://example.invalid")
+				case "/api/v2/workspaces/ws-test":
+					workspaceReads++
+					_, _ = fmt.Fprint(w, `{"data":{"type":"workspaces","id":"ws-test","attributes":{"name":"private-workspace"},"relationships":{"organization":{"data":{"type":"organizations","id":"blocked-org"}}}}}`)
+				default:
+					evidenceReads++
+					http.NotFound(w, r)
+				}
+			}))
+			defer backend.Close()
+			client, err := tfe.NewClient(&tfe.Config{Address: backend.URL, Token: "test-token", HTTPClient: backend.Client()})
+			require.NoError(t, err)
+			ctx := terraformclient.WithOrganizationAllowlist(context.Background(), []string{"allowed-org"})
+
+			summary, err := ReadQueryDiscoverySummary(ctx, client, "qry-test", QueryDiscoveryFilter{})
+
+			require.ErrorIs(t, err, terraformclient.ErrOrganizationNotAllowed)
+			require.NotContains(t, err.Error(), "blocked-org")
+			require.NotContains(t, err.Error(), "private-workspace")
+			require.Nil(t, summary)
+			require.Equal(t, 1, queryReads)
+			require.Equal(t, 1, workspaceReads)
+			require.Zero(t, evidenceReads)
+		})
+	}
+}
+
+func TestQuerySummaryFailsClosedWhenAllowlistedOwnershipCannotBeResolved(t *testing.T) {
+	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/vnd.api+json")
+		switch r.URL.Path {
+		case "/api/v2/ping":
+			w.WriteHeader(http.StatusOK)
+		case "/api/v2/queries/qry-test":
+			_, _ = fmt.Fprint(w, `{"data":{"type":"queries","id":"qry-test","attributes":{"status":"finished"},"relationships":{"workspace":{"data":{"type":"workspaces","id":"ws-test"}}}}}`)
+		case "/api/v2/workspaces/ws-test":
+			_, _ = fmt.Fprint(w, `{"data":{"type":"workspaces","id":"ws-test","attributes":{"name":"ws"}}}`)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer backend.Close()
+	client, err := tfe.NewClient(&tfe.Config{Address: backend.URL, Token: "test-token", HTTPClient: backend.Client()})
+	require.NoError(t, err)
+	ctx := terraformclient.WithOrganizationAllowlist(context.Background(), []string{"allowed-org"})
+
+	summary, err := ReadQueryDiscoverySummary(ctx, client, "qry-test", QueryDiscoveryFilter{})
+
+	require.EqualError(t, err, string(queryOwnershipUnverifiedCode))
+	require.Nil(t, summary)
 }
 
 func TestQueryProvenanceRejectsWhitespaceOnlyRawRelationshipID(t *testing.T) {

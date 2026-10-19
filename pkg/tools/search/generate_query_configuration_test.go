@@ -376,11 +376,10 @@ func TestWriteInstructions_ContainsPreConditions(t *testing.T) {
 		"execute_query",
 		"get_query_status",
 		"get_query_summary",
-		"organization_name",
+		"terraform_org_name",
 		"workspace_name",
-		"only when the user explicitly specifies the corresponding values",
-		"pass only values explicitly specified by the user",
-		"otherwise omit them so the server uses configured defaults",
+		"accepted source pair",
+		"requests confirmation",
 		"generate_config_out",
 		"nesting_mode",
 		"list` or `set",
@@ -444,7 +443,7 @@ func TestWriteExamplePayload_ContainsGenerateConfigOut(t *testing.T) {
 	if !strings.Contains(out, `"limit": 100`) {
 		t.Error("example payload must contain default limit of 100")
 	}
-	if strings.Contains(out, `"organization_name"`) || strings.Contains(out, `"workspace_name"`) {
+	if strings.Contains(out, `"terraform_org_name"`) || strings.Contains(out, `"workspace_name"`) {
 		t.Error("example query_configuration must not contain workspace selectors because they are separate tool inputs")
 	}
 	if strings.Contains(out, `"relationships"`) || strings.Contains(out, `"data"`) {
