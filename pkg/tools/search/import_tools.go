@@ -25,7 +25,7 @@ resolve the proposed target workspace from TF_MCP_IMPORT_WORKSPACE, then
 TF_WORKSPACE, unless the user supplies an explicit target. Always present and
 confirm the proposed target independently from the Search source. Pass the
 accepted terraform_org_name and workspace_name explicitly; omitted fields use
-native MCP user input before scoped API access. Never use TF_MCP_QUERY_WORKSPACE
+the server's scope-confirmation response before scoped API access. Never use TF_MCP_QUERY_WORKSPACE
 as an import target.
 The agent must inspect that directory's .terraform.lock.hcl. If the lock file is missing or
 ambiguous, alert the user that exact target provider releases cannot be determined;
@@ -54,7 +54,7 @@ does not create a Run, modify configuration or apply changes.
 Pass the unambiguous run_id retained from the reviewed CLI Run URL for the
 confirmed target organization/workspace. Reuse the target confirmed for
 prepare_import by passing terraform_org_name and workspace_name explicitly.
-Omitted fields use native MCP user input; do not use TF_MCP_QUERY_WORKSPACE as
+For omitted fields, the server requests confirmation; do not use TF_MCP_QUERY_WORKSPACE as
 the target. Do not search for or substitute a newer Run. import_context and
 bindings may be omitted while polling, but a
 finished Plan requires the unchanged prepare_import context and exactly one
@@ -98,11 +98,7 @@ func decodeImportArguments(raw any, target any) error {
 	return nil
 }
 
-func PrepareImport(logger *log.Logger, servers ...*server.MCPServer) server.ServerTool {
-	var mcpServer *server.MCPServer
-	if len(servers) > 0 {
-		mcpServer = servers[0]
-	}
+func PrepareImport(logger *log.Logger) server.ServerTool {
 	return server.ServerTool{Tool: mcp.NewTool("prepare_import", mcp.WithDescription(PrepareImportDescription),
 		mcp.WithTitleAnnotation("Prepare explicit Search import selection"), mcp.WithReadOnlyHintAnnotation(true), mcp.WithDestructiveHintAnnotation(false), mcp.WithOpenWorldHintAnnotation(true),
 		mcp.WithString(ScopeOrganizationInput, mcp.Description(ImportOrganizationDescription)), mcp.WithString(ScopeWorkspaceInput, mcp.Description(ImportWorkspaceDescription)), mcp.WithString("workspace_id", mcp.Description("Optional mismatch check only.")), mcp.WithString("query_run_id", mcp.Required()),
@@ -114,7 +110,7 @@ func PrepareImport(logger *log.Logger, servers ...*server.MCPServer) server.Serv
 			if err := decodeImportArguments(request.GetRawArguments(), &input); err != nil {
 				return toolErrorf(logger, "prepare_import", "decoding prepare_import arguments: %v", err)
 			}
-			scope, interactionResult := resolveMark3LabsScope(ctx, mcpServer, ResolveImportScope(input.OrganizationName, input.WorkspaceName), ImportTargetScope)
+			scope, interactionResult := resolveMark3LabsScope(ctx, ResolveImportScope(input.OrganizationName, input.WorkspaceName), ImportTargetScope)
 			if interactionResult != nil {
 				return interactionResult, nil
 			}
@@ -135,11 +131,7 @@ func PrepareImport(logger *log.Logger, servers ...*server.MCPServer) server.Serv
 	}
 }
 
-func VerifyImportPlan(logger *log.Logger, servers ...*server.MCPServer) server.ServerTool {
-	var mcpServer *server.MCPServer
-	if len(servers) > 0 {
-		mcpServer = servers[0]
-	}
+func VerifyImportPlan(logger *log.Logger) server.ServerTool {
 	return server.ServerTool{Tool: mcp.NewTool("verify_import_plan", mcp.WithDescription(VerifyImportPlanDescription),
 		mcp.WithTitleAnnotation("Inspect exact CLI speculative Run and Plan"), mcp.WithReadOnlyHintAnnotation(true), mcp.WithDestructiveHintAnnotation(false), mcp.WithOpenWorldHintAnnotation(true),
 		mcp.WithInputSchema[VerifyImportInput](), mcp.WithOutputSchema[VerifyImportResult]()),
@@ -148,7 +140,7 @@ func VerifyImportPlan(logger *log.Logger, servers ...*server.MCPServer) server.S
 			if err := decodeImportArguments(request.GetRawArguments(), &input); err != nil {
 				return toolErrorf(logger, "verify_import_plan", "decoding verify_import_plan arguments: %v", err)
 			}
-			scope, interactionResult := resolveMark3LabsScope(ctx, mcpServer, ResolveImportScope(input.OrganizationName, input.WorkspaceName), ImportTargetScope)
+			scope, interactionResult := resolveMark3LabsScope(ctx, ResolveImportScope(input.OrganizationName, input.WorkspaceName), ImportTargetScope)
 			if interactionResult != nil {
 				return interactionResult, nil
 			}

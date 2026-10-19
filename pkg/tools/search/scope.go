@@ -103,10 +103,10 @@ func AcceptedSearchScope(content map[string]any) (SearchScope, error) {
 	}, nil
 }
 
-const QueryOrganizationDescription = "Optional explicit HCP Terraform organization containing the query workspace. The canonical terraform_org_name input overrides TF_CLOUD_ORGANIZATION. When omitted, the server proposes TF_CLOUD_ORGANIZATION through native MCP user input before scoped API access. Reuse the accepted complete source pair explicitly in later Search calls."
+const QueryOrganizationDescription = "Optional explicit HCP Terraform organization containing the query workspace. The canonical terraform_org_name input overrides TF_CLOUD_ORGANIZATION. When omitted, the server requests confirmation of the proposed TF_CLOUD_ORGANIZATION value before scoped API access. Reuse the accepted complete source pair explicitly in later Search calls."
 
-const QueryWorkspaceDescription = "Optional explicit HCP Terraform source workspace. This input overrides TF_MCP_QUERY_WORKSPACE, then TF_WORKSPACE. When omitted, the server proposes the first configured value through native MCP user input before scoped API access. Reuse the accepted complete source pair explicitly. Import scope is resolved independently."
+const QueryWorkspaceDescription = "Optional explicit HCP Terraform source workspace. This input overrides TF_MCP_QUERY_WORKSPACE, then TF_WORKSPACE. When omitted, the server requests confirmation of the first configured value before scoped API access. Reuse the accepted complete source pair explicitly. Import scope is resolved independently."
 
-const ImportOrganizationDescription = "Optional explicit confirmed target organization. The canonical terraform_org_name input overrides TF_CLOUD_ORGANIZATION. When omitted, the server proposes TF_CLOUD_ORGANIZATION through native MCP user input before scoped API access. Import-target confirmation is independent from query-source confirmation."
+const ImportOrganizationDescription = "Optional explicit confirmed target organization. The canonical terraform_org_name input overrides TF_CLOUD_ORGANIZATION. When omitted, the server requests confirmation of the proposed TF_CLOUD_ORGANIZATION value before scoped API access. Import-target confirmation is independent from query-source confirmation."
 
-const ImportWorkspaceDescription = "Optional explicit confirmed import target workspace. This input overrides TF_MCP_IMPORT_WORKSPACE, then TF_WORKSPACE. When omitted, the server proposes the first configured value through native MCP user input before scoped API access. TF_MCP_QUERY_WORKSPACE is never an import default."
+const ImportWorkspaceDescription = "Optional explicit confirmed import target workspace. This input overrides TF_MCP_IMPORT_WORKSPACE, then TF_WORKSPACE. When omitted, the server requests confirmation of the first configured value before scoped API access. TF_MCP_QUERY_WORKSPACE is never an import default."

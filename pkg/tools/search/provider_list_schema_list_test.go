@@ -517,7 +517,7 @@ func TestProviderListSchemaList_ToolDefinition(t *testing.T) {
 	assert.NotContains(t, tool.Tool.InputSchema.Required, ScopeOrganizationInput)
 	assert.NotContains(t, tool.Tool.InputSchema.Required, "workspace_name")
 	assert.Contains(t, tool.Tool.Description, "TF_MCP_QUERY_WORKSPACE")
-	assert.Contains(t, tool.Tool.Description, "native MCP user input")
+	assert.Contains(t, tool.Tool.Description, "requires confirmation")
 	assert.NotContains(t, tool.Tool.Description, "\t")
 	assert.NotContains(t, props[ScopeOrganizationInput].(map[string]any), "default")
 	assert.NotContains(t, props["workspace_name"].(map[string]any), "default")
@@ -532,10 +532,11 @@ func TestProviderListSchemaList_RequestsMissingScopeBeforeRequest(t *testing.T) 
 	result, err := providerListSchemaListHandler(context.Background(), mcp.CallToolRequest{}, silentLogger())
 
 	require.NoError(t, err)
-	require.True(t, result.IsError)
+	require.False(t, result.IsError)
 	tc, ok := mcp.AsTextContent(result.Content[0])
 	require.True(t, ok, "expected TextContent")
-	assert.Contains(t, tc.Text, "explicit terraform_org_name and workspace_name")
+	assert.Contains(t, tc.Text, `"status":"input_required"`)
+	assert.Contains(t, tc.Text, `"missing_inputs":["terraform_org_name","workspace_name"]`)
 }
 
 func TestProviderListSchemaList_ValidatesWorkspaceBeforeProviderRequest(t *testing.T) {

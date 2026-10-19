@@ -35,7 +35,7 @@ type ImportSelection struct {
 }
 
 type PrepareImportInput struct {
-	OrganizationName string            `json:"terraform_org_name,omitempty" jsonschema:"Optional explicit confirmed target organization; omit to request native user input with the proposed TF_CLOUD_ORGANIZATION default"`
+	OrganizationName string            `json:"terraform_org_name,omitempty" jsonschema:"Optional explicit confirmed target organization; omit to request confirmation of the proposed TF_CLOUD_ORGANIZATION default"`
 	WorkspaceName    string            `json:"workspace_name,omitempty" jsonschema:"Optional confirmed target workspace override; omit to use the confirmed TF_MCP_IMPORT_WORKSPACE or TF_WORKSPACE default"`
 	WorkspaceID      string            `json:"workspace_id,omitempty"`
 	QueryRunID       string            `json:"query_run_id"`

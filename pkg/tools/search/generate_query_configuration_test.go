@@ -379,7 +379,7 @@ func TestWriteInstructions_ContainsPreConditions(t *testing.T) {
 		"terraform_org_name",
 		"workspace_name",
 		"accepted source pair",
-		"native MCP user input",
+		"requests confirmation",
 		"generate_config_out",
 		"nesting_mode",
 		"list` or `set",

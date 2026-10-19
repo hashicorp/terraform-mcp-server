@@ -42,7 +42,7 @@ func TestExecuteQueryDefinition(t *testing.T) {
 	assert.Contains(t, tool.Tool.InputSchema.Properties, ScopeOrganizationInput)
 	assert.NotContains(t, tool.Tool.InputSchema.Properties, "organization_name")
 	assert.NotContains(t, tool.Tool.InputSchema.Required, "workspace_name")
-	assert.Contains(t, tool.Tool.Description, "native MCP user input")
+	assert.Contains(t, tool.Tool.Description, "requests confirmation")
 	assert.NotContains(t, tool.Tool.InputSchema.Properties, "workspace_id")
 	assert.Contains(t, tool.Tool.InputSchema.Required, "query_configuration")
 	require.NotNil(t, tool.Tool.Annotations.ReadOnlyHint)

@@ -35,11 +35,7 @@ import (
 // fetches the schema for that specific provider directly.
 // When neither is supplied, it lists all supported providers for the required
 // organization context so the agent can pick one and call the tool again.
-func ProviderListSchemaList(logger *log.Logger, servers ...*server.MCPServer) server.ServerTool {
-	var mcpServer *server.MCPServer
-	if len(servers) > 0 {
-		mcpServer = servers[0]
-	}
+func ProviderListSchemaList(logger *log.Logger) server.ServerTool {
 	return server.ServerTool{
 		Tool: mcp.NewTool("provider_list_schema_list",
 			mcp.WithDescription(providerListSchemaListDescription),
@@ -65,19 +61,15 @@ func ProviderListSchemaList(logger *log.Logger, servers ...*server.MCPServer) se
 			mcp.WithSchemaAdditionalProperties(false),
 		),
 		Handler: func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-			return providerListSchemaListHandler(ctx, request, logger, mcpServer)
+			return providerListSchemaListHandler(ctx, request, logger)
 		},
 	}
 }
 
-func providerListSchemaListHandler(ctx context.Context, request mcp.CallToolRequest, logger *log.Logger, servers ...*server.MCPServer) (*mcp.CallToolResult, error) {
-	var mcpServer *server.MCPServer
-	if len(servers) > 0 {
-		mcpServer = servers[0]
-	}
+func providerListSchemaListHandler(ctx context.Context, request mcp.CallToolRequest, logger *log.Logger) (*mcp.CallToolResult, error) {
 	providerNamespace := strings.TrimSpace(request.GetString("provider_namespace", ""))
 	providerName := strings.TrimSpace(strings.ToLower(request.GetString("provider_name", "")))
-	scope, interactionResult := resolveMark3LabsScope(ctx, mcpServer, ResolveSearchScope(request.GetString(ScopeOrganizationInput, ""), request.GetString(ScopeWorkspaceInput, "")), QuerySourceScope)
+	scope, interactionResult := resolveMark3LabsScope(ctx, ResolveSearchScope(request.GetString(ScopeOrganizationInput, ""), request.GetString(ScopeWorkspaceInput, "")), QuerySourceScope)
 	if interactionResult != nil {
 		return interactionResult, nil
 	}
@@ -365,8 +357,8 @@ schemas for an HCP Terraform source workspace.
 
 The terraform_org_name and workspace_name source arguments are optional. Omitted
 fields resolve proposed values from TF_CLOUD_ORGANIZATION and
-TF_MCP_QUERY_WORKSPACE, then TF_WORKSPACE. The server uses native MCP user input
-to show and confirm the complete source before scoped API access. Reuse the
+TF_MCP_QUERY_WORKSPACE, then TF_WORKSPACE. The server requires confirmation of
+the complete source before scoped API access. Reuse the
 accepted pair explicitly in later Search calls.
 
 In LIST mode, omit both provider_namespace and provider_name; the result contains

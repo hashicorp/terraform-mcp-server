@@ -53,10 +53,11 @@ func TestImportToolsRequestMissingTargetScopeBeforeClientUse(t *testing.T) {
 		t.Run(tool.Tool.Name, func(t *testing.T) {
 			result, err := tool.Handler(context.Background(), mcp.CallToolRequest{Params: mcp.CallToolParams{Arguments: map[string]any{}}})
 			require.NoError(t, err)
-			require.True(t, result.IsError)
+			require.False(t, result.IsError)
 			text, ok := mcp.AsTextContent(result.Content[0])
 			require.True(t, ok)
-			require.Contains(t, text.Text, "explicit terraform_org_name and workspace_name")
+			require.Contains(t, text.Text, `"status":"input_required"`)
+			require.Contains(t, text.Text, `"missing_inputs":["terraform_org_name","workspace_name"]`)
 		})
 	}
 }
@@ -310,7 +311,7 @@ func TestPrepareImportKeepsSameNameSearchListAndManagedType(t *testing.T) {
 		require.NotContains(t, prepared.NextAction, name, "tool output must not prescribe CLI environment overrides")
 	}
 	require.Contains(t, PrepareImportDescription, "TF_MCP_IMPORT_WORKSPACE")
-	require.Contains(t, VerifyImportPlanDescription, "native MCP user input")
+	require.Contains(t, VerifyImportPlanDescription, "requests confirmation")
 	require.NotContains(t, prepared.NextAction, ".envrc")
 	require.Contains(t, PrepareImportDescription, "does not read")
 	require.Contains(t, PrepareImportDescription, "exact provider releases")

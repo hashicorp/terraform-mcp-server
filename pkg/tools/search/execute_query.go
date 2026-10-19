@@ -47,11 +47,7 @@ type executeQueryOptions struct {
 const executeQuerySource = "terraform-mcp"
 
 // ExecuteQuery creates and immediately executes an HCP Terraform no-code query.
-func ExecuteQuery(logger *log.Logger, servers ...*server.MCPServer) server.ServerTool {
-	var mcpServer *server.MCPServer
-	if len(servers) > 0 {
-		mcpServer = servers[0]
-	}
+func ExecuteQuery(logger *log.Logger) server.ServerTool {
 	return server.ServerTool{
 		Tool: mcp.NewTool("execute_query",
 			mcp.WithDescription(executeQueryDescription),
@@ -75,13 +71,13 @@ func ExecuteQuery(logger *log.Logger, servers ...*server.MCPServer) server.Serve
 			mcp.WithOutputSchema[ExecuteQueryResponse](),
 		),
 		Handler: func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-			return executeQueryHandler(ctx, request, logger, mcpServer)
+			return executeQueryHandler(ctx, request, logger)
 		},
 	}
 }
 
-func executeQueryHandler(ctx context.Context, request mcp.CallToolRequest, logger *log.Logger, mcpServer *server.MCPServer) (*mcp.CallToolResult, error) {
-	scope, interactionResult := resolveMark3LabsScope(ctx, mcpServer, ResolveSearchScope(request.GetString(ScopeOrganizationInput, ""), request.GetString(ScopeWorkspaceInput, "")), QuerySourceScope)
+func executeQueryHandler(ctx context.Context, request mcp.CallToolRequest, logger *log.Logger) (*mcp.CallToolResult, error) {
+	scope, interactionResult := resolveMark3LabsScope(ctx, ResolveSearchScope(request.GetString(ScopeOrganizationInput, ""), request.GetString(ScopeWorkspaceInput, "")), QuerySourceScope)
 	if interactionResult != nil {
 		return interactionResult, nil
 	}
@@ -283,8 +279,8 @@ infrastructure.
 Before calling, confirm the source organization/workspace, then use
 provider_list_schema_list and generate_query_configuration for that same source.
 Pass the accepted terraform_org_name and workspace_name explicitly. If either is
-omitted, the server proposes configured defaults through native MCP user input
-before scoped API access.
+omitted, the server requests confirmation of configured defaults before scoped
+API access.
 Pass the schema-backed provider/resource configuration produced from that
 guidance; resource_type must be an exact list_resource_schemas key. Do not
 construct the payload directly from an ordinary managed-resource name.
