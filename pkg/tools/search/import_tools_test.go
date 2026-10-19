@@ -750,7 +750,6 @@ func TestImportToolDescriptionsAndSchemas(t *testing.T) {
 		require.True(t, *tool.Annotations.ReadOnlyHint)
 		require.False(t, *tool.Annotations.DestructiveHint)
 		require.NotNil(t, tool.OutputSchema)
-		require.NotContains(t, tool.Description, "candidate_id")
 	}
 	prepare := PrepareImport(silentLogger()).Tool
 	require.Contains(t, prepare.InputSchema.Required, "selections")

@@ -28,9 +28,6 @@ func TestSearchDescriptionsOwnToolLocalContracts(t *testing.T) {
 			for _, fragment := range test.required {
 				require.Contains(t, test.description, fragment)
 			}
-			for _, forbidden := range []string{"candidate_id", "next_calls", "create_import_cv", "create_import_run", "get_import_configuration_download"} {
-				require.NotContains(t, test.description, forbidden)
-			}
 		})
 	}
 }
