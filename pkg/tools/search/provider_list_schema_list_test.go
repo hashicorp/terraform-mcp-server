@@ -36,6 +36,21 @@ func newProviderListTFEClient(t *testing.T, server *httptest.Server) *tfe.Client
 	return tfeClient
 }
 
+func TestProviderListSchemaListTextRejectsPartialProviderIdentifier(t *testing.T) {
+	for _, tc := range []struct {
+		name, namespace, provider string
+	}{
+		{name: "namespace only", namespace: "hashicorp"},
+		{name: "name only", provider: "aws"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			text, err := ProviderListSchemaListText(context.Background(), nil, "org", "workspace", tc.namespace, tc.provider)
+			require.Empty(t, text)
+			require.EqualError(t, err, "provider_namespace and provider_name must either both be supplied or both be omitted")
+		})
+	}
+}
+
 // ── helpers ───────────────────────────────────────────────────────────────────
 
 // providerListServer spins up a test HTTP server that serves a fixed providers
@@ -240,9 +255,9 @@ func TestListSupportedProviders_WithOrgFilter(t *testing.T) {
 	assert.Equal(t, "example org&group=test", capturedOrg)
 }
 
-// ── discoverProviderVersion ───────────────────────────────────────────────────
+// ── discoverProviderSelection ─────────────────────────────────────────────────
 
-func TestDiscoverProviderVersion_Found(t *testing.T) {
+func TestDiscoverProviderSelection_Found(t *testing.T) {
 	providers := []providerEntry{
 		{Namespace: "hashicorp", Name: "aws", Version: "5.1.0"},
 		{Namespace: "hashicorp", Name: "google", Version: "4.2.0"},
@@ -250,11 +265,11 @@ func TestDiscoverProviderVersion_Found(t *testing.T) {
 	s := newProviderListServer(providers, nil)
 	defer s.server.Close()
 
-	version, err := discoverProviderVersion(context.Background(), newProviderListTFEClient(t, s.server), "", "hashicorp", "aws")
+	selection, err := discoverProviderSelection(context.Background(), newProviderListTFEClient(t, s.server), "", "hashicorp", "aws")
 	require.NoError(t, err)
-	assert.Equal(t, "5.1.0", version)
+	assert.Equal(t, noCodeProviderSelection{Namespace: "hashicorp", Name: "aws", Version: "5.1.0"}, selection)
 }
-func TestDiscoverProviderVersion_WithOrgFilter(t *testing.T) {
+func TestDiscoverProviderSelection_WithOrgFilter(t *testing.T) {
 	var capturedOrg string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		capturedOrg = r.URL.Query().Get("filter[organization][name]")
@@ -262,30 +277,30 @@ func TestDiscoverProviderVersion_WithOrgFilter(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	_, _ = discoverProviderVersion(context.Background(), newProviderListTFEClient(t, srv), "example org&group=test", "example", "provider")
+	_, _ = discoverProviderSelection(context.Background(), newProviderListTFEClient(t, srv), "example org&group=test", "example", "provider")
 	assert.Equal(t, "example org&group=test", capturedOrg)
 }
 
-func TestDiscoverProviderVersion_CaseInsensitive(t *testing.T) {
+func TestDiscoverProviderSelection_CaseInsensitive(t *testing.T) {
 	providers := []providerEntry{
 		{Namespace: "HashiCorp", Name: "AWS", Version: "5.1.0"},
 	}
 	s := newProviderListServer(providers, nil)
 	defer s.server.Close()
 
-	version, err := discoverProviderVersion(context.Background(), newProviderListTFEClient(t, s.server), "", "hashicorp", "aws")
+	selection, err := discoverProviderSelection(context.Background(), newProviderListTFEClient(t, s.server), "", "hashicorp", "aws")
 	require.NoError(t, err)
-	assert.Equal(t, "5.1.0", version)
+	assert.Equal(t, noCodeProviderSelection{Namespace: "HashiCorp", Name: "AWS", Version: "5.1.0"}, selection)
 }
 
-func TestDiscoverProviderVersion_NotFound(t *testing.T) {
+func TestDiscoverProviderSelection_NotFound(t *testing.T) {
 	providers := []providerEntry{
 		{Namespace: "hashicorp", Name: "google", Version: "4.0.0"},
 	}
 	s := newProviderListServer(providers, nil)
 	defer s.server.Close()
 
-	_, err := discoverProviderVersion(context.Background(), newProviderListTFEClient(t, s.server), "", "hashicorp", "aws")
+	_, err := discoverProviderSelection(context.Background(), newProviderListTFEClient(t, s.server), "", "hashicorp", "aws")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "hashicorp/aws is not in the search-compatible catalog")
 }
@@ -315,6 +330,85 @@ func TestFetchProviderSchema_Success(t *testing.T) {
 	assert.NotNil(t, out["list_resource_schemas"])
 	assert.Contains(t, out["note"].(string), "generate_query_configuration")
 	assert.Contains(t, out["note"].(string), "exact resource type keys")
+}
+
+func TestProviderListFetchGenerateWithAtlasSchemaDetail(t *testing.T) {
+	const org, workspace = "test-org", "test-workspace"
+	var listReads, detailReads int
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/vnd.api+json")
+		switch r.URL.Path {
+		case "/api/v2/organizations/test-org/workspaces/test-workspace":
+			_, _ = w.Write([]byte(`{"data":{"id":"ws-test","type":"workspaces","attributes":{"name":"test-workspace"}}}`))
+		case "/api/v2/search/provider-versions":
+			if got := r.URL.Query().Get("filter[organization][name]"); got != org {
+				t.Errorf("catalog organization filter = %q, want %q", got, org)
+			}
+			listReads++
+			_, _ = w.Write([]byte(`{"data":[{"type":"search-compatible-provider-versions","id":"catalog-version","attributes":{"namespace":"hashicorp","name":"aws","version":"6.66.0"}}]}`))
+		case "/api/v2/search/provider-versions/hashicorp/aws/6.66.0":
+			if got := r.URL.Query().Get("filter[organization][name]"); got != org {
+				t.Errorf("schema organization filter = %q, want %q", got, org)
+			}
+			detailReads++
+			// Atlas's detail serializer includes schemas only, not namespace,
+			// name or version. Do not backfill these from model knowledge.
+			_, _ = w.Write([]byte(`{"data":{"type":"search-compatible-provider-versions","id":"catalog-version","attributes":{"list-resource-schemas":{"aws_sqs_queue":{"block":{"attributes":{"region":{"type":"string","optional":true}}}}}}}}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+	c := newProviderListTFEClient(t, srv)
+	listed, err := ProviderListSchemaListText(context.Background(), c, org, workspace, "", "")
+	require.NoError(t, err)
+	var catalog struct {
+		SupportedProviders []struct{ Namespace, Name, Version string } `json:"supported_providers"`
+		Note               string                                      `json:"note"`
+	}
+	require.NoError(t, json.Unmarshal([]byte(listed), &catalog))
+	require.Len(t, catalog.SupportedProviders, 1)
+	require.NotContains(t, catalog.Note, "optionally provider_version")
+	selected := catalog.SupportedProviders[0]
+	fetched, err := ProviderListSchemaListText(context.Background(), c, org, workspace, selected.Namespace, selected.Name)
+	require.NoError(t, err)
+	var detail struct {
+		Namespace string          `json:"namespace"`
+		Name      string          `json:"name"`
+		Version   string          `json:"version"`
+		Schemas   json.RawMessage `json:"list_resource_schemas"`
+		Note      string          `json:"note"`
+	}
+	require.NoError(t, json.Unmarshal([]byte(fetched), &detail))
+	require.Equal(t, selected.Namespace, detail.Namespace)
+	require.Equal(t, selected.Name, detail.Name)
+	require.Equal(t, selected.Version, detail.Version)
+	require.Contains(t, detail.Note, `provider_name="aws"`)
+	require.Contains(t, detail.Note, `provider_version="6.66.0"`)
+	guide, err := GenerateQueryConfigurationText(string(detail.Schemas), detail.Name, detail.Namespace, detail.Version, "aws_sqs_queue")
+	require.NoError(t, err)
+	require.Contains(t, guide, "aws_sqs_queue")
+	require.Equal(t, 2, listReads, "LIST and FETCH each read the catalog")
+	require.Equal(t, 1, detailReads)
+}
+
+func TestFetchProviderSchemaRejectsConflictingDetailMetadata(t *testing.T) {
+	for _, tc := range []struct{ name, attrs string }{
+		{"namespace", `"namespace":"different",`},
+		{"name", `"name":"different",`},
+		{"version", `"version":"9.0.0",`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.Header().Set("Content-Type", "application/vnd.api+json")
+				_, _ = w.Write([]byte(`{"data":{"attributes":{` + tc.attrs + `"list-resource-schemas":{"aws_sqs_queue":{"block":{"attributes":{}}}}}}}`))
+			}))
+			defer srv.Close()
+			_, err := fetchProviderSchemaText(context.Background(), newProviderListTFEClient(t, srv), "test-org", "hashicorp", "aws", "6.66.0")
+			require.ErrorContains(t, err, "metadata conflicts with catalog selection")
+			require.NotContains(t, err.Error(), "aws_sqs_queue")
+		})
+	}
 }
 
 func TestFetchProviderSchema_NotInCatalog(t *testing.T) {
@@ -422,12 +516,13 @@ func TestProviderListSchemaList_ToolDefinition(t *testing.T) {
 	assert.NotContains(t, tool.Tool.InputSchema.Required, "organization_name")
 	assert.NotContains(t, tool.Tool.InputSchema.Required, "workspace_name")
 	assert.Contains(t, tool.Tool.Description, "TF_MCP_QUERY_WORKSPACE")
-	assert.Contains(t, tool.Tool.Description, "values directly without confirmation")
-	assert.Contains(t, tool.Tool.Description, "Call without scope args first; if the result reports a missing value, ask the user for only that value and retry.")
+	assert.Contains(t, tool.Tool.Description, "ask the user to confirm")
+	assert.Contains(t, tool.Tool.Description, "input_required")
 	assert.NotContains(t, tool.Tool.Description, "\t")
 	assert.NotContains(t, props["organization_name"].(map[string]any), "default")
 	assert.NotContains(t, props["workspace_name"].(map[string]any), "default")
-	assert.Contains(t, tool.Tool.Description, "always read from the provider catalog response")
+	assert.Contains(t, tool.Tool.Description, "provider version comes from the catalog")
+	assert.Contains(t, tool.Tool.Description, "does not establish")
 }
 
 func TestProviderListSchemaList_RequestsMissingScopeBeforeRequest(t *testing.T) {

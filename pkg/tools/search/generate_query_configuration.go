@@ -38,15 +38,27 @@ type listResourceBlock struct {
 }
 
 // listResourceBlockType describes a nested block attribute such as "filter".
-// nesting_mode controls whether the block may appear multiple times:
-// "list" and "set" → repeatable; "single" and "map" → not repeatable.
+// Terraform schema JSON uses min_items/max_items for cardinality; it does not
+// expose a required boolean for nested blocks.
 type listResourceBlockType struct {
 	// NestingMode is "single", "list", "set", or "map".
-	// "list" and "set" mean the same block-type attribute may be submitted
-	// multiple times and the backend coalesces the values into an array.
 	NestingMode string            `json:"nesting_mode"`
-	Required    bool              `json:"required"`
+	MinItems    int               `json:"min_items"`
+	MaxItems    int               `json:"max_items"`
 	Block       listResourceBlock `json:"block"`
+}
+
+func (b listResourceBlockType) required() bool {
+	return b.MinItems > 0
+}
+
+func (b listResourceBlockType) repeatable() bool {
+	if b.NestingMode != "list" && b.NestingMode != "set" {
+		return false
+	}
+	// max_items == 0 is the provider-schema representation for no explicit
+	// upper bound. A positive maximum above one is also repeatable.
+	return b.MaxItems == 0 || b.MaxItems > 1
 }
 
 // listResourceAttribute captures the per-attribute metadata we expose to the
@@ -167,7 +179,10 @@ func GenerateQueryConfigurationText(rawSchema, providerName, providerNamespace, 
 	}
 
 	// ── 3. Filter to requested resource types ─────────────────────────────────
-	resourceTypes := filterResourceTypes(schemas, resourceTypesFlag)
+	resourceTypes, err := filterResourceTypes(schemas, resourceTypesFlag)
+	if err != nil {
+		return "", err
+	}
 	if len(resourceTypes) == 0 {
 		return "", fmt.Errorf("none of the requested resource types were found in the schema")
 	}
@@ -209,26 +224,33 @@ func parseListResourceSchemas(raw string) (map[string]listResourceEntry, error) 
 
 // filterResourceTypes returns the sorted slice of resource type keys to
 // include, optionally narrowed by the comma-separated resourceTypesFlag.
-func filterResourceTypes(schemas map[string]listResourceEntry, resourceTypesFlag string) []string {
+func filterResourceTypes(schemas map[string]listResourceEntry, resourceTypesFlag string) ([]string, error) {
 	if resourceTypesFlag == "" {
 		keys := make([]string, 0, len(schemas))
 		for k := range schemas {
 			keys = append(keys, k)
 		}
 		sort.Strings(keys)
-		return keys
+		return keys, nil
 	}
 
 	requested := strings.Split(resourceTypesFlag, ",")
 	var result []string
+	var missing []string
 	for _, rt := range requested {
 		rt = strings.TrimSpace(rt)
 		if _, ok := schemas[rt]; ok {
 			result = append(result, rt)
+		} else {
+			missing = append(missing, rt)
 		}
 	}
+	if len(missing) > 0 {
+		sort.Strings(missing)
+		return nil, fmt.Errorf("requested resource types not found in the schema: %s", strings.Join(missing, ", "))
+	}
 	sort.Strings(result)
-	return result
+	return result, nil
 }
 
 // humanType converts a raw Terraform type value (string, bool, number, or a
@@ -282,8 +304,9 @@ func stripMarkdownLinks(s string) string {
 func cleanDescription(raw string) string {
 	desc := strings.ReplaceAll(raw, "\n", " ")
 	desc = stripMarkdownLinks(desc)
-	if len(desc) > 120 {
-		desc = desc[:117] + "..."
+	runes := []rune(desc)
+	if len(runes) > 120 {
+		desc = string(runes[:117]) + "..."
 	}
 	return desc
 }
@@ -302,8 +325,8 @@ func writeInstructions(b *strings.Builder, namespace, name, version string) {
 	b.WriteString("## Pre-conditions\n\n")
 	b.WriteString("Before calling the endpoint, verify:\n\n")
 	b.WriteString("1. The workspace's Terraform version is **>= 1.14.0**. Requests against older versions are rejected with `422 Unprocessable Entity`.\n")
-	b.WriteString("2. After `execute_query` succeeds, pass the ID from its `latest-query-run` relationship to the `get_query_status` MCP tool. Once it returns a terminal status, pass the same ID to `get_query_summary` to retrieve the parsed result. Do not use curl or call the query API directly.\n")
-	b.WriteString("3. Pass `organization_name` and `workspace_name` as separate arguments to `execute_query` only when the user explicitly specifies the corresponding values; otherwise omit them so the server uses configured defaults. The tool resolves the workspace ID through go-tfe.\n\n")
+	b.WriteString("2. After `execute_query` succeeds, pass its `query_run_id` to the `get_query_status` MCP tool. Once it returns a terminal status, pass the same ID to `get_query_summary` to retrieve the parsed result. Do not use curl or call the query API directly.\n")
+	b.WriteString("3. Confirm the resolved source organization and workspace before discovery. Pass `organization_name` and `workspace_name` as separate arguments to `execute_query` only when the user explicitly specifies the corresponding values to override the confirmed defaults; otherwise omit them so the server uses configured defaults. The tool resolves the workspace ID through go-tfe.\n\n")
 
 	b.WriteString("## Query configuration structure\n\n")
 	b.WriteString("```json\n")
@@ -333,7 +356,7 @@ func writeInstructions(b *strings.Builder, namespace, name, version string) {
 
 	b.WriteString("## Rules for building the payload\n\n")
 	b.WriteString("1. **`organization_name` / `workspace_name`** — pass only values explicitly specified by the user as separate arguments to `execute_query`; otherwise omit them so the server uses configured defaults. Do not include them in this JSON object.\n")
-	b.WriteString("2. **`generate_config_out`** — optional boolean. Omit it (or set to `false`) to skip HCL scaffolding. Set to `true` to instruct Terraform to emit a `generated_config.tf` file containing importable HCL for each discovered resource.\n")
+	b.WriteString("2. **`generate_config_out`** — optional boolean. Omit it (or set to `false`) to skip HCL scaffolding. Set it to `true` when generated HCL is needed or when selection depends on additional result data that is not available as a list-resource query filter. Terraform then emits `generated_config.tf` and requests resource objects from the provider. Resource-object and attribute capture remain provider- and resource-dependent; use only fields actually projected by `get_query_summary`.\n")
 	b.WriteString("3. **`namespace` / `name` / `version`** — copy these exact values from `provider_list_schema_list`; never infer or substitute a provider version.\n")
 	b.WriteString("4. **`resource_type`** — must be an exact resource type key listed in the schema catalog below. A provider's ordinary managed resources are not automatically list resources; never infer or substitute a type that is absent from this catalog.\n")
 	b.WriteString("5. **`attributes`** — include only attributes that appear in the schema for that resource type.\n")
@@ -341,6 +364,7 @@ func writeInstructions(b *strings.Builder, namespace, name, version string) {
 	b.WriteString("   - Required attributes MUST be included.\n")
 	b.WriteString("   - Scalar attributes: value is a string, bool, or number.\n")
 	b.WriteString("   - Block-type attributes: value is a JSON object (see section below).\n")
+	b.WriteString("   - If the user's requested condition is absent from this schema, explain that it cannot filter the query and do not invent it. Preserve supported filters and set `generate_config_out: true` when additional result data is needed for later selection; capture is requested, not guaranteed.\n")
 	b.WriteString("6. **`limit`** — optional positive integer; caps results returned. Omitting it is valid; the HCP Terraform UI defaults to **100**. Explicitly pass `100` to match UI behaviour.\n")
 	b.WriteString("7. **Variable injection** — if a value should come from a Terraform workspace variable, use `${var.<name>}` as the exact value string (no prefix or suffix text).\n")
 	b.WriteString("   The backend automatically emits a `variable { <name> {} }` declaration in `main.tfquery.json`.\n\n")
@@ -434,13 +458,13 @@ func writeResourceCatalog(b *strings.Builder, schemas map[string]listResourceEnt
 			btNames := sortedKeys(blockTypes)
 
 			b.WriteString("**Block-type attributes** (pass as a JSON object for `value`)\n\n")
-			b.WriteString("| Block attribute | Required | nesting_mode | Sub-attributes |\n")
-			b.WriteString("|-----------------|----------|--------------|----------------|\n")
+			b.WriteString("| Block attribute | Required | nesting_mode | min_items | max_items | Sub-attributes |\n")
+			b.WriteString("|-----------------|----------|--------------|-----------|-----------|----------------|\n")
 
 			for _, btName := range btNames {
 				bt := blockTypes[btName]
 				reqLabel := "optional"
-				if bt.Required {
+				if bt.required() {
 					reqLabel = "**required**"
 				}
 
@@ -461,12 +485,14 @@ func writeResourceCatalog(b *strings.Builder, schemas map[string]listResourceEnt
 					nestingMode = "single"
 				}
 				repeatNote := ""
-				if nestingMode == "list" || nestingMode == "set" {
+				if bt.repeatable() {
 					repeatNote = " _(repeatable)_"
+				} else if (nestingMode == "list" || nestingMode == "set") && bt.MaxItems == 1 {
+					repeatNote = " _(at most one)_"
 				}
 
-				b.WriteString(fmt.Sprintf("| `%s` | %s | `%s`%s | %s |\n",
-					btName, reqLabel, nestingMode, repeatNote, subStr))
+				b.WriteString(fmt.Sprintf("| `%s` | %s | `%s`%s | `%d` | `%d` | %s |\n",
+					btName, reqLabel, nestingMode, repeatNote, bt.MinItems, bt.MaxItems, subStr))
 			}
 			b.WriteString("\n")
 		}
@@ -477,7 +503,7 @@ func writeExamplePayload(b *strings.Builder, schemas map[string]listResourceEntr
 	b.WriteString("## Example No-Code Query Payload\n\n")
 	b.WriteString("The example below includes up to 3 resource types from this provider. ")
 	b.WriteString("Required scalar and block-type attributes are filled with placeholder values; optional ones are omitted. ")
-	b.WriteString("`generate_config_out` is omitted — it defaults to `false`; add it only when you need Terraform to emit `generated_config.tf`.\n\n")
+	b.WriteString("`generate_config_out` is omitted — it defaults to `false`. Set it to `true` when generated HCL is needed or selection depends on additional result data unavailable as a schema-supported query filter; this requests resource objects but does not guarantee capture.\n\n")
 
 	// Pick up to 3 resource types for the example.
 	exampleTypes := resourceTypes
@@ -540,7 +566,7 @@ func buildExampleAttributes(attrs map[string]listResourceAttribute, blockTypes m
 	// Required block-type attributes.
 	for _, name := range sortedKeys(blockTypes) {
 		bt := blockTypes[name]
-		if !bt.Required {
+		if !bt.required() {
 			continue
 		}
 		result = append(result, map[string]any{
@@ -602,12 +628,13 @@ func writeVariableNotes(b *strings.Builder) {
 	b.WriteString("|---------|------------------|\n")
 	b.WriteString("| Inferring a list type from a managed resource name (for example, assuming an S3 bucket can use `aws_s3_bucket`) | Use only an exact key returned in `list_resource_schemas`; if no matching key exists, this provider version cannot perform that query |\n")
 	b.WriteString("| Using an attribute name not in the schema for that resource type | Only include attributes listed in the catalog above |\n")
+	b.WriteString("| Inventing a filter for an unsupported selection condition | Explain that it cannot filter the query, preserve supported filters, and use `generate_config_out: true` to request additional result evidence when needed; capture is not guaranteed |\n")
 	b.WriteString("| Setting `resource_type` to a data source (e.g. `aws_ami`) | Only list-resource types (found in `list_resource_schemas`) are valid |\n")
 	b.WriteString("| Omitting a **required** attribute | Required attributes must always be present |\n")
 	b.WriteString("| Passing `${var.name}` inside a longer string | Variable injection only works for exact-match values |\n")
 	b.WriteString("| Sending a non-positive or non-integer `limit` | Omit `limit` or use a positive integer (UI default is 100) |\n")
-	b.WriteString("| Repeating a `single` nesting_mode block type | Only `list` and `set` block types may appear more than once |\n")
-	b.WriteString("| Forgetting `generate_config_out` when you need HCL scaffolding | Set `generate_config_out: true` in the top-level attributes |\n\n")
+	b.WriteString("| Repeating a block beyond its `max_items` | Follow both `nesting_mode` and `max_items`; a list or set with `max_items: 1` is not repeatable |\n")
+	b.WriteString("| Forgetting `generate_config_out` when you need HCL scaffolding or additional result evidence | Set `generate_config_out: true` in the top-level attributes, then verify which fields were actually captured and projected |\n\n")
 }
 
 // sortedKeys returns a sorted slice of keys from any map[string]T.
@@ -621,33 +648,25 @@ func sortedKeys[T any](m map[string]T) []string {
 }
 
 // generateQueryConfigDescription is the MCP tool description seen by the LLM.
-const generateQueryConfigDescription = `Generates a No-Code Query Configuration guide for a specific Terraform provider version.
+const generateQueryConfigDescription = `Generates schema-backed guidance and an example configuration for one HCP
+Terraform No-Code Search query; it does not execute the query.
 
-Given a 'list_resource_schemas' JSON object (returned by the provider_list_schema_list tool
-or produced by 'terraform providers schema -json'), this tool:
+Pass list_resource_schemas and the exact provider namespace, name and version
+returned by provider_list_schema_list. Any requested resource type must be an
+exact schema key. The result describes supported scalar and nested attributes,
+required values, nesting/cardinality, variable syntax and generate_config_out
+so the query_configuration for execute_query can be constructed without
+inventing fields. Required schema attributes remain required.
 
-1. Explains the query_configuration structure accepted by execute_query, which calls
-   POST /api/v2/search/no-code-query to immediately run a No-Code Search query.
-2. Documents the workspace Terraform version pre-condition and how to monitor the
-   resulting query run with get_query_status.
-3. Catalogs every resource type with its scalar attributes AND block-type attributes
-   (name, type, required/optional, nesting_mode, sub-attributes, description)
-   so the agent knows exactly which filters can be applied and how to express them.
-4. Explains block-type (nested object) attributes and repeatable block semantics
-   controlled by nesting_mode (list/set = repeatable; single/map = not).
-5. Documents the generate_config_out flag that controls HCL scaffolding output.
-6. Provides a ready-to-use example payload pre-filled with placeholder values for
-   required scalar and block-type attributes.
-7. Documents variable injection syntax (${var.<name>}) and common mistakes.
-8. Directs the agent to pass organization_name and workspace_name as separate arguments to execute_query only when the user explicitly specifies the corresponding values; otherwise omit them so the server uses configured defaults.
-
-Always use this tool before constructing a no-code query payload. The output is self-contained
-guidance — the agent must use it to generate a correct, schema-validated query
-configuration without needing to consult external documentation.
-
-IMPORTANT: provider_version must be copied from provider_list_schema_list, not inferred.
-resource_type must be an exact key present in list_resource_schemas.
-Do not infer list support from a provider's ordinary managed resources or data sources.
-If the user's requested resource has no matching key, explain that this provider version
-cannot list it and do not call execute_query. Only attributes present in the schema for
-the chosen resource type may appear in 'attributes'. Required attributes must always be included.`
+Review and fill the generated configuration, then call execute_query with the
+same confirmed source organization/workspace. Omit source arguments to use the
+confirmed configured query defaults, or pass explicit user corrections as
+overrides. If the requested resource has no exact
+list-resource schema key, report that it is not searchable with this catalog
+provider version and do not call execute_query. If a requested selection
+condition is absent from an otherwise supported list-resource schema, explain
+that it cannot be used as a query-time filter and do not invent it. Preserve
+supported filters and set generate_config_out=true when selection depends on
+additional result data; this requests generated HCL and provider resource
+objects but does not guarantee capture, and get_query_summary exposes only its
+declared projections.`
