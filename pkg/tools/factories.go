@@ -29,7 +29,7 @@ var toolFactories = map[string]toolFactory{
 	"verify_import_plan":           searchTools.VerifyImportPlan,
 
 	// Public Registry tools
-	"search_provider_docs":            registryTools.ResolveProviderDocID,
+	"search_provider_docs":        registryTools.ResolveProviderDocID,
 	"get_provider_details":        registryTools.GetProviderDocs,
 	"get_latest_provider_version": registryTools.GetLatestProviderVersion,
 	"get_provider_capabilities":   registryTools.GetProviderCapabilities,
@@ -114,7 +114,8 @@ var toolFactories = map[string]toolFactory{
 	"get_state_version":   tfeTools.GetStateVersion,
 }
 
-// specialFactories covers the 2 tools that don't fit toolFactory's shape:
+// specialFactories covers tools that need the MCP server for elicitation or
+// select a factory based on ENABLE_TF_OPERATIONS:
 //   - create_no_code_workspace: also needs *server.MCPServer for elicitation
 //   - create_run: picks CreateRun or CreateRunSafe based on ENABLE_TF_OPERATIONS
 //
