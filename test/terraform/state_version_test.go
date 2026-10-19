@@ -201,9 +201,9 @@ func TestGetStateVersionHappyPath(t *testing.T) {
 
 		require.False(t, result.IsError, "get_state_version should not return an error")
 		require.NotEmpty(t, resultText, "get_state_version response must not be empty")
-		assert.Equal(t, stateVersion.ID, gjson.Get(resultText, "data.id").String())
-		assert.Equal(t, stateVersion.Serial, gjson.Get(resultText, "data.attributes.serial").Int())
-		assert.NotEmpty(t, gjson.Get(resultText, "data.attributes.created-at").String())
+		assert.Equal(t, stateVersion.ID, gjson.Get(resultText, idPath()).String())
+		assert.Equal(t, stateVersion.Serial, gjson.Get(resultText, attr("serial")).Int())
+		assert.NotEmpty(t, gjson.Get(resultText, attr("created_at")).String())
 
 		// Verify the state file contains the resources from the test fixture.
 		assert.Contains(t, stateJSON, `"name": "resource_one"`, "state file should contain resource_one from the test fixture")
@@ -217,7 +217,7 @@ func TestGetStateVersionHappyPath(t *testing.T) {
 
 		require.False(t, result.IsError, "get_state_version should not return an error")
 		require.NotEmpty(t, resultText, "get_state_version response must not be empty")
-		assert.Equal(t, stateVersion.ID, gjson.Get(resultText, "data.id").String())
+		assert.Equal(t, stateVersion.ID, gjson.Get(resultText, idPath()).String())
 
 		// Verify the state file contains the resources from the test fixture.
 		assert.Contains(t, stateJSON, `"name": "resource_one"`, "state file should contain resource_one from the test fixture")
