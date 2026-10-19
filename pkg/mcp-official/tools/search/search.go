@@ -25,15 +25,15 @@ type GenerateQueryConfigurationArguments struct {
 }
 
 type ProviderListSchemaListArguments struct {
-	OrganizationName  string `json:"organization_name" jsonschema:"HCP Terraform organization used to scope catalog requests"`
-	WorkspaceName     string `json:"workspace_name" jsonschema:"Existing HCP Terraform workspace that will execute the query"`
+	OrganizationName  string `json:"organization_name,omitempty"`
+	WorkspaceName     string `json:"workspace_name,omitempty"`
 	ProviderNamespace string `json:"provider_namespace,omitempty" jsonschema:"Namespace; supply together with provider_name to fetch a schema"`
 	ProviderName      string `json:"provider_name,omitempty" jsonschema:"Short name; supply together with provider_namespace to fetch a schema"`
 }
 
 type ExecuteQueryArguments struct {
-	OrganizationName   string `json:"organization_name" jsonschema:"HCP Terraform organization containing the workspace"`
-	WorkspaceName      string `json:"workspace_name" jsonschema:"HCP Terraform workspace in which to execute the query"`
+	OrganizationName   string `json:"organization_name,omitempty"`
+	WorkspaceName      string `json:"workspace_name,omitempty"`
 	QueryConfiguration string `json:"query_configuration" jsonschema:"JSON no-code query configuration produced using provider_list_schema_list and generate_query_configuration"`
 }
 
@@ -72,20 +72,34 @@ func GenerateQueryConfigurationFunc(_ context.Context, _ *mcp.CallToolRequest, i
 	return textResult(text), nil, nil
 }
 
+// searchScopeInputSchema applies shared descriptions that cannot be referenced in struct tags.
+func searchScopeInputSchema[T any]() *jsonschema.Schema {
+	schema, err := jsonschema.For[T](nil)
+	if err != nil {
+		panic(err)
+	}
+	schema.Properties["organization_name"].Description = searchlogic.QueryOrganizationDescription
+	schema.Properties["workspace_name"].Description = searchlogic.QueryWorkspaceDescription
+	return schema
+}
+
 func ProviderListSchemaListTool() *mcp.Tool {
-	return tool("provider_list_schema_list", searchlogic.ProviderListSchemaListDescription,
+	providerTool := tool("provider_list_schema_list", searchlogic.ProviderListSchemaListDescription,
 		"Fetch list_resource_schemas for a search-compatible provider", true, true)
+	providerTool.InputSchema = searchScopeInputSchema[ProviderListSchemaListArguments]()
+	return providerTool
 }
 
 func ProviderListSchemaListFunc(ctx context.Context, req *mcp.CallToolRequest, input ProviderListSchemaListArguments) (*mcp.CallToolResult, any, error) {
-	if strings.TrimSpace(input.OrganizationName) == "" || strings.TrimSpace(input.WorkspaceName) == "" {
-		return nil, nil, fmt.Errorf("organization_name and workspace_name are required; ask the user to provide both before fetching provider schemas")
+	scope := searchlogic.ResolveSearchScope(input.OrganizationName, input.WorkspaceName)
+	if !scope.Ready() {
+		return textResult(scope.InputRequest()), nil, nil
 	}
 	tfeClient, err := client.GetTfeClient(ctx, client.SessionIDFromRequest(req))
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to get Terraform client: %w", err)
 	}
-	text, err := searchlogic.ProviderListSchemaListText(ctx, tfeClient, input.OrganizationName, input.WorkspaceName, input.ProviderNamespace, input.ProviderName)
+	text, err := searchlogic.ProviderListSchemaListText(ctx, tfeClient, scope.Organization.Value, scope.Workspace.Value, input.ProviderNamespace, input.ProviderName)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -93,13 +107,19 @@ func ProviderListSchemaListFunc(ctx context.Context, req *mcp.CallToolRequest, i
 }
 
 func ExecuteQueryTool() *mcp.Tool {
-	return tool("execute_query", searchlogic.ExecuteQueryDescription,
+	queryTool := tool("execute_query", searchlogic.ExecuteQueryDescription,
 		"Create and execute an HCP Terraform no-code query", false, true)
+	queryTool.InputSchema = searchScopeInputSchema[ExecuteQueryArguments]()
+	return queryTool
 }
 
 func ExecuteQueryFunc(ctx context.Context, req *mcp.CallToolRequest, input ExecuteQueryArguments) (*mcp.CallToolResult, any, error) {
-	if strings.TrimSpace(input.OrganizationName) == "" || strings.TrimSpace(input.WorkspaceName) == "" || strings.TrimSpace(input.QueryConfiguration) == "" {
-		return nil, nil, fmt.Errorf("organization_name, workspace_name and query_configuration are required")
+	scope := searchlogic.ResolveSearchScope(input.OrganizationName, input.WorkspaceName)
+	if !scope.Ready() {
+		return textResult(scope.InputRequest()), nil, nil
+	}
+	if strings.TrimSpace(input.QueryConfiguration) == "" {
+		return nil, nil, fmt.Errorf("missing required input: query_configuration")
 	}
 	if err := searchlogic.ValidateQueryConfiguration(input.QueryConfiguration); err != nil {
 		return nil, nil, fmt.Errorf("invalid query_configuration: %w", err)
@@ -108,7 +128,7 @@ func ExecuteQueryFunc(ctx context.Context, req *mcp.CallToolRequest, input Execu
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to get Terraform client: %w", err)
 	}
-	text, err := searchlogic.ExecuteQueryText(ctx, tfeClient, input.OrganizationName, input.WorkspaceName, input.QueryConfiguration)
+	text, err := searchlogic.ExecuteQueryText(ctx, tfeClient, scope.Organization.Value, scope.Workspace.Value, input.QueryConfiguration)
 	if err != nil {
 		return nil, nil, err
 	}
