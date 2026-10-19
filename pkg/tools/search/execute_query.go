@@ -47,7 +47,11 @@ type executeQueryOptions struct {
 const executeQuerySource = "terraform-mcp"
 
 // ExecuteQuery creates and immediately executes an HCP Terraform no-code query.
-func ExecuteQuery(logger *log.Logger) server.ServerTool {
+func ExecuteQuery(logger *log.Logger, servers ...*server.MCPServer) server.ServerTool {
+	var mcpServer *server.MCPServer
+	if len(servers) > 0 {
+		mcpServer = servers[0]
+	}
 	return server.ServerTool{
 		Tool: mcp.NewTool("execute_query",
 			mcp.WithDescription(executeQueryDescription),
@@ -55,7 +59,7 @@ func ExecuteQuery(logger *log.Logger) server.ServerTool {
 			mcp.WithOpenWorldHintAnnotation(true),
 			mcp.WithReadOnlyHintAnnotation(false),
 			mcp.WithDestructiveHintAnnotation(false),
-			mcp.WithString("organization_name", mcp.Description(QueryOrganizationDescription)),
+			mcp.WithString(ScopeOrganizationInput, mcp.Description(QueryOrganizationDescription)),
 			mcp.WithString("workspace_name", mcp.Description(QueryWorkspaceDescription)),
 			mcp.WithString("query_configuration",
 				mcp.Required(),
@@ -67,18 +71,19 @@ func ExecuteQuery(logger *log.Logger) server.ServerTool {
 						"envelope and workspace relationship automatically.",
 				),
 			),
+			mcp.WithSchemaAdditionalProperties(false),
 			mcp.WithOutputSchema[ExecuteQueryResponse](),
 		),
 		Handler: func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-			return executeQueryHandler(ctx, request, logger)
+			return executeQueryHandler(ctx, request, logger, mcpServer)
 		},
 	}
 }
 
-func executeQueryHandler(ctx context.Context, request mcp.CallToolRequest, logger *log.Logger) (*mcp.CallToolResult, error) {
-	scope := ResolveSearchScope(request.GetString("organization_name", ""), request.GetString("workspace_name", ""))
-	if !scope.Ready() {
-		return mcp.NewToolResultText(scope.InputRequest()), nil
+func executeQueryHandler(ctx context.Context, request mcp.CallToolRequest, logger *log.Logger, mcpServer *server.MCPServer) (*mcp.CallToolResult, error) {
+	scope, interactionResult := resolveMark3LabsScope(ctx, mcpServer, ResolveSearchScope(request.GetString(ScopeOrganizationInput, ""), request.GetString(ScopeWorkspaceInput, "")), QuerySourceScope)
+	if interactionResult != nil {
+		return interactionResult, nil
 	}
 	organizationName, workspaceName := scope.Organization.Value, scope.Workspace.Value
 
@@ -140,7 +145,7 @@ func ExecuteQueryText(ctx context.Context, tfeClient *tfe.Client, organizationNa
 // has an unknown outcome: the caller must reconcile before submitting again.
 func SubmitQuery(ctx context.Context, tfeClient *tfe.Client, organizationName, workspaceName, rawConfiguration string) (*ExecuteQueryResponse, error) {
 	if organizationName = strings.TrimSpace(organizationName); organizationName == "" {
-		return nil, fmt.Errorf("missing required input: organization_name")
+		return nil, fmt.Errorf("missing required input: terraform_org_name")
 	}
 	if workspaceName = strings.TrimSpace(workspaceName); workspaceName == "" {
 		return nil, fmt.Errorf("missing required input: workspace_name")
@@ -277,9 +282,9 @@ infrastructure.
 
 Before calling, confirm the source organization/workspace, then use
 provider_list_schema_list and generate_query_configuration for that same source.
-Omitted source arguments resolve from TF_CLOUD_ORGANIZATION and
-TF_MCP_QUERY_WORKSPACE, then TF_WORKSPACE; pass explicit user corrections as
-overrides. Treat input_required as a request for only the missing source fields.
+Pass the accepted terraform_org_name and workspace_name explicitly. If either is
+omitted, the server proposes configured defaults through native MCP user input
+before scoped API access.
 Pass the schema-backed provider/resource configuration produced from that
 guidance; resource_type must be an exact list_resource_schemas key. Do not
 construct the payload directly from an ordinary managed-resource name.

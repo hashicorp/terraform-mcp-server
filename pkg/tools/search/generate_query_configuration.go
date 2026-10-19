@@ -326,7 +326,7 @@ func writeInstructions(b *strings.Builder, namespace, name, version string) {
 	b.WriteString("Before calling the endpoint, verify:\n\n")
 	b.WriteString("1. The workspace's Terraform version is **>= 1.14.0**. Requests against older versions are rejected with `422 Unprocessable Entity`.\n")
 	b.WriteString("2. After `execute_query` succeeds, pass its `query_run_id` to the `get_query_status` MCP tool. Once it returns a terminal status, pass the same ID to `get_query_summary` to retrieve the parsed result. Do not use curl or call the query API directly.\n")
-	b.WriteString("3. Confirm the resolved source organization and workspace before discovery. Pass `organization_name` and `workspace_name` as separate arguments to `execute_query` only when the user explicitly specifies the corresponding values to override the confirmed defaults; otherwise omit them so the server uses configured defaults. The tool resolves the workspace ID through go-tfe.\n\n")
+	b.WriteString("3. Confirm the source organization and workspace before discovery. Pass the accepted `terraform_org_name` and `workspace_name` explicitly to `execute_query`. If either is omitted, the server requests native MCP user input before scoped API access. The tool resolves the workspace ID through go-tfe.\n\n")
 
 	b.WriteString("## Query configuration structure\n\n")
 	b.WriteString("```json\n")
@@ -355,7 +355,7 @@ func writeInstructions(b *strings.Builder, namespace, name, version string) {
 	b.WriteString("```\n\n")
 
 	b.WriteString("## Rules for building the payload\n\n")
-	b.WriteString("1. **`organization_name` / `workspace_name`** — pass only values explicitly specified by the user as separate arguments to `execute_query`; otherwise omit them so the server uses configured defaults. Do not include them in this JSON object.\n")
+	b.WriteString("1. **`terraform_org_name` / `workspace_name`** — pass the complete accepted source pair as separate arguments to `execute_query`. Do not include them in this JSON object.\n")
 	b.WriteString("2. **`generate_config_out`** — optional boolean. Omit it (or set to `false`) to skip HCL scaffolding. Set it to `true` when generated HCL is needed or when selection depends on additional result data that is not available as a list-resource query filter. Terraform then emits `generated_config.tf` and requests resource objects from the provider. Resource-object and attribute capture remain provider- and resource-dependent; use only fields actually projected by `get_query_summary`.\n")
 	b.WriteString("3. **`namespace` / `name` / `version`** — copy these exact values from `provider_list_schema_list`; never infer or substitute a provider version.\n")
 	b.WriteString("4. **`resource_type`** — must be an exact resource type key listed in the schema catalog below. A provider's ordinary managed resources are not automatically list resources; never infer or substitute a type that is absent from this catalog.\n")

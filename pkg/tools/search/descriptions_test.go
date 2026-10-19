@@ -15,7 +15,7 @@ func TestSearchDescriptionsOwnToolLocalContracts(t *testing.T) {
 		description string
 		required    []string
 	}{
-		{"provider_list_schema_list", ProviderListSchemaListDescription, []string{"organization_name", "workspace_name", "catalog", "generate_query_configuration", "target managed-resource"}},
+		{"provider_list_schema_list", ProviderListSchemaListDescription, []string{"terraform_org_name", "workspace_name", "catalog", "generate_query_configuration", "target managed-resource"}},
 		{"generate_query_configuration", GenerateQueryConfigurationDescription, []string{"does not execute the query", "provider_list_schema_list", "exact schema key", "execute_query", "cannot be used as a query-time filter", "generate_config_out=true", "does not guarantee capture"}},
 		{"execute_query", ExecuteQueryDescription, []string{"QueryRun", "exact list_resource_schemas key", "query_run_id", "get_query_status", "do not blindly execute", "absent from the list-resource schema"}},
 		{"get_query_status", GetQueryStatusDescription, []string{"bounded call", "same ID", "get_query_summary", "Terminal status does not imply selectable"}},

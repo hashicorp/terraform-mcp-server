@@ -21,15 +21,11 @@ type toolFactory func(logger *log.Logger) server.ServerTool
 var toolFactories = map[string]toolFactory{
 	// HCP Terraform no-code search tools
 	"generate_query_configuration": searchTools.GenerateQueryConfiguration,
-	"provider_list_schema_list":    searchTools.ProviderListSchemaList,
-	"execute_query":                searchTools.ExecuteQuery,
 	"get_query_status":             searchTools.GetQueryStatus,
 	"get_query_summary":            searchTools.GetQuerySummary,
-	"prepare_import":               searchTools.PrepareImport,
-	"verify_import_plan":           searchTools.VerifyImportPlan,
 
 	// Public Registry tools
-	"search_provider_docs":            registryTools.ResolveProviderDocID,
+	"search_provider_docs":        registryTools.ResolveProviderDocID,
 	"get_provider_details":        registryTools.GetProviderDocs,
 	"get_latest_provider_version": registryTools.GetLatestProviderVersion,
 	"get_provider_capabilities":   registryTools.GetProviderCapabilities,
@@ -114,13 +110,26 @@ var toolFactories = map[string]toolFactory{
 	"get_state_version":   tfeTools.GetStateVersion,
 }
 
-// specialFactories covers the 2 tools that don't fit toolFactory's shape:
+// specialFactories covers tools that need the MCP server for elicitation or
+// select a factory based on ENABLE_TF_OPERATIONS:
 //   - create_no_code_workspace: also needs *server.MCPServer for elicitation
 //   - create_run: picks CreateRun or CreateRunSafe based on ENABLE_TF_OPERATIONS
 //
 // Keeping these in a map (not a switch statement) keeps every tool's setup
 // data-driven, not just most of them
 var specialFactories = map[string]func(logger *log.Logger, mcpServer *server.MCPServer, tfOpsEnabled bool) server.ServerTool{
+	"provider_list_schema_list": func(logger *log.Logger, mcpServer *server.MCPServer, _ bool) server.ServerTool {
+		return searchTools.ProviderListSchemaList(logger, mcpServer)
+	},
+	"execute_query": func(logger *log.Logger, mcpServer *server.MCPServer, _ bool) server.ServerTool {
+		return searchTools.ExecuteQuery(logger, mcpServer)
+	},
+	"prepare_import": func(logger *log.Logger, mcpServer *server.MCPServer, _ bool) server.ServerTool {
+		return searchTools.PrepareImport(logger, mcpServer)
+	},
+	"verify_import_plan": func(logger *log.Logger, mcpServer *server.MCPServer, _ bool) server.ServerTool {
+		return searchTools.VerifyImportPlan(logger, mcpServer)
+	},
 	"create_no_code_workspace": func(logger *log.Logger, mcpServer *server.MCPServer, _ bool) server.ServerTool {
 		return tfeTools.CreateNoCodeWorkspace(logger, mcpServer)
 	},

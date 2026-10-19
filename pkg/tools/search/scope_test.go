@@ -5,9 +5,10 @@ package search
 
 import (
 	"context"
-	"encoding/json"
+	"fmt"
 	"testing"
 
+	terraformclient "github.com/hashicorp/terraform-mcp-server/pkg/client"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 	"github.com/stretchr/testify/assert"
@@ -78,114 +79,118 @@ func TestResolveImportScope(t *testing.T) {
 	}
 }
 
-func TestSearchToolsRequireResolvedScopeBeforeAPIRequests(t *testing.T) {
+type scopeElicitationSession struct {
+	result  *mcp.ElicitationResult
+	request mcp.ElicitationRequest
+}
+
+func (*scopeElicitationSession) Initialize()                                         {}
+func (*scopeElicitationSession) Initialized() bool                                   { return true }
+func (*scopeElicitationSession) NotificationChannel() chan<- mcp.JSONRPCNotification { return nil }
+func (*scopeElicitationSession) SessionID() string                                   { return "scope-test" }
+func (s *scopeElicitationSession) RequestElicitation(_ context.Context, request mcp.ElicitationRequest) (*mcp.ElicitationResult, error) {
+	s.request = request
+	return s.result, nil
+}
+
+func TestSearchScopeNeedsInteraction(t *testing.T) {
+	assert.False(t, (SearchScope{Organization: SearchScopeValue{"org", "argument"}, Workspace: SearchScopeValue{"ws", "argument"}}).NeedsInteraction())
+	assert.True(t, (SearchScope{Organization: SearchScopeValue{"org", "TF_CLOUD_ORGANIZATION"}, Workspace: SearchScopeValue{"ws", "argument"}}).NeedsInteraction())
+	assert.True(t, (SearchScope{}).NeedsInteraction())
+}
+
+func TestAcceptedSearchScope(t *testing.T) {
+	scope, err := AcceptedSearchScope(map[string]any{ScopeOrganizationInput: " org ", ScopeWorkspaceInput: " ws "})
+	require.NoError(t, err)
+	assert.Equal(t, SearchScope{SearchScopeValue{"org", "user_input"}, SearchScopeValue{"ws", "user_input"}}, scope)
+
+	_, err = AcceptedSearchScope(map[string]any{ScopeOrganizationInput: "org"})
+	require.ErrorContains(t, err, ScopeWorkspaceInput)
+}
+
+func TestMark3LabsScopeUsesNativeElicitation(t *testing.T) {
+	proposed := SearchScope{SearchScopeValue{"default-org", "TF_CLOUD_ORGANIZATION"}, SearchScopeValue{"default-ws", "TF_MCP_QUERY_WORKSPACE"}}
+	session := &scopeElicitationSession{result: &mcp.ElicitationResult{ElicitationResponse: mcp.ElicitationResponse{
+		Action:  mcp.ElicitationResponseActionAccept,
+		Content: map[string]any{ScopeOrganizationInput: "confirmed-org", ScopeWorkspaceInput: "confirmed-ws"},
+	}}}
+	mcpServer := new(server.MCPServer)
+	ctx := mcpServer.WithContext(context.Background(), session)
+
+	scope, result := resolveMark3LabsScope(ctx, mcpServer, proposed, QuerySourceScope)
+
+	require.Nil(t, result)
+	assert.Equal(t, "confirmed-org", scope.Organization.Value)
+	assert.Equal(t, "confirmed-ws", scope.Workspace.Value)
+	assert.Contains(t, session.request.Params.Message, `terraform_org_name="default-org"`)
+	properties := session.request.Params.RequestedSchema.(map[string]any)["properties"].(map[string]any)
+	assert.Equal(t, "default-org", properties[ScopeOrganizationInput].(map[string]any)["default"])
+}
+
+func TestMark3LabsScopeFailsClosedWithoutElicitation(t *testing.T) {
 	for _, tool := range []server.ServerTool{ProviderListSchemaList(silentLogger()), ExecuteQuery(silentLogger())} {
-		t.Run(tool.Tool.Name, func(t *testing.T) {
-			for _, test := range []struct {
-				name, org, ws, mcpWS, status string
-				missing                      []string
-			}{
-				{"missing context", "", "", "", "input_required", []string{"organization_name", "workspace_name"}},
-				{"missing organization with Terraform workspace", "", "default-workspace", "", "input_required", []string{"organization_name"}},
-				{"missing workspace with Terraform organization", "default-org", "", "", "input_required", []string{"workspace_name"}},
-				{"missing organization with MCP workspace", "", "", "query-workspace", "input_required", []string{"organization_name"}},
-			} {
-				t.Run(test.name, func(t *testing.T) {
-					t.Setenv("TF_CLOUD_ORGANIZATION", test.org)
-					t.Setenv("TF_WORKSPACE", test.ws)
-					t.Setenv("TF_MCP_QUERY_WORKSPACE", test.mcpWS)
-					// No client/session: unresolved scope must return before acquiring one.
-					result, err := tool.Handler(context.Background(), mcp.CallToolRequest{})
-					require.NoError(t, err)
-					require.NotNil(t, result)
-					require.False(t, result.IsError)
-					text, ok := mcp.AsTextContent(result.Content[0])
-					require.True(t, ok)
-					var payload struct {
-						Status  string      `json:"status"`
-						Message string      `json:"message"`
-						Scope   SearchScope `json:"scope"`
-						Missing []string    `json:"missing_inputs"`
-					}
-					require.NoError(t, json.Unmarshal([]byte(text.Text), &payload))
-					assert.Equal(t, test.status, payload.Status)
-					assert.Equal(t, ResolveSearchScope("", ""), payload.Scope)
-					assert.NotContains(t, text.Text, "requires_confirmation")
-					assert.Equal(t, test.missing, payload.Missing)
-					assert.Contains(t, payload.Message, "ask the user")
-				})
-			}
+		result, err := tool.Handler(context.Background(), mcp.CallToolRequest{})
+		require.NoError(t, err)
+		require.True(t, result.IsError)
+		text, ok := mcp.AsTextContent(result.Content[0])
+		require.True(t, ok)
+		assert.Contains(t, text.Text, "explicit terraform_org_name and workspace_name")
+	}
+}
+
+func TestMark3LabsScopeRejectsResolvedOrganizationBeforeElicitation(t *testing.T) {
+	session := &scopeElicitationSession{result: &mcp.ElicitationResult{}}
+	mcpServer := new(server.MCPServer)
+	ctx := mcpServer.WithContext(context.Background(), session)
+	ctx = terraformclient.WithOrganizationAllowlist(ctx, []string{"allowed-org"})
+	proposed := SearchScope{SearchScopeValue{"blocked-org", "TF_CLOUD_ORGANIZATION"}, SearchScopeValue{"workspace", "TF_WORKSPACE"}}
+
+	_, result := resolveMark3LabsScope(ctx, mcpServer, proposed, QuerySourceScope)
+
+	require.True(t, result.IsError)
+	assert.Empty(t, session.request.Params.Message, "a rejected default must not be disclosed through elicitation")
+	text, ok := mcp.AsTextContent(result.Content[0])
+	require.True(t, ok)
+	assert.NotContains(t, text.Text, "blocked-org")
+}
+
+func TestMark3LabsScopeRechecksAcceptedOrganization(t *testing.T) {
+	session := &scopeElicitationSession{result: &mcp.ElicitationResult{ElicitationResponse: mcp.ElicitationResponse{
+		Action:  mcp.ElicitationResponseActionAccept,
+		Content: map[string]any{ScopeOrganizationInput: "blocked-org", ScopeWorkspaceInput: "workspace"},
+	}}}
+	mcpServer := new(server.MCPServer)
+	ctx := mcpServer.WithContext(context.Background(), session)
+	ctx = terraformclient.WithOrganizationAllowlist(ctx, []string{"allowed-org"})
+	proposed := SearchScope{SearchScopeValue{"allowed-org", "TF_CLOUD_ORGANIZATION"}, SearchScopeValue{"workspace", "TF_WORKSPACE"}}
+
+	_, result := resolveMark3LabsScope(ctx, mcpServer, proposed, QuerySourceScope)
+
+	require.True(t, result.IsError)
+	text, ok := mcp.AsTextContent(result.Content[0])
+	require.True(t, ok)
+	assert.NotContains(t, text.Text, "blocked-org")
+}
+
+func TestMark3LabsScopeDeclineAndCancelStopNormally(t *testing.T) {
+	for _, action := range []mcp.ElicitationResponseAction{mcp.ElicitationResponseActionDecline, mcp.ElicitationResponseActionCancel} {
+		t.Run(string(action), func(t *testing.T) {
+			session := &scopeElicitationSession{result: &mcp.ElicitationResult{ElicitationResponse: mcp.ElicitationResponse{Action: action}}}
+			mcpServer := new(server.MCPServer)
+			ctx := mcpServer.WithContext(context.Background(), session)
+			_, result := resolveMark3LabsScope(ctx, mcpServer, SearchScope{}, ImportTargetScope)
+			require.NotNil(t, result)
+			require.False(t, result.IsError)
+			assert.Contains(t, fmt.Sprint(result.Content), "no scoped API request was made")
 		})
 	}
 }
 
-func TestSearchScopeInputRequestMessage(t *testing.T) {
-	const organizationMessage = "organization_name is missing (TF_CLOUD_ORGANIZATION is unset); ask the user for it."
-	const workspaceMessage = "workspace_name is missing (TF_MCP_QUERY_WORKSPACE and TF_WORKSPACE are unset); ask the user for it."
-	for _, test := range []struct {
-		name    string
-		scope   SearchScope
-		message string
-		missing []string
-	}{
-		{"missing organization", SearchScope{Workspace: SearchScopeValue{Value: "workspace"}}, organizationMessage, []string{"organization_name"}},
-		{"missing workspace", SearchScope{Organization: SearchScopeValue{Value: "org"}}, workspaceMessage, []string{"workspace_name"}},
-		{"both missing", SearchScope{}, organizationMessage + " " + workspaceMessage, []string{"organization_name", "workspace_name"}},
-	} {
-		t.Run(test.name, func(t *testing.T) {
-			var payload struct {
-				Status  string   `json:"status"`
-				Message string   `json:"message"`
-				Missing []string `json:"missing_inputs"`
-			}
-			require.NoError(t, json.Unmarshal([]byte(test.scope.InputRequest()), &payload))
-			assert.Equal(t, "input_required", payload.Status)
-			assert.Equal(t, test.message, payload.Message)
-			assert.Equal(t, test.missing, payload.Missing)
-		})
-	}
-}
-
-func TestImportScopeInputRequestMessage(t *testing.T) {
-	var payload struct {
-		Status  string   `json:"status"`
-		Message string   `json:"message"`
-		Missing []string `json:"missing_inputs"`
-	}
-	require.NoError(t, json.Unmarshal([]byte((SearchScope{}).ImportInputRequest()), &payload))
-	assert.Equal(t, "input_required", payload.Status)
-	assert.Contains(t, payload.Message, "TF_MCP_IMPORT_WORKSPACE and TF_WORKSPACE are unset")
-	assert.NotContains(t, payload.Message, "TF_MCP_QUERY_WORKSPACE")
-	assert.Equal(t, []string{"organization_name", "workspace_name"}, payload.Missing)
-}
-
-func TestSearchScopeDescriptionsRequireSourceConfirmationAndSeparateImportTarget(t *testing.T) {
-	assert.Contains(t, QueryOrganizationDescription, "Confirm the resolved source")
-	assert.Contains(t, QueryWorkspaceDescription, "Confirm the resolved source")
-	assert.Contains(t, QueryWorkspaceDescription, "import target is selected and confirmed separately")
-	assert.NotContains(t, QueryOrganizationDescription, "without confirmation")
-	assert.NotContains(t, QueryWorkspaceDescription, "without confirmation")
-	assert.Contains(t, ImportOrganizationDescription, "confirmed")
+func TestSearchScopeDescriptionsUseCanonicalOrganizationAndIndependentTargets(t *testing.T) {
+	assert.Contains(t, QueryOrganizationDescription, ScopeOrganizationInput)
+	assert.Contains(t, QueryWorkspaceDescription, "native MCP user input")
+	assert.Contains(t, QueryWorkspaceDescription, "Import scope is resolved independently")
+	assert.Contains(t, ImportOrganizationDescription, "independent")
 	assert.Contains(t, ImportWorkspaceDescription, "TF_MCP_IMPORT_WORKSPACE")
-	assert.Contains(t, ImportWorkspaceDescription, "Never use TF_MCP_QUERY_WORKSPACE")
-}
-
-func TestExecuteQueryUsesEnvironmentScopeDirectly(t *testing.T) {
-	for _, workspaceEnv := range []string{"TF_WORKSPACE", "TF_MCP_QUERY_WORKSPACE"} {
-		t.Run(workspaceEnv, func(t *testing.T) {
-			t.Setenv("TF_CLOUD_ORGANIZATION", "org")
-			t.Setenv("TF_WORKSPACE", "")
-			t.Setenv("TF_MCP_QUERY_WORKSPACE", "")
-			t.Setenv(workspaceEnv, "workspace")
-			request := mcp.CallToolRequest{}
-			request.Params.Arguments = map[string]any{"query_configuration": "{"}
-			result, err := ExecuteQuery(silentLogger()).Handler(context.Background(), request)
-			require.NoError(t, err)
-			require.True(t, result.IsError)
-			text, ok := mcp.AsTextContent(result.Content[0])
-			require.True(t, ok)
-			// Resolved environment scope must reach validation, not request user input.
-			assert.Contains(t, text.Text, "invalid query_configuration")
-		})
-	}
+	assert.Contains(t, ImportWorkspaceDescription, "TF_MCP_QUERY_WORKSPACE is never")
 }

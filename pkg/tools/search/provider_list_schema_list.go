@@ -35,7 +35,11 @@ import (
 // fetches the schema for that specific provider directly.
 // When neither is supplied, it lists all supported providers for the required
 // organization context so the agent can pick one and call the tool again.
-func ProviderListSchemaList(logger *log.Logger) server.ServerTool {
+func ProviderListSchemaList(logger *log.Logger, servers ...*server.MCPServer) server.ServerTool {
+	var mcpServer *server.MCPServer
+	if len(servers) > 0 {
+		mcpServer = servers[0]
+	}
 	return server.ServerTool{
 		Tool: mcp.NewTool("provider_list_schema_list",
 			mcp.WithDescription(providerListSchemaListDescription),
@@ -56,21 +60,26 @@ func ProviderListSchemaList(logger *log.Logger) server.ServerTool {
 						"Required together with provider_namespace to fetch a schema directly.",
 				),
 			),
-			mcp.WithString("organization_name", mcp.Description(QueryOrganizationDescription)),
+			mcp.WithString(ScopeOrganizationInput, mcp.Description(QueryOrganizationDescription)),
 			mcp.WithString("workspace_name", mcp.Description(QueryWorkspaceDescription)),
+			mcp.WithSchemaAdditionalProperties(false),
 		),
 		Handler: func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-			return providerListSchemaListHandler(ctx, request, logger)
+			return providerListSchemaListHandler(ctx, request, logger, mcpServer)
 		},
 	}
 }
 
-func providerListSchemaListHandler(ctx context.Context, request mcp.CallToolRequest, logger *log.Logger) (*mcp.CallToolResult, error) {
+func providerListSchemaListHandler(ctx context.Context, request mcp.CallToolRequest, logger *log.Logger, servers ...*server.MCPServer) (*mcp.CallToolResult, error) {
+	var mcpServer *server.MCPServer
+	if len(servers) > 0 {
+		mcpServer = servers[0]
+	}
 	providerNamespace := strings.TrimSpace(request.GetString("provider_namespace", ""))
 	providerName := strings.TrimSpace(strings.ToLower(request.GetString("provider_name", "")))
-	scope := ResolveSearchScope(request.GetString("organization_name", ""), request.GetString("workspace_name", ""))
-	if !scope.Ready() {
-		return mcp.NewToolResultText(scope.InputRequest()), nil
+	scope, interactionResult := resolveMark3LabsScope(ctx, mcpServer, ResolveSearchScope(request.GetString(ScopeOrganizationInput, ""), request.GetString(ScopeWorkspaceInput, "")), QuerySourceScope)
+	if interactionResult != nil {
+		return interactionResult, nil
 	}
 	orgName, workspaceName := scope.Organization.Value, scope.Workspace.Value
 
@@ -97,7 +106,7 @@ func ProviderListSchemaListText(ctx context.Context, tfeClient *tfe.Client, orgN
 	providerNamespace = strings.TrimSpace(providerNamespace)
 	providerName = strings.TrimSpace(strings.ToLower(providerName))
 	if orgName == "" || workspaceName == "" {
-		return "", fmt.Errorf("organization_name and workspace_name are required; ask the user to provide both before fetching provider schemas")
+		return "", fmt.Errorf("terraform_org_name and workspace_name are required; ask the user to provide both before fetching provider schemas")
 	}
 	if (providerNamespace == "") != (providerName == "") {
 		return "", fmt.Errorf("provider_namespace and provider_name must either both be supplied or both be omitted")
@@ -108,7 +117,8 @@ func ProviderListSchemaListText(ctx context.Context, tfeClient *tfe.Client, orgN
 
 	// ── Branch: list all providers ────────────────────────────────────────────
 	if providerNamespace == "" {
-		return listSupportedProvidersText(ctx, tfeClient, orgName)
+		text, err := listSupportedProvidersText(ctx, tfeClient, orgName)
+		return providerResultWithScope(text, orgName, workspaceName, err)
 	}
 
 	// ── Branch: fetch schema for a specific provider ──────────────────────────
@@ -120,7 +130,25 @@ func ProviderListSchemaListText(ctx context.Context, tfeClient *tfe.Client, orgN
 		return "", err
 	}
 
-	return fetchProviderSchemaText(ctx, tfeClient, orgName, selection.Namespace, selection.Name, selection.Version)
+	text, err := fetchProviderSchemaText(ctx, tfeClient, orgName, selection.Namespace, selection.Name, selection.Version)
+	return providerResultWithScope(text, orgName, workspaceName, err)
+}
+
+func providerResultWithScope(text, organizationName, workspaceName string, err error) (string, error) {
+	if err != nil {
+		return "", err
+	}
+	var result map[string]any
+	if err := json.Unmarshal([]byte(text), &result); err != nil {
+		return "", fmt.Errorf("failed to preserve confirmed Search scope")
+	}
+	result[ScopeOrganizationInput] = organizationName
+	result[ScopeWorkspaceInput] = workspaceName
+	encoded, err := json.MarshalIndent(result, "", "  ")
+	if err != nil {
+		return "", fmt.Errorf("failed to preserve confirmed Search scope")
+	}
+	return string(encoded), nil
 }
 
 // ── list all supported providers ─────────────────────────────────────────────
@@ -192,7 +220,7 @@ func listSupportedProvidersText(ctx context.Context, tfeClient *tfe.Client, orgN
 
 	out, err := json.MarshalIndent(map[string]any{
 		"supported_providers": summaries,
-		"note":                "Call provider_list_schema_list again with the same organization_name and workspace_name, plus provider_namespace and provider_name, to fetch the full list_resource_schemas for a specific provider. FETCH uses the catalog-selected version.",
+		"note":                "Call provider_list_schema_list again with the same terraform_org_name and workspace_name, plus provider_namespace and provider_name, to fetch the full list_resource_schemas for a specific provider. FETCH uses the catalog-selected version.",
 	}, "", "  ")
 	if err != nil {
 		return "", fmt.Errorf("failed to marshal provider list: %w", err)
@@ -226,7 +254,7 @@ func discoverProviderSelection(ctx context.Context, tfeClient *tfe.Client, orgNa
 
 	return noCodeProviderSelection{}, fmt.Errorf(
 		"provider %s/%s is not in the search-compatible catalog — "+
-			"call provider_list_schema_list with organization_name and workspace_name to see supported providers, "+
+			"call provider_list_schema_list with terraform_org_name and workspace_name to see supported providers, "+
 			"or use search_providers to find a provider in the public Terraform Registry",
 		namespace, name,
 	)
@@ -291,7 +319,7 @@ func fetchProviderSchemaText(ctx context.Context, tfeClient *tfe.Client, orgName
 			"Pass list_resource_schemas to generate_query_configuration "+
 				"(with provider_namespace=%q, provider_name=%q, provider_version=%q) "+
 				"to get a full schema guide and example configuration. Use only exact resource type keys present in list_resource_schemas; "+
-				"ordinary managed resource names are not automatically supported list resources. Then pass the configuration with organization_name and workspace_name to execute_query.",
+				"ordinary managed resource names are not automatically supported list resources. Then pass the configuration with terraform_org_name and workspace_name to execute_query.",
 			namespace,
 			name,
 			version,
@@ -335,12 +363,11 @@ func doProviderRequest(ctx context.Context, request *tfe.ClientRequest, response
 const providerListSchemaListDescription = `Lists Search-compatible providers or fetches one provider's list-resource
 schemas for an HCP Terraform source workspace.
 
-The organization_name and workspace_name source arguments are optional. Omit
-them to resolve the proposed source from TF_CLOUD_ORGANIZATION and
-TF_MCP_QUERY_WORKSPACE, then TF_WORKSPACE. Before a new query, show that source
-and ask the user to confirm it; pass explicit user corrections as argument
-overrides. An input_required result is a normal request for only the missing
-source fields, and no unscoped API request is made.
+The terraform_org_name and workspace_name source arguments are optional. Omitted
+fields resolve proposed values from TF_CLOUD_ORGANIZATION and
+TF_MCP_QUERY_WORKSPACE, then TF_WORKSPACE. The server uses native MCP user input
+to show and confirm the complete source before scoped API access. Reuse the
+accepted pair explicitly in later Search calls.
 
 In LIST mode, omit both provider_namespace and provider_name; the result contains
 the providers available in the Search catalog. In FETCH mode, provide both
