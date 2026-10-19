@@ -99,12 +99,15 @@ func ProviderListSchemaListText(ctx context.Context, tfeClient *tfe.Client, orgN
 	if orgName == "" || workspaceName == "" {
 		return "", fmt.Errorf("organization_name and workspace_name are required; ask the user to provide both before fetching provider schemas")
 	}
+	if (providerNamespace == "") != (providerName == "") {
+		return "", fmt.Errorf("provider_namespace and provider_name must either both be supplied or both be omitted")
+	}
 	if _, err := tfeClient.Workspaces.Read(ctx, orgName, workspaceName); err != nil {
 		return "", fmt.Errorf("failed to read workspace %q in organization %q: %w", workspaceName, orgName, err)
 	}
 
 	// ── Branch: list all providers ────────────────────────────────────────────
-	if providerNamespace == "" || providerName == "" {
+	if providerNamespace == "" {
 		return listSupportedProvidersText(ctx, tfeClient, orgName)
 	}
 
@@ -112,12 +115,12 @@ func ProviderListSchemaListText(ctx context.Context, tfeClient *tfe.Client, orgN
 
 	// The catalog is authoritative for the version. Do not accept a caller- or
 	// model-supplied version because it may not have list-resource schemas.
-	providerVersion, err := discoverProviderVersion(ctx, tfeClient, orgName, providerNamespace, providerName)
+	selection, err := discoverProviderSelection(ctx, tfeClient, orgName, providerNamespace, providerName)
 	if err != nil {
 		return "", err
 	}
 
-	return fetchProviderSchemaText(ctx, tfeClient, orgName, providerNamespace, providerName, providerVersion)
+	return fetchProviderSchemaText(ctx, tfeClient, orgName, selection.Namespace, selection.Name, selection.Version)
 }
 
 // ── list all supported providers ─────────────────────────────────────────────
@@ -177,6 +180,9 @@ func listSupportedProvidersText(ctx context.Context, tfeClient *tfe.Client, orgN
 
 	summaries := make([]providerSummary, 0, len(resp.Data))
 	for _, d := range resp.Data {
+		if d.Attributes.Namespace == "" || d.Attributes.Name == "" || d.Attributes.Version == "" {
+			return "", fmt.Errorf("provider catalog returned incomplete metadata; retry provider discovery later")
+		}
 		summaries = append(summaries, providerSummary{
 			Namespace: d.Attributes.Namespace,
 			Name:      d.Attributes.Name,
@@ -186,7 +192,7 @@ func listSupportedProvidersText(ctx context.Context, tfeClient *tfe.Client, orgN
 
 	out, err := json.MarshalIndent(map[string]any{
 		"supported_providers": summaries,
-		"note":                "Call provider_list_schema_list again with the same organization_name and workspace_name, plus provider_namespace and provider_name (and optionally provider_version), to fetch the full list_resource_schemas for a specific provider.",
+		"note":                "Call provider_list_schema_list again with the same organization_name and workspace_name, plus provider_namespace and provider_name, to fetch the full list_resource_schemas for a specific provider. FETCH uses the catalog-selected version.",
 	}, "", "  ")
 	if err != nil {
 		return "", fmt.Errorf("failed to marshal provider list: %w", err)
@@ -195,21 +201,30 @@ func listSupportedProvidersText(ctx context.Context, tfeClient *tfe.Client, orgN
 	return string(out), nil
 }
 
-// ── discover version from index ───────────────────────────────────────────────
+// ── select provider metadata from the catalog ────────────────────────────────
 
-func discoverProviderVersion(ctx context.Context, tfeClient *tfe.Client, orgName, namespace, name string) (string, error) {
+type noCodeProviderSelection struct {
+	Namespace string
+	Name      string
+	Version   string
+}
+
+func discoverProviderSelection(ctx context.Context, tfeClient *tfe.Client, orgName, namespace, name string) (noCodeProviderSelection, error) {
 	resp, err := readProviderVersions(ctx, tfeClient, orgName)
 	if err != nil {
-		return "", fmt.Errorf("failed to fetch provider list to discover version: %w", err)
+		return noCodeProviderSelection{}, fmt.Errorf("failed to fetch provider list to discover version: %w", err)
 	}
 
 	for _, d := range resp.Data {
 		if strings.EqualFold(d.Attributes.Namespace, namespace) && strings.EqualFold(d.Attributes.Name, name) {
-			return d.Attributes.Version, nil
+			if d.Attributes.Namespace == "" || d.Attributes.Name == "" || d.Attributes.Version == "" {
+				return noCodeProviderSelection{}, fmt.Errorf("provider catalog returned incomplete metadata; retry provider discovery later")
+			}
+			return noCodeProviderSelection{Namespace: d.Attributes.Namespace, Name: d.Attributes.Name, Version: d.Attributes.Version}, nil
 		}
 	}
 
-	return "", fmt.Errorf(
+	return noCodeProviderSelection{}, fmt.Errorf(
 		"provider %s/%s is not in the search-compatible catalog — "+
 			"call provider_list_schema_list with organization_name and workspace_name to see supported providers, "+
 			"or use search_providers to find a provider in the public Terraform Registry",
@@ -248,8 +263,17 @@ func fetchProviderSchemaText(ctx context.Context, tfeClient *tfe.Client, orgName
 	if err := doProviderRequest(ctx, request, &resp); err != nil {
 		return "", fmt.Errorf("failed to fetch schema for %s/%s@%s: %w", namespace, name, version, err)
 	}
+	// Atlas's schema-detail serializer exposes schemas, not provider metadata.
+	// The catalog selection supplied these values; a detail response that does
+	// include metadata must not silently contradict the selected provider.
+	attrs := resp.Data.Attributes
+	if attrs.Namespace != "" && !strings.EqualFold(attrs.Namespace, namespace) ||
+		attrs.Name != "" && !strings.EqualFold(attrs.Name, name) ||
+		attrs.Version != "" && attrs.Version != version {
+		return "", fmt.Errorf("provider schema metadata conflicts with catalog selection; retry provider discovery")
+	}
 
-	lrs := resp.Data.Attributes.ListResourceSchemas
+	lrs := attrs.ListResourceSchemas
 	if lrs == nil || string(lrs) == "null" {
 		return "", fmt.Errorf(
 			"provider %s/%s@%s exists in the catalog but has no list_resource_schemas — "+
@@ -259,18 +283,18 @@ func fetchProviderSchemaText(ctx context.Context, tfeClient *tfe.Client, orgName
 	}
 
 	out, err := json.MarshalIndent(map[string]any{
-		"namespace":             resp.Data.Attributes.Namespace,
-		"name":                  resp.Data.Attributes.Name,
-		"version":               resp.Data.Attributes.Version,
+		"namespace":             namespace,
+		"name":                  name,
+		"version":               version,
 		"list_resource_schemas": lrs,
 		"note": fmt.Sprintf(
 			"Pass list_resource_schemas to generate_query_configuration "+
 				"(with provider_namespace=%q, provider_name=%q, provider_version=%q) "+
 				"to get a full schema guide and example configuration. Use only exact resource type keys present in list_resource_schemas; "+
 				"ordinary managed resource names are not automatically supported list resources. Then pass the configuration with organization_name and workspace_name to execute_query.",
-			resp.Data.Attributes.Namespace,
-			resp.Data.Attributes.Name,
-			resp.Data.Attributes.Version,
+			namespace,
+			name,
+			version,
 		),
 	}, "", "  ")
 	if err != nil {
@@ -308,45 +332,25 @@ func doProviderRequest(ctx context.Context, request *tfe.ClientRequest, response
 	return json.Unmarshal(body.Bytes(), response)
 }
 
-const providerListSchemaListDescription = `Fetches list_resource_schemas for a search-compatible Terraform provider from the
-HCP Terraform no-code stub endpoint (GET /api/v2/search/provider-versions).
+const providerListSchemaListDescription = `Lists Search-compatible providers or fetches one provider's list-resource
+schemas for an HCP Terraform source workspace.
 
-Scope arguments are optional. Use configured environment defaults unless the user explicitly
-specifies an organization or workspace; pass those explicit values as arguments to override
-the corresponding defaults. Do not invent scope arguments. The server uses
-TF_MCP_QUERY_WORKSPACE for queries; TF_MCP_IMPORT_WORKSPACE is
-a separate import target. If the query variable is absent, use TF_WORKSPACE.
-For organization, use TF_CLOUD_ORGANIZATION unless explicitly overridden. Use configured environment
-values directly without confirmation. If inputs are missing, ask only for those inputs.
-The server never makes an unscoped API request. An input_required result is a normal response, not a tool
-failure. Use its context and guidance to ask the user only for the missing inputs, then
-retry with those values as explicit arguments, preserving resolved context.
+The organization_name and workspace_name source arguments are optional. Omit
+them to resolve the proposed source from TF_CLOUD_ORGANIZATION and
+TF_MCP_QUERY_WORKSPACE, then TF_WORKSPACE. Before a new query, show that source
+and ask the user to confirm it; pass explicit user corrections as argument
+overrides. An input_required result is a normal request for only the missing
+source fields, and no unscoped API request is made.
 
-The tool has two modes:
+In LIST mode, omit both provider_namespace and provider_name; the result contains
+the providers available in the Search catalog. In FETCH mode, provide both
+identifiers; the tool returns the catalog-selected provider metadata and
+list_resource_schemas. The provider version comes from the catalog and must not
+be inferred or supplied from model knowledge or the public Registry.
 
-LIST mode (no provider identifiers supplied; scope resolved by the server):
-  Returns all providers currently in the search-compatible catalog so the agent
-  can choose one. Each entry includes namespace, name, and version.
-
-FETCH mode (provider_namespace and provider_name supplied; scope resolved by the server):
-  Returns the full list_resource_schemas for the requested provider, ready to
-  pass directly into generate_query_configuration.
-  - The provider version is always read from the provider catalog response. Never infer or
-    supply a version from model knowledge, examples, or the public Terraform Registry.
-  - If the provider is not found in the catalog, an error is returned with a hint
-    to use search_providers to find the provider in the public Terraform Registry.
-
-Typical agent workflow:
-If the user already supplied an explicit organization or workspace, pass it as a scope argument to override that default throughout this workflow. Otherwise follow the default-first steps below.
-  1. Call without scope args first; if the result reports a missing value, ask the user for only that value and retry.
-  2. Use the LIST response to discover available providers.
-  3. Call provider_list_schema_list with provider_namespace and provider_name to fetch the catalog-selected version and its schema. Reuse any explicit scope inputs from step 1.
-  4. Pass the returned list_resource_schemas to generate_query_configuration to get
-     a full guide and example query configuration.
-  5. Select only an exact resource type key present in list_resource_schemas. Never infer list
-     support from an ordinary managed resource name. If no key matches the user's request,
-     explain that the selected provider version cannot list that resource and stop.
-  6. Fill in the configuration and pass it to execute_query, reusing any explicit scope inputs from step 1; otherwise let the server resolve configured scope values.
-
-Requires TFE_TOKEN and TFE_ADDRESS to be configured (same credentials used for
-other HCP Terraform tools).`
+After LIST, choose a catalog provider with the user and call FETCH. After FETCH,
+pass the returned provider metadata and list_resource_schemas to
+generate_query_configuration. A searchable resource_type must be an exact key
+in list_resource_schemas; an ordinary managed-resource name does not establish
+Search list support. List-resource schemas are not target managed-resource
+schemas.`

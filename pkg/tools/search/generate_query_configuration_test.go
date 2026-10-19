@@ -110,6 +110,17 @@ func TestStripMarkdownLinks_BracketWithoutLink(t *testing.T) {
 	}
 }
 
+func TestCleanDescriptionTruncatesByRune(t *testing.T) {
+	description := strings.Repeat("é", 121)
+	got := cleanDescription(description)
+	if got != strings.Repeat("é", 117)+"..." {
+		t.Fatalf("unexpected UTF-8-safe truncation: %q", got)
+	}
+	if len([]rune(got)) != 120 {
+		t.Fatalf("expected 120 runes, got %d", len([]rune(got)))
+	}
+}
+
 // ── parseListResourceSchemas ─────────────────────────────────────────────────
 
 func TestParseListResourceSchemas_BareMap(t *testing.T) {
@@ -149,6 +160,41 @@ func TestParseListResourceSchemas_EmptyWrappedMap(t *testing.T) {
 	}
 }
 
+func TestParseListResourceSchemas_NestedBlockCardinality(t *testing.T) {
+	raw := `{"aws_instance":{"block":{"block_types":{"filter":{"nesting_mode":"list","min_items":1,"max_items":1,"block":{"attributes":{}}}}}}}`
+	schemas, err := parseListResourceSchemas(raw)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	filter := schemas["aws_instance"].Block.BlockTypes["filter"]
+	if filter.MinItems != 1 || filter.MaxItems != 1 || !filter.required() || filter.repeatable() {
+		t.Fatalf("unexpected nested block cardinality: %#v", filter)
+	}
+}
+
+func TestListResourceBlockTypeCardinality(t *testing.T) {
+	for _, tc := range []struct {
+		name                 string
+		block                listResourceBlockType
+		required, repeatable bool
+	}{
+		{name: "optional single", block: listResourceBlockType{NestingMode: "single"}},
+		{name: "required single", block: listResourceBlockType{NestingMode: "single", MinItems: 1, MaxItems: 1}, required: true},
+		{name: "optional list capped at one", block: listResourceBlockType{NestingMode: "list", MaxItems: 1}},
+		{name: "required repeatable list", block: listResourceBlockType{NestingMode: "list", MinItems: 1, MaxItems: 3}, required: true, repeatable: true},
+		{name: "unbounded set", block: listResourceBlockType{NestingMode: "set"}, repeatable: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if tc.block.required() != tc.required {
+				t.Fatalf("required() = %v, want %v", tc.block.required(), tc.required)
+			}
+			if tc.block.repeatable() != tc.repeatable {
+				t.Fatalf("repeatable() = %v, want %v", tc.block.repeatable(), tc.repeatable)
+			}
+		})
+	}
+}
+
 // ── filterResourceTypes ──────────────────────────────────────────────────────
 
 func TestFilterResourceTypes_AllWhenEmpty(t *testing.T) {
@@ -156,7 +202,10 @@ func TestFilterResourceTypes_AllWhenEmpty(t *testing.T) {
 		"aws_instance":  {},
 		"aws_s3_bucket": {},
 	}
-	got := filterResourceTypes(schemas, "")
+	got, err := filterResourceTypes(schemas, "")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 	if len(got) != 2 {
 		t.Errorf("expected 2 resource types, got %d", len(got))
 	}
@@ -172,7 +221,10 @@ func TestFilterResourceTypes_Filtered(t *testing.T) {
 		"aws_s3_bucket": {},
 		"aws_vpc":       {},
 	}
-	got := filterResourceTypes(schemas, "aws_vpc, aws_instance")
+	got, err := filterResourceTypes(schemas, "aws_vpc, aws_instance")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 	if len(got) != 2 {
 		t.Errorf("expected 2, got %d: %v", len(got), got)
 	}
@@ -180,9 +232,23 @@ func TestFilterResourceTypes_Filtered(t *testing.T) {
 
 func TestFilterResourceTypes_NoneFound(t *testing.T) {
 	schemas := map[string]listResourceEntry{"aws_instance": {}}
-	got := filterResourceTypes(schemas, "nonexistent_type")
-	if len(got) != 0 {
-		t.Errorf("expected empty, got %v", got)
+	got, err := filterResourceTypes(schemas, "nonexistent_type")
+	if err == nil || !strings.Contains(err.Error(), "nonexistent_type") {
+		t.Fatalf("expected missing resource type error, got %v", err)
+	}
+	if got != nil {
+		t.Errorf("expected nil result, got %v", got)
+	}
+}
+
+func TestFilterResourceTypes_RejectsMixedValidAndUnknown(t *testing.T) {
+	schemas := map[string]listResourceEntry{"aws_instance": {}}
+	got, err := filterResourceTypes(schemas, "aws_instance, aws_typo")
+	if err == nil || !strings.Contains(err.Error(), "aws_typo") {
+		t.Fatalf("expected unknown resource type error, got %v", err)
+	}
+	if got != nil {
+		t.Errorf("expected the complete request to be rejected, got %v", got)
 	}
 }
 
@@ -198,6 +264,7 @@ func TestWriteResourceCatalog_IncludesBlockTypes(t *testing.T) {
 				BlockTypes: map[string]listResourceBlockType{
 					"filter": {
 						NestingMode: "list",
+						MaxItems:    3,
 						Block: listResourceBlock{
 							Attributes: map[string]listResourceAttribute{
 								"name":   {Type: "string", Required: true},
@@ -256,8 +323,9 @@ func TestBuildExampleAttributes_IncludesRequiredBlockType(t *testing.T) {
 	attrs := map[string]listResourceAttribute{}
 	blockTypes := map[string]listResourceBlockType{
 		"filter": {
-			Required:    true,
 			NestingMode: "list",
+			MinItems:    1,
+			MaxItems:    1,
 			Block: listResourceBlock{
 				Attributes: map[string]listResourceAttribute{
 					"name":   {Type: "string", Required: true},
@@ -286,7 +354,7 @@ func TestBuildExampleAttributes_IncludesRequiredBlockType(t *testing.T) {
 
 func TestBuildExampleAttributes_SkipsOptionalBlockType(t *testing.T) {
 	blockTypes := map[string]listResourceBlockType{
-		"filter": {Required: false, NestingMode: "list"},
+		"filter": {MinItems: 0, NestingMode: "list"},
 	}
 	result := buildExampleAttributes(nil, blockTypes)
 	if len(result) != 0 {
@@ -304,7 +372,7 @@ func TestWriteInstructions_ContainsPreConditions(t *testing.T) {
 	checks := []string{
 		"Pre-conditions",
 		"1.14.0",
-		"latest-query-run",
+		"query_run_id",
 		"execute_query",
 		"get_query_status",
 		"get_query_summary",
@@ -319,6 +387,12 @@ func TestWriteInstructions_ContainsPreConditions(t *testing.T) {
 		"100",
 		"ordinary managed resources are not automatically list resources",
 		"never infer or substitute a provider version",
+		"requested condition is absent from this schema",
+		"cannot filter the query",
+		"do not invent it",
+		"generate_config_out: true",
+		"capture is requested, not guaranteed",
+		"only fields actually projected by `get_query_summary`",
 	}
 	for _, want := range checks {
 		if !strings.Contains(out, want) {
@@ -327,6 +401,9 @@ func TestWriteInstructions_ContainsPreConditions(t *testing.T) {
 	}
 	if strings.Contains(out, `"relationships"`) {
 		t.Error("instructions should not require callers to construct JSON:API relationships")
+	}
+	if strings.Contains(out, "latest-query-run") {
+		t.Error("instructions must use the projected execute_query response field")
 	}
 	if strings.Contains(out, "/api/v2/queries") {
 		t.Error("instructions should use get_query_status rather than the raw query API")
@@ -360,6 +437,9 @@ func TestWriteExamplePayload_ContainsGenerateConfigOut(t *testing.T) {
 	}
 	if !strings.Contains(out, "generate_config_out") {
 		t.Error("example payload output must still mention generate_config_out (in the comment)")
+	}
+	if !strings.Contains(out, "additional result data unavailable as a schema-supported query filter") || !strings.Contains(out, "does not guarantee capture") {
+		t.Error("example guidance must explain the qualified unsupported-condition path")
 	}
 	if !strings.Contains(out, `"limit": 100`) {
 		t.Error("example payload must contain default limit of 100")
@@ -400,6 +480,8 @@ func TestWriteVariableNotes_ContainsMistakeRows(t *testing.T) {
 		"nesting_mode",
 		"UI default is 100",
 		"assuming an S3 bucket can use `aws_s3_bucket`",
+		"Inventing a filter for an unsupported selection condition",
+		"capture is not guaranteed",
 	}
 	for _, want := range checks {
 		if !strings.Contains(out, want) {

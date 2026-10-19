@@ -7,6 +7,7 @@ BREAKING CHANGES
 FEATURES
 
 * [New Tools] Terraform Search adds `provider_list_schema_list`, `generate_query_configuration`, `execute_query`, `get_query_status`, and `get_query_summary` on both the legacy and official MCP servers. Query status polling is bounded per call.
+* [New Tools] Terraform Search adds read-only `prepare_import` and `verify_import_plan` tools for preparing explicitly selected Search results and verifying the associated plan-only HCP Terraform Run. These tools do not upload configuration, create a Run, or apply imports.
 
 IMPROVEMENTS
 

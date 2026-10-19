@@ -57,20 +57,33 @@ The Terraform MCP server provides tools for generating better Terraform code thr
 ## Workflow Patterns
 
 **Query and Import Context**:
-1. Use server-configured environment values by default. Omit scope arguments unless the user explicitly specifies an organization or workspace; pass those values as arguments to override the corresponding defaults. Do not invent scope arguments or ask the user to select defaults again.
-2. Without an explicit workspace override, use MCP-specific workspace configuration first: `TF_MCP_QUERY_WORKSPACE` for discovery queries and `TF_MCP_IMPORT_WORKSPACE` for the import destination. These are independent; never use one as the other's default.
-3. If the relevant MCP variable is unset, use `TF_WORKSPACE`. Without an explicit organization override, use `TF_CLOUD_ORGANIZATION`; there is no MCP-specific organization variable. Overrides are per field: changing the organization does not discard the workspace default, or vice versa.
-4. Use configured environment values directly without asking the user to confirm. Ask only for missing inputs, preserving context already resolved rather than asking for both values again.
-5. Search tools return `input_required` as a normal, non-error response with resolved values, sources, and missing inputs when context is incomplete, without making scoped API requests. Treat this as a clarification request, not a failure: ask the user only for the missing inputs rather than presenting an error or raw JSON. Pass those values as explicit `organization_name` or `workspace_name` arguments and reuse resolved context throughout the query workflow.
-6. Resolve the import destination separately before any import workflow. Generated importable configuration does not itself import resources, and this server has no dedicated import tool. Do not treat the query workspace as the import destination or create an import run without the required operation approval.
+1. Resolve a proposed Search source from explicit arguments first, then server-configured query defaults. Without an explicit workspace override, use `TF_MCP_QUERY_WORKSPACE`, then `TF_WORKSPACE`. Without an explicit organization override, use `TF_CLOUD_ORGANIZATION`; there is no MCP-specific organization variable. Overrides are per field.
+2. Before the first workspace-scoped call for a new query, show the resolved organization and source workspace and ask the user to confirm them. Pass explicit corrections as `organization_name` or `workspace_name` overrides and reuse the confirmed source throughout the query workflow.
+3. Search tools return `input_required` as a normal, non-error response with resolved values, sources, and missing inputs when query context is incomplete, without making scoped API requests. Treat this as a clarification request, not a failure: ask only for the missing inputs rather than presenting an error or raw JSON.
+4. Resolve the proposed import destination separately from an explicit selection, then `TF_MCP_IMPORT_WORKSPACE`, then `TF_WORKSPACE`. Always prompt for and confirm that destination when import is requested, even when a default is configured or the intended target is the Search source. Never treat a query workspace default as import authorization or use `TF_MCP_QUERY_WORKSPACE` as the import target. After confirmation, omit target arguments to use the confirmed import defaults or pass the user's explicit selection as an override.
+5. `prepare_import` and `verify_import_plan` are read-only preparation and verification tools. They do not upload configuration, create a speculative Run, apply an import, or modify infrastructure.
 
 Environment variables must be passed to the MCP server process by the client configuration (for example, its environment settings) or deployment. Do not assume the server can read the agent's local shell environment or client configuration files. Never read or expose tokens while resolving context.
 
 **Query Execution Approval**:
-- Resolve configured scope automatically and perform provider discovery and query configuration generation without asking for scope confirmation. Ask only for missing scope values reported by `input_required`.
+- Confirm the resolved query source before provider discovery. Source confirmation is distinct from approval to execute a query.
 - Before calling `execute_query`, show the resolved organization, workspace, and query selections (provider, resource types, and filters, if any). Explain that this starts a query run but does not create or modify infrastructure.
 - Ask the user to approve execution and wait for their approval. Do not execute if approval is declined or absent. If the target scope or query selections change, summarize the changes and obtain approval again.
-- This approval is agent-driven guidance, not a server-enforced parameter or status. It does not reintroduce confirmation of configured environment values.
+- This approval is agent-driven guidance, not a server-enforced parameter or status.
+
+**Terraform Search (when Search tools are available)**:
+1. **Follow the Search workflow**: These steps supersede the generic Tool Usage Guidelines and Code Generation workflow for Search query configuration and import authoring.
+2. **Start or resume a query**: For a new query, confirm the source organization and workspace, then use `provider_list_schema_list` → `generate_query_configuration` → `execute_query` → `get_query_status` → `get_query_summary`. Poll with the same `query_run_id`; do not submit another query merely because polling remains active. An existing authorized QueryRun ID may resume status and summary review.
+3. **Keep query versions scoped to Search**: Use the provider versions and schemas returned by the Search tools. Do not replace them with `get_latest_provider_version`; a Search catalog version is source-query evidence, not a target-version recommendation.
+4. **Stop for Search-only intent**: Report the summary and stop. Do not request an import target or local path. A selectable summary contains every result matching its presentation filters, not every cloud resource; selection is explicit and only for requested import.
+
+**Search-to-import (only when `prepare_import` and `verify_import_plan` are available and import is requested)**:
+1. **Confirm selection and target**: After the user selects displayed `query_result_marker` values, confirm the target workspace in the same organization and the existing user-designated local configuration directory. Markers provide continuity, not import IDs, authorization or identity proof.
+2. **Require the target lock file**: Inspect the target configuration tree and its exact locked provider releases before `prepare_import`. If `.terraform.lock.hcl` is missing or ambiguous, alert the user that exact target releases cannot be determined. Do not run `terraform init`, select versions, substitute Search catalog versions or call `prepare_import`; wait for further instructions.
+3. **Prepare with locked releases**: Pass each provider source and exact version relevant to the selected imports. Public namespace/type shorthand is accepted; custom/private sources retain their hostname. Use the target's locked releases, not Search catalog versions.
+4. **Author and validate locally**: Author and review local HCL using the target's locked releases. Use provider documentation applicable to the locked release; do not replace or upgrade it through a latest-version lookup. Format and, when appropriate, validate the authored HCL. These are diagnostics and do not authorize a Plan.
+5. **Plan and verify after approval**: Obtain separate approval for one plain HCP-connected speculative `terraform plan`. Retain and reconcile its exact CLI Run URL and `run_id`, then call `verify_import_plan`. Poll the same Run ID; never guess the latest Run or blindly create another. Review the exact full Plan and report Plan actions and object identity independently.
+6. **Stop before apply**: End with reviewed HCL and findings. Do not continue to `terraform apply`, `terraform import` or `apply_run`; any eventual apply is a separate, independently reviewed and authorized workflow.
 
 **Code Generation**:
 1. `search_modules`/`search_provider_docs` for available resources
