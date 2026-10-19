@@ -6,6 +6,7 @@ require (
 	github.com/hashicorp/go-cleanhttp v0.5.2
 	github.com/hashicorp/go-retryablehttp v0.7.8
 	github.com/hashicorp/go-tfe v1.111.2
+	github.com/hashicorp/go-version v1.9.0
 	github.com/hashicorp/jsonapi v1.5.0
 	github.com/instana/go-sensor v1.77.0
 	github.com/mark3labs/mcp-go v0.58.0
@@ -24,7 +25,10 @@ require (
 	golang.org/x/time v0.16.0
 )
 
-require github.com/google/jsonschema-go v0.4.3
+require (
+	github.com/google/jsonschema-go v0.4.3
+	github.com/hashicorp/terraform-registry-address v0.4.0
+)
 
 require (
 	github.com/cenkalti/backoff/v5 v5.0.3 // indirect
@@ -34,6 +38,7 @@ require (
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/google/pprof v0.0.0-20250630185457-6e76a2b096b5 // indirect
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.30.0 // indirect
+	github.com/hashicorp/terraform-svchost v0.1.1 // indirect
 	github.com/looplab/fsm v1.0.3 // indirect
 	github.com/opentracing/opentracing-go v1.2.0 // indirect
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.2 // indirect
@@ -58,7 +63,6 @@ require (
 	github.com/google/go-querystring v1.2.0 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/hashicorp/go-slug v0.16.8 // indirect
-	github.com/hashicorp/go-version v1.9.0 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/pelletier/go-toml/v2 v2.2.4 // indirect
 	github.com/sagikazarmark/locafero v0.12.0 // indirect
