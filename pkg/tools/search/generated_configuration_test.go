@@ -69,6 +69,26 @@ resource "example_resource" "result" {
 	require.Equal(t, map[string]any{"keep": "value"}, attributes)
 }
 
+func TestProjectGeneratedConfigurationRejectsNonliteralMapKeys(t *testing.T) {
+	attributes, err := projectGeneratedConfiguration(`
+resource "example_resource" "result" {
+  accepted = {
+    identifier = "one"
+    "quoted"   = "two"
+  }
+  conditional_key = {
+    (true ? "one" : "two") = "omit"
+  }
+  interpolated_key = {
+    "prefix-${"value"}" = "omit"
+  }
+}`)
+	require.NoError(t, err)
+	require.Equal(t, map[string]any{
+		"accepted": map[string]any{"identifier": "one", "quoted": "two"},
+	}, attributes)
+}
+
 func TestProjectGeneratedConfigurationCanReturnNoConvenienceAttributes(t *testing.T) {
 	attributes, err := projectGeneratedConfiguration(`resource "example_resource" "result" {
   provider = example

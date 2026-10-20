@@ -406,7 +406,7 @@ func ReadPrepareImport(ctx context.Context, c *tfe.Client, input PrepareImportIn
 			return nil, searchDiagnosticErrorWithDetail(lockVersionsInvalidCode, fmt.Sprintf("locked_providers must include the exact provider source %q required by the selected Search result; copy it from .terraform.lock.hcl", found.Provider.Source))
 		}
 		if strings.TrimSpace(found.Configuration) != "" {
-			if _, err := projectGeneratedConfiguration(found.Configuration); err != nil {
+			if _, err := parseGeneratedResourceConfiguration(found.Configuration); err != nil {
 				return nil, err
 			}
 		}

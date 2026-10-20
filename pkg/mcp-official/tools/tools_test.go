@@ -360,6 +360,7 @@ func TestOfficialSearchQuerySummarySelectableAndNonselectable(t *testing.T) {
 				require.NotContains(t, text, "must-not-be-returned")
 			} else {
 				require.Equal(t, "nonselectable", structured["status"])
+				require.Equal(t, true, structured["generate_config_out"])
 				require.NotContains(t, text, "query_result_marker")
 				require.NotContains(t, text, "first")
 			}

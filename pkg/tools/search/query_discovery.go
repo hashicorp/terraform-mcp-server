@@ -162,12 +162,6 @@ func readQueryDiscoveryProvenance(ctx context.Context, c *tfe.Client, queryID st
 		return nil, searchDiagnosticError(queryOwnershipUnverifiedCode)
 	}
 	prov := &queryDiscoveryProvenance{QueryRunID: queryID, Organization: w.Organization.Name, WorkspaceName: w.Name, WorkspaceID: w.ID}
-	if run.Status == tfe.QueryRunErrored || run.Status == tfe.QueryRunCanceled {
-		return prov, searchDiagnosticError(queryNotSelectableCode)
-	}
-	if run.Status != tfe.QueryRunFinished {
-		return prov, searchDiagnosticError(queryNotFinishedCode)
-	}
 	raw, err := readQueryBackendJSON(ctx, c, "queries/"+url.PathEscape(queryID))
 	if err != nil {
 		return nil, err
@@ -177,10 +171,19 @@ func readQueryDiscoveryProvenance(ctx context.Context, c *tfe.Client, queryID st
 		return nil, err
 	}
 	nc, ws := wire.Data.Relationships.NoCode.Data, wire.Data.Relationships.Workspace.Data
-	if wire.Data.ID != queryID || wire.Data.Attributes.GenerateConfigOut == nil || nc == nil || strings.TrimSpace(nc.ID) == "" || nc.Type != "no-code-queries" || ws == nil || ws.ID != w.ID {
+	if wire.Data.ID != queryID || wire.Data.Attributes.GenerateConfigOut == nil || ws == nil || ws.ID != w.ID {
 		return nil, searchDiagnosticError(queryProvenanceUnavailableCode)
 	}
 	prov.GenerateConfigOut = *wire.Data.Attributes.GenerateConfigOut
+	if run.Status == tfe.QueryRunErrored || run.Status == tfe.QueryRunCanceled {
+		return prov, searchDiagnosticError(queryNotSelectableCode)
+	}
+	if run.Status != tfe.QueryRunFinished {
+		return prov, searchDiagnosticError(queryNotFinishedCode)
+	}
+	if nc == nil || strings.TrimSpace(nc.ID) == "" || nc.Type != "no-code-queries" {
+		return nil, searchDiagnosticError(queryProvenanceUnavailableCode)
+	}
 	raw, err = readQueryBackendJSON(ctx, c, "search/no-code-query/"+url.PathEscape(nc.ID))
 	if err != nil {
 		return nil, err
@@ -253,7 +256,7 @@ func validateGeneratedConfigurationEvidence(generateConfigOut bool, evidence *qu
 	}
 	if !generateConfigOut {
 		for _, result := range evidence.Results {
-			if strings.TrimSpace(result.Configuration) != "" {
+			if strings.TrimSpace(result.Configuration) != "" || strings.TrimSpace(result.ImportConfig) != "" {
 				return searchDiagnosticError(queryGeneratedConfigurationUnexpectedCode)
 			}
 		}

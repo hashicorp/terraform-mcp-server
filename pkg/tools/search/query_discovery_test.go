@@ -139,6 +139,25 @@ func TestSummarizeQueryDiscoveryDoesNotParseFilteredConfiguration(t *testing.T) 
 	require.Equal(t, map[string]any{"instance_type": "m7i.large"}, summary.Lists[0].Results[0].ConfigurationAttributes)
 }
 
+func TestSummarizeQueryDiscoveryReportsGeneratedConfigurationWithoutProjectedAttributes(t *testing.T) {
+	prov, evidence := testDiscovery(t, "unsupported")
+	evidence.Results[0].Configuration = `resource "example_resource" "unsupported" {
+  policy = jsonencode({ key = "value" })
+  nested_block { value = "ignored" }
+}`
+
+	summary, err := summarizeQueryDiscovery(prov, evidence, QueryDiscoveryFilter{})
+	require.NoError(t, err)
+	row := summary.Lists[0].Results[0]
+	require.True(t, row.ConfigurationGenerated)
+	require.Nil(t, row.ConfigurationAttributes)
+	text, err := FormatQueryDiscoverySummary(summary)
+	require.NoError(t, err)
+	require.Contains(t, text, `"configuration_generated":true`)
+	require.NotContains(t, text, `"configuration_attributes"`)
+	require.NotContains(t, text, `"configuration":`)
+}
+
 func TestSummarizeQueryDiscoveryReportsWhenConfigurationWasNotGenerated(t *testing.T) {
 	prov, evidence := testDiscovery(t, "missing")
 	summary, err := summarizeQueryDiscovery(prov, evidence, QueryDiscoveryFilter{})
@@ -207,9 +226,17 @@ func TestQueryProvenanceChecksBackendAssociations(t *testing.T) {
 }
 
 func TestValidateGeneratedConfigurationEvidenceRejectsDisabledGenerationConflict(t *testing.T) {
-	evidence := &queryEvidence{Results: []queryResultEvidence{{Configuration: `resource "example" "result" {}`}}}
-	require.EqualError(t, validateGeneratedConfigurationEvidence(false, evidence), "query_generated_configuration_unexpected")
-	require.NoError(t, validateGeneratedConfigurationEvidence(true, evidence))
+	for name, result := range map[string]queryResultEvidence{
+		"resource only": {Configuration: `resource "example" "result" {}`},
+		"import only":   {ImportConfig: `import { to = example.result id = "example" }`},
+		"both":          {Configuration: `resource "example" "result" {}`, ImportConfig: `import { to = example.result id = "example" }`},
+	} {
+		t.Run(name, func(t *testing.T) {
+			evidence := &queryEvidence{Results: []queryResultEvidence{result}}
+			require.EqualError(t, validateGeneratedConfigurationEvidence(false, evidence), "query_generated_configuration_unexpected")
+			require.NoError(t, validateGeneratedConfigurationEvidence(true, evidence))
+		})
+	}
 	require.NoError(t, validateGeneratedConfigurationEvidence(false, &queryEvidence{}))
 }
 

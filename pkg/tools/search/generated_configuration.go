@@ -17,6 +17,14 @@ import (
 // arguments from one Terraform-generated resource block. It deliberately does
 // not provide variables or functions and never walks nested blocks.
 func projectGeneratedConfiguration(src string) (map[string]any, error) {
+	block, err := parseGeneratedResourceConfiguration(src)
+	if err != nil {
+		return nil, err
+	}
+	return projectGeneratedConfigurationBlock(block), nil
+}
+
+func parseGeneratedResourceConfiguration(src string) (*hclsyntax.Block, error) {
 	file, diagnostics := hclsyntax.ParseConfig([]byte(src), "generated.tf", hcl.Pos{Line: 1, Column: 1})
 	if diagnostics.HasErrors() || file == nil {
 		return nil, searchDiagnosticError(queryGeneratedConfigurationInvalidCode)
@@ -29,7 +37,10 @@ func projectGeneratedConfiguration(src string) (map[string]any, error) {
 	if block.Type != "resource" || len(block.Labels) != 2 {
 		return nil, searchDiagnosticError(queryGeneratedConfigurationInvalidCode)
 	}
+	return block, nil
+}
 
+func projectGeneratedConfigurationBlock(block *hclsyntax.Block) map[string]any {
 	projected := make(map[string]any)
 	for name, attribute := range block.Body.Attributes {
 		if name == "provider" || !generatedConfigurationExpression(attribute.Expr) {
@@ -48,9 +59,9 @@ func projectGeneratedConfiguration(src string) (map[string]any, error) {
 		}
 	}
 	if len(projected) == 0 {
-		return nil, nil
+		return nil
 	}
-	return projected, nil
+	return projected
 }
 
 func generatedConfigurationExpression(expression hclsyntax.Expression) bool {
@@ -68,7 +79,7 @@ func generatedConfigurationExpression(expression hclsyntax.Expression) bool {
 			return true
 		}
 		for _, item := range expression.Items {
-			if !generatedConfigurationScalarExpression(item.ValueExpr) {
+			if !generatedConfigurationMapKeyExpression(item.KeyExpr) || !generatedConfigurationScalarExpression(item.ValueExpr) {
 				return false
 			}
 		}
@@ -76,6 +87,18 @@ func generatedConfigurationExpression(expression hclsyntax.Expression) bool {
 	default:
 		return false
 	}
+}
+
+func generatedConfigurationMapKeyExpression(expression hclsyntax.Expression) bool {
+	key, ok := expression.(*hclsyntax.ObjectConsKeyExpr)
+	if !ok {
+		return false
+	}
+	if !key.ForceNonLiteral && hcl.ExprAsKeyword(key.Wrapped) != "" {
+		return true
+	}
+	template, ok := key.Wrapped.(*hclsyntax.TemplateExpr)
+	return ok && template.IsStringLiteral()
 }
 
 func generatedConfigurationScalarExpression(expression hclsyntax.Expression) bool {
