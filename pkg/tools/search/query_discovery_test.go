@@ -196,7 +196,7 @@ func TestQueryProvenanceChecksBackendAssociations(t *testing.T) {
 		case "/api/v2/workspaces/ws-test":
 			_, _ = fmt.Fprint(w, `{"data":{"type":"workspaces","id":"ws-test","attributes":{"name":"ws"},"relationships":{"organization":{"data":{"type":"organizations","id":"org"}}}}}`)
 		case "/api/v2/search/no-code-query/ncqry-test":
-			_, _ = fmt.Fprint(w, `{"data":{"id":"ncqry-test","attributes":{"no-code-query-providers":[{"namespace":"hashicorp","name":"aws","version":"6.66.0","no-code-query-resources":[{"body":{"resource_type":"aws_s3_buckets"}}]}]},"relationships":{"workspace":{"data":{"id":"ws-test"}}}}}`)
+			_, _ = fmt.Fprint(w, `{"data":{"id":"ncqry-test","attributes":{"no-code-query-providers":[{"namespace":"HashiCorp","name":"AWS","version":"6.66.0","no-code-query-resources":[{"body":{"resource_type":"aws_s3_buckets"}}]}]},"relationships":{"workspace":{"data":{"id":"ws-test"}}}}}`)
 		default:
 			http.Error(w, "not found", http.StatusNotFound)
 		}
@@ -209,6 +209,30 @@ func TestQueryProvenanceChecksBackendAssociations(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "org", prov.Organization)
 	require.Equal(t, "registry.terraform.io/hashicorp/aws", prov.Providers["aws_s3_buckets"].Source)
+}
+
+func TestCanonicalQueryProviderSourceRejectsInvalidCatalogPartsWithoutReflection(t *testing.T) {
+	for _, test := range []struct {
+		name, namespace, providerType string
+	}{
+		{name: "empty namespace", namespace: "", providerType: "aws"},
+		{name: "namespace with slash", namespace: "unsafe/namespace", providerType: "aws"},
+		{name: "type with dot", namespace: "hashicorp", providerType: "unsafe.type"},
+		{name: "type with control character", namespace: "hashicorp", providerType: "unsafe\ntype"},
+		{name: "reserved type prefix", namespace: "hashicorp", providerType: "terraform-example"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			source, err := canonicalQueryProviderSource(test.namespace, test.providerType)
+			require.Empty(t, source)
+			require.EqualError(t, err, "query_provider_source_unresolved")
+			if test.namespace != "" {
+				require.NotContains(t, err.Error(), test.namespace)
+			}
+			if test.providerType != "" {
+				require.NotContains(t, err.Error(), test.providerType)
+			}
+		})
+	}
 }
 
 func TestQuerySummaryRejectsDisallowedOrganizationBeforeEvidenceDisclosure(t *testing.T) {

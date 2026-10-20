@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	"github.com/hashicorp/go-tfe"
+	tfaddr "github.com/hashicorp/terraform-registry-address"
 )
 
 type QueryDiscoveryFilter struct {
@@ -127,6 +128,22 @@ type queryStoredResourceBody struct {
 	HyphenType string `json:"resource-type"`
 }
 
+func canonicalQueryProviderSource(namespace, providerType string) (string, error) {
+	namespace, err := tfaddr.ParseProviderPart(namespace)
+	if err != nil {
+		return "", searchDiagnosticError(queryProviderSourceUnresolvedCode)
+	}
+	providerType, err = tfaddr.ParseProviderPart(providerType)
+	if err != nil {
+		return "", searchDiagnosticError(queryProviderSourceUnresolvedCode)
+	}
+	provider := tfaddr.NewProvider(tfaddr.DefaultProviderRegistryHost, namespace, providerType)
+	if err := tfaddr.ValidateProviderAddress(provider.String()); err != nil {
+		return "", searchDiagnosticError(queryProviderSourceUnresolvedCode)
+	}
+	return provider.String(), nil
+}
+
 func readQueryDiscoveryProvenance(ctx context.Context, c *tfe.Client, queryID string) (*queryDiscoveryProvenance, error) {
 	run, err := c.QueryRuns.Read(ctx, queryID)
 	if err != nil {
@@ -168,10 +185,11 @@ func readQueryDiscoveryProvenance(ctx context.Context, c *tfe.Client, queryID st
 	}
 	providers := map[string]queryResultProvider{}
 	for _, p := range stored.Data.Attributes.Providers {
-		if p.Namespace == "" || p.Name == "" || p.Version == "" {
+		source, err := canonicalQueryProviderSource(p.Namespace, p.Name)
+		if err != nil || p.Version == "" {
 			return nil, searchDiagnosticError(queryProviderSourceUnresolvedCode)
 		}
-		provider := queryResultProvider{Source: "registry.terraform.io/" + p.Namespace + "/" + p.Name, Version: p.Version}
+		provider := queryResultProvider{Source: source, Version: p.Version}
 		for _, r := range p.Resources {
 			kind := r.Body.Type
 			if kind == "" {

@@ -89,6 +89,10 @@ func importWireBackendForListType(t *testing.T, status, planStatus, listType str
 }
 
 func importWireBackendWithPlan(t *testing.T, status, planStatus, listType, planJSON string) (*httptest.Server, *int) {
+	return importWireBackendWithPlanAndProvider(t, status, planStatus, listType, planJSON, "hashicorp", "aws")
+}
+
+func importWireBackendWithPlanAndProvider(t *testing.T, status, planStatus, listType, planJSON, providerNamespace, providerName string) (*httptest.Server, *int) {
 	t.Helper()
 	planJSONReads := new(int)
 	var backend *httptest.Server
@@ -107,7 +111,7 @@ func importWireBackendWithPlan(t *testing.T, status, planStatus, listType, planJ
 		case "/api/v2/workspaces/ws-source":
 			_, _ = fmt.Fprint(w, `{"data":{"type":"workspaces","id":"ws-source","attributes":{"name":"source"},"relationships":{"organization":{"data":{"type":"organizations","id":"org"}}}}}`)
 		case "/api/v2/search/no-code-query/ncqry-test":
-			_, _ = fmt.Fprintf(w, `{"data":{"id":"ncqry-test","attributes":{"no-code-query-providers":[{"namespace":"hashicorp","name":"aws","version":"6.66.0","no-code-query-resources":[{"body":{"resource_type":%q}}]}]},"relationships":{"workspace":{"data":{"id":"ws-source"}}}}}`, listType)
+			_, _ = fmt.Fprintf(w, `{"data":{"id":"ncqry-test","attributes":{"no-code-query-providers":[{"namespace":%q,"name":%q,"version":"6.66.0","no-code-query-resources":[{"body":{"resource_type":%q}}]}]},"relationships":{"workspace":{"data":{"id":"ws-source"}}}}}`, providerNamespace, providerName, listType)
 		case "/logs":
 			address := "list." + listType + ".all"
 			identity := map[string]any{"bucket": "sample"}
@@ -251,6 +255,44 @@ func TestImportToolsEndToEndLocalHTTPAndLegacyWire(t *testing.T) {
 	require.NotContains(t, fmt.Sprint(wire.StructuredContent), "resource-object-secret-sentinel")
 	require.NotContains(t, fmt.Sprint(wire.Content), "resource-object-secret-sentinel")
 	require.NotContains(t, fmt.Sprint(wire.Content), "nested-tag-secret-sentinel")
+}
+
+func TestImportToolsCanonicalizeMixedCaseQueryProviderThroughLockAndPlan(t *testing.T) {
+	backend, _ := importWireBackendWithPlanAndProvider(t, "planned_and_finished", "finished", "aws_s3_buckets", "", "HashiCorp", "AWS")
+	c, err := tfe.NewClient(&tfe.Config{Address: backend.URL, Token: "test-token", HTTPClient: backend.Client()})
+	require.NoError(t, err)
+
+	provider := queryResultProvider{Source: "registry.terraform.io/hashicorp/aws", Version: "6.66.0"}
+	identity := map[string]any{"bucket": "sample"}
+	marker, err := queryResultMarker("qry-example", provider, "aws_s3_buckets", identity)
+	require.NoError(t, err)
+	bindings := []ImportBinding{{QueryResultMarker: marker, TargetAddress: "aws_s3_bucket.sample"}}
+
+	prepared, err := ReadPrepareImport(context.Background(), c, PrepareImportInput{
+		OrganizationName: "org",
+		WorkspaceName:    "target",
+		QueryRunID:       "qry-example",
+		Selections:       []ImportSelection{{QueryResultMarker: marker, ManagedType: "aws_s3_bucket"}},
+		LockedProviders:  map[string]string{provider.Source: "6.66.0"},
+	})
+	require.NoError(t, err)
+	require.Equal(t, "prepared", prepared.Status)
+	require.Equal(t, provider.Source, prepared.Types[0].ProviderSource)
+	require.Equal(t, provider, prepared.ImportContext.Providers["aws_s3_buckets"])
+	require.Equal(t, map[string]string{provider.Source: "6.66.0"}, prepared.ImportContext.LockedProviders)
+
+	verified, err := ReadVerifyImportPlan(context.Background(), c, VerifyImportInput{
+		OrganizationName: "org",
+		WorkspaceName:    "target",
+		RunID:            "run-example",
+		ImportContext:    prepared.ImportContext,
+		Bindings:         bindings,
+	})
+	require.NoError(t, err)
+	require.Equal(t, "plan_available", verified.Status)
+	require.Equal(t, 1, verified.Changes["none"])
+	require.Equal(t, 1, verified.ObjectIdentity["matched"])
+	require.Empty(t, verified.Attention)
 }
 
 func TestImportRunUIURLOnlyForKnownHTTPSBrowserHosts(t *testing.T) {
