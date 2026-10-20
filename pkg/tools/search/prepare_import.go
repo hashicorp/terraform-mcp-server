@@ -92,8 +92,10 @@ type PreparedImportSelection struct {
 	IdentityVersion        int                 `json:"identity_version"`
 	Provider               queryResultProvider `json:"provider"`
 	ConfigurationGenerated bool                `json:"configuration_generated"`
-	Configuration          string              `json:"configuration,omitempty"`
-	ImportConfig           string              `json:"import_configuration,omitempty"`
+	// Configuration is Terraform Core resource HCL from the QueryResult log record.
+	Configuration string `json:"configuration,omitempty"`
+	// ImportConfig is Terraform Core import HCL from the QueryResult log record.
+	ImportConfig string `json:"import_configuration,omitempty"`
 }
 
 type HistoricalSchemaSource struct {
