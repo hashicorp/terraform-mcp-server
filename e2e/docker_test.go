@@ -13,19 +13,14 @@ import (
 )
 
 // startHTTPContainer starts the server in stateful streamable HTTP mode.
-func startHTTPContainer(t *testing.T, port string, officialSDK bool) string {
+func startHTTPContainer(t *testing.T, port string) string {
 	t.Helper()
 
 	// Map the host test port to the server's container port.
 	portMapping := fmt.Sprintf("%s:8080", port)
 
-	sdkEnabled := "false"
-	if officialSDK {
-		sdkEnabled = "true"
-	}
-
-	cmd := exec.Command(
-		"docker", "run",
+	args := []string{
+		"run",
 		"-d",
 		"--rm",
 		"-e", "TRANSPORT_MODE=streamable-http",
@@ -33,10 +28,10 @@ func startHTTPContainer(t *testing.T, port string, officialSDK bool) string {
 		"-e", "MCP_SESSION_MODE=stateful",
 		"-e", "MCP_RATE_LIMIT_GLOBAL=50:100",
 		"-e", "MCP_RATE_LIMIT_SESSION=50:100",
-		"-e", officialSDKEnabledEnv+"="+sdkEnabled,
-		"-p", portMapping,
-		"terraform-mcp-server:test-e2e",
-	)
+	}
+	args = append(args, sdkEnvArgs()...)
+	args = append(args, "-p", portMapping, "terraform-mcp-server:test-e2e")
+	cmd := exec.Command("docker", args...)
 
 	output, err := cmd.CombinedOutput()
 	require.NoError(
@@ -167,19 +162,13 @@ func startHTTPContainerWithCORS(
 	port string,
 	mode string,
 	origins string,
-	officialSDK bool,
 ) string {
 	t.Helper()
 
 	portMapping := fmt.Sprintf("%s:8080", port)
 
-	sdkEnabled := "false"
-	if officialSDK {
-		sdkEnabled = "true"
-	}
-
-	cmd := exec.Command(
-		"docker", "run",
+	args := []string{
+		"run",
 		"-d",
 		"--rm",
 		"-e", "TRANSPORT_MODE=streamable-http",
@@ -187,12 +176,12 @@ func startHTTPContainerWithCORS(
 		"-e", "MCP_SESSION_MODE=stateful",
 		"-e", "MCP_RATE_LIMIT_GLOBAL=50:100",
 		"-e", "MCP_RATE_LIMIT_SESSION=50:100",
-		"-e", officialSDKEnabledEnv+"="+sdkEnabled,
-		"-e", "MCP_CORS_MODE="+mode,
-		"-e", "MCP_ALLOWED_ORIGINS="+origins,
-		"-p", portMapping,
-		"terraform-mcp-server:test-e2e",
-	)
+		"-e", "MCP_CORS_MODE=" + mode,
+		"-e", "MCP_ALLOWED_ORIGINS=" + origins,
+	}
+	args = append(args, sdkEnvArgs()...)
+	args = append(args, "-p", portMapping, "terraform-mcp-server:test-e2e")
+	cmd := exec.Command("docker", args...)
 
 	output, err := cmd.CombinedOutput()
 	require.NoError(

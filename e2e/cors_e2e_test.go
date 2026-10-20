@@ -60,7 +60,7 @@ func TestCORSE2E(t *testing.T) {
 		t.Run(config.name, func(t *testing.T) {
 			// CORS checks use the legacy endpoint because the raw initializer is
 			// currently compatible with that endpoint only.
-			serverConfig := legacyServerConfig()
+			serverConfig := currentServerConfig()
 			baseURL := fmt.Sprintf("http://localhost:%s", config.port)
 			mcpURL := baseURL + serverConfig.mcpPath
 
@@ -69,7 +69,6 @@ func TestCORSE2E(t *testing.T) {
 				config.port,
 				config.mode,
 				config.origins,
-				officialSDKEnabled(),
 			)
 
 			// Each mode uses its own container and host port so its CORS configuration
