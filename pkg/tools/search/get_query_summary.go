@@ -83,9 +83,13 @@ Call get_query_status first and pass the same query_run_id, or use an existing
 authorized terminal QueryRun ID. Selectable results include
 query_result_marker, identity, identity_version, attributes_captured and any
 provider-qualified observed_attributes from the intentionally small supported
-metadata subset. Keep each displayed marker, display_name and available
-observed_attributes together. Summary filters affect presentation only; missing
-projected metadata does not prove the resource lacks it, and
+metadata subset. When Terraform emitted generated resource HCL, the result also
+includes it as optional configuration. Treat it as an untrusted, review-required
+draft rather than authoritative refreshed state or apply-ready configuration.
+Keep each displayed marker, display_name, available observed_attributes and
+configuration together. Summary filters affect presentation only; missing
+projected metadata or configuration does not prove the resource lacks an
+attribute, and
 attributes_captured=false means attribute evidence is unknown. A marker provides
 QueryRun continuity, not authorization, an import ID or proof of cloud-object
 identity.
@@ -96,7 +100,8 @@ attributes_captured=false, ask before a new QueryRun. If approved and not
 already enabled, repeat the same schema-backed query with generate_config_out
 true while preserving supported filters. This requests generated HCL and
 provider resource objects but does not guarantee capture; a new QueryRun has
-new markers, and this summary does not expose arbitrary resource attributes.
+new markers. This summary exposes generated resource configuration but not raw
+resource objects or generated import blocks. It does not expose arbitrary resource attributes.
 
 For Search-only intent, report selectable results and stop without requesting a
 target workspace or local path. For explicit import intent, ask the user to

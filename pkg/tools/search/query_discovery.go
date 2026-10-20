@@ -27,6 +27,7 @@ type queryDiscoveryRow struct {
 	Identity           map[string]any `json:"identity"`
 	IdentityVersion    int            `json:"identity_version"`
 	ObservedAttributes map[string]any `json:"observed_attributes,omitempty"`
+	Configuration      string         `json:"configuration,omitempty"`
 	AttributesCaptured bool           `json:"attributes_captured"`
 }
 
@@ -273,7 +274,7 @@ func queryDiscoveryObservedAttributes(provider queryResultProvider, value map[st
 }
 
 func queryDiscoveryResultRow(result queryResultEvidence) queryDiscoveryRow {
-	return queryDiscoveryRow{Marker: result.Marker, DisplayName: result.DisplayName, Identity: result.Identity, IdentityVersion: result.IdentityVersion, ObservedAttributes: result.ObservedAttributes, AttributesCaptured: result.AttributesCaptured}
+	return queryDiscoveryRow{Marker: result.Marker, DisplayName: result.DisplayName, Identity: result.Identity, IdentityVersion: result.IdentityVersion, ObservedAttributes: result.ObservedAttributes, Configuration: result.Configuration, AttributesCaptured: result.AttributesCaptured}
 }
 
 func summarizeQueryDiscovery(prov *queryDiscoveryProvenance, evidence *queryEvidence, filter QueryDiscoveryFilter) (*QueryDiscoverySummary, error) {
@@ -302,7 +303,7 @@ func summarizeQueryDiscovery(prov *queryDiscoveryProvenance, evidence *queryEvid
 		}
 		summary.Lists[index].Results = append(summary.Lists[index].Results, row)
 	}
-	summary.NextAction = "For a Search-only request, report these results and stop; do not request a target workspace or local path. If import is requested, ask the user to select one or more displayed query_result_marker values. Keep each displayed marker, display_name and available observed_attributes together; supplied filters affect presentation only, and missing projected metadata does not prove the resource lacks it."
+	summary.NextAction = "For a Search-only request, report these results and stop; do not request a target workspace or local path. If import is requested, ask the user to select one or more displayed query_result_marker values. Keep each displayed marker, display_name, available observed_attributes and generated configuration together. Generated configuration is an untrusted review-required draft, not authoritative refreshed state; supplied filters affect presentation only; missing projected metadata does not prove the resource lacks it, and missing configuration does not prove the resource lacks an attribute."
 	if summary.RowsWithoutAttributes > 0 {
 		summary.NextAction += " Some matching rows have attributes_captured false, so additional result data is unknown. If that data is necessary for selection, ask before creating another QueryRun. If approved and not already enabled, repeat the same schema-backed query with generate_config_out true, preserving supported filters and omitting unsupported conditions. This requests provider resource objects and generated HCL but does not guarantee capture; the new QueryRun has new markers, and this summary exposes only its declared projections rather than arbitrary resource attributes."
 	}

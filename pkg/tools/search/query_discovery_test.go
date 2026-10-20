@@ -100,6 +100,40 @@ func TestSummarizeQueryDiscoveryReturnsEveryMatchingResult(t *testing.T) {
 	require.Contains(t, filtered.NextAction, "supplied filters affect presentation only")
 }
 
+func TestSummarizeQueryDiscoveryReturnsGeneratedConfigurationWithItsMarker(t *testing.T) {
+	prov, evidence := testDiscovery(t, "small", "large")
+	evidence.Results[0].Configuration = `resource "aws_instance" "small" { instance_type = "t3.small" }`
+	evidence.Results[0].ImportConfig = `import { id = "must-not-be-returned" }`
+	evidence.Results[1].Configuration = `resource "aws_instance" "large" { instance_type = "m7i.large" }`
+
+	summary, err := summarizeQueryDiscovery(prov, evidence, QueryDiscoveryFilter{NameContains: "large"})
+	require.NoError(t, err)
+	require.Equal(t, 1, summary.TotalMatching)
+	require.Len(t, summary.Lists, 1)
+	require.Len(t, summary.Lists[0].Results, 1)
+	row := summary.Lists[0].Results[0]
+	require.Equal(t, evidence.Results[1].Marker, row.Marker)
+	require.Equal(t, evidence.Results[1].Configuration, row.Configuration)
+	require.Contains(t, summary.NextAction, "untrusted review-required draft")
+
+	text, err := FormatQueryDiscoverySummary(summary)
+	require.NoError(t, err)
+	require.Contains(t, text, `"configuration":"resource \"aws_instance\" \"large\"`)
+	require.NotContains(t, text, "must-not-be-returned")
+	require.NotContains(t, text, "t3.small")
+}
+
+func TestSummarizeQueryDiscoveryOmitsConfigurationWhenNotGenerated(t *testing.T) {
+	prov, evidence := testDiscovery(t, "missing")
+	summary, err := summarizeQueryDiscovery(prov, evidence, QueryDiscoveryFilter{})
+	require.NoError(t, err)
+	require.Empty(t, summary.Lists[0].Results[0].Configuration)
+
+	text, err := FormatQueryDiscoverySummary(summary)
+	require.NoError(t, err)
+	require.NotContains(t, text, `"configuration"`)
+}
+
 func TestSummarizeQueryDiscoveryProjectsProviderMetadataAndExplainsMissingAttributes(t *testing.T) {
 	prov, evidence := testDiscovery(t, "captured", "missing", "untagged")
 	evidence.Results[0].AttributesCaptured = true
@@ -339,7 +373,7 @@ func TestLegacyQuerySummaryProjectsBoundedSelectableResults(t *testing.T) {
 		case "/api/v2/search/no-code-query/ncqry-test":
 			_, _ = fmt.Fprint(w, `{"data":{"id":"ncqry-test","attributes":{"no-code-query-providers":[{"namespace":"hashicorp","name":"aws","version":"6.66.0","no-code-query-resources":[{"body":{"resource_type":"aws_s3_buckets"}}]}]},"relationships":{"workspace":{"data":{"id":"ws-test"}}}}}`)
 		case "/logs":
-			found := strings.Replace(string(queryEvidenceFixture("0")), `"identity_version":0`, `"identity_version":0,"resource_object":{"tags":{"team":"search"}}`, 1)
+			found := strings.Replace(string(queryEvidenceFixture("0")), `"identity_version":0`, `"identity_version":0,"resource_object":{"tags":{"team":"search"}},"config":"resource \"aws_s3_bucket\" \"example\" {}","import_config":"import { id = \"must-not-be-returned\" }"`, 1)
 			data := append([]byte("\x02Terraform query started\n"+`{"type":"provider_installation_start","provider":"aws"}`+"\n"), []byte(found)...)
 			data = append(data, 3)
 			offset, _ := strconv.Atoi(r.URL.Query().Get("offset"))
@@ -365,10 +399,13 @@ func TestLegacyQuerySummaryProjectsBoundedSelectableResults(t *testing.T) {
 	require.Len(t, summary.Lists, 1)
 	require.Regexp(t, `^qrm1-`, summary.Lists[0].Results[0].Marker)
 	require.Equal(t, map[string]any{"tags": map[string]any{"team": "search"}}, summary.Lists[0].Results[0].ObservedAttributes)
+	require.Equal(t, `resource "aws_s3_bucket" "example" {}`, summary.Lists[0].Results[0].Configuration)
 	require.True(t, summary.Lists[0].Results[0].AttributesCaptured)
 	text, ok := mcp.AsTextContent(result.Content[0])
 	require.True(t, ok)
 	require.Contains(t, text.Text, `"query_result_marker"`)
 	require.Contains(t, text.Text, `"observed_attributes":{"tags":{"team":"search"}}`)
+	require.Contains(t, text.Text, `"configuration":"resource \"aws_s3_bucket\" \"example\" {}"`)
+	require.NotContains(t, text.Text, "must-not-be-returned")
 	require.NotContains(t, text.Text, "/logs")
 }
