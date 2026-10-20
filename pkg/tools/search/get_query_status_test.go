@@ -43,6 +43,11 @@ type queryStatusWaitContext struct {
 	once    sync.Once
 }
 
+func TestQueryStatusWaitBudgetIsTransportSafe(t *testing.T) {
+	require.Equal(t, 20*time.Second, queryStatusWaitBudget)
+	require.Less(t, queryStatusWaitBudget, 30*time.Second)
+}
+
 func (c *queryStatusWaitContext) Done() <-chan struct{} {
 	c.once.Do(func() { close(c.waiting) })
 	return c.Context.Done()

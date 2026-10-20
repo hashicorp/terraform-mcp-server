@@ -20,7 +20,7 @@ import (
 
 const (
 	queryStatusPollInterval      = 3 * time.Second
-	queryStatusWaitBudget        = 40 * time.Second
+	queryStatusWaitBudget        = 20 * time.Second
 	queryStatusRetryAfterSeconds = 5
 )
 
