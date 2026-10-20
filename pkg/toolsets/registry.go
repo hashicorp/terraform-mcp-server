@@ -103,4 +103,10 @@ var AllTools = []ToolDef{
 	// Terraform - State Versions
 	{Name: "list_state_versions", Toolset: Terraform, RequiresTFE: true},
 	{Name: "get_state_version", Toolset: Terraform, RequiresTFE: true},
+
+	// Terraform - State Inspection
+	{Name: "list_state_resources", Toolset: Terraform, RequiresTFE: true},
+	{Name: "get_state_resource", Toolset: Terraform, RequiresTFE: true},
+	{Name: "search_state_attributes", Toolset: Terraform, RequiresTFE: true},
+	{Name: "get_state_summary", Toolset: Terraform, RequiresTFE: true},
 }

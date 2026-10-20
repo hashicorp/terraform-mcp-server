@@ -102,6 +102,12 @@ var toolFactories = map[string]toolFactory{
 	// Terraform - State Versions
 	"list_state_versions": tfeTools.ListStateVersions,
 	"get_state_version":   tfeTools.GetStateVersion,
+
+	// Terraform - State Inspection
+	"list_state_resources":    tfeTools.ListStateResources,
+	"get_state_resource":      tfeTools.GetStateResource,
+	"search_state_attributes": tfeTools.SearchStateAttributes,
+	"get_state_summary":       tfeTools.GetStateSummary,
 }
 
 // specialFactories covers the 2 tools that don't fit toolFactory's shape:
