@@ -4,6 +4,7 @@
 package search
 
 import (
+	"bufio"
 	"bytes"
 	"crypto/sha256"
 	"encoding/json"
@@ -20,16 +21,17 @@ type queryResultProvider struct {
 }
 
 type queryResultEvidence struct {
-	Marker          string              `json:"query_result_marker"`
-	Address         string              `json:"address"`
-	ResourceType    string              `json:"resource_type"`
-	DisplayName     string              `json:"display_name,omitempty"`
-	Identity        map[string]any      `json:"identity"`
-	IdentityVersion int                 `json:"identity_version"`
-	Provider        queryResultProvider `json:"provider"`
-	ResourceObject  map[string]any      `json:"resource_object,omitempty"`
-	Configuration   string              `json:"configuration,omitempty"`
-	ImportConfig    string              `json:"import_configuration,omitempty"`
+	Marker             string              `json:"query_result_marker"`
+	Address            string              `json:"address"`
+	ResourceType       string              `json:"resource_type"`
+	DisplayName        string              `json:"display_name,omitempty"`
+	Identity           map[string]any      `json:"identity"`
+	IdentityVersion    int                 `json:"identity_version"`
+	Provider           queryResultProvider `json:"provider"`
+	AttributesCaptured bool                `json:"attributes_captured"`
+	ObservedAttributes map[string]any      `json:"observed_attributes,omitempty"`
+	Configuration      string              `json:"configuration,omitempty"`
+	ImportConfig       string              `json:"import_configuration,omitempty"`
 }
 
 type queryEvidence struct {
@@ -58,7 +60,7 @@ type queryFoundResource struct {
 	DisplayName   string          `json:"display_name"`
 	Identity      map[string]any  `json:"identity"`
 	Version       json.RawMessage `json:"identity_version"`
-	Resource      map[string]any  `json:"resource_object"`
+	Resource      json.RawMessage `json:"resource_object"`
 	Config        *string         `json:"config"`
 	ImportConfig  *string         `json:"import_config"`
 	Configuration *string         `json:"configuration"`
@@ -74,6 +76,10 @@ type queryListCompletion struct {
 type queryLogDiagnostic struct {
 	Severity string `json:"severity"`
 }
+
+// queryLogReadBufferSize controls go-tfe LogReader range-request size. It is
+// not an artifact or NDJSON record-size limit.
+const queryLogReadBufferSize = 64 * 1024
 
 // The marker is deterministic within one QueryRun but does not authenticate
 // either a QueryRun or the identity of a cloud object. V0 candidate- values
@@ -166,114 +172,209 @@ func validateQueryEvidenceJSON(raw []byte) error {
 	return nil
 }
 
+// projectQueryResourceObject derives the only resource-object facts retained
+// by Search. The provider-owned object is decoded for the current NDJSON record
+// and discarded before the next record is read.
+func projectQueryResourceObject(provider queryResultProvider, raw json.RawMessage) (bool, map[string]any, error) {
+	trimmed := bytes.TrimSpace(raw)
+	if len(trimmed) == 0 || bytes.Equal(trimmed, []byte("null")) {
+		return false, nil, nil
+	}
+	var resource map[string]any
+	decoder := json.NewDecoder(bytes.NewReader(trimmed))
+	decoder.UseNumber()
+	if err := decoder.Decode(&resource); err != nil || resource == nil {
+		return false, nil, searchDiagnosticError(queryEvidenceInvalidCode)
+	}
+	if _, err := decoder.Token(); !errors.Is(err, io.EOF) {
+		return false, nil, searchDiagnosticError(queryEvidenceInvalidCode)
+	}
+	return true, queryDiscoveryObservedAttributes(provider, resource), nil
+}
+
 // parseQueryEvidence makes the whole QueryRun nonselectable when any found
 // record is malformed, duplicated, lacks a valid version/identity, or has
 // incomplete list totals. It never returns a partial selection on failure.
 func parseQueryEvidence(queryID string, data []byte, providers map[string]queryResultProvider) (*queryEvidence, error) {
+	return parseQueryEvidenceReader(queryID, bytes.NewReader(data), providers)
+}
+
+type queryEvidenceParser struct {
+	queryID       string
+	providers     map[string]queryResultProvider
+	evidence      *queryEvidence
+	counts        map[string]int
+	totals        map[string]int
+	seen          map[string]bool
+	completeTypes map[string]string
+}
+
+func newQueryEvidenceParser(queryID string, providers map[string]queryResultProvider) (*queryEvidenceParser, error) {
 	if queryID == "" {
 		return nil, searchDiagnosticError(queryEvidenceInvalidCode)
 	}
-	out := &queryEvidence{Results: []queryResultEvidence{}, ByType: map[string]int{}}
-	counts, totals, seen := map[string]int{}, map[string]int{}, map[string]bool{}
-	completeTypes := map[string]string{}
-	for _, line := range bytes.Split(data, []byte{'\n'}) {
-		line = bytes.TrimSpace(line)
-		if len(line) == 0 {
-			continue
+	return &queryEvidenceParser{
+		queryID:       queryID,
+		providers:     providers,
+		evidence:      &queryEvidence{Results: []queryResultEvidence{}, ByType: map[string]int{}},
+		counts:        map[string]int{},
+		totals:        map[string]int{},
+		seen:          map[string]bool{},
+		completeTypes: map[string]string{},
+	}, nil
+}
+
+// parseQueryEvidenceReader processes QueryRun NDJSON one record at a time. The
+// explicit buffer size keeps go-tfe LogReader range requests efficient without
+// imposing an artifact or record-size limit.
+func parseQueryEvidenceReader(queryID string, reader io.Reader, providers map[string]queryResultProvider) (*queryEvidence, error) {
+	parser, err := newQueryEvidenceParser(queryID, providers)
+	if err != nil {
+		return nil, err
+	}
+	buffered := bufio.NewReaderSize(reader, queryLogReadBufferSize)
+	for {
+		line, readErr := buffered.ReadBytes('\n')
+		if readErr != nil && !errors.Is(readErr, io.EOF) {
+			return nil, searchDiagnosticErrorWithCause(queryLogUnavailableCode, readErr)
 		}
-		// QueryRun logs also contain ordinary text and JSON progress events.
-		// Like the V0 reader, ignore text that cannot carry a result, but never
-		// silently skip a damaged found/completion/diagnostic record or an
-		// unexpected JSON array. The complete log is still checked below.
-		if !bytes.HasPrefix(line, []byte{'{'}) {
-			if bytes.HasPrefix(line, []byte{'['}) || bytes.Contains(line, []byte("list_resource_found")) || bytes.Contains(line, []byte("list_complete")) || bytes.Contains(line, []byte("diagnostic")) {
-				return nil, searchDiagnosticError(queryEvidenceInvalidCode)
-			}
-			continue
+		if err := parser.consumeLine(line); err != nil {
+			return nil, err
 		}
-		var record queryLogRecord
-		if decodeQueryEvidence(line, &record) != nil {
-			return nil, searchDiagnosticError(queryEvidenceInvalidCode)
-		}
-		switch record.Type {
-		case "list_resource_found":
-			f := record.Found
-			if f == nil || f.Address == "" || f.ResourceType == "" || len(f.Identity) == 0 {
-				return nil, searchDiagnosticError(queryIdentityInvalidCode)
-			}
-			version, ok := validIdentityVersion(f.Version)
-			if !ok {
-				return nil, searchDiagnosticError(queryIdentityVersionInvalidCode)
-			}
-			provider, ok := providers[f.ResourceType]
-			if !ok || provider.Source == "" || provider.Version == "" {
-				return nil, searchDiagnosticError(queryProviderSourceUnresolvedCode)
-			}
-			marker, err := queryResultMarker(queryID, provider, f.ResourceType, f.Identity)
-			if err != nil || seen[marker] {
-				return nil, searchDiagnosticError(queryDuplicateOrInvalidIdentityCode)
-			}
-			seen[marker] = true
-			if f.Config != nil && f.Configuration != nil && *f.Config != *f.Configuration || f.ImportConfig != nil && f.ImportBlock != nil && *f.ImportConfig != *f.ImportBlock {
-				return nil, searchDiagnosticError(queryGeneratedBlockConflictCode)
-			}
-			result := queryResultEvidence{Marker: marker, Address: f.Address, ResourceType: f.ResourceType, DisplayName: f.DisplayName, Identity: f.Identity, IdentityVersion: version, Provider: provider, ResourceObject: f.Resource}
-			if f.Config != nil {
-				result.Configuration = *f.Config
-			} else if f.Configuration != nil {
-				result.Configuration = *f.Configuration
-			}
-			if f.ImportConfig != nil {
-				result.ImportConfig = *f.ImportConfig
-			} else if f.ImportBlock != nil {
-				result.ImportConfig = *f.ImportBlock
-			}
-			out.Results = append(out.Results, result)
-			out.ByType[f.ResourceType]++
-			counts[f.Address]++
-		case "list_complete":
-			if record.Complete == nil || record.Complete.Address == "" || record.Complete.Total < 0 {
-				return nil, searchDiagnosticError(queryEvidenceInvalidCode)
-			}
-			if _, ok := totals[record.Complete.Address]; ok {
-				return nil, searchDiagnosticError(queryEvidenceInvalidCode)
-			}
-			totals[record.Complete.Address] = record.Complete.Total
-			completeTypes[record.Complete.Address] = record.Complete.ResourceType
-		case "diagnostic":
-			if record.Diagnostic == nil || strings.ToLower(record.Diagnostic.Severity) != "warning" {
-				return nil, searchDiagnosticError(queryReportedErrorCode)
-			}
-		case "version", "log", "list_start":
-			if record.Found != nil || record.Complete != nil || record.Diagnostic != nil {
-				return nil, searchDiagnosticError(queryEvidenceInvalidCode)
-			}
-		default:
-			// Progress and policy messages do not contribute result rows. Keep
-			// unknown result-bearing records nonselectable rather than mistaking
-			// them for benign progress messages.
-			if record.Found != nil || record.Complete != nil || record.Diagnostic != nil || strings.Contains(record.Type, "resource_found") || strings.HasPrefix(record.Type, "list_") || strings.Contains(record.Type, "diagnostic") {
-				return nil, searchDiagnosticError(queryEvidenceInvalidCode)
-			}
+		if errors.Is(readErr, io.EOF) {
+			break
 		}
 	}
-	if len(totals) == 0 {
+	return parser.finish()
+}
+
+// consumeLine separates ordinary QueryRun log text from Terraform's NDJSON
+// records. Result-bearing text that is damaged or structurally unexpected is
+// rejected rather than silently treated as progress output.
+func (p *queryEvidenceParser) consumeLine(line []byte) error {
+	line = bytes.TrimSpace(line)
+	if len(line) == 0 {
+		return nil
+	}
+	if !bytes.HasPrefix(line, []byte{'{'}) {
+		if bytes.HasPrefix(line, []byte{'['}) || bytes.Contains(line, []byte("list_resource_found")) || bytes.Contains(line, []byte("list_complete")) || bytes.Contains(line, []byte("diagnostic")) {
+			return searchDiagnosticError(queryEvidenceInvalidCode)
+		}
+		return nil
+	}
+	var record queryLogRecord
+	if decodeQueryEvidence(line, &record) != nil {
+		return searchDiagnosticError(queryEvidenceInvalidCode)
+	}
+	return p.consumeRecord(record)
+}
+
+func (p *queryEvidenceParser) consumeRecord(record queryLogRecord) error {
+	switch record.Type {
+	case "list_resource_found":
+		return p.consumeFound(record.Found)
+	case "list_complete":
+		return p.consumeCompletion(record.Complete)
+	case "diagnostic":
+		return p.consumeDiagnostic(record.Diagnostic)
+	case "version", "log", "list_start":
+		if record.Found != nil || record.Complete != nil || record.Diagnostic != nil {
+			return searchDiagnosticError(queryEvidenceInvalidCode)
+		}
+		return nil
+	default:
+		// Progress and policy messages do not contribute result rows. Keep
+		// unknown result-bearing records nonselectable rather than mistaking
+		// them for benign progress messages.
+		if record.Found != nil || record.Complete != nil || record.Diagnostic != nil || strings.Contains(record.Type, "resource_found") || strings.HasPrefix(record.Type, "list_") || strings.Contains(record.Type, "diagnostic") {
+			return searchDiagnosticError(queryEvidenceInvalidCode)
+		}
+		return nil
+	}
+}
+
+func (p *queryEvidenceParser) consumeFound(found *queryFoundResource) error {
+	if found == nil || found.Address == "" || found.ResourceType == "" || len(found.Identity) == 0 {
+		return searchDiagnosticError(queryIdentityInvalidCode)
+	}
+	version, ok := validIdentityVersion(found.Version)
+	if !ok {
+		return searchDiagnosticError(queryIdentityVersionInvalidCode)
+	}
+	provider, ok := p.providers[found.ResourceType]
+	if !ok || provider.Source == "" || provider.Version == "" {
+		return searchDiagnosticError(queryProviderSourceUnresolvedCode)
+	}
+	marker, err := queryResultMarker(p.queryID, provider, found.ResourceType, found.Identity)
+	if err != nil || p.seen[marker] {
+		return searchDiagnosticError(queryDuplicateOrInvalidIdentityCode)
+	}
+	p.seen[marker] = true
+	if found.Config != nil && found.Configuration != nil && *found.Config != *found.Configuration || found.ImportConfig != nil && found.ImportBlock != nil && *found.ImportConfig != *found.ImportBlock {
+		return searchDiagnosticError(queryGeneratedBlockConflictCode)
+	}
+	captured, observed, err := projectQueryResourceObject(provider, found.Resource)
+	if err != nil {
+		return err
+	}
+	result := queryResultEvidence{
+		Marker: marker, Address: found.Address, ResourceType: found.ResourceType,
+		DisplayName: found.DisplayName, Identity: found.Identity, IdentityVersion: version,
+		Provider: provider, AttributesCaptured: captured, ObservedAttributes: observed,
+	}
+	if found.Config != nil {
+		result.Configuration = *found.Config
+	} else if found.Configuration != nil {
+		result.Configuration = *found.Configuration
+	}
+	if found.ImportConfig != nil {
+		result.ImportConfig = *found.ImportConfig
+	} else if found.ImportBlock != nil {
+		result.ImportConfig = *found.ImportBlock
+	}
+	p.evidence.Results = append(p.evidence.Results, result)
+	p.evidence.ByType[found.ResourceType]++
+	p.counts[found.Address]++
+	return nil
+}
+
+func (p *queryEvidenceParser) consumeCompletion(complete *queryListCompletion) error {
+	if complete == nil || complete.Address == "" || complete.Total < 0 {
+		return searchDiagnosticError(queryEvidenceInvalidCode)
+	}
+	if _, ok := p.totals[complete.Address]; ok {
+		return searchDiagnosticError(queryEvidenceInvalidCode)
+	}
+	p.totals[complete.Address] = complete.Total
+	p.completeTypes[complete.Address] = complete.ResourceType
+	return nil
+}
+
+func (p *queryEvidenceParser) consumeDiagnostic(diagnostic *queryLogDiagnostic) error {
+	if diagnostic == nil || strings.ToLower(diagnostic.Severity) != "warning" {
+		return searchDiagnosticError(queryReportedErrorCode)
+	}
+	return nil
+}
+
+func (p *queryEvidenceParser) finish() (*queryEvidence, error) {
+	if len(p.totals) == 0 {
 		return nil, searchDiagnosticError(queryEvidenceIncompleteCode)
 	}
-	for addr, total := range totals {
-		if counts[addr] != total {
+	for addr, total := range p.totals {
+		if p.counts[addr] != total {
 			return nil, searchDiagnosticError(queryEvidenceIncompleteCode)
 		}
 	}
-	for addr := range counts {
-		if _, ok := totals[addr]; !ok {
+	for addr := range p.counts {
+		if _, ok := p.totals[addr]; !ok {
 			return nil, searchDiagnosticError(queryEvidenceIncompleteCode)
 		}
 	}
-	for _, result := range out.Results {
-		if kind := completeTypes[result.Address]; kind != "" && kind != result.ResourceType {
+	for _, result := range p.evidence.Results {
+		if kind := p.completeTypes[result.Address]; kind != "" && kind != result.ResourceType {
 			return nil, searchDiagnosticError(queryEvidenceIncompleteCode)
 		}
 	}
-	return out, nil
+	return p.evidence, nil
 }

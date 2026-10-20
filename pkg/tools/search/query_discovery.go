@@ -7,7 +7,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"io"
 	"net/http"
 	"net/url"
 	"strings"
@@ -229,13 +228,9 @@ func readQueryDiscovery(ctx context.Context, c *tfe.Client, queryID string) (*qu
 func readQueryEvidence(ctx context.Context, c *tfe.Client, queryID string, prov *queryDiscoveryProvenance) (*queryEvidence, error) {
 	reader, err := c.QueryRuns.Logs(ctx, queryID)
 	if err != nil {
-		return nil, searchDiagnosticError(queryLogUnavailableCode)
+		return nil, searchDiagnosticErrorWithCause(queryLogUnavailableCode, err)
 	}
-	data, err := io.ReadAll(reader)
-	if err != nil {
-		return nil, searchDiagnosticError(queryLogUnavailableCode)
-	}
-	evidence, err := parseQueryEvidence(queryID, data, prov.Providers)
+	evidence, err := parseQueryEvidenceReader(queryID, reader, prov.Providers)
 	if err != nil {
 		return nil, err
 	}
@@ -278,7 +273,7 @@ func queryDiscoveryObservedAttributes(provider queryResultProvider, value map[st
 }
 
 func queryDiscoveryResultRow(result queryResultEvidence) queryDiscoveryRow {
-	return queryDiscoveryRow{Marker: result.Marker, DisplayName: result.DisplayName, Identity: result.Identity, IdentityVersion: result.IdentityVersion, ObservedAttributes: queryDiscoveryObservedAttributes(result.Provider, result.ResourceObject), AttributesCaptured: result.ResourceObject != nil}
+	return queryDiscoveryRow{Marker: result.Marker, DisplayName: result.DisplayName, Identity: result.Identity, IdentityVersion: result.IdentityVersion, ObservedAttributes: result.ObservedAttributes, AttributesCaptured: result.AttributesCaptured}
 }
 
 func summarizeQueryDiscovery(prov *queryDiscoveryProvenance, evidence *queryEvidence, filter QueryDiscoveryFilter) (*QueryDiscoverySummary, error) {
@@ -294,7 +289,7 @@ func summarizeQueryDiscovery(prov *queryDiscoveryProvenance, evidence *queryEvid
 			continue
 		}
 		summary.TotalMatching++
-		if result.ResourceObject == nil {
+		if !result.AttributesCaptured {
 			summary.RowsWithoutAttributes++
 		}
 		row := queryDiscoveryResultRow(result)

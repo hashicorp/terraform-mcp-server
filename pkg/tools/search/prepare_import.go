@@ -136,8 +136,8 @@ func preparedImportSelection(result queryResultEvidence) PreparedImportSelection
 		Identity:           result.Identity,
 		IdentityVersion:    result.IdentityVersion,
 		Provider:           result.Provider,
-		AttributesCaptured: result.ResourceObject != nil,
-		ObservedAttributes: queryDiscoveryObservedAttributes(result.Provider, result.ResourceObject),
+		AttributesCaptured: result.AttributesCaptured,
+		ObservedAttributes: result.ObservedAttributes,
 		Configuration:      result.Configuration,
 		ImportConfig:       result.ImportConfig,
 	}

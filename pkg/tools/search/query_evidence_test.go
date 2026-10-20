@@ -4,10 +4,15 @@
 package search
 
 import (
+	"bytes"
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"strings"
 	"testing"
+	"testing/iotest"
 
 	"github.com/stretchr/testify/require"
 )
@@ -89,6 +94,60 @@ func TestQueryEvidenceDoesNotApplyByteOrDepthCaps(t *testing.T) {
 	raw := []byte(strings.Repeat("[", 40) + `{"value":"` + strings.Repeat("x", 128*1024) + `"}` + strings.Repeat("]", 40))
 	var value any
 	require.NoError(t, decodeQueryEvidence(raw, &value))
+}
+
+func TestQueryEvidenceReaderHandlesFragmentedRecordsAndFinalLine(t *testing.T) {
+	data := bytes.TrimSuffix(queryEvidenceFixture("0"), []byte{'\n'})
+	evidence, err := parseQueryEvidenceReader("qry-one", iotest.OneByteReader(bytes.NewReader(data)), testQueryProviders())
+	require.NoError(t, err)
+	require.Len(t, evidence.Results, 1)
+	require.Equal(t, "example", evidence.Results[0].DisplayName)
+}
+
+func TestQueryEvidenceReaderAcceptsRecordLargerThanReadBuffer(t *testing.T) {
+	displayName := strings.Repeat("x", 128*1024)
+	data := bytes.Replace(queryEvidenceFixture("0"), []byte(`"display_name":"example"`), []byte(`"display_name":"`+displayName+`"`), 1)
+	evidence, err := parseQueryEvidenceReader("qry-one", bytes.NewReader(data), testQueryProviders())
+	require.NoError(t, err)
+	require.Equal(t, displayName, evidence.Results[0].DisplayName)
+}
+
+func TestQueryEvidenceReaderFailsClosedOnLateReadError(t *testing.T) {
+	sentinel := errors.New("signed backend detail")
+	found := bytes.Split(queryEvidenceFixture("0"), []byte{'\n'})[0]
+	reader := io.MultiReader(bytes.NewReader(append(found, '\n')), iotest.ErrReader(sentinel))
+	evidence, err := parseQueryEvidenceReader("qry-one", reader, testQueryProviders())
+	require.Nil(t, evidence)
+	require.Equal(t, "query_log_unavailable", err.Error())
+	require.ErrorIs(t, err, sentinel)
+	require.NotContains(t, err.Error(), "signed backend detail")
+}
+
+func TestQueryEvidenceReaderPreservesCallerCancellation(t *testing.T) {
+	evidence, err := parseQueryEvidenceReader("qry-one", iotest.ErrReader(context.Canceled), testQueryProviders())
+	require.Nil(t, evidence)
+	require.Equal(t, "query_log_unavailable", err.Error())
+	require.ErrorIs(t, err, context.Canceled)
+}
+
+func TestValidateQueryEvidenceJSONAcceptsDeepContainersAndRejectsNestedDuplicates(t *testing.T) {
+	raw := []byte(strings.Repeat("[", 1000) + `0` + strings.Repeat("]", 1000))
+	require.NoError(t, validateQueryEvidenceJSON(raw))
+
+	duplicate := []byte(strings.Repeat("[", 1000) + `{"key":1,"key":2}` + strings.Repeat("]", 1000))
+	require.EqualError(t, validateQueryEvidenceJSON(duplicate), "query_evidence_invalid")
+}
+
+func TestQueryEvidenceProjectsAndDiscardsResourceObject(t *testing.T) {
+	data := bytes.Replace(queryEvidenceFixture("0"), []byte(`"identity_version":0`), []byte(`"identity_version":0,"resource_object":{"tags":{"team":"search","nested":{"password":"secret"}},"password":"secret"}`), 1)
+	evidence, err := parseQueryEvidenceReader("qry-one", bytes.NewReader(data), testQueryProviders())
+	require.NoError(t, err)
+	require.True(t, evidence.Results[0].AttributesCaptured)
+	require.Equal(t, map[string]any{"tags": map[string]any{"team": "search"}}, evidence.Results[0].ObservedAttributes)
+	encoded, err := json.Marshal(evidence)
+	require.NoError(t, err)
+	require.NotContains(t, string(encoded), "password")
+	require.NotContains(t, string(encoded), "secret")
 }
 
 func TestQueryEvidencePreservesGeneratedBlocksBeyondFormerLimit(t *testing.T) {

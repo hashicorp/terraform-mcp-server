@@ -102,12 +102,13 @@ func TestSummarizeQueryDiscoveryReturnsEveryMatchingResult(t *testing.T) {
 
 func TestSummarizeQueryDiscoveryProjectsProviderMetadataAndExplainsMissingAttributes(t *testing.T) {
 	prov, evidence := testDiscovery(t, "captured", "missing", "untagged")
-	evidence.Results[0].ResourceObject = map[string]any{
+	evidence.Results[0].AttributesCaptured = true
+	evidence.Results[0].ObservedAttributes = queryDiscoveryObservedAttributes(evidence.Results[0].Provider, map[string]any{
 		"tags":     map[string]any{"team": "search", "enabled": true, "count": json.Number("2"), "nested": map[string]any{"private": "value"}},
 		"tags_all": map[string]any{"team": "search", "inherited": "yes"},
 		"labels":   map[string]any{"must": "not be projected for aws"},
-	}
-	evidence.Results[2].ResourceObject = map[string]any{"name": "untagged"}
+	})
+	evidence.Results[2].AttributesCaptured = true
 	summary, err := summarizeQueryDiscovery(prov, evidence, QueryDiscoveryFilter{})
 	require.NoError(t, err)
 	require.Equal(t, 1, summary.RowsWithoutAttributes)
@@ -136,8 +137,9 @@ func TestSummarizeQueryDiscoveryProjectsProviderMetadataAndExplainsMissingAttrib
 
 func TestSummarizeQueryDiscoveryDoesNotRecommendRetryWhenAllRowsCaptured(t *testing.T) {
 	prov, evidence := testDiscovery(t, "captured", "captured-without-tags")
-	evidence.Results[0].ResourceObject = map[string]any{"tags": map[string]any{"environment": "production"}}
-	evidence.Results[1].ResourceObject = map[string]any{"name": "captured-without-tags"}
+	evidence.Results[0].AttributesCaptured = true
+	evidence.Results[0].ObservedAttributes = map[string]any{"tags": map[string]any{"environment": "production"}}
+	evidence.Results[1].AttributesCaptured = true
 	summary, err := summarizeQueryDiscovery(prov, evidence, QueryDiscoveryFilter{})
 	require.NoError(t, err)
 	require.Zero(t, summary.RowsWithoutAttributes)
