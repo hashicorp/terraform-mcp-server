@@ -77,6 +77,25 @@ func TestToolLoggingMiddleware_ToolError(t *testing.T) {
 	assert.Contains(t, logOutput, "listing workspaces: permission denied")
 }
 
+func TestToolLoggingMiddleware_DoesNotLogSearchArgumentsOrErrors(t *testing.T) {
+	var buf bytes.Buffer
+	logger := slog.New(slog.NewTextHandler(&buf, nil))
+	next := func(context.Context, string, mcp.Request) (mcp.Result, error) {
+		return nil, errors.New("search-error-secret-sentinel")
+	}
+	argsJSON, err := json.Marshal(map[string]any{"import_context": "search-argument-secret-sentinel"})
+	require.NoError(t, err)
+	request := &mcp.CallToolRequest{Params: &mcp.CallToolParamsRaw{Name: "prepare_import", Arguments: argsJSON}}
+
+	_, err = ToolLogging(logger)(next)(context.Background(), "tools/call", request)
+
+	require.Error(t, err)
+	assert.Contains(t, buf.String(), "prepare_import")
+	assert.NotContains(t, buf.String(), "search-error-secret-sentinel")
+	assert.NotContains(t, buf.String(), "search-argument-secret-sentinel")
+	assert.NotContains(t, buf.String(), "import_context")
+}
+
 func TestToolLoggingMiddleware_MethodError(t *testing.T) {
 	var buf bytes.Buffer
 	logger := slog.New(slog.NewTextHandler(&buf, nil))

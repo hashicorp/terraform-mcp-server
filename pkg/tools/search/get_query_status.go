@@ -102,7 +102,7 @@ func getQueryStatusHandlerWithConfig(ctx context.Context, request mcp.CallToolRe
 
 	tfeClient, err := client.GetTfeClientFromContext(pollCtx, logger)
 	if err != nil {
-		return toolErrorf(logger, "get_query_status", "failed to get Terraform client: %v", err)
+		return toolErrorf(logger, "get_query_status", "%v", TerraformClientUnavailableError(err))
 	}
 	return getQueryStatusWithClient(ctx, pollCtx, tfeClient, queryRunID, logger, config)
 }
@@ -125,17 +125,17 @@ func getQueryStatusWithClient(ctx, pollCtx context.Context, tfeClient *tfe.Clien
 		return toolErrorf(logger, "get_query_status", "missing required input: query_run_id")
 	}
 	if err := callerCancellation(ctx); err != nil {
-		return toolErrorf(logger, "get_query_status", "failed to get query run %q: %v", queryRunID, err)
+		return toolErrorf(logger, "get_query_status", "%v", QueryStatusUnavailableError(err))
 	}
 
 	response, err := waitForQueryStatus(ctx, pollCtx, tfeClient, queryRunID, config.pollInterval, logger)
 	if err != nil {
-		return toolErrorf(logger, "get_query_status", "failed to get query run %q: %v", queryRunID, err)
+		return toolErrorf(logger, "get_query_status", "%v", QueryStatusUnavailableError(err))
 	}
 
 	formatted, err := FormatQueryStatus(response)
 	if err != nil {
-		return toolErrorf(logger, "get_query_status", "failed to marshal query run %q: %v", queryRunID, err)
+		return toolErrorf(logger, "get_query_status", "%v", QueryStatusUnavailableError(err))
 	}
 	return mcp.NewToolResultStructured(response, formatted), nil
 }
@@ -234,21 +234,17 @@ func callerCancellation(ctx context.Context) error {
 	return context.Cause(ctx)
 }
 
-func logQueryStatusPoll(logger *log.Logger, queryRunID string, pollCount int, startedAt time.Time, response *queryStatusResponse, reason string, err error) {
+func logQueryStatusPoll(logger *log.Logger, _ string, pollCount int, startedAt time.Time, response *queryStatusResponse, reason string, _ error) {
 	if logger == nil {
 		return
 	}
 	fields := log.Fields{
-		"query_run_id": queryRunID,
-		"poll_count":   pollCount,
-		"elapsed":      time.Since(startedAt),
-		"reason":       reason,
+		"poll_count": pollCount,
+		"elapsed":    time.Since(startedAt),
+		"reason":     reason,
 	}
 	if response != nil {
 		fields["last_status"] = response.Status
-	}
-	if err != nil {
-		fields["error"] = err
 	}
 	logger.WithFields(fields).Debug("Polled HCP Terraform query run status")
 }

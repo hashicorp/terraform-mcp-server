@@ -100,19 +100,26 @@ func TestSummarizeQueryDiscoveryReturnsEveryMatchingResult(t *testing.T) {
 	require.Contains(t, filtered.NextAction, "supplied filters affect presentation only")
 }
 
-func TestSummarizeQueryDiscoveryProjectsTagsAndExplainsMissingAttributes(t *testing.T) {
+func TestSummarizeQueryDiscoveryProjectsProviderMetadataAndExplainsMissingAttributes(t *testing.T) {
 	prov, evidence := testDiscovery(t, "captured", "missing", "untagged")
-	evidence.Results[0].ResourceObject = map[string]any{"tags": map[string]any{"team": "search", "enabled": true, "count": json.Number("2"), "nested": map[string]any{"private": "value"}}}
+	evidence.Results[0].ResourceObject = map[string]any{
+		"tags":     map[string]any{"team": "search", "enabled": true, "count": json.Number("2"), "nested": map[string]any{"private": "value"}},
+		"tags_all": map[string]any{"team": "search", "inherited": "yes"},
+		"labels":   map[string]any{"must": "not be projected for aws"},
+	}
 	evidence.Results[2].ResourceObject = map[string]any{"name": "untagged"}
 	summary, err := summarizeQueryDiscovery(prov, evidence, QueryDiscoveryFilter{})
 	require.NoError(t, err)
 	require.Equal(t, 1, summary.RowsWithoutAttributes)
-	require.Equal(t, map[string]any{"team": "search", "enabled": true, "count": json.Number("2")}, summary.Lists[0].Results[0].Tags)
+	require.Equal(t, map[string]any{
+		"tags":     map[string]any{"team": "search", "enabled": true, "count": json.Number("2")},
+		"tags_all": map[string]any{"team": "search", "inherited": "yes"},
+	}, summary.Lists[0].Results[0].ObservedAttributes)
 	require.True(t, summary.Lists[0].Results[0].AttributesCaptured)
 	require.False(t, summary.Lists[0].Results[1].AttributesCaptured)
-	require.Empty(t, summary.Lists[0].Results[1].Tags)
+	require.Empty(t, summary.Lists[0].Results[1].ObservedAttributes)
 	require.True(t, summary.Lists[0].Results[2].AttributesCaptured)
-	require.Empty(t, summary.Lists[0].Results[2].Tags)
+	require.Empty(t, summary.Lists[0].Results[2].ObservedAttributes)
 	require.Contains(t, summary.NextAction, "attributes_captured false")
 	require.Contains(t, summary.NextAction, "ask before creating another QueryRun")
 	require.Contains(t, summary.NextAction, "generate_config_out true")
@@ -135,7 +142,35 @@ func TestSummarizeQueryDiscoveryDoesNotRecommendRetryWhenAllRowsCaptured(t *test
 	require.NoError(t, err)
 	require.Zero(t, summary.RowsWithoutAttributes)
 	require.NotContains(t, summary.NextAction, "repeat the same schema-backed query")
-	require.Contains(t, summary.NextAction, "missing tags do not prove a resource is untagged")
+	require.Contains(t, summary.NextAction, "missing projected metadata does not prove")
+}
+
+func TestQueryDiscoveryObservedAttributesUsesSmallProviderQualifiedSubset(t *testing.T) {
+	resource := map[string]any{
+		"tags":                  map[string]any{"team": "search", "nested": map[string]any{"secret": "omit"}},
+		"tags_all":              map[string]any{"team": "search", "default": "yes"},
+		"labels":                map[string]any{"environment": "prod"},
+		"terraform_labels":      map[string]any{"managed": true},
+		"effective_labels":      map[string]any{"external": "present"},
+		"resource_manager_tags": map[string]any{"tagKeys/1": "tagValues/2"},
+		"password":              "must-not-be-projected",
+	}
+
+	tests := []struct {
+		name, source string
+		want         map[string]any
+	}{
+		{"aws", "registry.terraform.io/hashicorp/aws", map[string]any{"tags": map[string]any{"team": "search"}, "tags_all": map[string]any{"team": "search", "default": "yes"}}},
+		{"azurerm", "registry.terraform.io/hashicorp/azurerm", map[string]any{"tags": map[string]any{"team": "search"}}},
+		{"google", "registry.terraform.io/hashicorp/google", map[string]any{"labels": map[string]any{"environment": "prod"}, "terraform_labels": map[string]any{"managed": true}, "effective_labels": map[string]any{"external": "present"}, "resource_manager_tags": map[string]any{"tagKeys/1": "tagValues/2"}}},
+		{"google beta", "registry.terraform.io/hashicorp/google-beta", map[string]any{"labels": map[string]any{"environment": "prod"}, "terraform_labels": map[string]any{"managed": true}, "effective_labels": map[string]any{"external": "present"}, "resource_manager_tags": map[string]any{"tagKeys/1": "tagValues/2"}}},
+		{"unsupported provider", "registry.terraform.io/example/example", nil},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			require.Equal(t, test.want, queryDiscoveryObservedAttributes(queryResultProvider{Source: test.source}, resource))
+		})
+	}
 }
 
 func TestSummarizeQueryDiscoveryDoesNotApplyOutputSizeCaps(t *testing.T) {
@@ -303,11 +338,11 @@ func TestLegacyQuerySummaryProjectsBoundedSelectableResults(t *testing.T) {
 	require.Equal(t, "org", summary.SourceOrganizationName)
 	require.Len(t, summary.Lists, 1)
 	require.Regexp(t, `^qrm1-`, summary.Lists[0].Results[0].Marker)
-	require.Equal(t, map[string]any{"team": "search"}, summary.Lists[0].Results[0].Tags)
+	require.Equal(t, map[string]any{"tags": map[string]any{"team": "search"}}, summary.Lists[0].Results[0].ObservedAttributes)
 	require.True(t, summary.Lists[0].Results[0].AttributesCaptured)
 	text, ok := mcp.AsTextContent(result.Content[0])
 	require.True(t, ok)
 	require.Contains(t, text.Text, `"query_result_marker"`)
-	require.Contains(t, text.Text, `"tags":{"team":"search"}`)
+	require.Contains(t, text.Text, `"observed_attributes":{"tags":{"team":"search"}}`)
 	require.NotContains(t, text.Text, "/logs")
 }

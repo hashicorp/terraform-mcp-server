@@ -26,7 +26,7 @@ type queryDiscoveryRow struct {
 	DisplayName        string         `json:"display_name,omitempty"`
 	Identity           map[string]any `json:"identity"`
 	IdentityVersion    int            `json:"identity_version"`
-	Tags               map[string]any `json:"tags,omitempty"`
+	ObservedAttributes map[string]any `json:"observed_attributes,omitempty"`
 	AttributesCaptured bool           `json:"attributes_captured"`
 }
 
@@ -224,23 +224,43 @@ func readQueryEvidence(ctx context.Context, c *tfe.Client, queryID string, prov 
 	return evidence, nil
 }
 
-func queryDiscoveryTags(value map[string]any) map[string]any {
-	raw, ok := value["tags"].(map[string]any)
-	if !ok {
+func queryDiscoveryObservedAttributes(provider queryResultProvider, value map[string]any) map[string]any {
+	// This is an intentionally small provider-qualified metadata projection,
+	// not a general claim that arbitrary resource attributes are safe to return.
+	var names []string
+	switch strings.ToLower(provider.Source) {
+	case "registry.terraform.io/hashicorp/aws":
+		names = []string{"tags", "tags_all"}
+	case "registry.terraform.io/hashicorp/azurerm":
+		names = []string{"tags"}
+	case "registry.terraform.io/hashicorp/google", "registry.terraform.io/hashicorp/google-beta":
+		names = []string{"labels", "terraform_labels", "effective_labels", "resource_manager_tags"}
+	default:
 		return nil
 	}
-	tags := make(map[string]any)
-	for key, tag := range raw {
-		switch tag.(type) {
-		case string, bool, json.Number:
-			tags[key] = tag
+
+	observed := make(map[string]any)
+	for _, name := range names {
+		raw, ok := value[name].(map[string]any)
+		if !ok {
+			continue
+		}
+		scalars := make(map[string]any)
+		for key, item := range raw {
+			switch item.(type) {
+			case string, bool, json.Number:
+				scalars[key] = item
+			}
+		}
+		if len(scalars) > 0 {
+			observed[name] = scalars
 		}
 	}
-	return tags
+	return observed
 }
 
 func queryDiscoveryResultRow(result queryResultEvidence) queryDiscoveryRow {
-	return queryDiscoveryRow{Marker: result.Marker, DisplayName: result.DisplayName, Identity: result.Identity, IdentityVersion: result.IdentityVersion, Tags: queryDiscoveryTags(result.ResourceObject), AttributesCaptured: result.ResourceObject != nil}
+	return queryDiscoveryRow{Marker: result.Marker, DisplayName: result.DisplayName, Identity: result.Identity, IdentityVersion: result.IdentityVersion, ObservedAttributes: queryDiscoveryObservedAttributes(result.Provider, result.ResourceObject), AttributesCaptured: result.ResourceObject != nil}
 }
 
 func summarizeQueryDiscovery(prov *queryDiscoveryProvenance, evidence *queryEvidence, filter QueryDiscoveryFilter) (*QueryDiscoverySummary, error) {
@@ -269,7 +289,7 @@ func summarizeQueryDiscovery(prov *queryDiscoveryProvenance, evidence *queryEvid
 		}
 		summary.Lists[index].Results = append(summary.Lists[index].Results, row)
 	}
-	summary.NextAction = "For a Search-only request, report these results and stop; do not request a target workspace or local path. If import is requested, ask the user to select one or more displayed query_result_marker values. Keep each displayed marker, display_name and available tags together; supplied filters affect presentation only, and missing tags do not prove a resource is untagged."
+	summary.NextAction = "For a Search-only request, report these results and stop; do not request a target workspace or local path. If import is requested, ask the user to select one or more displayed query_result_marker values. Keep each displayed marker, display_name and available observed_attributes together; supplied filters affect presentation only, and missing projected metadata does not prove the resource lacks it."
 	if summary.RowsWithoutAttributes > 0 {
 		summary.NextAction += " Some matching rows have attributes_captured false, so additional result data is unknown. If that data is necessary for selection, ask before creating another QueryRun. If approved and not already enabled, repeat the same schema-backed query with generate_config_out true, preserving supported filters and omitting unsupported conditions. This requests provider resource objects and generated HCL but does not guarantee capture; the new QueryRun has new markers, and this summary exposes only its declared projections rather than arbitrary resource attributes."
 	}
