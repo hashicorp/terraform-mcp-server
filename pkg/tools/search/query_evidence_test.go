@@ -138,14 +138,14 @@ func TestValidateQueryEvidenceJSONAcceptsDeepContainersAndRejectsNestedDuplicate
 	require.EqualError(t, validateQueryEvidenceJSON(duplicate), "query_evidence_invalid")
 }
 
-func TestQueryEvidenceProjectsAndDiscardsResourceObject(t *testing.T) {
+func TestQueryEvidenceIgnoresResourceObject(t *testing.T) {
 	data := bytes.Replace(queryEvidenceFixture("0"), []byte(`"identity_version":0`), []byte(`"identity_version":0,"resource_object":{"tags":{"team":"search","nested":{"password":"secret"}},"password":"secret"}`), 1)
 	evidence, err := parseQueryEvidenceReader("qry-one", bytes.NewReader(data), testQueryProviders())
 	require.NoError(t, err)
-	require.True(t, evidence.Results[0].AttributesCaptured)
-	require.Equal(t, map[string]any{"tags": map[string]any{"team": "search"}}, evidence.Results[0].ObservedAttributes)
 	encoded, err := json.Marshal(evidence)
 	require.NoError(t, err)
+	require.NotContains(t, string(encoded), "resource_object")
+	require.NotContains(t, string(encoded), "tags")
 	require.NotContains(t, string(encoded), "password")
 	require.NotContains(t, string(encoded), "secret")
 }

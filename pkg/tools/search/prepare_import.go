@@ -81,21 +81,19 @@ type PreparedImportType struct {
 }
 
 // PreparedImportSelection is the explicit prepare_import projection for a
-// selected QueryRun result. The raw provider resource_object remains internal;
-// only the same scalar tag projection exposed by get_query_summary crosses the
-// tool boundary.
+// selected QueryRun result. Full generated HCL is retained as the authoring
+// input; the summary-only convenience projection is not duplicated here.
 type PreparedImportSelection struct {
-	QueryResultMarker  string              `json:"query_result_marker"`
-	Address            string              `json:"address"`
-	ResourceType       string              `json:"resource_type"`
-	DisplayName        string              `json:"display_name,omitempty"`
-	Identity           map[string]any      `json:"identity"`
-	IdentityVersion    int                 `json:"identity_version"`
-	Provider           queryResultProvider `json:"provider"`
-	AttributesCaptured bool                `json:"attributes_captured"`
-	ObservedAttributes map[string]any      `json:"observed_attributes,omitempty"`
-	Configuration      string              `json:"configuration,omitempty"`
-	ImportConfig       string              `json:"import_configuration,omitempty"`
+	QueryResultMarker      string              `json:"query_result_marker"`
+	Address                string              `json:"address"`
+	ResourceType           string              `json:"resource_type"`
+	DisplayName            string              `json:"display_name,omitempty"`
+	Identity               map[string]any      `json:"identity"`
+	IdentityVersion        int                 `json:"identity_version"`
+	Provider               queryResultProvider `json:"provider"`
+	ConfigurationGenerated bool                `json:"configuration_generated"`
+	Configuration          string              `json:"configuration,omitempty"`
+	ImportConfig           string              `json:"import_configuration,omitempty"`
 }
 
 type HistoricalSchemaSource struct {
@@ -114,6 +112,7 @@ type PrepareImportResult struct {
 	SourceOrganizationName            string                    `json:"source_organization_name,omitempty"`
 	SourceWorkspaceName               string                    `json:"source_workspace_name,omitempty"`
 	SourceWorkspaceID                 string                    `json:"source_workspace_id,omitempty"`
+	GenerateConfigOut                 bool                      `json:"generate_config_out"`
 	OrganizationName                  string                    `json:"organization_name,omitempty"`
 	TargetWorkspaceName               string                    `json:"target_workspace_name,omitempty"`
 	WorkspaceID                       string                    `json:"workspace_id,omitempty"`
@@ -129,17 +128,16 @@ type PrepareImportResult struct {
 
 func preparedImportSelection(result queryResultEvidence) PreparedImportSelection {
 	return PreparedImportSelection{
-		QueryResultMarker:  result.Marker,
-		Address:            result.Address,
-		ResourceType:       result.ResourceType,
-		DisplayName:        result.DisplayName,
-		Identity:           result.Identity,
-		IdentityVersion:    result.IdentityVersion,
-		Provider:           result.Provider,
-		AttributesCaptured: result.AttributesCaptured,
-		ObservedAttributes: result.ObservedAttributes,
-		Configuration:      result.Configuration,
-		ImportConfig:       result.ImportConfig,
+		QueryResultMarker:      result.Marker,
+		Address:                result.Address,
+		ResourceType:           result.ResourceType,
+		DisplayName:            result.DisplayName,
+		Identity:               result.Identity,
+		IdentityVersion:        result.IdentityVersion,
+		Provider:               result.Provider,
+		ConfigurationGenerated: strings.TrimSpace(result.Configuration) != "",
+		Configuration:          result.Configuration,
+		ImportConfig:           result.ImportConfig,
 	}
 }
 
@@ -368,7 +366,8 @@ func ReadPrepareImport(ctx context.Context, c *tfe.Client, input PrepareImportIn
 	}
 	out := &PrepareImportResult{Status: "blocked", Diagnostics: []string{}, QueryRunID: input.QueryRunID,
 		SourceOrganizationName: prov.Organization, SourceWorkspaceName: prov.WorkspaceName, SourceWorkspaceID: prov.WorkspaceID,
-		OrganizationName: w.Organization.Name, TargetWorkspaceName: w.Name, WorkspaceID: w.ID, ExecutionMode: w.ExecutionMode,
+		GenerateConfigOut: prov.GenerateConfigOut,
+		OrganizationName:  w.Organization.Name, TargetWorkspaceName: w.Name, WorkspaceID: w.ID, ExecutionMode: w.ExecutionMode,
 		TargetTerraformSetting: w.TerraformVersion, VCSLinked: w.VCSRepo != nil}
 	blocked := func(code string) (*PrepareImportResult, error) {
 		out.Diagnostics = []string{code}
@@ -405,6 +404,11 @@ func ReadPrepareImport(ctx context.Context, c *tfe.Client, input PrepareImportIn
 		}
 		if _, ok := input.LockedProviders[found.Provider.Source]; !ok {
 			return nil, searchDiagnosticErrorWithDetail(lockVersionsInvalidCode, fmt.Sprintf("locked_providers must include the exact provider source %q required by the selected Search result; copy it from .terraform.lock.hcl", found.Provider.Source))
+		}
+		if strings.TrimSpace(found.Configuration) != "" {
+			if _, err := projectGeneratedConfiguration(found.Configuration); err != nil {
+				return nil, err
+			}
 		}
 		out.SelectedResults = append(out.SelectedResults, preparedImportSelection(found))
 		importContext.Providers[found.ResourceType] = found.Provider

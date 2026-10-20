@@ -21,17 +21,15 @@ type queryResultProvider struct {
 }
 
 type queryResultEvidence struct {
-	Marker             string              `json:"query_result_marker"`
-	Address            string              `json:"address"`
-	ResourceType       string              `json:"resource_type"`
-	DisplayName        string              `json:"display_name,omitempty"`
-	Identity           map[string]any      `json:"identity"`
-	IdentityVersion    int                 `json:"identity_version"`
-	Provider           queryResultProvider `json:"provider"`
-	AttributesCaptured bool                `json:"attributes_captured"`
-	ObservedAttributes map[string]any      `json:"observed_attributes,omitempty"`
-	Configuration      string              `json:"configuration,omitempty"`
-	ImportConfig       string              `json:"import_configuration,omitempty"`
+	Marker          string              `json:"query_result_marker"`
+	Address         string              `json:"address"`
+	ResourceType    string              `json:"resource_type"`
+	DisplayName     string              `json:"display_name,omitempty"`
+	Identity        map[string]any      `json:"identity"`
+	IdentityVersion int                 `json:"identity_version"`
+	Provider        queryResultProvider `json:"provider"`
+	Configuration   string              `json:"configuration,omitempty"`
+	ImportConfig    string              `json:"import_configuration,omitempty"`
 }
 
 type queryEvidence struct {
@@ -60,7 +58,6 @@ type queryFoundResource struct {
 	DisplayName   string          `json:"display_name"`
 	Identity      map[string]any  `json:"identity"`
 	Version       json.RawMessage `json:"identity_version"`
-	Resource      json.RawMessage `json:"resource_object"`
 	Config        *string         `json:"config"`
 	ImportConfig  *string         `json:"import_config"`
 	Configuration *string         `json:"configuration"`
@@ -170,26 +167,6 @@ func validateQueryEvidenceJSON(raw []byte) error {
 		return searchDiagnosticError(queryEvidenceInvalidCode)
 	}
 	return nil
-}
-
-// projectQueryResourceObject derives the only resource-object facts retained
-// by Search. The provider-owned object is decoded for the current NDJSON record
-// and discarded before the next record is read.
-func projectQueryResourceObject(provider queryResultProvider, raw json.RawMessage) (bool, map[string]any, error) {
-	trimmed := bytes.TrimSpace(raw)
-	if len(trimmed) == 0 || bytes.Equal(trimmed, []byte("null")) {
-		return false, nil, nil
-	}
-	var resource map[string]any
-	decoder := json.NewDecoder(bytes.NewReader(trimmed))
-	decoder.UseNumber()
-	if err := decoder.Decode(&resource); err != nil || resource == nil {
-		return false, nil, searchDiagnosticError(queryEvidenceInvalidCode)
-	}
-	if _, err := decoder.Token(); !errors.Is(err, io.EOF) {
-		return false, nil, searchDiagnosticError(queryEvidenceInvalidCode)
-	}
-	return true, queryDiscoveryObservedAttributes(provider, resource), nil
 }
 
 // parseQueryEvidence makes the whole QueryRun nonselectable when any found
@@ -313,18 +290,14 @@ func (p *queryEvidenceParser) consumeFound(found *queryFoundResource) error {
 	if found.Config != nil && found.Configuration != nil && *found.Config != *found.Configuration || found.ImportConfig != nil && found.ImportBlock != nil && *found.ImportConfig != *found.ImportBlock {
 		return searchDiagnosticError(queryGeneratedBlockConflictCode)
 	}
-	captured, observed, err := projectQueryResourceObject(provider, found.Resource)
-	if err != nil {
-		return err
-	}
 	result := queryResultEvidence{
 		Marker: marker, Address: found.Address, ResourceType: found.ResourceType,
 		DisplayName: found.DisplayName, Identity: found.Identity, IdentityVersion: version,
-		Provider: provider, AttributesCaptured: captured, ObservedAttributes: observed,
+		Provider: provider,
 	}
-	if found.Config != nil {
+	if found.Config != nil && strings.TrimSpace(*found.Config) != "" {
 		result.Configuration = *found.Config
-	} else if found.Configuration != nil {
+	} else if found.Configuration != nil && strings.TrimSpace(*found.Configuration) != "" {
 		result.Configuration = *found.Configuration
 	}
 	if found.ImportConfig != nil {
