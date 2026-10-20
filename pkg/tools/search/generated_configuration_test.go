@@ -20,8 +20,8 @@ resource "aws_instance" "result" {
   instance_type = "m7i.large"
   enabled       = true
   capacity      = 9007199254740993
-	  ratio         = 1.25
-	  negative      = -7
+  ratio         = 1.25
+  negative      = -7
   tags = {
     Team    = "Search"
     Enabled = true
@@ -86,6 +86,39 @@ resource "example_resource" "result" {
 	require.NoError(t, err)
 	require.Equal(t, map[string]any{
 		"accepted": map[string]any{"identifier": "one", "quoted": "two"},
+	}, attributes)
+}
+
+func TestProjectGeneratedConfigurationHandlesAdditionalTerraformShapes(t *testing.T) {
+	attributes, err := projectGeneratedConfiguration(`
+resource "example_resource" "result" {
+  literal_heredoc = <<-EOT
+    hello
+  EOT
+  escaped_template = "literal $${value}"
+  special_keys = {
+    "key.with.dot" = "value"
+    "key with space" = 3
+  }
+
+  sensitive_scalar = null # sensitive
+  sensitive_map    = {}   # sensitive
+  sensitive_list   = []   # sensitive
+
+  arithmetic   = 1 + 2
+  static_interpolation = "prefix-${1}"
+  indexed      = local.items[0]
+  splat        = local.items[*].name
+  comprehension = { for key, value in local.items : key => value }
+}`)
+	require.NoError(t, err)
+	require.Equal(t, map[string]any{
+		"literal_heredoc":  "hello\n",
+		"escaped_template": "literal ${value}",
+		"special_keys": map[string]any{
+			"key.with.dot":   "value",
+			"key with space": json.Number("3"),
+		},
 	}, attributes)
 }
 
