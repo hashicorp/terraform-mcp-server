@@ -223,3 +223,22 @@ func CreateTfeClientForSession(ctx context.Context, sessionID string, logger *lo
 	client, err := NewTfeClient(sessionID, terraformAddress, parseTerraformSkipTLSVerify(ctx), terraformToken, clientIP, logger)
 	return client, err
 }
+
+// HasTerraformToken reports whether a Terraform token is available for this
+// request. It checks the same sources, in the same order, as
+// CreateTfeClientForSession (request context, TFE_TOKEN, credentials.tfrc.json)
+// but does not build a client or call the TFE API.
+func HasTerraformToken(ctx context.Context, logger *log.Logger) bool {
+	if token, _ := ctx.Value(contextKey(TerraformToken)).(string); token != "" {
+		return true
+	}
+	if utils.GetEnv(TerraformToken, "") != "" {
+		return true
+	}
+	address, _ := ctx.Value(contextKey(TerraformAddress)).(string)
+	if address == "" {
+		address = utils.GetEnv(TerraformAddress, DefaultTerraformAddress)
+	}
+	token, err := ReadCredentialsFile(extractHostname(address), logger)
+	return err == nil && token != ""
+}

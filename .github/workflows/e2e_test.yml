@@ -21,10 +21,12 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - suite: legacy server
+          # The official go-sdk server is the default
+          - suite: official SDK (default)
             make_target: test-e2e
-          - suite: official SDK - public Registry
-            make_target: test-e2e-official-public-registry
+          # Rollback path, remove once the legacy server is removed
+          - suite: legacy server
+            make_target: test-e2e-legacy
 
     steps:
       - name: Check out code

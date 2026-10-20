@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"strconv"
 	"testing"
 	"time"
 
@@ -15,44 +16,36 @@ import (
 
 const (
 	officialSDKEnabledEnv = "TF_X_OFFICIAL_SDK_ENABLED"
-	legacyServerName      = "terraform-mcp-server"
-	officialServerName    = "terraform-mcp-official"
-	legacyMCPEndpoint     = "/mcp"
-	officialMCPEndpoint   = "/mcp/official"
+	serverName            = "terraform-mcp-server"
+	mcpEndpoint           = "/mcp"
 )
 
 type e2eServerConfig struct {
-	officialSDK bool
-	serverName  string
-	mcpPath     string
+	serverName string
+	mcpPath    string
 }
 
+// officialSDKEnabled reports which server this run tests. The official go-sdk
+// server is the default, set TF_X_OFFICIAL_SDK_ENABLED=false to test the legacy
+// mark3labs fallback.
 func officialSDKEnabled() bool {
-	return os.Getenv(officialSDKEnabledEnv) == "true"
+	enabled, err := strconv.ParseBool(os.Getenv(officialSDKEnabledEnv))
+	return err != nil || enabled
 }
 
-// currentServerConfig selects the HTTP endpoint and server name for this run.
-func currentServerConfig() e2eServerConfig {
+// sdkEnvArgs returns the docker flags that select the server. The official
+// server is the default, so no flag is passed for it.
+func sdkEnvArgs() []string {
 	if officialSDKEnabled() {
-		return e2eServerConfig{
-			officialSDK: true,
-			serverName:  officialServerName,
-			mcpPath:     officialMCPEndpoint,
-		}
+		return nil
 	}
-
-	return e2eServerConfig{
-		officialSDK: false,
-		serverName:  legacyServerName,
-		mcpPath:     legacyMCPEndpoint,
-	}
+	return []string{"-e", officialSDKEnabledEnv + "=false"}
 }
 
-func legacyServerConfig() e2eServerConfig {
-	return e2eServerConfig{
-		serverName: legacyServerName,
-		mcpPath:    legacyMCPEndpoint,
-	}
+// currentServerConfig returns the endpoint and server name for this run. Both
+// servers use the same ones.
+func currentServerConfig() e2eServerConfig {
+	return e2eServerConfig{serverName: serverName, mcpPath: mcpEndpoint}
 }
 
 var e2eTransports = []struct {
@@ -89,23 +82,27 @@ func runForEachTransport(
 	}
 }
 
-// createStdioClient starts the image as a process connected to MCP Stdio.
-func createStdioClient(t *testing.T) (*mcp.ClientSession, func()) {
-	t.Helper()
-	t.Log("Starting Stdio MCP client...")
-	config := currentServerConfig()
-
-	cmd := exec.Command(
-		"docker",
+// Builds the docker command that runs the server over stdio.
+// Docker passes everything after the image name to the server inside the
+// container, so every -e flag has to come BEFORE the image name.
+func stdioDockerCommand() *exec.Cmd {
+	args := []string{
 		"run",
 		"-i",
 		"--rm",
 		"-e", "MCP_RATE_LIMIT_GLOBAL=50:100",
 		"-e", "MCP_RATE_LIMIT_SESSION=50:100",
-		"-e", fmt.Sprintf("%s=%t", officialSDKEnabledEnv, config.officialSDK),
-		"terraform-mcp-server:test-e2e",
-	)
+	}
+	args = append(args, sdkEnvArgs()...)
+	args = append(args, "terraform-mcp-server:test-e2e")
+	return exec.Command("docker", args...)
+}
 
+// createStdioClient starts the image as a process connected to MCP Stdio.
+func createStdioClient(t *testing.T) (*mcp.ClientSession, func()) {
+	t.Helper()
+	t.Log("Starting Stdio MCP client...")
+	cmd := stdioDockerCommand()
 	client := mcp.NewClient(&mcp.Implementation{
 		Name:    "e2e-test-client",
 		Version: "0.0.1",
@@ -121,7 +118,7 @@ func createStdioClient(t *testing.T) (*mcp.ClientSession, func()) {
 	require.NoError(t, err, "failed to connect over stdio")
 	initResult := session.InitializeResult()
 	require.NotNil(t, initResult)
-	require.Equal(t, config.serverName, initResult.ServerInfo.Name)
+	require.Equal(t, currentServerConfig().serverName, initResult.ServerInfo.Name)
 
 	cleanup := func() {
 		if err := session.Close(); err != nil {
@@ -143,7 +140,7 @@ func createHTTPClient(t *testing.T) (*mcp.ClientSession, func()) {
 	baseURL := fmt.Sprintf("http://localhost:%s", port)
 	mcpURL := baseURL + config.mcpPath
 
-	containerID := startHTTPContainer(t, port, officialSDKEnabled())
+	containerID := startHTTPContainer(t, port)
 	// Register immediately so failures during readiness or Connect
 	// still stop the container.
 	t.Cleanup(func() {
