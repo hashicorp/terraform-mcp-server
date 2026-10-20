@@ -554,7 +554,7 @@ func TestProviderListSchemaList_ValidatesWorkspaceBeforeProviderRequest(t *testi
 		{
 			name:            "failed workspace read stops before provider endpoint",
 			workspaceStatus: http.StatusNotFound,
-			wantError:       `failed to read workspace "test-workspace" in organization "test-org"`,
+			wantError:       "provider_data_unavailable",
 		},
 	}
 

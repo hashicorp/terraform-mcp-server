@@ -80,6 +80,24 @@ type PreparedImportType struct {
 	IdentitySchema        map[string]any `json:"identity_schema,omitempty"`
 }
 
+// PreparedImportSelection is the explicit prepare_import projection for a
+// selected QueryRun result. The raw provider resource_object remains internal;
+// only the same scalar tag projection exposed by get_query_summary crosses the
+// tool boundary.
+type PreparedImportSelection struct {
+	QueryResultMarker  string              `json:"query_result_marker"`
+	Address            string              `json:"address"`
+	ResourceType       string              `json:"resource_type"`
+	DisplayName        string              `json:"display_name,omitempty"`
+	Identity           map[string]any      `json:"identity"`
+	IdentityVersion    int                 `json:"identity_version"`
+	Provider           queryResultProvider `json:"provider"`
+	AttributesCaptured bool                `json:"attributes_captured"`
+	ObservedAttributes map[string]any      `json:"observed_attributes,omitempty"`
+	Configuration      string              `json:"configuration,omitempty"`
+	ImportConfig       string              `json:"import_configuration,omitempty"`
+}
+
 type HistoricalSchemaSource struct {
 	StateVersionID   string `json:"state_version_id"`
 	RunID            string `json:"run_id"`
@@ -89,24 +107,40 @@ type HistoricalSchemaSource struct {
 }
 
 type PrepareImportResult struct {
-	Status                            string                  `json:"status"`
-	Diagnostics                       []string                `json:"diagnostics"`
-	NextAction                        string                  `json:"next_action"`
-	QueryRunID                        string                  `json:"query_run_id,omitempty"`
-	SourceOrganizationName            string                  `json:"source_organization_name,omitempty"`
-	SourceWorkspaceName               string                  `json:"source_workspace_name,omitempty"`
-	SourceWorkspaceID                 string                  `json:"source_workspace_id,omitempty"`
-	OrganizationName                  string                  `json:"organization_name,omitempty"`
-	TargetWorkspaceName               string                  `json:"target_workspace_name,omitempty"`
-	WorkspaceID                       string                  `json:"workspace_id,omitempty"`
-	ExecutionMode                     string                  `json:"execution_mode,omitempty"`
-	TargetTerraformSetting            string                  `json:"target_terraform_setting,omitempty"`
-	StateProducingRunTerraformVersion string                  `json:"state_producing_run_terraform_version,omitempty"`
-	SchemaSource                      *HistoricalSchemaSource `json:"schema_source,omitempty"`
-	VCSLinked                         bool                    `json:"vcs_linked"`
-	Types                             []PreparedImportType    `json:"types,omitempty"`
-	SelectedResults                   []queryResultEvidence   `json:"selected_results,omitempty"`
-	ImportContext                     *ImportContext          `json:"import_context,omitempty"`
+	Status                            string                    `json:"status"`
+	Diagnostics                       []string                  `json:"diagnostics"`
+	NextAction                        string                    `json:"next_action"`
+	QueryRunID                        string                    `json:"query_run_id,omitempty"`
+	SourceOrganizationName            string                    `json:"source_organization_name,omitempty"`
+	SourceWorkspaceName               string                    `json:"source_workspace_name,omitempty"`
+	SourceWorkspaceID                 string                    `json:"source_workspace_id,omitempty"`
+	OrganizationName                  string                    `json:"organization_name,omitempty"`
+	TargetWorkspaceName               string                    `json:"target_workspace_name,omitempty"`
+	WorkspaceID                       string                    `json:"workspace_id,omitempty"`
+	ExecutionMode                     string                    `json:"execution_mode,omitempty"`
+	TargetTerraformSetting            string                    `json:"target_terraform_setting,omitempty"`
+	StateProducingRunTerraformVersion string                    `json:"state_producing_run_terraform_version,omitempty"`
+	SchemaSource                      *HistoricalSchemaSource   `json:"schema_source,omitempty"`
+	VCSLinked                         bool                      `json:"vcs_linked"`
+	Types                             []PreparedImportType      `json:"types,omitempty"`
+	SelectedResults                   []PreparedImportSelection `json:"selected_results,omitempty"`
+	ImportContext                     *ImportContext            `json:"import_context,omitempty"`
+}
+
+func preparedImportSelection(result queryResultEvidence) PreparedImportSelection {
+	return PreparedImportSelection{
+		QueryResultMarker:  result.Marker,
+		Address:            result.Address,
+		ResourceType:       result.ResourceType,
+		DisplayName:        result.DisplayName,
+		Identity:           result.Identity,
+		IdentityVersion:    result.IdentityVersion,
+		Provider:           result.Provider,
+		AttributesCaptured: result.ResourceObject != nil,
+		ObservedAttributes: queryDiscoveryObservedAttributes(result.Provider, result.ResourceObject),
+		Configuration:      result.Configuration,
+		ImportConfig:       result.ImportConfig,
+	}
 }
 
 type importContextDigestPayload struct {
@@ -372,7 +406,7 @@ func ReadPrepareImport(ctx context.Context, c *tfe.Client, input PrepareImportIn
 		if _, ok := input.LockedProviders[found.Provider.Source]; !ok {
 			return nil, searchDiagnosticErrorWithDetail(lockVersionsInvalidCode, fmt.Sprintf("locked_providers must include the exact provider source %q required by the selected Search result; copy it from .terraform.lock.hcl", found.Provider.Source))
 		}
-		out.SelectedResults = append(out.SelectedResults, found)
+		out.SelectedResults = append(out.SelectedResults, preparedImportSelection(found))
 		importContext.Providers[found.ResourceType] = found.Provider
 		importContext.SelectedResults = append(importContext.SelectedResults, ImportContextSelection{QueryResultMarker: found.Marker, ListType: found.ResourceType, ManagedType: selection.ManagedType, Identity: found.Identity, SearchIdentityVersion: found.IdentityVersion})
 		if !seenTypes[selection.ManagedType] {

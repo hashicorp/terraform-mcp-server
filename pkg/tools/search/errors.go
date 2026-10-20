@@ -13,7 +13,7 @@ import (
 func toolErrorf(logger *log.Logger, toolName, format string, args ...any) (*mcp.CallToolResult, error) {
 	message := fmt.Sprintf(format, args...)
 	if logger != nil {
-		logger.Errorf("%s: %s", toolName, message)
+		logger.Errorf("%s: tool error", toolName)
 	}
 	return mcp.NewToolResultError(message), nil
 }
