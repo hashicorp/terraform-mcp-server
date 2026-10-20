@@ -21,12 +21,13 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - sdk: mark3labs
-            endpoint: /mcp
-            official_enabled: "false"
+          # The official go-sdk server is the default, so it runs with no flag
           - sdk: official
-            endpoint: /mcp/official
-            official_enabled: "true"
+            official_enabled: ""
+          # Rollback path, remove once the legacy server is removed
+          - sdk: mark3labs
+            official_enabled: "false"
+
 
     steps:
       - name: Check out code
@@ -44,6 +45,7 @@ jobs:
       - name: Start server
         env:
           ENABLE_TF_OPERATIONS: true
+          TF_MCP_ENDPOINT: http://localhost:8080/mcp
           TF_X_OFFICIAL_SDK_ENABLED: ${{ matrix.official_enabled }}
         run: |
           nohup ./bin/terraform-mcp-server streamable-http --transport-host 0.0.0.0 --transport-port 8080 2>&1 &
