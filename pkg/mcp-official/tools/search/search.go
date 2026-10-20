@@ -105,11 +105,11 @@ func ProviderListSchemaListFunc(ctx context.Context, req *mcp.CallToolRequest, i
 	}
 	tfeClient, err := client.GetTfeClient(ctx, client.SessionIDFromRequest(req))
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to get Terraform client: %w", err)
+		return nil, nil, searchlogic.TerraformClientUnavailableError(err)
 	}
 	text, err := searchlogic.ProviderListSchemaListText(ctx, tfeClient, scope.Organization.Value, scope.Workspace.Value, input.ProviderNamespace, input.ProviderName)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, searchlogic.ProviderDataUnavailableError(err)
 	}
 	return textResult(text), nil, nil
 }
@@ -169,15 +169,15 @@ func GetQueryStatusFunc(logger *slog.Logger) mcp.ToolHandlerFor[QueryRunArgument
 		}
 		tfeClient, err := client.GetTfeClient(ctx, client.SessionIDFromRequest(req))
 		if err != nil {
-			return nil, nil, fmt.Errorf("failed to get Terraform client: %w", err)
+			return nil, nil, searchlogic.TerraformClientUnavailableError(err)
 		}
 		response, err := searchlogic.PollQueryStatus(ctx, tfeClient, queryRunID, searchLogger)
 		if err != nil {
-			return nil, nil, fmt.Errorf("failed to get query run %q: %w", queryRunID, err)
+			return nil, nil, searchlogic.QueryStatusUnavailableError(err)
 		}
 		text, err := searchlogic.FormatQueryStatus(response)
 		if err != nil {
-			return nil, nil, fmt.Errorf("failed to marshal query run %q: %w", queryRunID, err)
+			return nil, nil, searchlogic.QueryStatusUnavailableError(err)
 		}
 		return textResult(text), response, nil
 	}

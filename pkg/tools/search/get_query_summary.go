@@ -82,11 +82,13 @@ logs or backend artifact URLs.
 Call get_query_status first and pass the same query_run_id, or use an existing
 authorized terminal QueryRun ID. Selectable results include
 query_result_marker, identity, identity_version, attributes_captured and any
-projected scalar tags. Keep each displayed marker, display_name and available
-tags together. Summary filters affect presentation only; missing tags do not
-prove a resource is untagged, and attributes_captured=false means tag evidence
-is unknown. A marker provides QueryRun continuity, not authorization, an import
-ID or proof of cloud-object identity.
+provider-qualified observed_attributes from the intentionally small supported
+metadata subset. Keep each displayed marker, display_name and available
+observed_attributes together. Summary filters affect presentation only; missing
+projected metadata does not prove the resource lacks it, and
+attributes_captured=false means attribute evidence is unknown. A marker provides
+QueryRun continuity, not authorization, an import ID or proof of cloud-object
+identity.
 
 Only schema-present list-resource attributes can filter the original query.
 When selection depends on additional result data and matching rows have

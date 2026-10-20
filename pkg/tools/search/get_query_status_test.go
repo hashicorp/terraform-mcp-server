@@ -43,6 +43,11 @@ type queryStatusWaitContext struct {
 	once    sync.Once
 }
 
+func TestQueryStatusWaitBudgetIsTransportSafe(t *testing.T) {
+	require.Equal(t, 20*time.Second, queryStatusWaitBudget)
+	require.Less(t, queryStatusWaitBudget, 30*time.Second)
+}
+
 func (c *queryStatusWaitContext) Done() <-chan struct{} {
 	c.once.Do(func() { close(c.waiting) })
 	return c.Context.Done()
@@ -532,7 +537,7 @@ func TestGetQueryStatusHandlerReturnsAPIFailureAsToolError(t *testing.T) {
 	server := queryStatusTestServer(t, func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/vnd.api+json")
 		w.WriteHeader(http.StatusNotFound)
-		_, _ = w.Write([]byte(`{"errors":[{"detail":"Query run not found"}]}`))
+		_, _ = w.Write([]byte(`{"errors":[{"detail":"signed-url-secret https://example.test/logs?token=secret"}]}`))
 	})
 	ctx := queryStatusHandlerContext(t, server)
 	request := mcp.CallToolRequest{Params: mcp.CallToolParams{
@@ -549,7 +554,9 @@ func TestGetQueryStatusHandlerReturnsAPIFailureAsToolError(t *testing.T) {
 	require.Len(t, result.Content, 1)
 	text, ok := mcp.AsTextContent(result.Content[0])
 	require.True(t, ok)
-	assert.Contains(t, text.Text, "failed to get query run")
+	assert.Equal(t, "query_run_unavailable", text.Text)
+	assert.NotContains(t, text.Text, "signed-url-secret")
+	assert.NotContains(t, text.Text, "example.test")
 }
 
 func TestGetQueryStatusHandlerRejectsMissingQueryRunID(t *testing.T) {
@@ -586,7 +593,8 @@ func TestGetQueryStatusHandlerPreservesCallerCancellation(t *testing.T) {
 	require.Len(t, result.Content, 1)
 	text, ok := mcp.AsTextContent(result.Content[0])
 	require.True(t, ok)
-	assert.Contains(t, text.Text, callerErr.Error())
+	assert.Equal(t, "query_run_unavailable", text.Text)
+	assert.NotContains(t, text.Text, callerErr.Error())
 }
 
 func TestWaitForQueryStatusLogsPollingAndCancellation(t *testing.T) {
@@ -610,7 +618,8 @@ func TestWaitForQueryStatusLogsPollingAndCancellation(t *testing.T) {
 	assert.Nil(t, response)
 	assert.ErrorIs(t, err, context.Canceled)
 	output := buf.String()
-	assert.Contains(t, output, "query_run_id=qry-test")
+	assert.NotContains(t, output, "qry-test")
+	assert.NotContains(t, output, "context canceled")
 	assert.Contains(t, output, "poll_count=2")
 	assert.Contains(t, output, "last_status=running")
 	assert.Contains(t, output, "reason=caller_canceled")

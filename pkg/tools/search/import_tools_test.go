@@ -89,6 +89,10 @@ func importWireBackendForListType(t *testing.T, status, planStatus, listType str
 }
 
 func importWireBackendWithPlan(t *testing.T, status, planStatus, listType, planJSON string) (*httptest.Server, *int) {
+	return importWireBackendWithPlanAndProvider(t, status, planStatus, listType, planJSON, "hashicorp", "aws")
+}
+
+func importWireBackendWithPlanAndProvider(t *testing.T, status, planStatus, listType, planJSON, providerNamespace, providerName string) (*httptest.Server, *int) {
 	t.Helper()
 	planJSONReads := new(int)
 	var backend *httptest.Server
@@ -107,7 +111,7 @@ func importWireBackendWithPlan(t *testing.T, status, planStatus, listType, planJ
 		case "/api/v2/workspaces/ws-source":
 			_, _ = fmt.Fprint(w, `{"data":{"type":"workspaces","id":"ws-source","attributes":{"name":"source"},"relationships":{"organization":{"data":{"type":"organizations","id":"org"}}}}}`)
 		case "/api/v2/search/no-code-query/ncqry-test":
-			_, _ = fmt.Fprintf(w, `{"data":{"id":"ncqry-test","attributes":{"no-code-query-providers":[{"namespace":"hashicorp","name":"aws","version":"6.66.0","no-code-query-resources":[{"body":{"resource_type":%q}}]}]},"relationships":{"workspace":{"data":{"id":"ws-source"}}}}}`, listType)
+			_, _ = fmt.Fprintf(w, `{"data":{"id":"ncqry-test","attributes":{"no-code-query-providers":[{"namespace":%q,"name":%q,"version":"6.66.0","no-code-query-resources":[{"body":{"resource_type":%q}}]}]},"relationships":{"workspace":{"data":{"id":"ws-source"}}}}}`, providerNamespace, providerName, listType)
 		case "/logs":
 			address := "list." + listType + ".all"
 			identity := map[string]any{"bucket": "sample"}
@@ -117,6 +121,15 @@ func importWireBackendWithPlan(t *testing.T, status, planStatus, listType, planJ
 			found := map[string]any{"address": address, "resource_type": listType, "display_name": "sample", "identity": identity, "identity_version": 0}
 			if listType == "aws_s3_buckets" {
 				found["config"] = `resource "aws_s3_bucket" "sample" {}`
+				found["import_config"] = `import { to = aws_s3_bucket.sample id = "review-before-use" }`
+				found["resource_object"] = map[string]any{
+					"password": "resource-object-secret-sentinel",
+					"tags_all": map[string]any{"inherited": "yes"},
+					"tags": map[string]any{
+						"team":   "search",
+						"nested": map[string]any{"secret": "nested-tag-secret-sentinel"},
+					},
+				}
 			}
 			foundJSON, _ := json.Marshal(map[string]any{"type": "list_resource_found", "list_resource_found": found})
 			completeJSON, _ := json.Marshal(map[string]any{"type": "list_complete", "list_complete": map[string]any{"address": address, "resource_type": listType, "total": 1}})
@@ -185,6 +198,19 @@ func TestImportToolsEndToEndLocalHTTPAndLegacyWire(t *testing.T) {
 	require.Equal(t, "unknown", prep.Types[0].SchemaStatus)
 	require.Equal(t, "6.66.0", prep.Types[0].LockedProviderVersion)
 	require.Equal(t, "6.66.0", prep.Types[0].SearchProviderVersion)
+	require.Len(t, prep.SelectedResults, 1)
+	require.True(t, prep.SelectedResults[0].AttributesCaptured)
+	require.Equal(t, map[string]any{
+		"tags":     map[string]any{"team": "search"},
+		"tags_all": map[string]any{"inherited": "yes"},
+	}, prep.SelectedResults[0].ObservedAttributes)
+	require.Equal(t, `resource "aws_s3_bucket" "sample" {}`, prep.SelectedResults[0].Configuration)
+	require.Equal(t, `import { to = aws_s3_bucket.sample id = "review-before-use" }`, prep.SelectedResults[0].ImportConfig)
+	preparedJSON, err := json.Marshal(prep)
+	require.NoError(t, err)
+	require.NotContains(t, string(preparedJSON), "resource_object")
+	require.NotContains(t, string(preparedJSON), "resource-object-secret-sentinel")
+	require.NotContains(t, string(preparedJSON), "nested-tag-secret-sentinel")
 	result, err := ReadVerifyImportPlan(context.Background(), c, VerifyImportInput{OrganizationName: "org", WorkspaceName: "target", RunID: "run-example"})
 	require.NoError(t, err)
 	require.Equal(t, "import_context_required", result.Status)
@@ -226,6 +252,47 @@ func TestImportToolsEndToEndLocalHTTPAndLegacyWire(t *testing.T) {
 	require.Contains(t, fmt.Sprint(wire.StructuredContent), "prepared")
 	require.Contains(t, fmt.Sprint(wire.Content), "selection_digest")
 	require.NotContains(t, fmt.Sprint(wire.Content), "signed-secret-sentinel")
+	require.NotContains(t, fmt.Sprint(wire.StructuredContent), "resource-object-secret-sentinel")
+	require.NotContains(t, fmt.Sprint(wire.Content), "resource-object-secret-sentinel")
+	require.NotContains(t, fmt.Sprint(wire.Content), "nested-tag-secret-sentinel")
+}
+
+func TestImportToolsCanonicalizeMixedCaseQueryProviderThroughLockAndPlan(t *testing.T) {
+	backend, _ := importWireBackendWithPlanAndProvider(t, "planned_and_finished", "finished", "aws_s3_buckets", "", "HashiCorp", "AWS")
+	c, err := tfe.NewClient(&tfe.Config{Address: backend.URL, Token: "test-token", HTTPClient: backend.Client()})
+	require.NoError(t, err)
+
+	provider := queryResultProvider{Source: "registry.terraform.io/hashicorp/aws", Version: "6.66.0"}
+	identity := map[string]any{"bucket": "sample"}
+	marker, err := queryResultMarker("qry-example", provider, "aws_s3_buckets", identity)
+	require.NoError(t, err)
+	bindings := []ImportBinding{{QueryResultMarker: marker, TargetAddress: "aws_s3_bucket.sample"}}
+
+	prepared, err := ReadPrepareImport(context.Background(), c, PrepareImportInput{
+		OrganizationName: "org",
+		WorkspaceName:    "target",
+		QueryRunID:       "qry-example",
+		Selections:       []ImportSelection{{QueryResultMarker: marker, ManagedType: "aws_s3_bucket"}},
+		LockedProviders:  map[string]string{provider.Source: "6.66.0"},
+	})
+	require.NoError(t, err)
+	require.Equal(t, "prepared", prepared.Status)
+	require.Equal(t, provider.Source, prepared.Types[0].ProviderSource)
+	require.Equal(t, provider, prepared.ImportContext.Providers["aws_s3_buckets"])
+	require.Equal(t, map[string]string{provider.Source: "6.66.0"}, prepared.ImportContext.LockedProviders)
+
+	verified, err := ReadVerifyImportPlan(context.Background(), c, VerifyImportInput{
+		OrganizationName: "org",
+		WorkspaceName:    "target",
+		RunID:            "run-example",
+		ImportContext:    prepared.ImportContext,
+		Bindings:         bindings,
+	})
+	require.NoError(t, err)
+	require.Equal(t, "plan_available", verified.Status)
+	require.Equal(t, 1, verified.Changes["none"])
+	require.Equal(t, 1, verified.ObjectIdentity["matched"])
+	require.Empty(t, verified.Attention)
 }
 
 func TestImportRunUIURLOnlyForKnownHTTPSBrowserHosts(t *testing.T) {
@@ -758,6 +825,10 @@ func TestImportToolDescriptionsAndSchemas(t *testing.T) {
 	require.Contains(t, lockedProvidersSchema["description"], "namespace/type shorthand")
 	require.Contains(t, lockedProvidersSchema["description"], "custom/private sources require hostname/namespace/type")
 	require.Contains(t, prepare.OutputSchema.Properties, "import_context")
+	prepareOutputSchema, err := json.Marshal(prepare.OutputSchema)
+	require.NoError(t, err)
+	require.NotContains(t, string(prepareOutputSchema), "resource_object")
+	require.Contains(t, string(prepareOutputSchema), "attributes_captured")
 	require.NotContains(t, string(prepare.RawInputSchema), `"maxItems":100`)
 	require.NotContains(t, prepare.Description, "1–100")
 	verify := VerifyImportPlan(silentLogger()).Tool

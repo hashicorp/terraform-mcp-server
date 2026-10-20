@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	"github.com/hashicorp/go-tfe"
+	tfaddr "github.com/hashicorp/terraform-registry-address"
 )
 
 type QueryDiscoveryFilter struct {
@@ -26,7 +27,7 @@ type queryDiscoveryRow struct {
 	DisplayName        string         `json:"display_name,omitempty"`
 	Identity           map[string]any `json:"identity"`
 	IdentityVersion    int            `json:"identity_version"`
-	Tags               map[string]any `json:"tags,omitempty"`
+	ObservedAttributes map[string]any `json:"observed_attributes,omitempty"`
 	AttributesCaptured bool           `json:"attributes_captured"`
 }
 
@@ -127,6 +128,22 @@ type queryStoredResourceBody struct {
 	HyphenType string `json:"resource-type"`
 }
 
+func canonicalQueryProviderSource(namespace, providerType string) (string, error) {
+	namespace, err := tfaddr.ParseProviderPart(namespace)
+	if err != nil {
+		return "", searchDiagnosticError(queryProviderSourceUnresolvedCode)
+	}
+	providerType, err = tfaddr.ParseProviderPart(providerType)
+	if err != nil {
+		return "", searchDiagnosticError(queryProviderSourceUnresolvedCode)
+	}
+	provider := tfaddr.NewProvider(tfaddr.DefaultProviderRegistryHost, namespace, providerType)
+	if err := tfaddr.ValidateProviderAddress(provider.String()); err != nil {
+		return "", searchDiagnosticError(queryProviderSourceUnresolvedCode)
+	}
+	return provider.String(), nil
+}
+
 func readQueryDiscoveryProvenance(ctx context.Context, c *tfe.Client, queryID string) (*queryDiscoveryProvenance, error) {
 	run, err := c.QueryRuns.Read(ctx, queryID)
 	if err != nil {
@@ -168,10 +185,11 @@ func readQueryDiscoveryProvenance(ctx context.Context, c *tfe.Client, queryID st
 	}
 	providers := map[string]queryResultProvider{}
 	for _, p := range stored.Data.Attributes.Providers {
-		if p.Namespace == "" || p.Name == "" || p.Version == "" {
+		source, err := canonicalQueryProviderSource(p.Namespace, p.Name)
+		if err != nil || p.Version == "" {
 			return nil, searchDiagnosticError(queryProviderSourceUnresolvedCode)
 		}
-		provider := queryResultProvider{Source: "registry.terraform.io/" + p.Namespace + "/" + p.Name, Version: p.Version}
+		provider := queryResultProvider{Source: source, Version: p.Version}
 		for _, r := range p.Resources {
 			kind := r.Body.Type
 			if kind == "" {
@@ -224,23 +242,43 @@ func readQueryEvidence(ctx context.Context, c *tfe.Client, queryID string, prov 
 	return evidence, nil
 }
 
-func queryDiscoveryTags(value map[string]any) map[string]any {
-	raw, ok := value["tags"].(map[string]any)
-	if !ok {
+func queryDiscoveryObservedAttributes(provider queryResultProvider, value map[string]any) map[string]any {
+	// This is an intentionally small provider-qualified metadata projection,
+	// not a general claim that arbitrary resource attributes are safe to return.
+	var names []string
+	switch strings.ToLower(provider.Source) {
+	case "registry.terraform.io/hashicorp/aws":
+		names = []string{"tags", "tags_all"}
+	case "registry.terraform.io/hashicorp/azurerm":
+		names = []string{"tags"}
+	case "registry.terraform.io/hashicorp/google", "registry.terraform.io/hashicorp/google-beta":
+		names = []string{"labels", "terraform_labels", "effective_labels", "resource_manager_tags"}
+	default:
 		return nil
 	}
-	tags := make(map[string]any)
-	for key, tag := range raw {
-		switch tag.(type) {
-		case string, bool, json.Number:
-			tags[key] = tag
+
+	observed := make(map[string]any)
+	for _, name := range names {
+		raw, ok := value[name].(map[string]any)
+		if !ok {
+			continue
+		}
+		scalars := make(map[string]any)
+		for key, item := range raw {
+			switch item.(type) {
+			case string, bool, json.Number:
+				scalars[key] = item
+			}
+		}
+		if len(scalars) > 0 {
+			observed[name] = scalars
 		}
 	}
-	return tags
+	return observed
 }
 
 func queryDiscoveryResultRow(result queryResultEvidence) queryDiscoveryRow {
-	return queryDiscoveryRow{Marker: result.Marker, DisplayName: result.DisplayName, Identity: result.Identity, IdentityVersion: result.IdentityVersion, Tags: queryDiscoveryTags(result.ResourceObject), AttributesCaptured: result.ResourceObject != nil}
+	return queryDiscoveryRow{Marker: result.Marker, DisplayName: result.DisplayName, Identity: result.Identity, IdentityVersion: result.IdentityVersion, ObservedAttributes: queryDiscoveryObservedAttributes(result.Provider, result.ResourceObject), AttributesCaptured: result.ResourceObject != nil}
 }
 
 func summarizeQueryDiscovery(prov *queryDiscoveryProvenance, evidence *queryEvidence, filter QueryDiscoveryFilter) (*QueryDiscoverySummary, error) {
@@ -269,7 +307,7 @@ func summarizeQueryDiscovery(prov *queryDiscoveryProvenance, evidence *queryEvid
 		}
 		summary.Lists[index].Results = append(summary.Lists[index].Results, row)
 	}
-	summary.NextAction = "For a Search-only request, report these results and stop; do not request a target workspace or local path. If import is requested, ask the user to select one or more displayed query_result_marker values. Keep each displayed marker, display_name and available tags together; supplied filters affect presentation only, and missing tags do not prove a resource is untagged."
+	summary.NextAction = "For a Search-only request, report these results and stop; do not request a target workspace or local path. If import is requested, ask the user to select one or more displayed query_result_marker values. Keep each displayed marker, display_name and available observed_attributes together; supplied filters affect presentation only, and missing projected metadata does not prove the resource lacks it."
 	if summary.RowsWithoutAttributes > 0 {
 		summary.NextAction += " Some matching rows have attributes_captured false, so additional result data is unknown. If that data is necessary for selection, ask before creating another QueryRun. If approved and not already enabled, repeat the same schema-backed query with generate_config_out true, preserving supported filters and omitting unsupported conditions. This requests provider resource objects and generated HCL but does not guarantee capture; the new QueryRun has new markers, and this summary exposes only its declared projections rather than arbitrary resource attributes."
 	}

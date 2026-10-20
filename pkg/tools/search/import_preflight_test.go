@@ -352,6 +352,16 @@ func TestVerifyImportRunGuardsPlanJSONRead(t *testing.T) {
 			require.Nil(t, out.Changes)
 			require.Nil(t, out.ObjectIdentity)
 			require.Zero(t, planReads, "no Plan metadata or JSON read is allowed")
+			if tc.name == "wrong workspace" {
+				require.Empty(t, out.RunID)
+				require.Empty(t, out.RunStatus)
+				require.Nil(t, out.PlanOnly)
+				require.Nil(t, out.AutoApply)
+				require.Empty(t, out.PlanID)
+				require.Empty(t, out.PlanStatus)
+				require.Empty(t, out.ConfigurationVersionID)
+				require.Empty(t, out.RunUIURL)
+			}
 		})
 	}
 }

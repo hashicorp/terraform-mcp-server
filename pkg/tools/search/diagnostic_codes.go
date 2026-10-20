@@ -13,7 +13,8 @@ type searchDiagnosticCode string
 
 // Shared tool infrastructure diagnostics.
 const (
-	clientUnavailableCode searchDiagnosticCode = "client_unavailable"
+	clientUnavailableCode   searchDiagnosticCode = "client_unavailable"
+	providerUnavailableCode searchDiagnosticCode = "provider_data_unavailable"
 )
 
 // Query evidence and discovery diagnostics.
@@ -110,6 +111,28 @@ func searchDiagnosticErrorWithCause(code searchDiagnosticCode, cause error) erro
 // contextual, classifiable error for client acquisition failures.
 func TerraformClientUnavailableError(err error) error {
 	return fmt.Errorf("getting Terraform client: %w", searchDiagnosticErrorWithCause(clientUnavailableCode, err))
+}
+
+// ProviderDataUnavailableError prevents provider catalog and schema transport
+// details from crossing either MCP adapter boundary.
+func ProviderDataUnavailableError(err error) error {
+	return sanitizedSearchToolError(err, providerUnavailableCode)
+}
+
+// QueryStatusUnavailableError prevents QueryRun transport details from
+// crossing either MCP adapter boundary.
+func QueryStatusUnavailableError(err error) error {
+	return sanitizedSearchToolError(err, queryRunUnavailableCode)
+}
+
+func sanitizedSearchToolError(err error, fallback searchDiagnosticCode) error {
+	if err == nil {
+		return nil
+	}
+	if _, ok := searchDiagnosticCodeFromError(err); ok {
+		return err
+	}
+	return searchDiagnosticErrorWithCause(fallback, err)
 }
 
 // searchDiagnosticCodeFromError extracts a diagnostic code through wrapped errors.

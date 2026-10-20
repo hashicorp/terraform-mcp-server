@@ -12,3 +12,13 @@ var searchTools = []ToolDef{
 	{Name: "prepare_import", Toolset: Search, RequiresTFE: true},
 	{Name: "verify_import_plan", Toolset: Search, RequiresTFE: true},
 }
+
+// IsSearchTool reports whether name belongs to the Search toolset.
+func IsSearchTool(name string) bool {
+	for _, tool := range searchTools {
+		if tool.Name == name {
+			return true
+		}
+	}
+	return false
+}

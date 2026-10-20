@@ -77,7 +77,7 @@ func providerListSchemaListHandler(ctx context.Context, request mcp.CallToolRequ
 
 	tfeClient, err := client.GetTfeClientFromContext(ctx, logger)
 	if err != nil {
-		return toolErrorf(logger, "provider_list_schema_list", "failed to get Terraform client — ensure TFE_TOKEN and TFE_ADDRESS are configured: %v", err)
+		return toolErrorf(logger, "provider_list_schema_list", "%v", TerraformClientUnavailableError(err))
 	}
 	return providerListSchemaListWithClient(ctx, tfeClient, orgName, workspaceName, providerNamespace, providerName, logger)
 }
@@ -85,7 +85,7 @@ func providerListSchemaListHandler(ctx context.Context, request mcp.CallToolRequ
 func providerListSchemaListWithClient(ctx context.Context, tfeClient *tfe.Client, orgName, workspaceName, providerNamespace, providerName string, logger *log.Logger) (*mcp.CallToolResult, error) {
 	text, err := ProviderListSchemaListText(ctx, tfeClient, orgName, workspaceName, providerNamespace, providerName)
 	if err != nil {
-		return toolErrorf(logger, "provider_list_schema_list", "%v", err)
+		return toolErrorf(logger, "provider_list_schema_list", "%v", ProviderDataUnavailableError(err))
 	}
 	return mcp.NewToolResultText(text), nil
 }

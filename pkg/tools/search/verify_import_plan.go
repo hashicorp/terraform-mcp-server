@@ -246,13 +246,13 @@ func observeImportRun(ctx context.Context, c *tfe.Client, input VerifyImportInpu
 		return nil, nil, searchDiagnosticError(runEvidenceInvalidCode)
 	}
 
-	out.RunID, out.RunStatus, out.PlanOnly, out.AutoApply = run.Data.ID, run.Data.Attributes.Status, run.Data.Attributes.PlanOnly, run.Data.Attributes.AutoApply
-	out.PlanID, out.PlanStatus, out.ConfigurationVersionID = "", "", ""
 	workspace := run.Data.Relationships.Workspace.Data
 	if workspace == nil || workspace.Type != "workspaces" || workspace.ID != target.ID {
 		result, err := stopVerifyImport(out, "blocked", "run_workspace_mismatch", "Stop: the exact Run is not associated with the confirmed target. Do not inspect its Plan as this import attempt.")
 		return nil, result, err
 	}
+	out.RunID, out.RunStatus, out.PlanOnly, out.AutoApply = run.Data.ID, run.Data.Attributes.Status, run.Data.Attributes.PlanOnly, run.Data.Attributes.AutoApply
+	out.PlanID, out.PlanStatus, out.ConfigurationVersionID = "", "", ""
 	if out.PlanOnly == nil || !*out.PlanOnly || out.AutoApply == nil || *out.AutoApply {
 		result, err := stopVerifyImport(out, "blocked", "run_not_plan_only", "Stop: the backend has not confirmed both plan-only=true and auto-apply=false. Do not classify this Run.")
 		return nil, result, err
