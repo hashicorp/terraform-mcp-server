@@ -410,9 +410,10 @@ func TestOfficialSearchQuerySummarySelectableAndNonselectable(t *testing.T) {
 				require.Contains(t, text, `"query_result_marker":"qrm1-`)
 				require.Equal(t, "org", structured["source_organization_name"])
 				rows := structured["lists"].([]any)[0].(map[string]any)["results"].([]any)
-				require.Equal(t, "search", rows[0].(map[string]any)["tags"].(map[string]any)["team"])
+				observed := rows[0].(map[string]any)["observed_attributes"].(map[string]any)
+				require.Equal(t, "search", observed["tags"].(map[string]any)["team"])
 				require.Equal(t, true, rows[0].(map[string]any)["attributes_captured"])
-				require.Contains(t, text, `"tags":{"team":"search"}`)
+				require.Contains(t, text, `"observed_attributes":{"tags":{"team":"search"}}`)
 			} else {
 				require.Equal(t, "nonselectable", structured["status"])
 				require.NotContains(t, text, "query_result_marker")
