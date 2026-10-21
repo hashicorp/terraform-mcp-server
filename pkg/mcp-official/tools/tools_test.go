@@ -294,7 +294,7 @@ func TestOfficialImportPrepareAndFinishedPlan(t *testing.T) {
 		case "/api/v2/ping":
 			w.WriteHeader(http.StatusOK)
 		case "/api/v2/queries/qry-test":
-			_, _ = fmt.Fprintf(w, `{"data":{"type":"queries","id":"qry-test","attributes":{"status":"finished","log-read-url":%q},"relationships":{"workspace":{"data":{"type":"workspaces","id":"ws-source"}},"no-code-query":{"data":{"type":"no-code-queries","id":"ncqry-test"}}}}}`, backend.URL+"/logs")
+			_, _ = fmt.Fprintf(w, `{"data":{"type":"queries","id":"qry-test","attributes":{"status":"finished","generate-config-out":false,"log-read-url":%q},"relationships":{"workspace":{"data":{"type":"workspaces","id":"ws-source"}},"no-code-query":{"data":{"type":"no-code-queries","id":"ncqry-test"}}}}}`, backend.URL+"/logs")
 		case "/api/v2/workspaces/ws-source":
 			_, _ = fmt.Fprint(w, `{"data":{"type":"workspaces","id":"ws-source","attributes":{"name":"source"},"relationships":{"organization":{"data":{"type":"organizations","id":"org"}}}}}`)
 		case "/api/v2/search/no-code-query/ncqry-test":
@@ -341,6 +341,10 @@ func TestOfficialImportPrepareAndFinishedPlan(t *testing.T) {
 	prepared := prep.StructuredContent.(map[string]any)
 	require.Equal(t, "prepared", prepared["status"])
 	require.Equal(t, "source", prepared["source_workspace_name"])
+	require.Equal(t, false, prepared["generate_config_out"])
+	preparedRows := prepared["selected_results"].([]any)
+	require.Equal(t, false, preparedRows[0].(map[string]any)["configuration_generated"])
+	require.NotContains(t, preparedRows[0].(map[string]any), "configuration_attributes")
 	require.Equal(t, "ws-target", prepared["workspace_id"])
 	require.Equal(t, "6.66.0", prepared["import_context"].(map[string]any)["locked_providers"].(map[string]any)["registry.terraform.io/hashicorp/aws"])
 	verify, err := session.CallTool(ctx, &mcp.CallToolParams{Name: "verify_import_plan", Arguments: map[string]any{"terraform_org_name": "org", "workspace_name": "target", "run_id": "run-example", "import_context": prepared["import_context"], "bindings": []any{map[string]any{"query_result_marker": marker, "target_address": "aws_s3_bucket.sample"}}}})
@@ -379,13 +383,13 @@ func TestOfficialSearchQuerySummarySelectableAndNonselectable(t *testing.T) {
 				case "/api/v2/ping":
 					w.WriteHeader(http.StatusOK)
 				case "/api/v2/queries/qry-test":
-					_, _ = fmt.Fprintf(w, `{"data":{"type":"queries","id":"qry-test","attributes":{"status":%q,"log-read-url":%q},"relationships":{"workspace":{"data":{"type":"workspaces","id":"ws-test"}},"no-code-query":{"data":{"type":"no-code-queries","id":"ncqry-test"}}}}}`, tc.status, backend.URL+"/logs")
+					_, _ = fmt.Fprintf(w, `{"data":{"type":"queries","id":"qry-test","attributes":{"status":%q,"generate-config-out":true,"log-read-url":%q},"relationships":{"workspace":{"data":{"type":"workspaces","id":"ws-test"}},"no-code-query":{"data":{"type":"no-code-queries","id":"ncqry-test"}}}}}`, tc.status, backend.URL+"/logs")
 				case "/api/v2/workspaces/ws-test":
 					_, _ = fmt.Fprint(w, `{"data":{"type":"workspaces","id":"ws-test","attributes":{"name":"ws"},"relationships":{"organization":{"data":{"type":"organizations","id":"org"}}}}}`)
 				case "/api/v2/search/no-code-query/ncqry-test":
 					_, _ = fmt.Fprint(w, `{"data":{"id":"ncqry-test","attributes":{"no-code-query-providers":[{"namespace":"hashicorp","name":"aws","version":"6.66.0","no-code-query-resources":[{"body":{"resource_type":"aws_s3_buckets"}}]}]},"relationships":{"workspace":{"data":{"id":"ws-test"}}}}}`)
 				case "/logs":
-					body := []byte("\x02Starting query\n" + `{"type":"provider_installation_start","provider":"aws"}` + "\n" + `{"type":"list_resource_found","list_resource_found":{"address":"list.aws_s3_buckets.all","resource_type":"aws_s3_buckets","display_name":"first","identity":{"bucket":"first"},"identity_version":` + tc.version + `,"resource_object":{"tags":{"team":"search"}}}}` + "\n" + `{"type":"list_complete","list_complete":{"address":"list.aws_s3_buckets.all","total":1}}` + "\n\x03")
+					body := []byte("\x02Starting query\n" + `{"type":"provider_installation_start","provider":"aws"}` + "\n" + `{"type":"list_resource_found","list_resource_found":{"address":"list.aws_s3_buckets.all","resource_type":"aws_s3_buckets","display_name":"first","identity":{"bucket":"first"},"identity_version":` + tc.version + `,"resource_object":{"tags":{"team":"search"}},"config":"resource \"aws_s3_bucket\" \"first\" { bucket = \"first\" }","import_config":"import { id = \"must-not-be-returned\" }"}}` + "\n" + `{"type":"list_complete","list_complete":{"address":"list.aws_s3_buckets.all","total":1}}` + "\n\x03")
 					offset, _ := strconv.Atoi(r.URL.Query().Get("offset"))
 					limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
 					if offset < len(body) {
@@ -410,12 +414,17 @@ func TestOfficialSearchQuerySummarySelectableAndNonselectable(t *testing.T) {
 				require.Contains(t, text, `"query_result_marker":"qrm1-`)
 				require.Equal(t, "org", structured["source_organization_name"])
 				rows := structured["lists"].([]any)[0].(map[string]any)["results"].([]any)
-				observed := rows[0].(map[string]any)["observed_attributes"].(map[string]any)
-				require.Equal(t, "search", observed["tags"].(map[string]any)["team"])
-				require.Equal(t, true, rows[0].(map[string]any)["attributes_captured"])
-				require.Contains(t, text, `"observed_attributes":{"tags":{"team":"search"}}`)
+				require.Equal(t, true, structured["generate_config_out"])
+				require.Equal(t, true, rows[0].(map[string]any)["configuration_generated"])
+				require.Equal(t, "first", rows[0].(map[string]any)["configuration_attributes"].(map[string]any)["bucket"])
+				require.NotContains(t, rows[0].(map[string]any), "configuration")
+				require.NotContains(t, text, "observed_attributes")
+				require.Contains(t, text, `"configuration_attributes":{"bucket":"first"}`)
+				require.NotContains(t, text, `"configuration":`)
+				require.NotContains(t, text, "must-not-be-returned")
 			} else {
 				require.Equal(t, "nonselectable", structured["status"])
+				require.Equal(t, true, structured["generate_config_out"])
 				require.NotContains(t, text, "query_result_marker")
 				require.NotContains(t, text, "first")
 			}

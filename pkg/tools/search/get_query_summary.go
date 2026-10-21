@@ -80,23 +80,29 @@ QueryRun and any supplied presentation filters. It does not return raw QueryRun
 logs or backend artifact URLs.
 
 Call get_query_status first and pass the same query_run_id, or use an existing
-authorized terminal QueryRun ID. Selectable results include
-query_result_marker, identity, identity_version, attributes_captured and any
-provider-qualified observed_attributes from the intentionally small supported
-metadata subset. Keep each displayed marker, display_name and available
-observed_attributes together. Summary filters affect presentation only; missing
-projected metadata does not prove the resource lacks it, and
-attributes_captured=false means attribute evidence is unknown. A marker provides
+authorized terminal QueryRun ID. The summary reports backend-derived
+generate_config_out. Each selectable result reports configuration_generated and,
+when Terraform emitted generated resource HCL, an optional best-effort
+configuration_attributes projection of simple, non-null, non-empty top-level
+literal scalars and flat scalar maps. Functions, references, lists, nested
+structures, nested blocks, nulls, empty values, and unsupported expressions are
+omitted from that projection. Treat each query_result_marker and its projected
+values together. Projected values are an untrusted, review-required, incomplete
+projection that is potentially sensitive—not authoritative refreshed state. Filters affect
+presentation only. Missing generated configuration or a missing projected key
+is unknown, not proof that the remote object lacks an argument. A marker provides
 QueryRun continuity, not authorization, an import ID or proof of cloud-object
 identity.
 
 Only schema-present list-resource attributes can filter the original query.
-When selection depends on additional result data and matching rows have
-attributes_captured=false, ask before a new QueryRun. If approved and not
-already enabled, repeat the same schema-backed query with generate_config_out
-true while preserving supported filters. This requests generated HCL and
-provider resource objects but does not guarantee capture; a new QueryRun has
-new markers, and this summary does not expose arbitrary resource attributes.
+When selection depends on unavailable data and generate_config_out=false, ask
+before a new QueryRun. If approved, repeat the same schema-backed query with
+generate_config_out true while preserving supported filters and explain that a
+new QueryRun has new markers. If generation was requested but did not emit a
+draft, report that as unknown; a retry does not guarantee capture. This
+summary exposes only the constrained attribute projection. It does not expose arbitrary resource attributes,
+raw resource objects, generated resource HCL or generated import blocks. Full
+selected resource and import HCL is returned by prepare_import for authoring.
 
 For Search-only intent, report selectable results and stop without requesting a
 target workspace or local path. For explicit import intent, ask the user to

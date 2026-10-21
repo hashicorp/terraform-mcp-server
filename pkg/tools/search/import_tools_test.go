@@ -107,7 +107,7 @@ func importWireBackendWithPlanAndProvider(t *testing.T, status, planStatus, list
 		case "/api/v2/ping":
 			w.WriteHeader(http.StatusOK)
 		case "/api/v2/queries/qry-example":
-			_, _ = fmt.Fprintf(w, `{"data":{"type":"queries","id":"qry-example","attributes":{"status":"finished","log-read-url":%q},"relationships":{"workspace":{"data":{"type":"workspaces","id":"ws-source"}},"no-code-query":{"data":{"type":"no-code-queries","id":"ncqry-test"}}}}}`, backend.URL+"/logs?X-Amz-Signature=signed-secret-sentinel")
+			_, _ = fmt.Fprintf(w, `{"data":{"type":"queries","id":"qry-example","attributes":{"status":"finished","generate-config-out":true,"log-read-url":%q},"relationships":{"workspace":{"data":{"type":"workspaces","id":"ws-source"}},"no-code-query":{"data":{"type":"no-code-queries","id":"ncqry-test"}}}}}`, backend.URL+"/logs?X-Amz-Signature=signed-secret-sentinel")
 		case "/api/v2/workspaces/ws-source":
 			_, _ = fmt.Fprint(w, `{"data":{"type":"workspaces","id":"ws-source","attributes":{"name":"source"},"relationships":{"organization":{"data":{"type":"organizations","id":"org"}}}}}`)
 		case "/api/v2/search/no-code-query/ncqry-test":
@@ -199,15 +199,13 @@ func TestImportToolsEndToEndLocalHTTPAndLegacyWire(t *testing.T) {
 	require.Equal(t, "6.66.0", prep.Types[0].LockedProviderVersion)
 	require.Equal(t, "6.66.0", prep.Types[0].SearchProviderVersion)
 	require.Len(t, prep.SelectedResults, 1)
-	require.True(t, prep.SelectedResults[0].AttributesCaptured)
-	require.Equal(t, map[string]any{
-		"tags":     map[string]any{"team": "search"},
-		"tags_all": map[string]any{"inherited": "yes"},
-	}, prep.SelectedResults[0].ObservedAttributes)
+	require.True(t, prep.GenerateConfigOut)
+	require.True(t, prep.SelectedResults[0].ConfigurationGenerated)
 	require.Equal(t, `resource "aws_s3_bucket" "sample" {}`, prep.SelectedResults[0].Configuration)
 	require.Equal(t, `import { to = aws_s3_bucket.sample id = "review-before-use" }`, prep.SelectedResults[0].ImportConfig)
 	preparedJSON, err := json.Marshal(prep)
 	require.NoError(t, err)
+	require.NotContains(t, string(preparedJSON), "configuration_attributes")
 	require.NotContains(t, string(preparedJSON), "resource_object")
 	require.NotContains(t, string(preparedJSON), "resource-object-secret-sentinel")
 	require.NotContains(t, string(preparedJSON), "nested-tag-secret-sentinel")
@@ -828,7 +826,10 @@ func TestImportToolDescriptionsAndSchemas(t *testing.T) {
 	prepareOutputSchema, err := json.Marshal(prepare.OutputSchema)
 	require.NoError(t, err)
 	require.NotContains(t, string(prepareOutputSchema), "resource_object")
-	require.Contains(t, string(prepareOutputSchema), "attributes_captured")
+	require.Contains(t, string(prepareOutputSchema), "configuration_generated")
+	require.Contains(t, string(prepareOutputSchema), "generate_config_out")
+	require.NotContains(t, string(prepareOutputSchema), "configuration_attributes")
+	require.NotContains(t, string(prepareOutputSchema), "attributes_captured")
 	require.NotContains(t, string(prepare.RawInputSchema), `"maxItems":100`)
 	require.NotContains(t, prepare.Description, "1–100")
 	verify := VerifyImportPlan(silentLogger()).Tool
