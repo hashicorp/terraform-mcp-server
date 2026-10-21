@@ -7,7 +7,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"io"
 	"net/http"
 	"net/url"
 	"strings"
@@ -23,12 +22,18 @@ type QueryDiscoveryFilter struct {
 }
 
 type queryDiscoveryRow struct {
-	Marker             string         `json:"query_result_marker"`
-	DisplayName        string         `json:"display_name,omitempty"`
-	Identity           map[string]any `json:"identity"`
-	IdentityVersion    int            `json:"identity_version"`
-	ObservedAttributes map[string]any `json:"observed_attributes,omitempty"`
-	AttributesCaptured bool           `json:"attributes_captured"`
+	Marker      string `json:"query_result_marker"`
+	DisplayName string `json:"display_name,omitempty"`
+	// Identity is the provider-returned resource identity.
+	Identity map[string]any `json:"identity"`
+	// IdentityVersion is its managed-resource identity schema version.
+	IdentityVersion int `json:"identity_version"`
+	// ConfigurationGenerated is observed per result. QueryRun generation intent
+	// and provider-returned resource-object availability do not prove that
+	// Terraform emitted generated resource HCL for this result.
+	ConfigurationGenerated bool `json:"configuration_generated"`
+	// ConfigurationAttributes is a constrained generated-HCL projection.
+	ConfigurationAttributes map[string]any `json:"configuration_attributes,omitempty"`
 }
 
 type queryDiscoveryGroup struct {
@@ -43,11 +48,11 @@ type QueryDiscoverySummary struct {
 	SourceOrganizationName string                `json:"source_organization_name,omitempty"`
 	SourceWorkspaceName    string                `json:"source_workspace_name,omitempty"`
 	SourceWorkspaceID      string                `json:"source_workspace_id,omitempty"`
+	GenerateConfigOut      bool                  `json:"generate_config_out"`
 	Selectable             bool                  `json:"selectable"`
 	ResourcesDiscovered    int                   `json:"resources_discovered,omitempty"`
 	ByType                 map[string]int        `json:"by_type,omitempty"`
 	TotalMatching          int                   `json:"total_matching,omitempty"`
-	RowsWithoutAttributes  int                   `json:"rows_without_attributes,omitempty"`
 	Diagnostics            []string              `json:"diagnostics,omitempty"`
 	NextAction             string                `json:"next_action"`
 	Lists                  []queryDiscoveryGroup `json:"lists,omitempty"`
@@ -56,6 +61,7 @@ type QueryDiscoverySummary struct {
 // queryDiscoveryProvenance is backend-derived, never supplied by the caller.
 type queryDiscoveryProvenance struct {
 	QueryRunID, Organization, WorkspaceName, WorkspaceID string
+	GenerateConfigOut                                    bool
 	Providers                                            map[string]queryResultProvider
 }
 
@@ -85,8 +91,13 @@ type queryRunProvenanceResponse struct {
 }
 
 type queryRunProvenanceData struct {
-	ID            string                `json:"id"`
-	Relationships queryRunRelationships `json:"relationships"`
+	ID            string                       `json:"id"`
+	Attributes    queryRunProvenanceAttributes `json:"attributes"`
+	Relationships queryRunRelationships        `json:"relationships"`
+}
+
+type queryRunProvenanceAttributes struct {
+	GenerateConfigOut *bool `json:"generate-config-out"`
 }
 
 type queryRunRelationships struct {
@@ -157,12 +168,6 @@ func readQueryDiscoveryProvenance(ctx context.Context, c *tfe.Client, queryID st
 		return nil, searchDiagnosticError(queryOwnershipUnverifiedCode)
 	}
 	prov := &queryDiscoveryProvenance{QueryRunID: queryID, Organization: w.Organization.Name, WorkspaceName: w.Name, WorkspaceID: w.ID}
-	if run.Status == tfe.QueryRunErrored || run.Status == tfe.QueryRunCanceled {
-		return prov, searchDiagnosticError(queryNotSelectableCode)
-	}
-	if run.Status != tfe.QueryRunFinished {
-		return prov, searchDiagnosticError(queryNotFinishedCode)
-	}
 	raw, err := readQueryBackendJSON(ctx, c, "queries/"+url.PathEscape(queryID))
 	if err != nil {
 		return nil, err
@@ -172,7 +177,17 @@ func readQueryDiscoveryProvenance(ctx context.Context, c *tfe.Client, queryID st
 		return nil, err
 	}
 	nc, ws := wire.Data.Relationships.NoCode.Data, wire.Data.Relationships.Workspace.Data
-	if wire.Data.ID != queryID || nc == nil || strings.TrimSpace(nc.ID) == "" || nc.Type != "no-code-queries" || ws == nil || ws.ID != w.ID {
+	if wire.Data.ID != queryID || wire.Data.Attributes.GenerateConfigOut == nil || ws == nil || ws.ID != w.ID {
+		return nil, searchDiagnosticError(queryProvenanceUnavailableCode)
+	}
+	prov.GenerateConfigOut = *wire.Data.Attributes.GenerateConfigOut
+	if run.Status == tfe.QueryRunErrored || run.Status == tfe.QueryRunCanceled {
+		return prov, searchDiagnosticError(queryNotSelectableCode)
+	}
+	if run.Status != tfe.QueryRunFinished {
+		return prov, searchDiagnosticError(queryNotFinishedCode)
+	}
+	if nc == nil || strings.TrimSpace(nc.ID) == "" || nc.Type != "no-code-queries" {
 		return nil, searchDiagnosticError(queryProvenanceUnavailableCode)
 	}
 	raw, err = readQueryBackendJSON(ctx, c, "search/no-code-query/"+url.PathEscape(nc.ID))
@@ -227,58 +242,157 @@ func readQueryDiscovery(ctx context.Context, c *tfe.Client, queryID string) (*qu
 // backend provenance. Callers that have resolved provenance should reuse it
 // rather than repeat the QueryRun, workspace, and stored-query reads.
 func readQueryEvidence(ctx context.Context, c *tfe.Client, queryID string, prov *queryDiscoveryProvenance) (*queryEvidence, error) {
-	reader, err := c.QueryRuns.Logs(ctx, queryID)
-	if err != nil {
-		return nil, searchDiagnosticError(queryLogUnavailableCode)
-	}
-	data, err := io.ReadAll(reader)
-	if err != nil {
-		return nil, searchDiagnosticError(queryLogUnavailableCode)
-	}
-	evidence, err := parseQueryEvidence(queryID, data, prov.Providers)
-	if err != nil {
+	collector := newAllQueryEvidenceCollector()
+	if err := readQueryEvidenceWithCollector(ctx, c, queryID, prov, collector); err != nil {
 		return nil, err
 	}
-	return evidence, nil
+	return collector.evidence, nil
 }
 
-func queryDiscoveryObservedAttributes(provider queryResultProvider, value map[string]any) map[string]any {
-	// This is an intentionally small provider-qualified metadata projection,
-	// not a general claim that arbitrary resource attributes are safe to return.
-	var names []string
-	switch strings.ToLower(provider.Source) {
-	case "registry.terraform.io/hashicorp/aws":
-		names = []string{"tags", "tags_all"}
-	case "registry.terraform.io/hashicorp/azurerm":
-		names = []string{"tags"}
-	case "registry.terraform.io/hashicorp/google", "registry.terraform.io/hashicorp/google-beta":
-		names = []string{"labels", "terraform_labels", "effective_labels", "resource_manager_tags"}
-	default:
-		return nil
-	}
+type generatedConfigurationEvidenceCollector struct {
+	generateConfigOut bool
+	next              queryEvidenceCollector
+	unexpected        bool
+}
 
-	observed := make(map[string]any)
-	for _, name := range names {
-		raw, ok := value[name].(map[string]any)
-		if !ok {
-			continue
-		}
-		scalars := make(map[string]any)
-		for key, item := range raw {
-			switch item.(type) {
-			case string, bool, json.Number:
-				scalars[key] = item
+func (c *generatedConfigurationEvidenceCollector) CollectQueryEvidence(result queryResultEvidence) error {
+	if !c.generateConfigOut && (strings.TrimSpace(result.Configuration) != "" || strings.TrimSpace(result.ImportConfig) != "") {
+		c.unexpected = true
+	}
+	return c.next.CollectQueryEvidence(result)
+}
+
+func (c *generatedConfigurationEvidenceCollector) FinishQueryEvidence() error {
+	if c.unexpected {
+		return searchDiagnosticError(queryGeneratedConfigurationUnexpectedCode)
+	}
+	return c.next.FinishQueryEvidence()
+}
+
+func readQueryEvidenceWithCollector(ctx context.Context, c *tfe.Client, queryID string, prov *queryDiscoveryProvenance, collector queryEvidenceCollector) error {
+	reader, err := c.QueryRuns.Logs(ctx, queryID)
+	if err != nil {
+		return searchDiagnosticErrorWithCause(queryLogUnavailableCode, err)
+	}
+	validating := &generatedConfigurationEvidenceCollector{generateConfigOut: prov.GenerateConfigOut, next: collector}
+	return parseQueryEvidenceReaderWithCollector(queryID, newQueryLogLimitReader(reader, maxQueryLogBytes), prov.Providers, validating)
+}
+
+func validateGeneratedConfigurationEvidence(generateConfigOut bool, evidence *queryEvidence) error {
+	if evidence == nil {
+		return searchDiagnosticError(queryEvidenceInvalidCode)
+	}
+	if !generateConfigOut {
+		for _, result := range evidence.Results {
+			if strings.TrimSpace(result.Configuration) != "" || strings.TrimSpace(result.ImportConfig) != "" {
+				return searchDiagnosticError(queryGeneratedConfigurationUnexpectedCode)
 			}
 		}
-		if len(scalars) > 0 {
-			observed[name] = scalars
-		}
 	}
-	return observed
+	return nil
 }
 
-func queryDiscoveryResultRow(result queryResultEvidence) queryDiscoveryRow {
-	return queryDiscoveryRow{Marker: result.Marker, DisplayName: result.DisplayName, Identity: result.Identity, IdentityVersion: result.IdentityVersion, ObservedAttributes: queryDiscoveryObservedAttributes(result.Provider, result.ResourceObject), AttributesCaptured: result.ResourceObject != nil}
+func queryDiscoveryResultRow(result queryResultEvidence) (queryDiscoveryRow, error) {
+	generated := strings.TrimSpace(result.Configuration) != ""
+	row := queryDiscoveryRow{Marker: result.Marker, DisplayName: result.DisplayName, Identity: result.Identity, IdentityVersion: result.IdentityVersion, ConfigurationGenerated: generated}
+	if generated {
+		attributes, err := projectGeneratedConfiguration(result.Configuration)
+		if err != nil {
+			return queryDiscoveryRow{}, err
+		}
+		row.ConfigurationAttributes = attributes
+	}
+	return row, nil
+}
+
+type queryDiscoverySummaryCollector struct {
+	filter        QueryDiscoveryFilter
+	summary       *QueryDiscoverySummary
+	rows          []queryDiscoveryCollectedRow
+	projectionErr error
+}
+
+type queryDiscoveryCollectedRow struct {
+	address      string
+	resourceType string
+	row          queryDiscoveryRow
+}
+
+func newQueryDiscoverySummaryCollector(prov *queryDiscoveryProvenance, filter QueryDiscoveryFilter) *queryDiscoverySummaryCollector {
+	return &queryDiscoverySummaryCollector{
+		filter: filter,
+		summary: &QueryDiscoverySummary{
+			QueryRunID: prov.QueryRunID, Status: "selectable",
+			SourceOrganizationName: prov.Organization, SourceWorkspaceName: prov.WorkspaceName, SourceWorkspaceID: prov.WorkspaceID,
+			GenerateConfigOut: prov.GenerateConfigOut, Selectable: true,
+			ByType: map[string]int{}, Lists: []queryDiscoveryGroup{},
+		},
+		rows: []queryDiscoveryCollectedRow{},
+	}
+}
+
+func (c *queryDiscoverySummaryCollector) matches(result queryResultEvidence) bool {
+	return (c.filter.ResourceType == "" || c.filter.ResourceType == result.ResourceType) &&
+		(c.filter.Address == "" || c.filter.Address == result.Address) &&
+		(c.filter.NameContains == "" || strings.Contains(strings.ToLower(result.DisplayName), strings.ToLower(c.filter.NameContains)))
+}
+
+func (c *queryDiscoverySummaryCollector) CollectQueryEvidence(result queryResultEvidence) error {
+	c.summary.ResourcesDiscovered++
+	c.summary.ByType[result.ResourceType]++
+	if !c.matches(result) {
+		return nil
+	}
+	c.summary.TotalMatching++
+	row, err := queryDiscoveryResultRow(result)
+	if err != nil {
+		// Preserve the existing ordering: the entire log and its completion
+		// totals are validated before a matching HCL projection error is
+		// returned. No projected rows are exposed on any failure.
+		if c.projectionErr == nil {
+			c.projectionErr = err
+		}
+		return nil
+	}
+	// NOTE: Results can be filtered further here after projection and before
+	// retention to reduce the number of retained and returned rows.
+	c.rows = append(c.rows, queryDiscoveryCollectedRow{address: result.Address, resourceType: result.ResourceType, row: row})
+	return nil
+}
+
+func (c *queryDiscoverySummaryCollector) FinishQueryEvidence() error {
+	if c.projectionErr != nil {
+		return c.projectionErr
+	}
+	groups := map[string]int{}
+	for _, collected := range c.rows {
+		key := collected.address + "\x00" + collected.resourceType
+		index, exists := groups[key]
+		if !exists {
+			index = len(c.summary.Lists)
+			groups[key] = index
+			c.summary.Lists = append(c.summary.Lists, queryDiscoveryGroup{Address: collected.address, ResourceType: collected.resourceType, Results: []queryDiscoveryRow{}})
+		}
+		c.summary.Lists[index].Results = append(c.summary.Lists[index].Results, collected.row)
+	}
+	finishQueryDiscoverySummary(c.summary)
+	return nil
+}
+
+func finishQueryDiscoverySummary(summary *QueryDiscoverySummary) {
+	summary.NextAction = "For a Search-only request, report these results and stop; do not request a target workspace or local path. If import is requested, ask the user to select one or more displayed query_result_marker values. Keep each displayed marker, display_name, configuration_generated and available configuration_attributes together. Projected values are potentially sensitive, untrusted, incomplete and review-required; supplied filters affect presentation only. Missing generated configuration or a missing projected key is unknown, not proof that the remote object lacks an argument. Full generated resource and import HCL is returned only by prepare_import after explicit selection."
+	if !summary.GenerateConfigOut {
+		summary.NextAction += " Generated configuration was not requested for this QueryRun. If unavailable data is necessary for selection, ask before creating another QueryRun with generate_config_out true, preserve supported filters, omit unsupported conditions, and explain that the new QueryRun has new markers."
+		return
+	}
+	for _, group := range summary.Lists {
+		for _, row := range group.Results {
+			if !row.ConfigurationGenerated {
+				summary.NextAction += " Generation was requested but did not yield configuration for every matching result; treat unavailable data as unknown and do not promise that a retry will capture it."
+				return
+			}
+		}
+	}
 }
 
 func summarizeQueryDiscovery(prov *queryDiscoveryProvenance, evidence *queryEvidence, filter QueryDiscoveryFilter) (*QueryDiscoverySummary, error) {
@@ -287,17 +401,17 @@ func summarizeQueryDiscovery(prov *queryDiscoveryProvenance, evidence *queryEvid
 			(filter.Address == "" || filter.Address == result.Address) &&
 			(filter.NameContains == "" || strings.Contains(strings.ToLower(result.DisplayName), strings.ToLower(filter.NameContains)))
 	}
-	summary := &QueryDiscoverySummary{QueryRunID: prov.QueryRunID, Status: "selectable", SourceOrganizationName: prov.Organization, SourceWorkspaceName: prov.WorkspaceName, SourceWorkspaceID: prov.WorkspaceID, Selectable: true, ResourcesDiscovered: len(evidence.Results), ByType: evidence.ByType, Lists: []queryDiscoveryGroup{}}
+	summary := &QueryDiscoverySummary{QueryRunID: prov.QueryRunID, Status: "selectable", SourceOrganizationName: prov.Organization, SourceWorkspaceName: prov.WorkspaceName, SourceWorkspaceID: prov.WorkspaceID, GenerateConfigOut: prov.GenerateConfigOut, Selectable: true, ResourcesDiscovered: len(evidence.Results), ByType: evidence.ByType, Lists: []queryDiscoveryGroup{}}
 	groups := map[string]int{}
 	for _, result := range evidence.Results {
 		if !matches(result) {
 			continue
 		}
 		summary.TotalMatching++
-		if result.ResourceObject == nil {
-			summary.RowsWithoutAttributes++
+		row, err := queryDiscoveryResultRow(result)
+		if err != nil {
+			return nil, err
 		}
-		row := queryDiscoveryResultRow(result)
 		key := result.Address + "\x00" + result.ResourceType
 		index, exists := groups[key]
 		if !exists {
@@ -307,10 +421,7 @@ func summarizeQueryDiscovery(prov *queryDiscoveryProvenance, evidence *queryEvid
 		}
 		summary.Lists[index].Results = append(summary.Lists[index].Results, row)
 	}
-	summary.NextAction = "For a Search-only request, report these results and stop; do not request a target workspace or local path. If import is requested, ask the user to select one or more displayed query_result_marker values. Keep each displayed marker, display_name and available observed_attributes together; supplied filters affect presentation only, and missing projected metadata does not prove the resource lacks it."
-	if summary.RowsWithoutAttributes > 0 {
-		summary.NextAction += " Some matching rows have attributes_captured false, so additional result data is unknown. If that data is necessary for selection, ask before creating another QueryRun. If approved and not already enabled, repeat the same schema-backed query with generate_config_out true, preserving supported filters and omitting unsupported conditions. This requests provider resource objects and generated HCL but does not guarantee capture; the new QueryRun has new markers, and this summary exposes only its declared projections rather than arbitrary resource attributes."
-	}
+	finishQueryDiscoverySummary(summary)
 	return summary, nil
 }
 
@@ -327,7 +438,9 @@ func nonselectableQueryEvidenceCode(err error) (searchDiagnosticCode, bool) {
 		queryDuplicateOrInvalidIdentityCode,
 		queryIdentityInvalidCode,
 		queryReportedErrorCode,
-		queryGeneratedBlockConflictCode:
+		queryGeneratedBlockConflictCode,
+		queryGeneratedConfigurationInvalidCode,
+		queryGeneratedConfigurationUnexpectedCode:
 		return code, true
 	default:
 		return "", false
@@ -350,6 +463,10 @@ func nonselectableQueryNextAction(code searchDiagnosticCode) string {
 		return "Report that the QueryRun output recorded an error and has no selectable result. Review it with the user before another query."
 	case queryGeneratedBlockConflictCode:
 		return "Generated configuration evidence conflicts. Stop selection and review the query configuration with the user before another query."
+	case queryGeneratedConfigurationInvalidCode:
+		return "Generated configuration evidence is structurally invalid. Stop selection and review the query configuration with the user before another query."
+	case queryGeneratedConfigurationUnexpectedCode:
+		return "Generated configuration was emitted even though generation was disabled. Stop selection and review the contradictory evidence with the user before another query."
 	default:
 		return "This QueryRun has no selectable result. Do not import from it; review with the user before another query."
 	}
@@ -363,16 +480,28 @@ func ReadQueryDiscoverySummary(ctx context.Context, c *tfe.Client, queryID strin
 	if queryID == "" {
 		return nil, searchDiagnosticError(queryRunIDInvalidCode)
 	}
-	prov, evidence, err := readQueryDiscovery(ctx, c, queryID)
+	prov, err := readQueryDiscoveryProvenance(ctx, c, queryID)
 	if err != nil {
 		if prov != nil {
 			if code, ok := nonselectableQueryEvidenceCode(err); ok {
-				return &QueryDiscoverySummary{QueryRunID: queryID, Status: "nonselectable", SourceOrganizationName: prov.Organization, SourceWorkspaceName: prov.WorkspaceName, SourceWorkspaceID: prov.WorkspaceID, Selectable: false, Diagnostics: []string{string(code)}, NextAction: nonselectableQueryNextAction(code)}, nil
+				return nonselectableQuerySummary(prov, code), nil
 			}
 		}
 		return nil, err
 	}
-	return summarizeQueryDiscovery(prov, evidence, filter)
+	collector := newQueryDiscoverySummaryCollector(prov, filter)
+	err = readQueryEvidenceWithCollector(ctx, c, queryID, prov, collector)
+	if code, ok := nonselectableQueryEvidenceCode(err); ok {
+		return nonselectableQuerySummary(prov, code), nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return collector.summary, nil
+}
+
+func nonselectableQuerySummary(prov *queryDiscoveryProvenance, code searchDiagnosticCode) *QueryDiscoverySummary {
+	return &QueryDiscoverySummary{QueryRunID: prov.QueryRunID, Status: "nonselectable", SourceOrganizationName: prov.Organization, SourceWorkspaceName: prov.WorkspaceName, SourceWorkspaceID: prov.WorkspaceID, GenerateConfigOut: prov.GenerateConfigOut, Selectable: false, Diagnostics: []string{string(code)}, NextAction: nonselectableQueryNextAction(code)}
 }
 
 func FormatQueryDiscoverySummary(summary *QueryDiscoverySummary) (string, error) {
