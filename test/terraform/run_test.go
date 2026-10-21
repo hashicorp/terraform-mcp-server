@@ -127,8 +127,8 @@ func TestRunLifecycle(t *testing.T) {
 		result, resultText := callTool(t, s, "get_run_details", map[string]any{"run_id": runID})
 		require.False(t, result.IsError, "get_run_details should not return an error")
 		require.NotEmpty(t, resultText, "get_run_details response must not be empty")
-		toolRunID := gjson.Get(resultText, "data.id").String()
-		toolRunMessage := gjson.Get(resultText, "data.attributes.message").String()
+		toolRunID := gjson.Get(resultText, pick("data.id", "id")).String()
+		toolRunMessage := gjson.Get(resultText, pick("data.attributes.message", "message")).String()
 
 		// Verify against the TFE API directly
 		run, err := client.Runs.Read(t.Context(), runID)
@@ -234,7 +234,6 @@ func TestRunLifecycle(t *testing.T) {
 		require.NoError(t, err, "failed to download the plan export directly from TFE")
 		assert.Equal(t, directArchiveData, archiveData)
 	})
-
 	t.Run("Action run", func(t *testing.T) {
 		result, resultText := callTool(t, s, "action_run", map[string]any{
 			"run_id":     runID,
@@ -243,8 +242,11 @@ func TestRunLifecycle(t *testing.T) {
 		})
 		require.False(t, result.IsError, "action_run should not return an error")
 		require.NotEmpty(t, resultText, "action_run response must not be empty")
-		// TODO: update this after MCP SKD migration
-		assert.Contains(t, resultText, "Run approved and applied successfully")
+		expectedMessage := pick(
+			"Run approved and applied successfully",
+			fmt.Sprintf("Apply request accepted for run %q", runID),
+		)
+		assert.Contains(t, resultText, expectedMessage)
 	})
 
 	// action_run starts applying asynchronously; wait until the apply finishes.
