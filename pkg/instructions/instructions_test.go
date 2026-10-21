@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestEmbeddedInstructionsPreserveProviderDiscoveryBoundaries(t *testing.T) {
+func TestEmbeddedInstructionsPreserveDiscoveryAndGuidanceBoundaries(t *testing.T) {
 	searchStart := strings.Index(Text, "**Terraform Search (")
 	codeGenerationStart := strings.Index(Text, "**Code Generation**")
 	require.GreaterOrEqual(t, searchStart, 0)
@@ -25,13 +25,21 @@ func TestEmbeddedInstructionsPreserveProviderDiscoveryBoundaries(t *testing.T) {
 		"reuse the accepted `terraform_org_name` and `workspace_name` explicitly",
 		"`provider_namespace` and `provider_name` together",
 		"Do not replace them with `get_latest_provider_version`",
+		"`generate_query_configuration` transforms a supplied schema without Terraform credentials or backend calls",
+		"exact `provider_namespace`, `provider_name`, and `provider_version`",
+		"bare schema map or a wrapper",
+		"comma-separated exact schema keys",
+		"nesting modes/cardinality, required values",
+		"Never invent unsupported filters or omit required values",
+		"Guidance is not backend validation",
+		"Stop at reviewed configuration guidance",
 		"Do not request an import target or local path",
 		"Do not create queries or modify infrastructure",
 	} {
 		require.Contains(t, guidance, required)
 	}
 	for _, unavailable := range []string{
-		"generate_query_configuration", "execute_query", "get_query_status", "get_query_summary",
+		"execute_query", "get_query_status", "get_query_summary",
 		"prepare_import", "verify_import_plan", "TF_MCP_IMPORT_WORKSPACE",
 	} {
 		require.NotContains(t, Text, unavailable)

@@ -9,16 +9,29 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestSearchProviderMetadataAndCredentialGating(t *testing.T) {
+func TestSearchMetadataAndCredentialGating(t *testing.T) {
 	filter := NewToolsetFilter([]string{Search})
-	want := []ToolDef{{Name: "provider_list_schema_list", Toolset: Search, RequiresTFE: true}}
+	want := []ToolDef{
+		{Name: "generate_query_configuration", Toolset: Search},
+		{Name: "provider_list_schema_list", Toolset: Search, RequiresTFE: true},
+	}
 	require.Equal(t, want, filter.EnabledTools(nil))
-	require.Empty(t, filter.EnabledTools(func(td ToolDef) bool { return !td.RequiresTFE }))
-	require.Equal(t, want, filter.EnabledTools(func(td ToolDef) bool { return td.RequiresTFE }))
-	require.True(t, IsSearchTool("provider_list_schema_list"))
+	require.Equal(t, want[:1], filter.EnabledTools(func(td ToolDef) bool { return !td.RequiresTFE }))
+	require.Equal(t, want[1:], filter.EnabledTools(func(td ToolDef) bool { return td.RequiresTFE }))
+	for _, td := range want {
+		require.True(t, IsSearchTool(td.Name))
+		group, ok := GetToolsetForTool(td.Name)
+		require.True(t, ok)
+		require.Equal(t, Search, group)
+		require.True(t, NewIndividualToolFilter([]string{td.Name}).IsToolEnabled(td.Name))
+		require.True(t, NewToolsetFilter([]string{All}).IsToolEnabled(td.Name))
+		require.False(t, NewToolsetFilter([]string{Registry}).IsToolEnabled(td.Name))
+		require.True(t, KnownToolNames()[td.Name])
+	}
 	require.False(t, IsSearchTool("search_provider_docs"))
 	require.False(t, IsSearchTool("unknown_tool"))
-	group, ok := GetToolsetForTool("provider_list_schema_list")
-	require.True(t, ok)
-	require.Equal(t, Search, group)
+	for _, future := range []string{"execute_query", "get_query_status", "get_query_summary", "prepare_import", "verify_import_plan"} {
+		require.False(t, IsSearchTool(future))
+		require.False(t, KnownToolNames()[future])
+	}
 }

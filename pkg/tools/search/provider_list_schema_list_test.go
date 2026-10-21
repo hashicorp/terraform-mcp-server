@@ -385,7 +385,9 @@ func TestProviderListFetchGenerateWithAtlasSchemaDetail(t *testing.T) {
 	require.Equal(t, selected.Version, detail.Version)
 	require.Contains(t, detail.Note, `provider_name="aws"`)
 	require.Contains(t, detail.Note, `provider_version="6.66.0"`)
-	// The generator round-trip assertions join this fixture with PR2.
+	guide, err := GenerateQueryConfigurationText(string(detail.Schemas), detail.Name, detail.Namespace, detail.Version, "aws_sqs_queue")
+	require.NoError(t, err)
+	require.Contains(t, guide, "aws_sqs_queue")
 	require.Equal(t, 2, listReads, "LIST and FETCH each read the catalog")
 	require.Equal(t, 1, detailReads)
 }

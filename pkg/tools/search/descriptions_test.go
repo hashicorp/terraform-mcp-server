@@ -16,6 +16,7 @@ func TestSearchDescriptionsOwnToolLocalContracts(t *testing.T) {
 		required    []string
 	}{
 		{"provider_list_schema_list", ProviderListSchemaListDescription, []string{"terraform_org_name", "workspace_name", "catalog", "generate_query_configuration", "target managed-resource"}},
+		{"generate_query_configuration", GenerateQueryConfigurationDescription, []string{"schema-backed guidance", "does not execute", "exact schema key", "nesting/cardinality", "Required schema attributes remain required"}},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {

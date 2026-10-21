@@ -4,6 +4,7 @@
 package toolsets
 
 var searchTools = []ToolDef{
+	{Name: "generate_query_configuration", Toolset: Search},
 	{Name: "provider_list_schema_list", Toolset: Search, RequiresTFE: true},
 }
 

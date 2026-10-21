@@ -618,13 +618,15 @@ curl http://localhost:8080/health
 
 [Check out available tools here :link:](https://developer.hashicorp.com/terraform/docs/tools/mcp-server/reference#available-tools)
 
-### Search Provider Discovery
+### Search Provider Discovery and Configuration Guidance
 
 Enable `--toolsets=search` (or `--tools=provider_list_schema_list`) and supply valid Terraform credentials to use `provider_list_schema_list`. This read-only tool first verifies workspace access, then reads the organization-scoped Search provider catalog. Omit both provider fields to list supported providers; supply `provider_namespace` and `provider_name` together to fetch `list_resource_schemas`. The catalog selects the exact provider release; do not substitute a latest public-registry version or guess list-resource type names.
 
 Explicit `terraform_org_name` and `workspace_name` override environment defaults. Otherwise, the server proposes `TF_CLOUD_ORGANIZATION` and `TF_MCP_QUERY_WORKSPACE` (falling back to `TF_WORKSPACE`). Blank values count as unset. Defaults are proposals, not authorization: confirm or supply the complete source pair before scoped access. The official SDK uses native `InputRequests` with accept/decline/cancel responses; the legacy SDK returns a non-error `input_required` JSON-text result for the client to resolve and resubmit explicitly. Organization allowlists apply to proposed and accepted scope before scoped access or disallowed proposal disclosure.
 
-Provider results retain their complete JSON-text representation, including confirmed scope. This capability stops at catalog/schema discovery: it does not create queries, modify infrastructure, or read local files. Search argument values are omitted from tool-call logs, and official Search error payloads are not reproduced in those logs; this is not a blanket guarantee about all application or backend logs.
+Use `generate_query_configuration` (also available individually with `--tools=generate_query_configuration`) to transform a supplied schema without Terraform credentials or backend access. Pass the discovered `list_resource_schemas` and exact provider namespace, name, and version. Bare schema maps and wrappers containing `list_resource_schemas` are supported; optional comma-separated `resource_types` must be exact schema keys. Both SDKs return the same text guidance covering scalar and nested attributes, required values, nesting modes/cardinality, schema-backed examples, filters, and variable syntax. Do not invent unsupported filters or infer list-resource names from managed-resource names. Review and fill the scaffold; generated guidance has not passed backend validation, and requesting generated configuration does not guarantee additional data capture.
+
+Provider results retain their complete JSON-text representation, including confirmed scope. This release stops at discovery and reviewed configuration guidance: execution and results are unavailable, even where source-derived tool text describes a later workflow. It does not create queries, modify infrastructure, read local files, or require an import target/local path. Search argument values, including supplied schemas, are omitted from tool-call logs, and official Search error payloads are not reproduced in those logs; this is not a blanket guarantee about all application or backend logs.
 
 ## Available Resources
 
