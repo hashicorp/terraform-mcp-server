@@ -83,12 +83,9 @@ func TestRunLifecycle(t *testing.T) {
 		require.False(t, result.IsError, "create_run should not return an error")
 		require.NotEmpty(t, resultText, "create_run response must not be empty")
 
-		runID = gjson.Get(resultText, "data.id").String() // Legacy SDK
-		// TODO: Switch to the official SDK response after the migration is complete.
-		// Official SDK: runID = gjson.Get(resultText, "run_id").String()
+		runID = gjson.Get(resultText, pick("data.id", "run_id")).String()
 		require.NotEmpty(t, runID, "Tool response should include a run ID")
-		toolRunMessage := gjson.Get(resultText, "data.attributes.message").String() // Legacy SDK
-		// Official SDK: toolRunMessage := gjson.Get(resultText, "message").String()
+		toolRunMessage := gjson.Get(resultText, pick("data.attributes.message", "message")).String()
 		assert.Equal(t, runMessage, toolRunMessage)
 
 		// Verify against the TFE API directly
@@ -498,9 +495,7 @@ func TestListRunsStatusFilterAndWorkspaceName(t *testing.T) {
 		"message":            "list_runs status filter test",
 	})
 	require.False(t, result.IsError, "create_run should not return an error")
-	runID := gjson.Get(resultText, "data.id").String() // Legacy SDK
-	// TODO: Switch to the official SDK response after the migration is complete.
-	// Official SDK: runID := gjson.Get(resultText, "run_id").String()
+	runID := gjson.Get(resultText, pick("data.id", "run_id")).String()
 	require.NotEmpty(t, runID, "create_run response should include a run ID")
 
 	waitForRun(t, client, runID, "planned_and_finished", func(r *tfe.Run) bool {
