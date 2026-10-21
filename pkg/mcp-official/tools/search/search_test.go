@@ -5,6 +5,7 @@ package search
 
 import (
 	"context"
+	"log/slog"
 	"testing"
 
 	"github.com/google/jsonschema-go/jsonschema"
@@ -17,6 +18,8 @@ import (
 func TestOfficialSearchDescriptionsUseSharedValues(t *testing.T) {
 	require.Equal(t, searchlogic.ProviderListSchemaListDescription, ProviderListSchemaListTool().Description)
 	require.Equal(t, searchlogic.GenerateQueryConfigurationDescription, GenerateQueryConfigurationTool().Description)
+	require.Equal(t, searchlogic.ExecuteQueryDescription, ExecuteQueryTool().Description)
+	require.Equal(t, searchlogic.GetQueryStatusDescription, GetQueryStatusTool().Description)
 }
 
 func TestOfficialSearchToolAnnotations(t *testing.T) {
@@ -30,6 +33,63 @@ func TestOfficialSearchToolAnnotations(t *testing.T) {
 	require.False(t, *generator.Annotations.DestructiveHint)
 	require.False(t, *generator.Annotations.OpenWorldHint)
 	require.Nil(t, generator.OutputSchema, "guidance retains its text result contract")
+	for _, tool := range []*mcp.Tool{ExecuteQueryTool(), GetQueryStatusTool()} {
+		require.Equal(t, tool.Name != "execute_query", tool.Annotations.ReadOnlyHint)
+		require.False(t, *tool.Annotations.DestructiveHint)
+		require.True(t, *tool.Annotations.OpenWorldHint)
+		require.NotNil(t, tool.OutputSchema)
+	}
+	require.Contains(t, ExecuteQueryTool().Description, "EXECUTION APPROVAL")
+	require.Contains(t, ExecuteQueryTool().Description, "wait for their approval")
+}
+
+func TestOfficialExecutionArgumentsAndValidation(t *testing.T) {
+	querySchema := ExecuteQueryTool().InputSchema.(*jsonschema.Schema)
+	require.Equal(t, []string{"query_configuration"}, querySchema.Required)
+	require.Len(t, querySchema.Properties, 3)
+	require.Equal(t, searchlogic.QueryOrganizationDescription, querySchema.Properties[searchlogic.ScopeOrganizationInput].Description)
+	require.Equal(t, searchlogic.QueryWorkspaceDescription, querySchema.Properties[searchlogic.ScopeWorkspaceInput].Description)
+	require.NotContains(t, querySchema.Properties, "organization_name")
+	output := ExecuteQueryTool().OutputSchema.(*jsonschema.Schema)
+	require.Equal(t, []string{"query_run_id"}, output.Required)
+	require.Len(t, output.Properties, 1)
+	schema, err := jsonschema.For[QueryRunArguments](nil)
+	require.NoError(t, err)
+	require.Equal(t, []string{"query_run_id"}, schema.Required)
+	statusSchema := GetQueryStatusTool().OutputSchema.(*jsonschema.Schema)
+	require.ElementsMatch(t, []string{"query_run_id", "status", "terminal", "message"}, statusSchema.Required)
+	require.Contains(t, statusSchema.Properties, "status_timestamps")
+	require.Contains(t, statusSchema.Properties, "retry_after_seconds")
+	_, _, err = GetQueryStatusFunc(slog.Default())(context.Background(), nil, QueryRunArguments{QueryRunID: " "})
+	require.ErrorContains(t, err, "missing required input: query_run_id")
+	for _, raw := range []string{" ", "{", "{}"} {
+		_, _, err = ExecuteQueryFunc(context.Background(), nil, ExecuteQueryArguments{
+			OrganizationName: "org", WorkspaceName: "ws", QueryConfiguration: raw,
+		})
+		require.ErrorContains(t, err, "query_configuration")
+	}
+}
+
+func TestOfficialExecuteQueryValidatesAfterAcceptedScope(t *testing.T) {
+	request := &mcp.CallToolRequest{Params: &mcp.CallToolParamsRaw{InputResponses: mcp.InputResponseMap{
+		searchlogic.ScopeInputRequestID: &mcp.ElicitResult{Action: "accept", Content: map[string]any{
+			searchlogic.ScopeOrganizationInput: "org",
+			searchlogic.ScopeWorkspaceInput:    "workspace",
+		}},
+	}}}
+	_, _, err := ExecuteQueryFunc(context.Background(), request, ExecuteQueryArguments{QueryConfiguration: "{"})
+	require.ErrorContains(t, err, "invalid query_configuration")
+}
+
+func TestOfficialExecuteQueryRejectsDisallowedSourceBeforeClientUse(t *testing.T) {
+	ctx := terraformclient.WithOrganizationAllowlist(context.Background(), []string{"allowed"})
+	result, output, err := ExecuteQueryFunc(ctx, nil, ExecuteQueryArguments{
+		OrganizationName: "blocked-secret", WorkspaceName: "ws", QueryConfiguration: "{",
+	})
+	require.ErrorIs(t, err, terraformclient.ErrOrganizationNotAllowed)
+	require.Nil(t, result)
+	require.Nil(t, output)
+	require.NotContains(t, err.Error(), "blocked-secret")
 }
 
 func TestOfficialGeneratorSchemaAndValidation(t *testing.T) {
@@ -95,6 +155,12 @@ func TestOfficialSearchScopeRequestsNativeInput(t *testing.T) {
 			require.Contains(t, result.InputRequests, searchlogic.ScopeInputRequestID)
 			require.Empty(t, result.RequestState)
 			require.Empty(t, result.Content)
+			execution, executionOutput, err := ExecuteQueryFunc(context.Background(), nil, ExecuteQueryArguments{OrganizationName: test.explicitOrg, QueryConfiguration: "{"})
+			require.NoError(t, err)
+			require.Nil(t, executionOutput)
+			require.Contains(t, execution.InputRequests, searchlogic.ScopeInputRequestID)
+			require.Empty(t, execution.RequestState)
+			require.Empty(t, execution.Content)
 			request := result.InputRequests[searchlogic.ScopeInputRequestID].(*mcp.ElicitParams)
 			require.Contains(t, request.Message, searchlogic.ScopeOrganizationInput)
 			require.Equal(t, "form", request.Mode)

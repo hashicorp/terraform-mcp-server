@@ -39,6 +39,19 @@ func TestProviderDataUnavailableErrorPreservesCodeAndCause(t *testing.T) {
 	require.EqualError(t, classified, "provider validation: locked_provider_source_invalid: reviewed recovery text")
 }
 
+func TestQueryStatusUnavailableErrorPreservesCodeAndCause(t *testing.T) {
+	require.NoError(t, QueryStatusUnavailableError(nil))
+	cause := errors.New("backend-sensitive-sentinel")
+	err := QueryStatusUnavailableError(cause)
+	require.EqualError(t, err, "query_run_unavailable")
+	require.ErrorIs(t, err, cause)
+	code, ok := searchDiagnosticCodeFromError(err)
+	require.True(t, ok)
+	require.Equal(t, queryRunUnavailableCode, code)
+	classified := searchDiagnosticError(queryOwnershipUnverifiedCode)
+	require.Same(t, classified, QueryStatusUnavailableError(classified))
+}
+
 func TestSearchDiagnosticCodeFromUnclassifiedError(t *testing.T) {
 	for _, err := range []error{nil, errors.New("unclassified")} {
 		code, ok := searchDiagnosticCodeFromError(err)

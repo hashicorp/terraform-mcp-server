@@ -81,6 +81,8 @@ func TestToolLoggingMiddleware_DoesNotLogSearchArgumentsOrErrors(t *testing.T) {
 	for _, test := range []struct{ name, argument string }{
 		{"provider_list_schema_list", "workspace_name"},
 		{"generate_query_configuration", "list_resource_schemas"},
+		{"execute_query", "query_configuration"},
+		{"get_query_status", "query_run_id"},
 	} {
 		for _, outcome := range []string{"success", "protocol error", "tool error"} {
 			t.Run(test.name+"/"+outcome, func(t *testing.T) {
