@@ -37,6 +37,31 @@ type queryEvidence struct {
 	ByType  map[string]int
 }
 
+// queryEvidenceCollector receives each result only after the shared parser has
+// validated its identity, provider provenance, marker, and generated-block
+// aliases. Collectors decide which validated values must survive the current
+// tool call; whole-query validation remains parser-owned.
+type queryEvidenceCollector interface {
+	CollectQueryEvidence(queryResultEvidence) error
+	FinishQueryEvidence() error
+}
+
+type allQueryEvidenceCollector struct {
+	evidence *queryEvidence
+}
+
+func newAllQueryEvidenceCollector() *allQueryEvidenceCollector {
+	return &allQueryEvidenceCollector{evidence: &queryEvidence{Results: []queryResultEvidence{}, ByType: map[string]int{}}}
+}
+
+func (c *allQueryEvidenceCollector) CollectQueryEvidence(result queryResultEvidence) error {
+	c.evidence.Results = append(c.evidence.Results, result)
+	c.evidence.ByType[result.ResourceType]++
+	return nil
+}
+
+func (c *allQueryEvidenceCollector) FinishQueryEvidence() error { return nil }
+
 type queryResultMarkerPayload struct {
 	QueryRunID      string         `json:"query_run_id"`
 	ProviderSource  string         `json:"provider_source"`
@@ -77,6 +102,43 @@ type queryLogDiagnostic struct {
 // queryLogReadBufferSize controls go-tfe LogReader range-request size. It is
 // not an artifact or NDJSON record-size limit.
 const queryLogReadBufferSize = 64 * 1024
+
+// maxQueryLogBytes is a temporary outer safety ceiling for decoded QueryRun
+// log bytes. It bounds remote evidence consumption; it is not a product result
+// limit, retained-heap guarantee, or MCP response-size guarantee.
+const maxQueryLogBytes int64 = 128 << 20
+
+type queryLogLimitReader struct {
+	reader    io.Reader
+	remaining int64
+}
+
+func newQueryLogLimitReader(reader io.Reader, limit int64) io.Reader {
+	return &queryLogLimitReader{reader: reader, remaining: limit}
+}
+
+func (r *queryLogLimitReader) Read(p []byte) (int, error) {
+	if len(p) == 0 {
+		return 0, nil
+	}
+	if r.remaining == 0 {
+		var probe [1]byte
+		n, err := r.reader.Read(probe[:])
+		if n > 0 {
+			return 0, searchDiagnosticError(queryLogSizeLimitCode)
+		}
+		return 0, err
+	}
+	if int64(len(p)) > r.remaining {
+		p = p[:r.remaining]
+	}
+	n, err := r.reader.Read(p)
+	if int64(n) > r.remaining {
+		return 0, searchDiagnosticError(queryLogSizeLimitCode)
+	}
+	r.remaining -= int64(n)
+	return n, err
+}
 
 // The marker is deterministic within one QueryRun but does not authenticate
 // either a QueryRun or the identity of a cloud object. V0 candidate- values
@@ -179,25 +241,29 @@ func parseQueryEvidence(queryID string, data []byte, providers map[string]queryR
 type queryEvidenceParser struct {
 	queryID       string
 	providers     map[string]queryResultProvider
-	evidence      *queryEvidence
+	collector     queryEvidenceCollector
 	counts        map[string]int
 	totals        map[string]int
 	seen          map[string]bool
 	completeTypes map[string]string
+	foundTypes    map[string]string
+	mixedTypes    map[string]bool
 }
 
-func newQueryEvidenceParser(queryID string, providers map[string]queryResultProvider) (*queryEvidenceParser, error) {
-	if queryID == "" {
+func newQueryEvidenceParser(queryID string, providers map[string]queryResultProvider, collector queryEvidenceCollector) (*queryEvidenceParser, error) {
+	if queryID == "" || collector == nil {
 		return nil, searchDiagnosticError(queryEvidenceInvalidCode)
 	}
 	return &queryEvidenceParser{
 		queryID:       queryID,
 		providers:     providers,
-		evidence:      &queryEvidence{Results: []queryResultEvidence{}, ByType: map[string]int{}},
+		collector:     collector,
 		counts:        map[string]int{},
 		totals:        map[string]int{},
 		seen:          map[string]bool{},
 		completeTypes: map[string]string{},
+		foundTypes:    map[string]string{},
+		mixedTypes:    map[string]bool{},
 	}, nil
 }
 
@@ -205,18 +271,30 @@ func newQueryEvidenceParser(queryID string, providers map[string]queryResultProv
 // explicit buffer size keeps go-tfe LogReader range requests efficient without
 // imposing an artifact or record-size limit.
 func parseQueryEvidenceReader(queryID string, reader io.Reader, providers map[string]queryResultProvider) (*queryEvidence, error) {
-	parser, err := newQueryEvidenceParser(queryID, providers)
+	collector := newAllQueryEvidenceCollector()
+	err := parseQueryEvidenceReaderWithCollector(queryID, reader, providers, collector)
 	if err != nil {
 		return nil, err
+	}
+	return collector.evidence, nil
+}
+
+func parseQueryEvidenceReaderWithCollector(queryID string, reader io.Reader, providers map[string]queryResultProvider, collector queryEvidenceCollector) error {
+	parser, err := newQueryEvidenceParser(queryID, providers, collector)
+	if err != nil {
+		return err
 	}
 	buffered := bufio.NewReaderSize(reader, queryLogReadBufferSize)
 	for {
 		line, readErr := buffered.ReadBytes('\n')
 		if readErr != nil && !errors.Is(readErr, io.EOF) {
-			return nil, searchDiagnosticErrorWithCause(queryLogUnavailableCode, readErr)
+			if _, ok := searchDiagnosticCodeFromError(readErr); ok {
+				return readErr
+			}
+			return searchDiagnosticErrorWithCause(queryLogUnavailableCode, readErr)
 		}
 		if err := parser.consumeLine(line); err != nil {
-			return nil, err
+			return err
 		}
 		if errors.Is(readErr, io.EOF) {
 			break
@@ -305,10 +383,13 @@ func (p *queryEvidenceParser) consumeFound(found *queryFoundResource) error {
 	} else if found.ImportBlock != nil {
 		result.ImportConfig = *found.ImportBlock
 	}
-	p.evidence.Results = append(p.evidence.Results, result)
-	p.evidence.ByType[found.ResourceType]++
+	if previous := p.foundTypes[found.Address]; previous == "" {
+		p.foundTypes[found.Address] = found.ResourceType
+	} else if previous != found.ResourceType {
+		p.mixedTypes[found.Address] = true
+	}
 	p.counts[found.Address]++
-	return nil
+	return p.collector.CollectQueryEvidence(result)
 }
 
 func (p *queryEvidenceParser) consumeCompletion(complete *queryListCompletion) error {
@@ -330,24 +411,24 @@ func (p *queryEvidenceParser) consumeDiagnostic(diagnostic *queryLogDiagnostic) 
 	return nil
 }
 
-func (p *queryEvidenceParser) finish() (*queryEvidence, error) {
+func (p *queryEvidenceParser) finish() error {
 	if len(p.totals) == 0 {
-		return nil, searchDiagnosticError(queryEvidenceIncompleteCode)
+		return searchDiagnosticError(queryEvidenceIncompleteCode)
 	}
 	for addr, total := range p.totals {
 		if p.counts[addr] != total {
-			return nil, searchDiagnosticError(queryEvidenceIncompleteCode)
+			return searchDiagnosticError(queryEvidenceIncompleteCode)
 		}
 	}
 	for addr := range p.counts {
 		if _, ok := p.totals[addr]; !ok {
-			return nil, searchDiagnosticError(queryEvidenceIncompleteCode)
+			return searchDiagnosticError(queryEvidenceIncompleteCode)
 		}
 	}
-	for _, result := range p.evidence.Results {
-		if kind := p.completeTypes[result.Address]; kind != "" && kind != result.ResourceType {
-			return nil, searchDiagnosticError(queryEvidenceIncompleteCode)
+	for addr, kind := range p.completeTypes {
+		if kind != "" && p.counts[addr] > 0 && (p.mixedTypes[addr] || p.foundTypes[addr] != kind) {
+			return searchDiagnosticError(queryEvidenceIncompleteCode)
 		}
 	}
-	return p.evidence, nil
+	return p.collector.FinishQueryEvidence()
 }

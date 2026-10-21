@@ -143,6 +143,34 @@ func preparedImportSelection(result queryResultEvidence) PreparedImportSelection
 	}
 }
 
+// selectedQueryEvidenceCollector keeps full identity and generated HCL only
+// for markers explicitly requested by prepare_import. The shared parser still
+// validates every QueryRun result before this collector can finish.
+type selectedQueryEvidenceCollector struct {
+	requested map[string]struct{}
+	selected  map[string]queryResultEvidence
+}
+
+func newSelectedQueryEvidenceCollector(selections []ImportSelection) *selectedQueryEvidenceCollector {
+	requested := make(map[string]struct{}, len(selections))
+	for _, selection := range selections {
+		requested[selection.QueryResultMarker] = struct{}{}
+	}
+	return &selectedQueryEvidenceCollector{
+		requested: requested,
+		selected:  make(map[string]queryResultEvidence, len(selections)),
+	}
+}
+
+func (c *selectedQueryEvidenceCollector) CollectQueryEvidence(result queryResultEvidence) error {
+	if _, ok := c.requested[result.Marker]; ok {
+		c.selected[result.Marker] = result
+	}
+	return nil
+}
+
+func (c *selectedQueryEvidenceCollector) FinishQueryEvidence() error { return nil }
+
 type importContextDigestPayload struct {
 	QueryRunID      string                         `json:"query_run_id"`
 	Providers       map[string]queryResultProvider `json:"providers"`
@@ -386,18 +414,14 @@ func ReadPrepareImport(ctx context.Context, c *tfe.Client, input PrepareImportIn
 		return blocked("target_terraform_below_floor")
 	}
 	// The log is read only after the inexpensive source and target checks.
-	evidence, err := readQueryEvidence(ctx, c, input.QueryRunID, prov)
-	if err != nil {
+	evidenceCollector := newSelectedQueryEvidenceCollector(input.Selections)
+	if err := readQueryEvidenceWithCollector(ctx, c, input.QueryRunID, prov, evidenceCollector); err != nil {
 		return nil, err
-	}
-	byMarker := make(map[string]queryResultEvidence, len(evidence.Results))
-	for _, result := range evidence.Results {
-		byMarker[result.Marker] = result
 	}
 	importContext := &ImportContext{QueryRunID: input.QueryRunID, Providers: map[string]queryResultProvider{}, Target: ImportContextTarget{WorkspaceID: w.ID, OrganizationName: w.Organization.Name, TerraformVersion: w.TerraformVersion, IdentitySupport: map[string]string{}}, LockedProviders: input.LockedProviders, SelectedResults: []ImportContextSelection{}}
 	seenTypes := map[string]bool{}
 	for _, selection := range input.Selections {
-		found, ok := byMarker[selection.QueryResultMarker]
+		found, ok := evidenceCollector.selected[selection.QueryResultMarker]
 		// The list type is not necessarily a plural of the managed type.
 		// Keep the caller-proposed managed type and Search list type separate;
 		// the optional target schema and finished Plan supply target-side checks.

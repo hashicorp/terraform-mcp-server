@@ -38,7 +38,11 @@ func TestNonselectableQueryEvidenceCode(t *testing.T) {
 		})
 	}
 
-	for _, err := range []error{errors.New("query_not_selectable"), searchDiagnosticError(queryProviderSourceUnresolvedCode)} {
+	for _, err := range []error{
+		errors.New("query_not_selectable"),
+		searchDiagnosticError(queryProviderSourceUnresolvedCode),
+		searchDiagnosticError(queryLogSizeLimitCode),
+	} {
 		code, ok := nonselectableQueryEvidenceCode(err)
 		require.False(t, ok)
 		require.Empty(t, code)

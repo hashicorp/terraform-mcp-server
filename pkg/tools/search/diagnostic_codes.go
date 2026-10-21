@@ -28,6 +28,7 @@ const (
 	queryGeneratedConfigurationUnexpectedCode searchDiagnosticCode = "query_generated_configuration_unexpected"
 	queryIdentityInvalidCode                  searchDiagnosticCode = "query_identity_invalid"
 	queryIdentityVersionInvalidCode           searchDiagnosticCode = "query_identity_version_invalid"
+	queryLogSizeLimitCode                     searchDiagnosticCode = "query_log_size_limit"
 	queryLogUnavailableCode                   searchDiagnosticCode = "query_log_unavailable"
 	queryNotFinishedCode                      searchDiagnosticCode = "query_not_finished"
 	queryNotSelectableCode                    searchDiagnosticCode = "query_not_selectable"

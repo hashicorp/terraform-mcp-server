@@ -130,6 +130,74 @@ func TestQueryEvidenceReaderPreservesCallerCancellation(t *testing.T) {
 	require.ErrorIs(t, err, context.Canceled)
 }
 
+func TestQueryLogLimitReaderAcceptsExactLimitAndRejectsOneByteOver(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		reader  io.Reader
+		limit   int64
+		want    string
+		wantErr string
+	}{
+		{name: "below", reader: strings.NewReader("ab"), limit: 3, want: "ab"},
+		{name: "exact", reader: strings.NewReader("abc"), limit: 3, want: "abc"},
+		{name: "exact fragmented", reader: iotest.OneByteReader(strings.NewReader("abc")), limit: 3, want: "abc"},
+		{name: "one over", reader: strings.NewReader("abcd"), limit: 3, want: "abc", wantErr: "query_log_size_limit"},
+		{name: "one over fragmented", reader: iotest.OneByteReader(strings.NewReader("abcd")), limit: 3, want: "abc", wantErr: "query_log_size_limit"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			actual, err := io.ReadAll(newQueryLogLimitReader(tc.reader, tc.limit))
+			require.Equal(t, tc.want, string(actual))
+			if tc.wantErr == "" {
+				require.NoError(t, err)
+			} else {
+				require.EqualError(t, err, tc.wantErr)
+			}
+		})
+	}
+}
+
+func TestPurposeSpecificCollectorsRetainOnlyNeededResults(t *testing.T) {
+	data := []byte(strings.Join([]string{
+		`{"type":"list_resource_found","list_resource_found":{"address":"list.aws_s3_buckets.all","resource_type":"aws_s3_buckets","display_name":"filtered","identity":{"bucket":"filtered"},"identity_version":0,"configuration":"private-filtered-hcl"}}`,
+		`{"type":"list_resource_found","list_resource_found":{"address":"list.aws_s3_buckets.all","resource_type":"aws_s3_buckets","display_name":"selected","identity":{"bucket":"selected"},"identity_version":0,"configuration":"resource \"aws_s3_bucket\" \"selected\" { bucket = \"private-selected-hcl\" }"}}`,
+		`{"type":"list_complete","list_complete":{"address":"list.aws_s3_buckets.all","resource_type":"aws_s3_buckets","total":2}}`,
+	}, "\n"))
+
+	selectedMarker, err := queryResultMarker("qry-one", testQueryProviders()["aws_s3_buckets"], "aws_s3_buckets", map[string]any{"bucket": "selected"})
+	require.NoError(t, err)
+	prepareCollector := newSelectedQueryEvidenceCollector([]ImportSelection{{QueryResultMarker: selectedMarker, ManagedType: "aws_s3_bucket"}})
+	require.NoError(t, parseQueryEvidenceReaderWithCollector("qry-one", bytes.NewReader(data), testQueryProviders(), prepareCollector))
+	require.Len(t, prepareCollector.selected, 1)
+	require.Contains(t, prepareCollector.selected[selectedMarker].Configuration, "private-selected-hcl")
+	for _, result := range prepareCollector.selected {
+		require.NotContains(t, fmt.Sprint(result), "private-filtered-hcl")
+	}
+
+	prov := &queryDiscoveryProvenance{QueryRunID: "qry-one", Organization: "org", WorkspaceName: "ws", WorkspaceID: "ws-one", GenerateConfigOut: true}
+	summaryCollector := newQueryDiscoverySummaryCollector(prov, QueryDiscoveryFilter{NameContains: "selected"})
+	// The filtered fixture HCL is intentionally invalid and must not be parsed.
+	require.NoError(t, parseQueryEvidenceReaderWithCollector("qry-one", bytes.NewReader(data), testQueryProviders(), summaryCollector))
+	require.Equal(t, 2, summaryCollector.summary.ResourcesDiscovered)
+	require.Equal(t, 1, summaryCollector.summary.TotalMatching)
+	require.Len(t, summaryCollector.summary.Lists, 1)
+	require.Len(t, summaryCollector.summary.Lists[0].Results, 1)
+	require.Equal(t, "private-selected-hcl", summaryCollector.summary.Lists[0].Results[0].ConfigurationAttributes["bucket"])
+	require.NotContains(t, fmt.Sprint(summaryCollector.summary), "private-filtered-hcl")
+}
+
+func TestSummaryCollectorDefersProjectionFailureUntilWholeLogValidation(t *testing.T) {
+	data := []byte(strings.Join([]string{
+		`{"type":"list_resource_found","list_resource_found":{"address":"list.aws_s3_buckets.all","resource_type":"aws_s3_buckets","display_name":"selected","identity":{"bucket":"selected"},"identity_version":0,"configuration":"invalid generated HCL"}}`,
+		`{"type":"list_complete","list_complete":{"address":"list.aws_s3_buckets.all","resource_type":"aws_s3_buckets","total":2}}`,
+	}, "\n"))
+	prov := &queryDiscoveryProvenance{QueryRunID: "qry-one", GenerateConfigOut: true}
+	collector := newQueryDiscoverySummaryCollector(prov, QueryDiscoveryFilter{})
+
+	err := parseQueryEvidenceReaderWithCollector("qry-one", bytes.NewReader(data), testQueryProviders(), collector)
+	require.EqualError(t, err, "query_evidence_incomplete")
+	require.Empty(t, collector.summary.Lists)
+}
+
 func TestValidateQueryEvidenceJSONAcceptsDeepContainersAndRejectsNestedDuplicates(t *testing.T) {
 	raw := []byte(strings.Repeat("[", 1000) + `0` + strings.Repeat("]", 1000))
 	require.NoError(t, validateQueryEvidenceJSON(raw))
