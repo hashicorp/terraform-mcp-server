@@ -5,6 +5,7 @@ package tools
 
 import (
 	registryTools "github.com/hashicorp/terraform-mcp-server/pkg/tools/registry"
+	searchTools "github.com/hashicorp/terraform-mcp-server/pkg/tools/search"
 	tfeTools "github.com/hashicorp/terraform-mcp-server/pkg/tools/tfe"
 	"github.com/mark3labs/mcp-go/server"
 	log "github.com/sirupsen/logrus"
@@ -18,8 +19,11 @@ type toolFactory func(logger *log.Logger) server.ServerTool
 // keyed by toolsets.ToolDef.Name. Two tools that don't fit this plain shape
 // (create_no_code_workspace, create_run) live in specialFactories below
 var toolFactories = map[string]toolFactory{
+	// HCP Terraform Search provider discovery
+	"provider_list_schema_list": searchTools.ProviderListSchemaList,
+
 	// Public Registry tools
-	"search_provider_docs":            registryTools.ResolveProviderDocID,
+	"search_provider_docs":        registryTools.ResolveProviderDocID,
 	"get_provider_details":        registryTools.GetProviderDocs,
 	"get_latest_provider_version": registryTools.GetLatestProviderVersion,
 	"get_provider_capabilities":   registryTools.GetProviderCapabilities,

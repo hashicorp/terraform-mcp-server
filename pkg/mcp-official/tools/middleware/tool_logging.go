@@ -7,11 +7,12 @@ import (
 	"context"
 	"log/slog"
 
+	"github.com/hashicorp/terraform-mcp-server/pkg/toolsets"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 // ToolLogging is the go-sdk equivalent of client.ToolLoggingMiddleware:
-// it logs the tool name and arguments for every tools/call request.
+// it logs tool calls, omitting Search arguments and error payloads.
 func ToolLogging(logger *slog.Logger) mcp.Middleware {
 	return func(next mcp.MethodHandler) mcp.MethodHandler {
 		return func(ctx context.Context, method string, req mcp.Request) (mcp.Result, error) {
@@ -24,6 +25,18 @@ func ToolLogging(logger *slog.Logger) mcp.Middleware {
 			arguments := params.Arguments
 
 			result, err := next(ctx, method, req)
+			if toolsets.IsSearchTool(toolName) {
+				if err != nil {
+					logger.ErrorContext(ctx, "tool call failed", "tool", toolName)
+					return result, err
+				}
+				if toolResult, ok := result.(*mcp.CallToolResult); ok && toolResult.IsError {
+					logger.ErrorContext(ctx, "tool call failed", "tool", toolName)
+					return result, nil
+				}
+				logger.InfoContext(ctx, "tool call completed", "tool", toolName)
+				return result, nil
+			}
 			// Protocol-level error
 			if err != nil {
 				logger.ErrorContext(ctx, "tool call failed",
