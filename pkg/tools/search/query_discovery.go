@@ -22,11 +22,17 @@ type QueryDiscoveryFilter struct {
 }
 
 type queryDiscoveryRow struct {
-	Marker                  string         `json:"query_result_marker"`
-	DisplayName             string         `json:"display_name,omitempty"`
-	Identity                map[string]any `json:"identity"`
-	IdentityVersion         int            `json:"identity_version"`
-	ConfigurationGenerated  bool           `json:"configuration_generated"`
+	Marker      string `json:"query_result_marker"`
+	DisplayName string `json:"display_name,omitempty"`
+	// Identity is the provider-returned resource identity.
+	Identity map[string]any `json:"identity"`
+	// IdentityVersion is its managed-resource identity schema version.
+	IdentityVersion int `json:"identity_version"`
+	// ConfigurationGenerated is observed per result. QueryRun generation intent
+	// and provider-returned resource-object availability do not prove that
+	// Terraform emitted generated resource HCL for this result.
+	ConfigurationGenerated bool `json:"configuration_generated"`
+	// ConfigurationAttributes is a constrained generated-HCL projection.
 	ConfigurationAttributes map[string]any `json:"configuration_attributes,omitempty"`
 }
 
