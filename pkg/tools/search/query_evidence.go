@@ -106,7 +106,7 @@ const queryLogReadBufferSize = 64 * 1024
 // maxQueryLogBytes is a temporary outer safety ceiling for decoded QueryRun
 // log bytes. It bounds remote evidence consumption; it is not a product result
 // limit, retained-heap guarantee, or MCP response-size guarantee.
-const maxQueryLogBytes int64 = 128 << 20
+const maxQueryLogBytes int64 = 256 << 20
 
 type queryLogLimitReader struct {
 	reader    io.Reader
