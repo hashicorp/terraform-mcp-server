@@ -77,7 +77,7 @@ func ActionRunFunc(ctx context.Context, request *mcp.CallToolRequest, input Acti
 		return nil, nil, fmt.Errorf("run_id must not be blank")
 	}
 
-	comment := input.Comment
+	comment := strings.TrimSpace(input.Comment)
 	if comment == "" {
 		comment = defaultRunActionComment
 	}

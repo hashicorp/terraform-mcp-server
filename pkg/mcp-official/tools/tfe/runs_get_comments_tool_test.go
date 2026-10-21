@@ -15,6 +15,7 @@ import (
 func TestGetRunCommentsTool(t *testing.T) {
 	tool := GetRunCommentsTool()
 	assert.Equal(t, "get_run_comments", tool.Name)
+	assert.Contains(t, tool.Description, "get_run_details")
 	assert.Nil(t, tool.InputSchema)
 	require.NotNil(t, tool.Annotations)
 	assert.True(t, tool.Annotations.ReadOnlyHint)

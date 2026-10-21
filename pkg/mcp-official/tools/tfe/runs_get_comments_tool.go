@@ -31,7 +31,7 @@ type RunCommentsResponse struct {
 func GetRunCommentsTool() *mcp.Tool {
 	return &mcp.Tool{
 		Name:        "get_run_comments",
-		Description: "Lists the user-submitted comments returned by the Terraform run comments endpoint. Use this tool when you need to review feedback, approvals, or notes that collaborators have left on a run. Returns each comment's ID and body text.",
+		Description: "Lists the user-submitted comments returned by the Terraform run comments endpoint. Use this tool when you need to review feedback, approvals, or notes that collaborators have left on a run. Returns each comment's ID and body text. To get the run's status, plan, and apply details instead, use get_run_details.",
 		OutputSchema: &jsonschema.Schema{
 			Type: "object",
 			Properties: map[string]*jsonschema.Schema{
