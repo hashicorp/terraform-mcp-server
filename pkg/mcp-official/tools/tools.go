@@ -22,25 +22,6 @@ import (
 // side uses. Tools that log, take the server's logger from RegisterTools.
 
 var officialFactories = map[string]func(svr *mcp.Server, logger *slog.Logger){
-	// HCP Terraform Search discovery, configuration, execution, and monitoring
-	"generate_query_configuration": func(svr *mcp.Server, _ *slog.Logger) {
-		mcp.AddTool(svr, searchTools.GenerateQueryConfigurationTool(), searchTools.GenerateQueryConfigurationFunc)
-	},
-	"provider_list_schema_list": func(svr *mcp.Server, _ *slog.Logger) {
-		mcp.AddTool(svr, searchTools.ProviderListSchemaListTool(), searchTools.ProviderListSchemaListFunc)
-	},
-	"execute_query": func(svr *mcp.Server, _ *slog.Logger) {
-		mcp.AddTool(svr, searchTools.ExecuteQueryTool(), searchTools.ExecuteQueryFunc)
-	},
-	"get_query_status": func(svr *mcp.Server, logger *slog.Logger) {
-		mcp.AddTool(svr, searchTools.GetQueryStatusTool(), searchTools.GetQueryStatusFunc(logger))
-	},
-	"get_query_summary": func(svr *mcp.Server, _ *slog.Logger) {
-		mcp.AddTool(svr, searchTools.GetQuerySummaryTool(), searchTools.GetQuerySummaryFunc)
-	},
-	"prepare_import": func(svr *mcp.Server, _ *slog.Logger) {
-		mcp.AddTool(svr, searchTools.PrepareImportTool(), searchTools.PrepareImportFunc)
-	},
 	// Add entries here as each tool gets ported to the official go-sdk
 	// Public Registry tools
 	"search_provider_docs": func(svr *mcp.Server, logger *slog.Logger) {
@@ -69,6 +50,28 @@ var officialFactories = map[string]func(svr *mcp.Server, logger *slog.Logger){
 	},
 	"get_policy_details": func(svr *mcp.Server, logger *slog.Logger) {
 		mcp.AddTool(svr, registryTools.GetPolicyDetailsTool(), registryTools.GetPolicyDetailsFunc(logger))
+	},
+	// Search tools
+	"generate_query_configuration": func(svr *mcp.Server, _ *slog.Logger) {
+		mcp.AddTool(svr, searchTools.GenerateQueryConfigurationTool(), searchTools.GenerateQueryConfigurationFunc)
+	},
+	"provider_list_schema_list": func(svr *mcp.Server, _ *slog.Logger) {
+		mcp.AddTool(svr, searchTools.ProviderListSchemaListTool(), searchTools.ProviderListSchemaListFunc)
+	},
+	"execute_query": func(svr *mcp.Server, _ *slog.Logger) {
+		mcp.AddTool(svr, searchTools.ExecuteQueryTool(), searchTools.ExecuteQueryFunc)
+	},
+	"get_query_status": func(svr *mcp.Server, logger *slog.Logger) {
+		mcp.AddTool(svr, searchTools.GetQueryStatusTool(), searchTools.GetQueryStatusFunc(logger))
+	},
+	"get_query_summary": func(svr *mcp.Server, _ *slog.Logger) {
+		mcp.AddTool(svr, searchTools.GetQuerySummaryTool(), searchTools.GetQuerySummaryFunc)
+	},
+	"prepare_import": func(svr *mcp.Server, _ *slog.Logger) {
+		mcp.AddTool(svr, searchTools.PrepareImportTool(), searchTools.PrepareImportFunc)
+	},
+	"verify_import_plan": func(svr *mcp.Server, _ *slog.Logger) {
+		mcp.AddTool(svr, searchTools.VerifyImportPlanTool(), searchTools.VerifyImportPlanFunc)
 	},
 	// TFE tools
 	"list_workspaces": func(svr *mcp.Server, _ *slog.Logger) {

@@ -11,7 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestTerraformClientUnavailableErrorPreservesCodeAndCause(t *testing.T) {
+func TestFoundationTerraformClientUnavailableErrorPreservesCodeAndCause(t *testing.T) {
 	cause := errors.New("session is not configured")
 	err := TerraformClientUnavailableError(cause)
 	require.EqualError(t, err, "getting Terraform client: client_unavailable")
