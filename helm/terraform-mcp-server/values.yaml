@@ -81,8 +81,9 @@ mcpServer:
   corsMode: "strict"
   # restrict tool calls to these orgs. empty allows any org the token can reach.
   allowedOrganizations: []
-  # enables the destructive tools (delete_team, force_unlock_workspace, etc).
-  enableTfOperations: false
+  # blocks the destructive tools (delete_team, force_unlock_workspace, etc).
+  # set to false to allow them.
+  preventDestructiveOperations: true
   # where to send a browser that hits /. defaults to the terraform mcp docs page.
   redirectRootURL: ""
   # paths to a cert and key inside the container. mount them via volumes and
