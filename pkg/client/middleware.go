@@ -229,9 +229,12 @@ func OrganizationAllowlistMiddleware(allowlist []string, logger *log.Logger) fun
 	}
 }
 
-// RequireTerraformTokenMiddleware rejects requests without an Authorization
-// bearer token when MCP_REQUIRE_TOKEN is true. It keeps tokenless clients
-// off the hosted server once the organization allowlist is removed.
+// RequireTerraformTokenMiddleware rejects requests without a valid Authorization
+// bearer token when MCP_REQUIRE_TOKEN is true. The token is checked against
+// HCP Terraform by listing organizations, the same call the organization
+// allowlist makes, so junk tokens are rejected and user, team and organization
+// tokens all work. It keeps tokenless clients off the hosted server once the
+// organization allowlist is removed.
 func RequireTerraformTokenMiddleware(logger *log.Logger) func(http.Handler) http.Handler {
 	required := utils.GetEnv(RequireTokenEnv, "") == "true"
 	return func(next http.Handler) http.Handler {
@@ -239,19 +242,46 @@ func RequireTerraformTokenMiddleware(logger *log.Logger) func(http.Handler) http
 			return next
 		}
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if strings.TrimSpace(getTokenFromAuthHeader(r)) == "" {
+			token := strings.TrimSpace(getTokenFromAuthHeader(r))
+			if token == "" {
 				if logger != nil {
 					logger.Warn("Rejecting request: Authorization bearer token is required")
 				}
 				http.Error(w, "Authorization bearer token is required", http.StatusUnauthorized)
 				return
 			}
+
+			lister, err := organizationListerForRequest(r.Context(), token, logger)
+			if err != nil {
+				if logger != nil {
+					logger.WithError(err).Error("Failed to initialize token validation client")
+				}
+				http.Error(w, "Failed to validate Terraform token", http.StatusBadGateway)
+				return
+			}
+			if _, err := lister.List(r.Context(), &tfe.OrganizationListOptions{
+				ListOptions: tfe.ListOptions{PageSize: 1},
+			}); err != nil {
+				if errors.Is(err, tfe.ErrUnauthorized) {
+					if logger != nil {
+						logger.Warn("Rejecting request: Terraform token is unauthorized")
+					}
+					http.Error(w, "Terraform token is unauthorized", http.StatusUnauthorized)
+					return
+				}
+				if logger != nil {
+					logger.WithError(err).Error("Failed to validate Terraform token")
+				}
+				http.Error(w, "Failed to validate Terraform token", http.StatusBadGateway)
+				return
+			}
+
 			next.ServeHTTP(w, r)
 		})
 	}
 }
 
-func organizationListerForRequest(ctx context.Context, token string, logger *log.Logger) (organizationLister, error) {
+var organizationListerForRequest = func(ctx context.Context, token string, logger *log.Logger) (organizationLister, error) {
 	terraformAddress := utils.GetEnv(TerraformAddress, DefaultTerraformAddress)
 	clientIP, _ := ctx.Value(contextKey(ClientIPKey)).(string)
 	tfeClient, err := NewTfeClientForToken(terraformAddress, parseTerraformSkipTLSVerify(ctx), token, clientIP, logger)

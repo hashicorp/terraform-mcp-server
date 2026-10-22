@@ -384,6 +384,16 @@ func (l *fakeOrganizationLister) List(_ context.Context, options *tfe.Organizati
 	return l.pages[page], nil
 }
 
+// useFakeOrganizationLister swaps organizationListerForRequest for a fake
+func useFakeOrganizationLister(t *testing.T, lister *fakeOrganizationLister) {
+	t.Helper()
+	original := organizationListerForRequest
+	organizationListerForRequest = func(context.Context, string, *log.Logger) (organizationLister, error) {
+		return lister, nil
+	}
+	t.Cleanup(func() { organizationListerForRequest = original })
+}
+
 func TestOrganizationAllowlistMiddleware(t *testing.T) {
 	logger := log.New()
 	logger.SetLevel(log.ErrorLevel)
@@ -532,6 +542,7 @@ func TestOrganizationAllowlistUsesValidatedTokenDownstream(t *testing.T) {
 	assert.Equal(t, "Bearer allowed-token", upstreamAuthorization)
 	assert.Equal(t, "allowed-token", downstreamToken)
 }
+
 func TestRequireTerraformTokenMiddleware(t *testing.T) {
 	logger := log.New()
 	logger.SetLevel(log.ErrorLevel)
@@ -541,7 +552,9 @@ func TestRequireTerraformTokenMiddleware(t *testing.T) {
 		requireToken     string
 		authHeader       string
 		tfeTokenHeader   string
+		upstreamErr      error
 		expectedStatus   int
+		expectedBody     string
 		expectedNextCall bool
 	}{
 		{
@@ -559,27 +572,47 @@ func TestRequireTerraformTokenMiddleware(t *testing.T) {
 			name:           "missing Authorization rejected",
 			requireToken:   "true",
 			expectedStatus: http.StatusUnauthorized,
+			expectedBody:   "Authorization bearer token is required",
 		},
 		{
 			name:           "blank bearer token rejected",
 			requireToken:   "true",
 			authHeader:     "Bearer   ",
 			expectedStatus: http.StatusUnauthorized,
+			expectedBody:   "Authorization bearer token is required",
 		},
 		{
 			name:           "non-bearer Authorization rejected",
 			requireToken:   "true",
 			authHeader:     "Basic abc123",
 			expectedStatus: http.StatusUnauthorized,
+			expectedBody:   "Authorization bearer token is required",
 		},
 		{
 			name:           "TFE_TOKEN header alone rejected",
 			requireToken:   "true",
 			tfeTokenHeader: "header-token",
 			expectedStatus: http.StatusUnauthorized,
+			expectedBody:   "Authorization bearer token is required",
 		},
 		{
-			name:             "bearer token allowed",
+			name:           "unauthorized token rejected",
+			requireToken:   "true",
+			authHeader:     "Bearer junk",
+			upstreamErr:    tfe.ErrUnauthorized,
+			expectedStatus: http.StatusUnauthorized,
+			expectedBody:   "Terraform token is unauthorized",
+		},
+		{
+			name:           "upstream failure is a bad gateway",
+			requireToken:   "true",
+			authHeader:     "Bearer user-token",
+			upstreamErr:    errors.New("upstream unavailable"),
+			expectedStatus: http.StatusBadGateway,
+			expectedBody:   "Failed to validate Terraform token",
+		},
+		{
+			name:             "valid bearer token allowed",
 			requireToken:     "true",
 			authHeader:       "Bearer user-token",
 			expectedStatus:   http.StatusOK,
@@ -590,6 +623,7 @@ func TestRequireTerraformTokenMiddleware(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Setenv(RequireTokenEnv, tt.requireToken)
+			useFakeOrganizationLister(t, &fakeOrganizationLister{err: tt.upstreamErr})
 
 			nextCalled := false
 			mockHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -599,7 +633,7 @@ func TestRequireTerraformTokenMiddleware(t *testing.T) {
 
 			handler := RequireTerraformTokenMiddleware(logger)(mockHandler)
 
-			req := httptest.NewRequest(http.MethodPost, "/mcp/official", nil)
+			req := httptest.NewRequest(http.MethodPost, "/mcp", nil)
 			if tt.authHeader != "" {
 				req.Header.Set("Authorization", tt.authHeader)
 			}
@@ -612,12 +646,13 @@ func TestRequireTerraformTokenMiddleware(t *testing.T) {
 
 			assert.Equal(t, tt.expectedStatus, rr.Code)
 			assert.Equal(t, tt.expectedNextCall, nextCalled)
-			if tt.expectedStatus == http.StatusUnauthorized {
-				assert.Contains(t, rr.Body.String(), "Authorization bearer token is required")
+			if tt.expectedBody != "" {
+				assert.Contains(t, rr.Body.String(), tt.expectedBody)
 			}
 		})
 	}
 }
+
 func TestTokenHasAllowedOrganization(t *testing.T) {
 	tests := []struct {
 		name          string
