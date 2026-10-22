@@ -11,7 +11,8 @@ IMPROVEMENTS
 * `get_private_module_details` now reports every submodule published with a private module, each with its own inputs, outputs, dependencies, provider dependencies, resources, and README, matching the detail already provided for the root module. The root module section is now labelled and its README is reported alongside its own inputs and outputs.
 * `get_private_module_details` now reports the module version its details were read from, and the generated usage snippet pins that version instead of the first entry in the module's version statuses, which may be a version whose ingress is still pending or has failed.
 * `get_private_module_details` now requests the registry's latest-version route directly when `private_module_version` is omitted, instead of sending a request with an empty version segment.
-* Add `MCP_REQUIRE_TOKEN`. When set to `true`, to the official SDK endpoint (`/mcp/official`) it now rejects requests without an `Authorization: Bearer` token with a 401. Defaults to off, so tokenless use of the registry tools is unchanged.
+* Add `MCP_REQUIRE_TOKEN`. When set to `true`, the streamable HTTP server rejects requests without an `Authorization: Bearer` token with a 401, on both `/mcp` and `/mcp/official`. Defaults to off, so tokenless use of the registry tools is unchanged. [578](https://github.com/hashicorp/terraform-mcp-server/pull/578)
+
 FIXES
 
 * `list_runs` now applies the `status` filter. The tool accepts `status` as an array but read it as a string, so the filter was always dropped and runs of every status were returned.

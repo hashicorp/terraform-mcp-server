@@ -224,7 +224,8 @@ func streamableHTTPServerInit(ctx context.Context, hcServer *server.MCPServer, l
 	mux := http.NewServeMux()
 
 	// Apply middleware
-	streamableServer := client.OrganizationAllowlistMiddleware(organizationAllowlist, logger)(baseStreamableServer)
+	streamableServer := client.RequireTerraformTokenMiddleware(logger)(baseStreamableServer)
+	streamableServer = client.OrganizationAllowlistMiddleware(organizationAllowlist, logger)(streamableServer)
 	streamableServer = client.TerraformContextMiddleware(logger)(streamableServer)
 	streamableServer = client.NewSecurityHandler(streamableServer, corsConfig.AllowedOrigins, corsConfig.Mode, logger)
 
