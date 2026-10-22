@@ -215,6 +215,44 @@ func GetQuerySummaryFunc(ctx context.Context, req *mcp.CallToolRequest, input Qu
 	return textResult(text), summary, nil
 }
 
+func PrepareImportTool() *mcp.Tool {
+	t := tool("prepare_import", searchlogic.PrepareImportDescription, "Prepare explicit Search import selection", true, true)
+	inputSchema, err := jsonschema.For[searchlogic.PrepareImportInput](nil)
+	if err != nil {
+		panic(err)
+	}
+	inputSchema.Properties[searchlogic.ScopeOrganizationInput].Description = searchlogic.ImportOrganizationDescription
+	inputSchema.Properties["workspace_name"].Description = searchlogic.ImportWorkspaceDescription
+	t.InputSchema = inputSchema
+	schema, err := jsonschema.For[searchlogic.PrepareImportResult](nil)
+	if err != nil {
+		panic(err)
+	}
+	t.OutputSchema = schema
+	return t
+}
+
+func PrepareImportFunc(ctx context.Context, req *mcp.CallToolRequest, input searchlogic.PrepareImportInput) (*mcp.CallToolResult, *searchlogic.PrepareImportResult, error) {
+	scope := searchlogic.ResolveImportScope(input.OrganizationName, input.WorkspaceName)
+	scope, interactionResult, err := resolveOfficialScope(ctx, req, scope, searchlogic.ImportTargetScope)
+	if err != nil || interactionResult != nil {
+		return interactionResult, nil, err
+	}
+	input.OrganizationName, input.WorkspaceName = scope.Organization.Value, scope.Workspace.Value
+	if err := searchlogic.ValidatePrepareImportInput(input); err != nil {
+		return nil, nil, fmt.Errorf("validating prepare_import arguments: %w", err)
+	}
+	c, err := client.GetTfeClient(ctx, client.SessionIDFromRequest(req))
+	if err != nil {
+		return nil, nil, searchlogic.TerraformClientUnavailableError(err)
+	}
+	result, text, err := searchlogic.PrepareImportToolOutput(ctx, c, input)
+	if err != nil {
+		return nil, nil, err
+	}
+	return textResult(text), result, nil
+}
+
 func textResult(text string) *mcp.CallToolResult {
 	return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: text}}}
 }

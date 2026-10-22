@@ -25,6 +25,7 @@ var toolFactories = map[string]toolFactory{
 	"execute_query":                searchTools.ExecuteQuery,
 	"get_query_status":             searchTools.GetQueryStatus,
 	"get_query_summary":            searchTools.GetQuerySummary,
+	"prepare_import":               searchTools.PrepareImport,
 
 	// Public Registry tools
 	"search_provider_docs":        registryTools.ResolveProviderDocID,

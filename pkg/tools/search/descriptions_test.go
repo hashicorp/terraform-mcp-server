@@ -19,6 +19,7 @@ func TestSearchDescriptionsOwnToolLocalContracts(t *testing.T) {
 		{"generate_query_configuration", GenerateQueryConfigurationDescription, []string{"schema-backed guidance", "does not execute", "exact schema key", "nesting/cardinality", "Required schema attributes remain required"}},
 		{"execute_query", ExecuteQueryDescription, []string{"EXECUTION APPROVAL", "wait for their approval", "server does not enforce a separate approval parameter", "query_run_id", "reconcile", "does not create or modify cloud"}},
 		{"get_query_status", GetQueryStatusDescription, []string{"bounded call", "retry_after_seconds", "same ID", "do not execute another query", "Terminal status does not imply selectable results"}},
+		{"prepare_import", PrepareImportDescription, []string{"explicitly selected", "existing local configuration directory", ".terraform.lock.hcl", "do not run terraform init", "does not read", "unchanged", "not import IDs or authorization", "separate approval"}},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {

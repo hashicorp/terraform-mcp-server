@@ -50,6 +50,34 @@ func TestResolveSearchScope(t *testing.T) {
 	}
 }
 
+func TestResolveImportScope(t *testing.T) {
+	for _, test := range []struct {
+		name                    string
+		organization, workspace string
+		env                     map[string]string
+		want                    SearchScope
+		ready                   bool
+	}{
+		{"explicit target overrides defaults", " user-org ", " user-target ", map[string]string{"TF_CLOUD_ORGANIZATION": "env-org", "TF_MCP_IMPORT_WORKSPACE": "env-target", "TF_WORKSPACE": "fallback"}, SearchScope{SearchScopeValue{"user-org", "argument"}, SearchScopeValue{"user-target", "argument"}}, true},
+		{"import workspace precedes Terraform workspace", "", "", map[string]string{"TF_CLOUD_ORGANIZATION": "org", "TF_MCP_IMPORT_WORKSPACE": "target", "TF_WORKSPACE": "fallback"}, SearchScope{SearchScopeValue{"org", "TF_CLOUD_ORGANIZATION"}, SearchScopeValue{"target", "TF_MCP_IMPORT_WORKSPACE"}}, true},
+		{"Terraform workspace is import fallback", "", "", map[string]string{"TF_CLOUD_ORGANIZATION": "org", "TF_WORKSPACE": "fallback"}, SearchScope{SearchScopeValue{"org", "TF_CLOUD_ORGANIZATION"}, SearchScopeValue{"fallback", "TF_WORKSPACE"}}, true},
+		{"query workspace never defaults import target", "org", "", map[string]string{"TF_MCP_QUERY_WORKSPACE": "query"}, SearchScope{Organization: SearchScopeValue{"org", "argument"}}, false},
+		{"missing target scope", "", "", nil, SearchScope{}, false},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			for _, name := range []string{"TF_CLOUD_ORGANIZATION", "TF_MCP_QUERY_WORKSPACE", "TF_MCP_IMPORT_WORKSPACE", "TF_WORKSPACE"} {
+				t.Setenv(name, "")
+			}
+			for name, value := range test.env {
+				t.Setenv(name, value)
+			}
+			got := ResolveImportScope(test.organization, test.workspace)
+			assert.Equal(t, test.want, got)
+			assert.Equal(t, test.ready, got.Ready())
+		})
+	}
+}
+
 func TestSearchScopeNeedsInteraction(t *testing.T) {
 	assert.False(t, (SearchScope{Organization: SearchScopeValue{"org", "argument"}, Workspace: SearchScopeValue{"ws", "argument"}}).NeedsInteraction())
 	assert.True(t, (SearchScope{Organization: SearchScopeValue{"org", "TF_CLOUD_ORGANIZATION"}, Workspace: SearchScopeValue{"ws", "argument"}}).NeedsInteraction())
@@ -79,8 +107,8 @@ func TestMark3LabsScopeReturnsCompletedInputRequest(t *testing.T) {
 			missing:  []string{},
 		},
 		{
-			name:     "partial query defaults identify missing workspace",
-			role:     QuerySourceScope,
+			name:     "partial import defaults identify missing workspace",
+			role:     ImportTargetScope,
 			proposed: SearchScope{Organization: SearchScopeValue{"default-org", "TF_CLOUD_ORGANIZATION"}},
 			missing:  []string{ScopeWorkspaceInput},
 		},
@@ -176,4 +204,7 @@ func TestSearchScopeDescriptionsUseCanonicalOrganizationAndIndependentTargets(t 
 	assert.Contains(t, QueryOrganizationDescription, ScopeOrganizationInput)
 	assert.Contains(t, QueryWorkspaceDescription, "requests confirmation")
 	assert.Contains(t, QueryWorkspaceDescription, "Import scope is resolved independently")
+	assert.Contains(t, ImportOrganizationDescription, "independent")
+	assert.Contains(t, ImportWorkspaceDescription, "TF_MCP_IMPORT_WORKSPACE")
+	assert.Contains(t, ImportWorkspaceDescription, "TF_MCP_QUERY_WORKSPACE is never")
 }

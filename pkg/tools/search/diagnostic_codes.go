@@ -53,6 +53,18 @@ const (
 	queryRunUnavailableCode      searchDiagnosticCode = "query_run_unavailable"
 )
 
+// Import preparation diagnostics; Plan verification is introduced separately.
+const (
+	importArgumentsInvalidCode    searchDiagnosticCode = "import_arguments_invalid"
+	importContextInvalidCode      searchDiagnosticCode = "import_context_invalid"
+	importResponseInvalidCode     searchDiagnosticCode = "import_response_invalid"
+	prepareInputInvalidCode       searchDiagnosticCode = "prepare_input_invalid"
+	selectionInvalidCode          searchDiagnosticCode = "selection_invalid"
+	targetReadUnavailableCode     searchDiagnosticCode = "target_read_unavailable"
+	targetOwnershipUnverifiedCode searchDiagnosticCode = "target_ownership_unverified"
+	targetEvidenceInvalidCode     searchDiagnosticCode = "target_evidence_invalid"
+)
+
 type searchDiagnosticFailure struct {
 	code   searchDiagnosticCode
 	detail string
