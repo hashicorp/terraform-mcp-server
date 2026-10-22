@@ -5,6 +5,7 @@ package middleware
 
 import (
 	"context"
+	"encoding/json"
 	"time"
 
 	tfeclient "github.com/hashicorp/terraform-mcp-server/pkg/client"
@@ -46,7 +47,28 @@ func Metrics(metricsConfig tfeclient.MetricsConfig, logger *log.Logger) mcp.Midd
 				toolErr = true
 			}
 			tfeclient.RecordToolCallByName(ctx, start, toolErr, params.Name, metricsConfig, logger)
+			// Only successful calls count as an organization using the server
+			if !toolErr {
+				tfeclient.RecordOrgToolCall(ctx, orgNameFromArguments(params.Arguments), metricsConfig, logger)
+			}
+
 			return result, err
 		}
 	}
+}
+
+// orgNameFromArguments returns the terraform_org_name argument of a tool call,
+// or "" when it is absent or malformed. Arguments arrive as raw JSON on the
+// go-sdk path, so only that one field is decoded
+func orgNameFromArguments(arguments json.RawMessage) string {
+	if len(arguments) == 0 {
+		return ""
+	}
+	var args struct {
+		TerraformOrgName string `json:"terraform_org_name"`
+	}
+	if err := json.Unmarshal(arguments, &args); err != nil {
+		return ""
+	}
+	return args.TerraformOrgName
 }

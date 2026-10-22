@@ -700,7 +700,8 @@ Second, the MCP server records custom tool metrics around tool execution using M
 1. mcp_tool_calls_total
 2. mcp_tool_errors_total
 3. mcp_tool_duration_seconds
-
+4. mcp_client_type_total
+5. mcp_org_tool_calls_total
 
 ### Tool Filtering
 
