@@ -26,6 +26,7 @@ type MetricsConfig struct {
 	ErrorCounter          metric.Int64Counter      // Error count
 	ToolCallLatencyBucket metric.Float64Histogram  // Latency distribution
 	ClientTypeCounter     metric.Int64Counter      // Client type count (e.g. cli, cpi, vscode, web etc.)
+	OrgToolCallCounter    metric.Int64Counter      // Successful tool calls per Terraform organization (used to count distinct organizations)
 }
 
 type ClientInfo struct {
@@ -117,6 +118,9 @@ func RecordToolCallByName(ctx context.Context, startTime time.Time, toolErr bool
 func RecordToolCall(ctx context.Context, startTime time.Time, toolErr bool, id any, message *mcp.CallToolRequest, config MetricsConfig, logger *log.Logger) {
 	logger.Infof("Recording tool call for tool: %s id: %v", message.Params.Name, id)
 	RecordToolCallByName(ctx, startTime, toolErr, message.Params.Name, config, logger)
+	if !toolErr {
+		RecordOrgToolCall(ctx, message.GetString(OrgNameArgument, ""), config, logger)
+	}
 }
 
 // RecordClientType records the type and version of the client making the tool call (e.g., CLI, VSCode, Web, etc.)
