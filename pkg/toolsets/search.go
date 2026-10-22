@@ -8,6 +8,7 @@ var searchTools = []ToolDef{
 	{Name: "provider_list_schema_list", Toolset: Search, RequiresTFE: true},
 	{Name: "execute_query", Toolset: Search, RequiresTFE: true},
 	{Name: "get_query_status", Toolset: Search, RequiresTFE: true},
+	{Name: "get_query_summary", Toolset: Search, RequiresTFE: true},
 }
 
 // IsSearchTool reports whether name belongs to the Search toolset.

@@ -10,4 +10,5 @@ const (
 	ProviderListSchemaListDescription     = providerListSchemaListDescription
 	ExecuteQueryDescription               = executeQueryDescription
 	GetQueryStatusDescription             = getQueryStatusDescription
+	GetQuerySummaryDescription            = getQuerySummaryDescription
 )

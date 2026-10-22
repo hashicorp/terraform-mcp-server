@@ -20,6 +20,7 @@ func TestOfficialSearchDescriptionsUseSharedValues(t *testing.T) {
 	require.Equal(t, searchlogic.GenerateQueryConfigurationDescription, GenerateQueryConfigurationTool().Description)
 	require.Equal(t, searchlogic.ExecuteQueryDescription, ExecuteQueryTool().Description)
 	require.Equal(t, searchlogic.GetQueryStatusDescription, GetQueryStatusTool().Description)
+	require.Equal(t, searchlogic.GetQuerySummaryDescription, GetQuerySummaryTool().Description)
 }
 
 func TestOfficialSearchToolAnnotations(t *testing.T) {
@@ -33,7 +34,7 @@ func TestOfficialSearchToolAnnotations(t *testing.T) {
 	require.False(t, *generator.Annotations.DestructiveHint)
 	require.False(t, *generator.Annotations.OpenWorldHint)
 	require.Nil(t, generator.OutputSchema, "guidance retains its text result contract")
-	for _, tool := range []*mcp.Tool{ExecuteQueryTool(), GetQueryStatusTool()} {
+	for _, tool := range []*mcp.Tool{ExecuteQueryTool(), GetQueryStatusTool(), GetQuerySummaryTool()} {
 		require.Equal(t, tool.Name != "execute_query", tool.Annotations.ReadOnlyHint)
 		require.False(t, *tool.Annotations.DestructiveHint)
 		require.True(t, *tool.Annotations.OpenWorldHint)
@@ -67,6 +68,30 @@ func TestOfficialExecutionArgumentsAndValidation(t *testing.T) {
 			OrganizationName: "org", WorkspaceName: "ws", QueryConfiguration: raw,
 		})
 		require.ErrorContains(t, err, "query_configuration")
+	}
+}
+
+func TestOfficialSummaryArgumentsAndOutputSchema(t *testing.T) {
+	schema, err := jsonschema.For[QuerySummaryArguments](nil)
+	require.NoError(t, err)
+	require.Equal(t, []string{"query_run_id"}, schema.Required)
+	require.Len(t, schema.Properties, 4)
+	for _, name := range []string{"query_run_id", "resource_type", "address", "name_contains"} {
+		require.Equal(t, "string", schema.Properties[name].Type)
+	}
+	require.NotContains(t, schema.Properties, "limit")
+	require.NotContains(t, schema.Properties, "after")
+	output := GetQuerySummaryTool().OutputSchema.(*jsonschema.Schema)
+	for _, name := range []string{"selectable", "lists", "generate_config_out", "diagnostics", "next_action"} {
+		require.Contains(t, output.Properties, name)
+	}
+	require.NotContains(t, output.Properties, "has_more")
+	require.NotContains(t, output.Properties, "next_cursor")
+	for _, id := range []string{"", " \t"} {
+		result, summary, err := GetQuerySummaryFunc(context.Background(), nil, QuerySummaryArguments{QueryRunID: id})
+		require.EqualError(t, err, "missing required input: query_run_id")
+		require.Nil(t, result)
+		require.Nil(t, summary)
 	}
 }
 
