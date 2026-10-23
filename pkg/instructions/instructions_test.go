@@ -57,11 +57,21 @@ func TestEmbeddedInstructionsPreserveSearchOnlyWorkflowBoundaries(t *testing.T) 
 		"Stop at the summary for Search-only intent",
 		"Do not request an import target or local path",
 		"Do not modify infrastructure",
+		"`prepare_import`",
+		"`TF_MCP_IMPORT_WORKSPACE`",
+		"existing local configuration directory",
+		"independently from the source",
+		"Do not run `terraform init`",
+		"server does not read local files",
+		"retaining full observations/HCL only for selected markers",
+		"Preserve the context and digest unchanged",
+		"Stop at prepared/reviewed local changes",
+		"Plan verification is not available yet",
 	} {
 		require.Contains(t, guidance, required)
 	}
 	for _, unavailable := range []string{
-		"prepare_import", "verify_import_plan", "TF_MCP_IMPORT_WORKSPACE",
+		"verify_import_plan",
 	} {
 		require.NotContains(t, Text, unavailable)
 	}

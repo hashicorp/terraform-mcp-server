@@ -17,6 +17,7 @@ func TestSearchMetadataAndCredentialGating(t *testing.T) {
 		{Name: "execute_query", Toolset: Search, RequiresTFE: true},
 		{Name: "get_query_status", Toolset: Search, RequiresTFE: true},
 		{Name: "get_query_summary", Toolset: Search, RequiresTFE: true},
+		{Name: "prepare_import", Toolset: Search, RequiresTFE: true},
 	}
 	require.Equal(t, want, filter.EnabledTools(nil))
 	require.Equal(t, want[:1], filter.EnabledTools(func(td ToolDef) bool { return !td.RequiresTFE }))
@@ -33,7 +34,7 @@ func TestSearchMetadataAndCredentialGating(t *testing.T) {
 	}
 	require.False(t, IsSearchTool("search_provider_docs"))
 	require.False(t, IsSearchTool("unknown_tool"))
-	for _, future := range []string{"prepare_import", "verify_import_plan"} {
+	for _, future := range []string{"verify_import_plan"} {
 		require.False(t, IsSearchTool(future))
 		require.False(t, KnownToolNames()[future])
 	}

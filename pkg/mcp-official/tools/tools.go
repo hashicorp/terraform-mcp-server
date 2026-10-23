@@ -38,6 +38,9 @@ var officialFactories = map[string]func(svr *mcp.Server, logger *slog.Logger){
 	"get_query_summary": func(svr *mcp.Server, _ *slog.Logger) {
 		mcp.AddTool(svr, searchTools.GetQuerySummaryTool(), searchTools.GetQuerySummaryFunc)
 	},
+	"prepare_import": func(svr *mcp.Server, _ *slog.Logger) {
+		mcp.AddTool(svr, searchTools.PrepareImportTool(), searchTools.PrepareImportFunc)
+	},
 	// Add entries here as each tool gets ported to the official go-sdk
 	// Public Registry tools
 	"search_provider_docs": func(svr *mcp.Server, logger *slog.Logger) {

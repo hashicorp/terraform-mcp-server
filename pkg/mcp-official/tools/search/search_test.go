@@ -6,6 +6,7 @@ package search
 import (
 	"context"
 	"log/slog"
+	"strings"
 	"testing"
 
 	"github.com/google/jsonschema-go/jsonschema"
@@ -21,6 +22,7 @@ func TestOfficialSearchDescriptionsUseSharedValues(t *testing.T) {
 	require.Equal(t, searchlogic.ExecuteQueryDescription, ExecuteQueryTool().Description)
 	require.Equal(t, searchlogic.GetQueryStatusDescription, GetQueryStatusTool().Description)
 	require.Equal(t, searchlogic.GetQuerySummaryDescription, GetQuerySummaryTool().Description)
+	require.Equal(t, searchlogic.PrepareImportDescription, PrepareImportTool().Description)
 }
 
 func TestOfficialSearchToolAnnotations(t *testing.T) {
@@ -34,7 +36,7 @@ func TestOfficialSearchToolAnnotations(t *testing.T) {
 	require.False(t, *generator.Annotations.DestructiveHint)
 	require.False(t, *generator.Annotations.OpenWorldHint)
 	require.Nil(t, generator.OutputSchema, "guidance retains its text result contract")
-	for _, tool := range []*mcp.Tool{ExecuteQueryTool(), GetQueryStatusTool(), GetQuerySummaryTool()} {
+	for _, tool := range []*mcp.Tool{ExecuteQueryTool(), GetQueryStatusTool(), GetQuerySummaryTool(), PrepareImportTool()} {
 		require.Equal(t, tool.Name != "execute_query", tool.Annotations.ReadOnlyHint)
 		require.False(t, *tool.Annotations.DestructiveHint)
 		require.True(t, *tool.Annotations.OpenWorldHint)
@@ -42,6 +44,72 @@ func TestOfficialSearchToolAnnotations(t *testing.T) {
 	}
 	require.Contains(t, ExecuteQueryTool().Description, "EXECUTION APPROVAL")
 	require.Contains(t, ExecuteQueryTool().Description, "wait for their approval")
+}
+
+func TestOfficialPrepareImportRejectsInvalidProviderBeforeClientUse(t *testing.T) {
+	t.Setenv("TF_CLOUD_ORGANIZATION", "org")
+	t.Setenv("TF_MCP_IMPORT_WORKSPACE", "target")
+	t.Setenv("TF_MCP_QUERY_WORKSPACE", "source-must-not-be-import-target")
+	t.Setenv("TF_WORKSPACE", "fallback-must-not-win")
+	input := searchlogic.PrepareImportInput{
+		OrganizationName: "org",
+		WorkspaceName:    "target",
+		QueryRunID:       "qry-example",
+		Selections:       []searchlogic.ImportSelection{{QueryResultMarker: "qrm1-" + strings.Repeat("a", 64), ManagedType: "aws_s3_bucket"}},
+		LockedProviders:  map[string]string{"aws": "6.18.0"},
+	}
+	result, output, err := PrepareImportFunc(context.Background(), nil, input)
+	require.Nil(t, result)
+	require.Nil(t, output)
+	require.ErrorContains(t, err, "locked_provider_source_invalid")
+	require.ErrorContains(t, err, `locked_providers key "aws"`)
+	require.ErrorContains(t, err, "lacks a provider namespace")
+	schema, err := jsonschema.For[searchlogic.PrepareImportInput](nil)
+	require.NoError(t, err)
+	require.Contains(t, schema.Properties["locked_providers"].Description, "Public namespace/type shorthand is accepted")
+	require.Contains(t, schema.Properties["locked_providers"].Description, "custom/private sources require hostname/namespace/type")
+}
+
+func TestOfficialPrepareImportSchemaAndTargetInteraction(t *testing.T) {
+	schema := PrepareImportTool().InputSchema.(*jsonschema.Schema)
+	require.ElementsMatch(t, []string{"query_run_id", "selections", "locked_providers"}, schema.Required)
+	require.NotContains(t, schema.Properties, "organization_name")
+	require.Equal(t, searchlogic.ImportOrganizationDescription, schema.Properties[searchlogic.ScopeOrganizationInput].Description)
+	require.Equal(t, searchlogic.ImportWorkspaceDescription, schema.Properties[searchlogic.ScopeWorkspaceInput].Description)
+	output := PrepareImportTool().OutputSchema.(*jsonschema.Schema)
+	for _, field := range []string{"import_context", "selected_results", "generate_config_out", "diagnostics", "next_action"} {
+		require.Contains(t, output.Properties, field)
+	}
+	t.Setenv("TF_CLOUD_ORGANIZATION", "org")
+	t.Setenv("TF_MCP_IMPORT_WORKSPACE", "target")
+	t.Setenv("TF_MCP_QUERY_WORKSPACE", "source-must-not-be-import-target")
+	t.Setenv("TF_WORKSPACE", "fallback")
+	result, prepared, err := PrepareImportFunc(context.Background(), nil, searchlogic.PrepareImportInput{})
+	require.NoError(t, err)
+	require.Nil(t, prepared)
+	request := result.InputRequests[searchlogic.ScopeInputRequestID].(*mcp.ElicitParams)
+	require.Contains(t, request.Message, "import target")
+	require.Contains(t, request.Message, `workspace_name="target"`)
+	require.NotContains(t, request.Message, "source-must-not-be-import-target")
+	for _, action := range []string{"accept", "decline", "cancel"} {
+		req := &mcp.CallToolRequest{Params: &mcp.CallToolParamsRaw{InputResponses: mcp.InputResponseMap{
+			searchlogic.ScopeInputRequestID: &mcp.ElicitResult{Action: action, Content: map[string]any{searchlogic.ScopeOrganizationInput: "org", searchlogic.ScopeWorkspaceInput: "target"}},
+		}}}
+		result, prepared, err := PrepareImportFunc(context.Background(), req, searchlogic.PrepareImportInput{})
+		require.Nil(t, prepared)
+		if action == "accept" {
+			require.ErrorContains(t, err, "prepare_input_invalid")
+			require.Nil(t, result)
+		} else {
+			require.NoError(t, err)
+			require.Contains(t, result.Content[0].(*mcp.TextContent).Text, "no scoped API request")
+		}
+	}
+	ctx := terraformclient.WithOrganizationAllowlist(context.Background(), []string{"allowed"})
+	result, prepared, err = PrepareImportFunc(ctx, nil, searchlogic.PrepareImportInput{})
+	require.ErrorIs(t, err, terraformclient.ErrOrganizationNotAllowed)
+	require.Nil(t, result)
+	require.Nil(t, prepared)
 }
 
 func TestOfficialExecutionArgumentsAndValidation(t *testing.T) {

@@ -33,6 +33,7 @@ func TestSearchRegistrationWithoutCredentials(t *testing.T) {
 	require.Nil(t, svr.GetTool("execute_query"))
 	require.Nil(t, svr.GetTool("get_query_status"))
 	require.Nil(t, svr.GetTool("get_query_summary"))
+	require.Nil(t, svr.GetTool("prepare_import"))
 	generator := svr.GetTool("generate_query_configuration")
 	require.NotNil(t, generator)
 	result, err := generator.Handler(context.Background(), mcp.CallToolRequest{Params: mcp.CallToolParams{
@@ -48,8 +49,8 @@ func TestSearchRegistrationWithoutCredentials(t *testing.T) {
 
 	// Simulate credential availability without constructing a client or calling a backend.
 	globalToolRegistry.RegisterSessionWithTFE("fixture-session")
-	require.Len(t, svr.ListTools(), 5)
-	for _, name := range []string{"execute_query", "get_query_status", "get_query_summary"} {
+	require.Len(t, svr.ListTools(), 6)
+	for _, name := range []string{"execute_query", "get_query_status", "get_query_summary", "prepare_import"} {
 		tool := svr.GetTool(name)
 		require.NotNil(t, tool)
 		result, err := tool.Handler(context.Background(), mcp.CallToolRequest{})
