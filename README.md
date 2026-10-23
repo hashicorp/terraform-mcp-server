@@ -693,23 +693,23 @@ When enabled, the server sources the client IP according to `MCP_REMOTE_IP_METHO
 |--------|----------|
 | `RemoteAddr` (default) | Uses only the address of the direct TCP connection. Ignores `X-Forwarded-For` and `X-Real-IP`. |
 | `X-Real-IP` | Uses the `X-Real-IP` header if it is a valid IP, otherwise falls back to `RemoteAddr`. |
-| `X-Forwarded-For` | Uses the `X-Forwarded-For` chain, selecting the entry `MCP_XFF_TRUSTED_HOPS` positions from the right. Falls back to `RemoteAddr` if the value is missing or invalid. |
+| `X-Forwarded-For` | Uses the `X-Forwarded-For` header, selecting the entry `MCP_XFF_TRUSTED_HOPS` positions from the right. Falls back to `RemoteAddr` if the value is missing or invalid. |
 
 ### Trust model
 
-`X-Forwarded-For` and `X-Real-IP` are set by clients and intermediary proxies, so they can be spoofed unless a trusted proxy in front of the server overwrites them. For this reason the default is `RemoteAddr`, which trusts only the peer the server is directly connected to. Only enable `X-Real-IP` or `X-Forwarded-For` when the server sits behind a proxy you control that sets these headers.
+`X-Forwarded-For` and `X-Real-IP` are set by clients and intermediary proxies, so they can be spoofed unless a trusted proxy in front of the server overwrites them. For this reason the default is `RemoteAddr`, which trusts only the peer the server is directly connected to. Only enable `X-Real-IP` or `X-Forwarded-For` when the server sits behind a proxy you control that sets these headers. Some load balancers, including AWS Application Load Balancers, do not set `X-Real-IP`, so with those the header comes straight from the client and should not be used.
 
 ### Trusted hops
 
-When using `X-Forwarded-For`, `MCP_XFF_TRUSTED_HOPS` is the number of proxies you operate between the server and the internet. Hops are counted from the right of the chain, since each proxy appends the address it received the request from and the rightmost entry is set by the proxy closest to the server. The server skips that many trusted entries and takes the next one to the left.
+When using `X-Forwarded-For`, set `MCP_XFF_TRUSTED_HOPS` to the number of proxies you operate in front of the server. Each proxy appends the address it received the request from, not its own address, so the client IP is the entry that many positions from the right. Everything to the left of it was sent by the client and can be spoofed.
 
-For example, with `MCP_XFF_TRUSTED_HOPS=1` and a header of `200.1.2.3, 10.1.1.10`, the server selects `200.1.2.3`. With `MCP_XFF_TRUSTED_HOPS=2` and `108.0.0.1, 200.1.2.3, 10.1.1.10, 192.168.0.1`, it selects `200.1.2.3`. If the hop count is greater than the number of entries, or the selected entry is not a valid IP, the server falls back to `RemoteAddr`.
+For example, behind a single load balancer such as an AWS ALB, set `MCP_XFF_TRUSTED_HOPS=1`. A header of `198.51.100.7` resolves to `198.51.100.7`, and a header of `1.2.3.4, 198.51.100.7`, where the client sent `1.2.3.4` itself, also resolves to `198.51.100.7`. With `MCP_XFF_TRUSTED_HOPS=2` and `1.2.3.4, 198.51.100.7, 10.0.0.5`, the server selects `198.51.100.7`. If the hop count is greater than the number of entries, or the selected entry is not a valid IP, the server falls back to `RemoteAddr`.
 
-Setting the hop count too low will trust a client-supplied value; setting it too high will trust an address further into your own infrastructure. Set it to the exact number of proxies you run.
+Setting the hop count too high will trust a client-supplied value; setting it too low will select an address from your own infrastructure. Set it to the exact number of proxies you run.
 
 ### Limitations
 
-- The server reads only the first `X-Forwarded-For` header on a request. It is valid for a request to carry multiple `X-Forwarded-For` headers, but Go's standard library returns only the first, and the server does not join them. If your proxy chain emits multiple headers, configure it to emit a single combined `X-Forwarded-For` header.
+- If a request carries multiple `X-Forwarded-For` headers, the server joins them in order before selecting an entry. `X-Forwarded-For` header.
 - IPv4 and IPv6 addresses are both supported. Values that are not valid IPs are rejected and the server falls back to `RemoteAddr`.
 
 ### Migrating from earlier versions

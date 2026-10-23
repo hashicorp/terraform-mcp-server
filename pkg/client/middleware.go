@@ -28,8 +28,8 @@ const (
 	// The valid values are: "RemoteAddr" (default), "X-Real-IP", "X-Forwarded-For".
 	RemoteIPMethodEnv = "MCP_REMOTE_IP_METHOD"
 
-	// XFFTrustedHopsEnv sets the number of trusted proxy hops, counted from the
-	// right of the X-Forwarded-For chain. Only used with the X-Forwarded-For method.
+	// XFFTrustedHopsEnv is how many trusted proxies sit in front of the server,
+	// so 1 if it's just a load balancer. Only used with the X-Forwarded-For method.
 	XFFTrustedHopsEnv = "MCP_XFF_TRUSTED_HOPS"
 
 	RemoteIPMethodRemoteAddr = "RemoteAddr"
@@ -412,8 +412,8 @@ func TerraformContextMiddleware(logger *log.Logger) func(http.Handler) http.Hand
 type ClientIPConfig struct {
 	// The Method is one of the RemoteIPMethod consts. It defaults to RemoteAddr.
 	Method string
-	// TrustedHops is the number of proxy hops to trust from the right of the
-	// X-Forwarded-For chain. Only used when the selected method is X-Forwarded-For.
+	// TrustedHops is the number of trusted proxies in front of the server.
+	// Only used when the selected method is X-Forwarded-For.
 	TrustedHops int
 }
 
@@ -452,7 +452,9 @@ func getClientIP(r *http.Request, cfg ClientIPConfig) string {
 		return remoteAddrIP(r)
 
 	case RemoteIPMethodXFF:
-		if ip := ipFromXFF(r.Header.Get("X-Forwarded-For"), cfg.TrustedHops); ip != "" {
+		// Using Values instead of Get so we read every X-Forwarded-For line. Get only
+		// returns the first one, which could be a line the client sent itself.
+		if ip := ipFromXFF(r.Header.Values("X-Forwarded-For"), cfg.TrustedHops); ip != "" {
 			return ip
 		}
 		return remoteAddrIP(r)
@@ -475,28 +477,29 @@ func remoteAddrIP(r *http.Request) string {
 	return parseIP(addr)
 }
 
-// ipFromXFF returns the trusted client IP from an X-Forwarded-For chain.
+// ipFromXFF returns the client IP from the X-Forwarded-For header values.
 //
-// hops is the number of trusted proxies between the server and the client,
-// counted from the right (the rightmost entry is set by the nearest proxy).
-// It skips those hops and returns the next entry to the left, which is the
-// first client-supplied address beyond the trusted proxies.
-// .  example flow on how it works, and what the logic represents >
+// Each proxy adds the IP it got the request from, not its own IP. So with hops
+// trusted proxies in front of us, the client IP is the hops-th entry from the
+// right. Anything further left came from the client and can be faked. If there
+// are multiple header lines they get joined in order first.
 //
-//	hops=1, "200.1.2.3, 10.1.1.10"                         -> "200.1.2.3"
-//	hops=2, "108.0.0.1, 200.1.2.3, 10.1.1.10, 192.168.0.1" -> "200.1.2.3"
+//	hops=1, "198.51.100.7"                    -> "198.51.100.7"
+//	hops=1, "1.2.3.4, 198.51.100.7"           -> "198.51.100.7" (1.2.3.4 came from the client)
+//	hops=2, "1.2.3.4, 198.51.100.7, 10.0.0.5" -> "198.51.100.7"
 //
-// Returns "" if the chain is empty, hops is <= 0, the position is out of range,
-// or the entry is not a valid IP.
-func ipFromXFF(xff string, hops int) string {
-	if xff == "" || hops <= 0 {
+// Returns "" when there's no header, hops is 0 or less, there are fewer
+// entries than hops, or the entry isn't a valid IP.
+func ipFromXFF(values []string, hops int) string {
+	if len(values) == 0 || hops <= 0 {
 		return ""
 	}
-	parts := strings.Split(xff, ",")
-	// Skip hops trusted proxies from the right, then take the next entry left.
-	// hops=1 -> parts[len-2], hops=2 -> parts[len-3].
-	idx := len(parts) - hops - 1
-	if idx < 0 || idx >= len(parts) {
+	var parts []string
+	for _, value := range values {
+		parts = append(parts, strings.Split(value, ",")...)
+	}
+	idx := len(parts) - hops
+	if idx < 0 {
 		return ""
 	}
 	return parseIP(parts[idx])
