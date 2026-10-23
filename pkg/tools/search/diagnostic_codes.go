@@ -24,6 +24,12 @@ const (
 	lockedProviderSourceInvalidCode   searchDiagnosticCode = "locked_provider_source_invalid"
 )
 
+// QueryRun status and backend ownership diagnostics.
+const (
+	queryOwnershipUnverifiedCode searchDiagnosticCode = "query_ownership_unverified"
+	queryRunUnavailableCode      searchDiagnosticCode = "query_run_unavailable"
+)
+
 type searchDiagnosticFailure struct {
 	code   searchDiagnosticCode
 	detail string
@@ -66,6 +72,12 @@ func TerraformClientUnavailableError(err error) error {
 // details from crossing either MCP adapter boundary.
 func ProviderDataUnavailableError(err error) error {
 	return sanitizedSearchToolError(err, providerUnavailableCode)
+}
+
+// QueryStatusUnavailableError prevents QueryRun transport details from
+// crossing either MCP adapter boundary.
+func QueryStatusUnavailableError(err error) error {
+	return sanitizedSearchToolError(err, queryRunUnavailableCode)
 }
 
 func sanitizedSearchToolError(err error, fallback searchDiagnosticCode) error {

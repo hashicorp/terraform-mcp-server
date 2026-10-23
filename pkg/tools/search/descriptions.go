@@ -8,4 +8,6 @@ package search
 const (
 	GenerateQueryConfigurationDescription = generateQueryConfigDescription
 	ProviderListSchemaListDescription     = providerListSchemaListDescription
+	ExecuteQueryDescription               = executeQueryDescription
+	GetQueryStatusDescription             = getQueryStatusDescription
 )

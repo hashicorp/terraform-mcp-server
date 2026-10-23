@@ -3,7 +3,9 @@
 FEATURES
 
 * Add the `search` toolset with credential-requiring, read-only `provider_list_schema_list` on both MCP SDKs. Verify workspace access before fetching the organization-scoped provider catalog and catalog-selected list-resource schemas.
-* Add credential-free `generate_query_configuration` on both MCP SDKs, with schema-backed scalar/nested attribute, cardinality, required-value, filter, example, and variable guidance. Preserve exact discovered provider releases and list-resource keys. This release stops at reviewed guidance, not backend validation or query execution.
+* Add credential-free `generate_query_configuration` on both MCP SDKs, with schema-backed scalar/nested attribute, cardinality, required-value, filter, example, and variable guidance. Preserve exact discovered provider releases and list-resource keys; guidance is not backend validation.
+* Add credential-requiring `execute_query` and `get_query_status` on both MCP SDKs. Confirm the source and obtain separate agent-driven execution approval; execution creates query records and a QueryRun, not infrastructure or an ordinary Run. Validate before submission, return only the created ID, and reconcile uncertain outcomes before retrying.
+* Monitor the same QueryRun within a 20-second call budget at 3-second intervals, with a 5-second pending retry recommendation and caller cancellation/deadline support. Verify backend ownership for allowlisted ID-only access. Return complete structured and text/JSON status results with safe errors and polling logs. Result summaries and import assistance remain unavailable.
 * Add explicit Search source scope and confirmed defaults from `TF_CLOUD_ORGANIZATION`, `TF_MCP_QUERY_WORKSPACE`, and `TF_WORKSPACE`, with organization allowlist enforcement. The official SDK uses native input requests; the legacy SDK returns non-error input-required guidance.
 * Add shared provider-source canonicalization and exact caller-supplied locked-version validation primitives. These do not read local files, select versions, or initialize providers.
 

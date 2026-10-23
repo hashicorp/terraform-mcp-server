@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestEmbeddedInstructionsPreserveDiscoveryAndGuidanceBoundaries(t *testing.T) {
+func TestEmbeddedInstructionsPreserveExecutionAndStatusBoundaries(t *testing.T) {
 	searchStart := strings.Index(Text, "**Terraform Search (")
 	codeGenerationStart := strings.Index(Text, "**Code Generation**")
 	require.GreaterOrEqual(t, searchStart, 0)
@@ -32,14 +32,27 @@ func TestEmbeddedInstructionsPreserveDiscoveryAndGuidanceBoundaries(t *testing.T
 		"nesting modes/cardinality, required values",
 		"Never invent unsupported filters or omit required values",
 		"Guidance is not backend validation",
-		"Stop at reviewed configuration guidance",
+		"Source confirmation does not approve query execution",
+		"wait for approval",
+		"obtain approval again",
+		"server does not enforce a separate approval parameter",
+		"`execute_query` → `get_query_status`",
+		"not an ordinary speculative/apply Run",
+		"reconcile before another submission",
+		"existing authorized QueryRun ID",
+		"20-second budget and 3-second intervals",
+		"5-second `retry_after_seconds`",
+		"earlier caller deadlines and cancellation",
+		"do not execute another query",
+		"does not imply selectable results",
+		"Stop at status in this release",
 		"Do not request an import target or local path",
-		"Do not create queries or modify infrastructure",
+		"Do not modify infrastructure",
 	} {
 		require.Contains(t, guidance, required)
 	}
 	for _, unavailable := range []string{
-		"execute_query", "get_query_status", "get_query_summary",
+		"get_query_summary",
 		"prepare_import", "verify_import_plan", "TF_MCP_IMPORT_WORKSPACE",
 	} {
 		require.NotContains(t, Text, unavailable)

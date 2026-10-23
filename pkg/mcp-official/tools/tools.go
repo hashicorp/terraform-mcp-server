@@ -22,12 +22,18 @@ import (
 // side uses. Tools that log, take the server's logger from RegisterTools.
 
 var officialFactories = map[string]func(svr *mcp.Server, logger *slog.Logger){
-	// HCP Terraform Search discovery and configuration guidance
+	// HCP Terraform Search discovery, configuration, execution, and monitoring
 	"generate_query_configuration": func(svr *mcp.Server, _ *slog.Logger) {
 		mcp.AddTool(svr, searchTools.GenerateQueryConfigurationTool(), searchTools.GenerateQueryConfigurationFunc)
 	},
 	"provider_list_schema_list": func(svr *mcp.Server, _ *slog.Logger) {
 		mcp.AddTool(svr, searchTools.ProviderListSchemaListTool(), searchTools.ProviderListSchemaListFunc)
+	},
+	"execute_query": func(svr *mcp.Server, _ *slog.Logger) {
+		mcp.AddTool(svr, searchTools.ExecuteQueryTool(), searchTools.ExecuteQueryFunc)
+	},
+	"get_query_status": func(svr *mcp.Server, logger *slog.Logger) {
+		mcp.AddTool(svr, searchTools.GetQueryStatusTool(), searchTools.GetQueryStatusFunc(logger))
 	},
 	// Add entries here as each tool gets ported to the official go-sdk
 	// Public Registry tools
