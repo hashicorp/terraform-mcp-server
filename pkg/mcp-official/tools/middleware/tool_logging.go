@@ -5,13 +5,17 @@ package middleware
 
 import (
 	"context"
+	"encoding/json"
 	"log/slog"
+	"sort"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 // ToolLogging is the go-sdk equivalent of client.ToolLoggingMiddleware:
-// it logs the tool name and arguments for every tools/call request.
+// it logs the tool name and argument keys for every tools/call request.
+// Argument values are never logged, since they can hold customer data such as
+// sensitive variable values.
 func ToolLogging(logger *slog.Logger) mcp.Middleware {
 	return func(next mcp.MethodHandler) mcp.MethodHandler {
 		return func(ctx context.Context, method string, req mcp.Request) (mcp.Result, error) {
@@ -21,14 +25,14 @@ func ToolLogging(logger *slog.Logger) mcp.Middleware {
 
 			params := req.GetParams().(*mcp.CallToolParamsRaw)
 			toolName := params.Name
-			arguments := params.Arguments
+			keys := argumentKeys(params.Arguments)
 
 			result, err := next(ctx, method, req)
 			// Protocol-level error
 			if err != nil {
 				logger.ErrorContext(ctx, "tool call failed",
 					"tool", toolName,
-					"arguments", arguments,
+					"argument_keys", keys,
 					"error", err)
 				return result, err
 			}
@@ -37,15 +41,33 @@ func ToolLogging(logger *slog.Logger) mcp.Middleware {
 			if toolResult, ok := result.(*mcp.CallToolResult); ok && toolResult.IsError {
 				logger.ErrorContext(ctx, "tool call failed",
 					"tool", toolName,
-					"arguments", arguments,
+					"argument_keys", keys,
 					"error", toolResult.GetError())
 				return result, nil
 			}
 
 			logger.InfoContext(ctx, "tool call completed",
 				"tool", toolName,
-				"arguments", arguments)
+				"argument_keys", keys)
 			return result, nil
 		}
 	}
+}
+
+// argumentKeys returns the sorted top-level keys of a tool call's arguments.
+// It never returns values. Missing arguments will give just an empty slice.
+func argumentKeys(raw json.RawMessage) []string {
+	keys := make([]string, 0)
+	if len(raw) == 0 {
+		return keys
+	}
+	var args map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &args); err != nil {
+		return keys
+	}
+	for key := range args {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	return keys
 }
