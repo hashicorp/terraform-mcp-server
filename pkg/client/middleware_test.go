@@ -1303,6 +1303,7 @@ func TestGetClientIP(t *testing.T) {
 		cfg        ClientIPConfig
 		remoteAddr string
 		headers    map[string]string
+		xffLines   []string // each entry is sent as its own X-Forwarded-For line
 		expected   string
 	}{
 		//default method: RemoteAddr (secure)
@@ -1328,7 +1329,7 @@ func TestGetClientIP(t *testing.T) {
 			name:       "RemoteAddr ignores spoofed XFF header",
 			cfg:        ClientIPConfig{Method: RemoteIPMethodRemoteAddr},
 			remoteAddr: "203.0.113.5:443",
-			headers:    map[string]string{"X-Forwarded-For": "1.2.3.4"},
+			xffLines:   []string{"1.2.3.4"},
 			expected:   "203.0.113.5", // header is NOT trusted in default mode
 		},
 		{
@@ -1367,54 +1368,69 @@ func TestGetClientIP(t *testing.T) {
 			expected:   "10.0.0.1",
 		},
 
-		//X-Forwarded-For method (hops counted from the right)
+		// X-Forwarded-For method. Each proxy appends the IP it got the request from,
+		// so with N trusted proxies the client IP is the Nth entry from the right.
 		{
-			name:       "XFF hops=1 two entries (SecOps example)",
+			name:       "XFF hops=1 single entry from the load balancer",
 			cfg:        ClientIPConfig{Method: RemoteIPMethodXFF, TrustedHops: 1},
-			remoteAddr: "10.1.1.10:80",
-			headers:    map[string]string{"X-Forwarded-For": "200.1.2.3, 10.1.1.10"},
-			expected:   "200.1.2.3",
+			remoteAddr: "10.0.0.1:80",
+			xffLines:   []string{"198.51.100.7"},
+			expected:   "198.51.100.7",
 		},
 		{
-			name:       "XFF hops=2 four entries (SecOps example)",
+			name:       "XFF hops=1 ignores client supplied entries",
+			cfg:        ClientIPConfig{Method: RemoteIPMethodXFF, TrustedHops: 1},
+			remoteAddr: "10.0.0.1:80",
+			xffLines:   []string{"1.2.3.4, 198.51.100.7"},
+			expected:   "198.51.100.7", // 1.2.3.4 was sent by the client
+		},
+		{
+			name:       "XFF hops=2 two trusted proxies",
 			cfg:        ClientIPConfig{Method: RemoteIPMethodXFF, TrustedHops: 2},
-			remoteAddr: "192.168.0.1:80",
-			headers:    map[string]string{"X-Forwarded-For": "108.0.0.1, 200.1.2.3, 10.1.1.10, 192.168.0.1"},
-			expected:   "200.1.2.3",
+			remoteAddr: "10.0.0.1:80",
+			xffLines:   []string{"1.2.3.4, 198.51.100.7, 10.0.0.5"},
+			expected:   "198.51.100.7",
+		},
+		{
+			name:       "XFF multiple header lines are joined",
+			cfg:        ClientIPConfig{Method: RemoteIPMethodXFF, TrustedHops: 1},
+			remoteAddr: "10.0.0.1:80",
+			xffLines:   []string{"1.2.3.4", "198.51.100.7"},
+			expected:   "198.51.100.7", // the client's own line comes first and is ignored
 		},
 		{
 			name:       "XFF ipv6 entry",
 			cfg:        ClientIPConfig{Method: RemoteIPMethodXFF, TrustedHops: 1},
-			remoteAddr: "10.1.1.10:80",
-			headers:    map[string]string{"X-Forwarded-For": "2001:db8::5, 10.1.1.10"},
+			remoteAddr: "10.0.0.1:80",
+			xffLines:   []string{"1.2.3.4, 2001:db8::5"},
 			expected:   "2001:db8::5",
 		},
 		{
 			name:       "XFF hops exceeds chain length falls back to RemoteAddr",
-			cfg:        ClientIPConfig{Method: RemoteIPMethodXFF, TrustedHops: 5},
-			remoteAddr: "10.1.1.10:80",
-			headers:    map[string]string{"X-Forwarded-For": "200.1.2.3, 10.1.1.10"},
-			expected:   "10.1.1.10", // out of range -> "" from ipFromXFF -> RemoteAddr fallback
+			cfg:        ClientIPConfig{Method: RemoteIPMethodXFF, TrustedHops: 2},
+			remoteAddr: "10.0.0.1:80",
+			xffLines:   []string{"198.51.100.7"},
+			expected:   "10.0.0.1",
 		},
 		{
 			name:       "XFF hops unset (0) falls back to RemoteAddr",
 			cfg:        ClientIPConfig{Method: RemoteIPMethodXFF, TrustedHops: 0},
-			remoteAddr: "10.1.1.10:80",
-			headers:    map[string]string{"X-Forwarded-For": "200.1.2.3, 10.1.1.10"},
-			expected:   "10.1.1.10",
+			remoteAddr: "10.0.0.1:80",
+			xffLines:   []string{"198.51.100.7"},
+			expected:   "10.0.0.1",
 		},
 		{
 			name:       "XFF selected entry invalid falls back to RemoteAddr",
 			cfg:        ClientIPConfig{Method: RemoteIPMethodXFF, TrustedHops: 1},
-			remoteAddr: "10.1.1.10:80",
-			headers:    map[string]string{"X-Forwarded-For": "not-an-ip, 10.1.1.10"},
-			expected:   "10.1.1.10",
+			remoteAddr: "10.0.0.1:80",
+			xffLines:   []string{"198.51.100.7, not-an-ip"},
+			expected:   "10.0.0.1",
 		},
 		{
 			name:       "XFF empty header falls back to RemoteAddr",
 			cfg:        ClientIPConfig{Method: RemoteIPMethodXFF, TrustedHops: 1},
-			remoteAddr: "10.1.1.10:80",
-			expected:   "10.1.1.10",
+			remoteAddr: "10.0.0.1:80",
+			expected:   "10.0.0.1",
 		},
 	}
 
@@ -1424,6 +1440,9 @@ func TestGetClientIP(t *testing.T) {
 			req.RemoteAddr = tc.remoteAddr
 			for k, v := range tc.headers {
 				req.Header.Set(k, v)
+			}
+			for _, line := range tc.xffLines {
+				req.Header.Add("X-Forwarded-For", line)
 			}
 			result := getClientIP(req, tc.cfg)
 			assert.Equal(t, tc.expected, result)
