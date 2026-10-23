@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"testing"
 
@@ -58,8 +59,7 @@ func TestCORSE2E(t *testing.T) {
 		config := config
 
 		t.Run(config.name, func(t *testing.T) {
-			// CORS checks use the legacy endpoint because the raw initializer is
-			// currently compatible with that endpoint only.
+			// Run the CORS checks against the server selected for this test run
 			serverConfig := currentServerConfig()
 			baseURL := fmt.Sprintf("http://localhost:%s", config.port)
 			mcpURL := baseURL + serverConfig.mcpPath
@@ -170,6 +170,7 @@ func runCORSTests(t *testing.T, mcpURL, mode, expectedServerName string) {
 
 			req, _ := http.NewRequest(tc.method, mcpURL, bytes.NewBuffer(body))
 			req.Header.Set("Content-Type", "application/json")
+			req.Header.Set("Accept", "application/json, text/event-stream")
 
 			if tc.origin != "" {
 				req.Header.Set("Origin", tc.origin)
@@ -259,6 +260,7 @@ func initializeMCPSession(t *testing.T, mcpURL, origin, expectedServerName strin
 	require.NoError(t, err)
 
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json, text/event-stream")
 	if origin != "" {
 		req.Header.Set("Origin", origin)
 	}
@@ -276,10 +278,22 @@ func initializeMCPSession(t *testing.T, mcpURL, origin, expectedServerName strin
 	require.NotEmpty(t, sessionID, "Expected to receive a session ID")
 
 	// Verify we got a valid response
-	var initResp InitializeResponse
-	err = json.NewDecoder(resp.Body).Decode(&initResp)
+	raw, err := io.ReadAll(resp.Body)
 	require.NoError(t, err)
+	var initResp InitializeResponse
+	require.NoError(t, json.Unmarshal(jsonFromBody(raw), &initResp))
 	assert.Equal(t, expectedServerName, initResp.Result.ServerInfo.Name)
 
 	return sessionID
+}
+
+// jsonFromBody returns the JSON payload of a response that is either plain
+// JSON (mark3labs) or a single SSE message with a "data:" line (go-sdk).
+func jsonFromBody(body []byte) []byte {
+	for _, line := range bytes.Split(body, []byte("\n")) {
+		if data, ok := bytes.CutPrefix(line, []byte("data:")); ok {
+			return bytes.TrimSpace(data)
+		}
+	}
+	return body
 }
