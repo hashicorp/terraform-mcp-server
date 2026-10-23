@@ -16,6 +16,36 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestOfficialSearchArgumentsAndValidation(t *testing.T) {
+	require.Contains(t, GetQueryStatusTool().Description, "query_run_id returned by execute_query")
+	require.NotContains(t, GetQueryStatusTool().Description, "latest-query-run")
+	schema, err := jsonschema.For[QueryRunArguments](nil)
+	require.NoError(t, err)
+	require.Equal(t, []string{"query_run_id"}, schema.Required)
+	statusSchema, ok := GetQueryStatusTool().OutputSchema.(*jsonschema.Schema)
+	require.True(t, ok)
+	require.Contains(t, statusSchema.Required, "terminal")
+	require.Contains(t, statusSchema.Properties, "status_timestamps")
+	require.Contains(t, statusSchema.Properties, "retry_after_seconds")
+	summarySchema, ok := GetQuerySummaryTool().OutputSchema.(*jsonschema.Schema)
+	require.True(t, ok)
+	require.Contains(t, summarySchema.Properties, "selectable")
+	require.Contains(t, summarySchema.Properties, "lists")
+	require.NotContains(t, summarySchema.Properties, "has_more")
+	require.NotContains(t, summarySchema.Properties, "next_cursor")
+	summaryInputSchema, err := jsonschema.For[QuerySummaryArguments](nil)
+	require.NoError(t, err)
+	require.NotContains(t, summaryInputSchema.Properties, "limit")
+	require.NotContains(t, summaryInputSchema.Properties, "after")
+
+	_, _, err = GetQueryStatusFunc(slog.Default())(context.Background(), nil, QueryRunArguments{QueryRunID: " "})
+	require.ErrorContains(t, err, "missing required input: query_run_id")
+	_, _, err = ExecuteQueryFunc(context.Background(), nil, ExecuteQueryArguments{
+		OrganizationName: "org", WorkspaceName: "ws", QueryConfiguration: `{`,
+	})
+	require.ErrorContains(t, err, "invalid query_configuration")
+}
+
 func TestOfficialSearchDescriptionsUseSharedValues(t *testing.T) {
 	require.Equal(t, searchlogic.ProviderListSchemaListDescription, ProviderListSchemaListTool().Description)
 	require.Equal(t, searchlogic.GenerateQueryConfigurationDescription, GenerateQueryConfigurationTool().Description)
@@ -23,6 +53,7 @@ func TestOfficialSearchDescriptionsUseSharedValues(t *testing.T) {
 	require.Equal(t, searchlogic.GetQueryStatusDescription, GetQueryStatusTool().Description)
 	require.Equal(t, searchlogic.GetQuerySummaryDescription, GetQuerySummaryTool().Description)
 	require.Equal(t, searchlogic.PrepareImportDescription, PrepareImportTool().Description)
+	require.Equal(t, searchlogic.VerifyImportPlanDescription, VerifyImportPlanTool().Description)
 }
 
 func TestOfficialSearchToolAnnotations(t *testing.T) {
@@ -36,7 +67,7 @@ func TestOfficialSearchToolAnnotations(t *testing.T) {
 	require.False(t, *generator.Annotations.DestructiveHint)
 	require.False(t, *generator.Annotations.OpenWorldHint)
 	require.Nil(t, generator.OutputSchema, "guidance retains its text result contract")
-	for _, tool := range []*mcp.Tool{ExecuteQueryTool(), GetQueryStatusTool(), GetQuerySummaryTool(), PrepareImportTool()} {
+	for _, tool := range []*mcp.Tool{ExecuteQueryTool(), GetQueryStatusTool(), GetQuerySummaryTool(), PrepareImportTool(), VerifyImportPlanTool()} {
 		require.Equal(t, tool.Name != "execute_query", tool.Annotations.ReadOnlyHint)
 		require.False(t, *tool.Annotations.DestructiveHint)
 		require.True(t, *tool.Annotations.OpenWorldHint)
@@ -113,6 +144,8 @@ func TestOfficialPrepareImportSchemaAndTargetInteraction(t *testing.T) {
 }
 
 func TestOfficialExecutionArgumentsAndValidation(t *testing.T) {
+	require.Contains(t, GetQueryStatusTool().Description, "query_run_id returned by execute_query")
+	require.NotContains(t, GetQueryStatusTool().Description, "latest-query-run")
 	querySchema := ExecuteQueryTool().InputSchema.(*jsonschema.Schema)
 	require.Equal(t, []string{"query_configuration"}, querySchema.Required)
 	require.Len(t, querySchema.Properties, 3)

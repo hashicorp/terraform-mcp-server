@@ -82,6 +82,7 @@ func TestToolLoggingMiddleware(t *testing.T) {
 		{"get_query_status", "query_run_id"},
 		{"get_query_summary", "name_contains"},
 		{"prepare_import", "selections"},
+		{"verify_import_plan", "import_context"},
 	} {
 		t.Run("does not log Search arguments/"+test.name, func(t *testing.T) {
 			var buf bytes.Buffer

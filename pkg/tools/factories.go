@@ -19,13 +19,14 @@ type toolFactory func(logger *log.Logger) server.ServerTool
 // keyed by toolsets.ToolDef.Name. Two tools that don't fit this plain shape
 // (create_no_code_workspace, create_run) live in specialFactories below
 var toolFactories = map[string]toolFactory{
-	// HCP Terraform Search discovery, configuration, execution, and monitoring
+	// HCP Terraform no-code search tools
 	"generate_query_configuration": searchTools.GenerateQueryConfiguration,
 	"provider_list_schema_list":    searchTools.ProviderListSchemaList,
 	"execute_query":                searchTools.ExecuteQuery,
 	"get_query_status":             searchTools.GetQueryStatus,
 	"get_query_summary":            searchTools.GetQuerySummary,
 	"prepare_import":               searchTools.PrepareImport,
+	"verify_import_plan":           searchTools.VerifyImportPlan,
 
 	// Public Registry tools
 	"search_provider_docs":        registryTools.ResolveProviderDocID,
@@ -113,7 +114,8 @@ var toolFactories = map[string]toolFactory{
 	"get_state_version":   tfeTools.GetStateVersion,
 }
 
-// specialFactories covers the 2 tools that don't fit toolFactory's shape:
+// specialFactories covers tools that need the MCP server for elicitation or
+// select a factory based on ENABLE_TF_OPERATIONS:
 //   - create_no_code_workspace: also needs *server.MCPServer for elicitation
 //   - create_run: picks CreateRun or CreateRunSafe based on ENABLE_TF_OPERATIONS
 //

@@ -48,6 +48,35 @@ exact addresses, effective provider mappings and editable local-module effects.
 On a prepared result, author and review the proposed local changes with the
 user. Any HCP-connected speculative Plan requires separate approval.`
 
+const VerifyImportPlanDescription = `Read-only verification of one exact ordinary HCP Terraform speculative Run; it
+does not create a Run, modify configuration or apply changes.
+
+Pass the unambiguous run_id retained from the reviewed CLI Run URL for the
+confirmed target organization/workspace. Reuse the target confirmed for
+prepare_import by passing terraform_org_name and workspace_name explicitly.
+For omitted fields, the server requests confirmation; do not use TF_MCP_QUERY_WORKSPACE as
+the target. Do not search for or substitute a newer Run. import_context and
+bindings may be omitted while polling, but a
+finished Plan requires the unchanged prepare_import context and exactly one
+selected marker-to-address binding per selection. The tool checks the Run's
+backend workspace association, plan-only/no-auto-apply evidence, Plan and
+configuration-version relationships, lifecycle state and—when eligible—the
+associated Plan JSON.
+
+Follow the returned status and next_action. Poll pending with the same Run ID.
+Blocked or failed results do not provide successful Plan classification. A
+plan_available result contains bounded facts about selected actions, object
+identity and other Plan effects; change and object_identity are independent,
+and neither the summary nor a no-op import proves identity, uploaded bytes,
+provider scope or apply safety.
+
+Review the exact full Plan through run_ui_url or, only if the user chooses
+in-session review and the Terraform toolset exposes get_plan_json_output, with
+the backend-observed plan_id. Raw Plan JSON can contain sensitive values;
+summarize without reproducing them and state if full review was not completed.
+This Search-to-import workflow ends with reviewed HCL and findings; it does not
+continue to terraform apply, terraform import or apply_run.`
+
 // decodeImportArguments validates strict JSON structure and decodes one tool input value.
 func decodeImportArguments(raw any, target any) error {
 	data, err := json.Marshal(raw)
@@ -96,6 +125,33 @@ func PrepareImport(logger *log.Logger) server.ServerTool {
 			result, text, err := PrepareImportToolOutput(ctx, c, input)
 			if err != nil {
 				return toolErrorf(logger, "prepare_import", "%v", err)
+			}
+			return mcp.NewToolResultStructured(result, text), nil
+		},
+	}
+}
+
+func VerifyImportPlan(logger *log.Logger) server.ServerTool {
+	return server.ServerTool{Tool: mcp.NewTool("verify_import_plan", mcp.WithDescription(VerifyImportPlanDescription),
+		mcp.WithTitleAnnotation("Inspect exact CLI speculative Run and Plan"), mcp.WithReadOnlyHintAnnotation(true), mcp.WithDestructiveHintAnnotation(false), mcp.WithOpenWorldHintAnnotation(true),
+		mcp.WithInputSchema[VerifyImportInput](), mcp.WithOutputSchema[VerifyImportResult]()),
+		Handler: func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			var input VerifyImportInput
+			if err := decodeImportArguments(request.GetRawArguments(), &input); err != nil {
+				return toolErrorf(logger, "verify_import_plan", "decoding verify_import_plan arguments: %v", err)
+			}
+			scope, interactionResult := resolveMark3LabsScope(ctx, ResolveImportScope(input.OrganizationName, input.WorkspaceName), ImportTargetScope)
+			if interactionResult != nil {
+				return interactionResult, nil
+			}
+			input.OrganizationName, input.WorkspaceName = scope.Organization.Value, scope.Workspace.Value
+			c, err := client.GetTfeClientFromContext(ctx, logger)
+			if err != nil {
+				return toolErrorf(logger, "verify_import_plan", "%v", TerraformClientUnavailableError(err))
+			}
+			result, text, err := VerifyImportPlanToolOutput(ctx, c, input)
+			if err != nil {
+				return toolErrorf(logger, "verify_import_plan", "%v", err)
 			}
 			return mcp.NewToolResultStructured(result, text), nil
 		},

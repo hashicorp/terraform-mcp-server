@@ -10,6 +10,7 @@ var searchTools = []ToolDef{
 	{Name: "get_query_status", Toolset: Search, RequiresTFE: true},
 	{Name: "get_query_summary", Toolset: Search, RequiresTFE: true},
 	{Name: "prepare_import", Toolset: Search, RequiresTFE: true},
+	{Name: "verify_import_plan", Toolset: Search, RequiresTFE: true},
 }
 
 // IsSearchTool reports whether name belongs to the Search toolset.

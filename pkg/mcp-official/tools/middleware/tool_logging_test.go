@@ -85,6 +85,7 @@ func TestToolLoggingMiddleware_DoesNotLogSearchArgumentsOrErrors(t *testing.T) {
 		{"get_query_status", "query_run_id"},
 		{"get_query_summary", "name_contains"},
 		{"prepare_import", "selections"},
+		{"verify_import_plan", "import_context"},
 	} {
 		for _, outcome := range []string{"success", "protocol error", "tool error"} {
 			t.Run(test.name+"/"+outcome, func(t *testing.T) {

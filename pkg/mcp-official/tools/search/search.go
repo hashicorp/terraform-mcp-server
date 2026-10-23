@@ -253,6 +253,41 @@ func PrepareImportFunc(ctx context.Context, req *mcp.CallToolRequest, input sear
 	return textResult(text), result, nil
 }
 
+func VerifyImportPlanTool() *mcp.Tool {
+	t := tool("verify_import_plan", searchlogic.VerifyImportPlanDescription, "Inspect exact CLI speculative Run and Plan", true, true)
+	inputSchema, err := jsonschema.For[searchlogic.VerifyImportInput](nil)
+	if err != nil {
+		panic(err)
+	}
+	inputSchema.Properties[searchlogic.ScopeOrganizationInput].Description = searchlogic.ImportOrganizationDescription
+	inputSchema.Properties["workspace_name"].Description = searchlogic.ImportWorkspaceDescription
+	t.InputSchema = inputSchema
+	schema, err := jsonschema.For[searchlogic.VerifyImportResult](nil)
+	if err != nil {
+		panic(err)
+	}
+	t.OutputSchema = schema
+	return t
+}
+
+func VerifyImportPlanFunc(ctx context.Context, req *mcp.CallToolRequest, input searchlogic.VerifyImportInput) (*mcp.CallToolResult, *searchlogic.VerifyImportResult, error) {
+	scope := searchlogic.ResolveImportScope(input.OrganizationName, input.WorkspaceName)
+	scope, interactionResult, err := resolveOfficialScope(ctx, req, scope, searchlogic.ImportTargetScope)
+	if err != nil || interactionResult != nil {
+		return interactionResult, nil, err
+	}
+	input.OrganizationName, input.WorkspaceName = scope.Organization.Value, scope.Workspace.Value
+	c, err := client.GetTfeClient(ctx, client.SessionIDFromRequest(req))
+	if err != nil {
+		return nil, nil, searchlogic.TerraformClientUnavailableError(err)
+	}
+	result, text, err := searchlogic.VerifyImportPlanToolOutput(ctx, c, input)
+	if err != nil {
+		return nil, nil, err
+	}
+	return textResult(text), result, nil
+}
+
 func textResult(text string) *mcp.CallToolResult {
 	return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: text}}}
 }

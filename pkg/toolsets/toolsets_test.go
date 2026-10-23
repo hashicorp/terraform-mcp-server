@@ -233,6 +233,48 @@ func TestToolFilter_ToolsetsMode(t *testing.T) {
 			enabledToolsets: []string{"all"},
 			expected:        true,
 		},
+		{
+			name:            "generator enabled by search toolset",
+			toolName:        "generate_query_configuration",
+			enabledToolsets: []string{"search"},
+			expected:        true,
+		},
+		{
+			name:            "generator not enabled by registry toolset",
+			toolName:        "generate_query_configuration",
+			enabledToolsets: []string{"registry"},
+			expected:        false,
+		},
+		{
+			name:            "generator enabled by all toolset",
+			toolName:        "generate_query_configuration",
+			enabledToolsets: []string{"all"},
+			expected:        true,
+		},
+		{
+			name:            "execute query enabled by search toolset",
+			toolName:        "execute_query",
+			enabledToolsets: []string{"search"},
+			expected:        true,
+		},
+		{
+			name:            "execute query disabled by registry toolset",
+			toolName:        "execute_query",
+			enabledToolsets: []string{"registry"},
+			expected:        false,
+		},
+		{
+			name:            "query status enabled by search toolset",
+			toolName:        "get_query_status",
+			enabledToolsets: []string{"search"},
+			expected:        true,
+		},
+		{
+			name:            "query summary enabled by search toolset",
+			toolName:        "get_query_summary",
+			enabledToolsets: []string{"search"},
+			expected:        true,
+		},
 	}
 
 	for _, tt := range tests {
@@ -343,6 +385,24 @@ func TestToolFilter_IndividualMode(t *testing.T) {
 			toolNames: []string{"provider_list_schema_list"},
 			expected:  true,
 		},
+		{
+			name:      "execute query in individual mode",
+			toolName:  "execute_query",
+			toolNames: []string{"execute_query"},
+			expected:  true,
+		},
+		{
+			name:      "query status in individual mode",
+			toolName:  "get_query_status",
+			toolNames: []string{"get_query_status"},
+			expected:  true,
+		},
+		{
+			name:      "query summary in individual mode",
+			toolName:  "get_query_summary",
+			toolNames: []string{"get_query_summary"},
+			expected:  true,
+		},
 	}
 
 	for _, tt := range tests {
@@ -372,6 +432,12 @@ func TestKnownToolNames(t *testing.T) {
 		"search_private_modules",
 		"search_private_providers",
 		"provider_list_schema_list",
+		"generate_query_configuration",
+		"execute_query",
+		"get_query_status",
+		"get_query_summary",
+		"prepare_import",
+		"verify_import_plan",
 	}
 
 	for _, tool := range expectedTools {

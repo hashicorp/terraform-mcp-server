@@ -187,7 +187,7 @@ func TestSafeProviderSourceForDiagnostic(t *testing.T) {
 	}
 }
 
-func TestTerraformImportSyntaxVersionPrereleaseAndMalformed(t *testing.T) {
+func TestFoundationTerraformImportSyntaxVersionPrereleaseAndMalformed(t *testing.T) {
 	for _, tt := range []struct {
 		version    string
 		old, known bool
@@ -223,7 +223,7 @@ func TestTerraformImportSyntaxVersionPrereleaseAndMalformed(t *testing.T) {
 	}
 }
 
-func TestTerraformVersionBeforeResourceIdentityPrereleases(t *testing.T) {
+func TestFoundationTerraformVersionBeforeResourceIdentityPrereleases(t *testing.T) {
 	for _, tt := range []struct {
 		version    string
 		old, known bool

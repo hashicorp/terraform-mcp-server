@@ -43,12 +43,12 @@ func TestOfficialSearchRegistration(t *testing.T) {
 	ctx, session := newOfficialSearchSession(t)
 	listed, err := session.ListTools(ctx, nil)
 	require.NoError(t, err)
-	require.Len(t, listed.Tools, 6, "search-only filter must expose discovery, guidance, execution, status, summary, and preparation")
+	require.Len(t, listed.Tools, 7, "search-only filter must expose the complete Search and read-only import workflow")
 	names := make([]string, 0, len(listed.Tools))
 	for _, tool := range listed.Tools {
 		names = append(names, tool.Name)
 		require.NotNil(t, tool.InputSchema)
-		if tool.Name == "execute_query" || tool.Name == "get_query_status" || tool.Name == "get_query_summary" || tool.Name == "prepare_import" {
+		if tool.Name == "execute_query" || tool.Name == "get_query_status" || tool.Name == "get_query_summary" || tool.Name == "prepare_import" || tool.Name == "verify_import_plan" {
 			require.NotNil(t, tool.OutputSchema)
 		} else {
 			require.Nil(t, tool.OutputSchema, "retain the text result contracts")
@@ -56,7 +56,7 @@ func TestOfficialSearchRegistration(t *testing.T) {
 		require.Equal(t, tool.Name != "execute_query", tool.Annotations.ReadOnlyHint)
 		require.False(t, *tool.Annotations.DestructiveHint)
 	}
-	require.ElementsMatch(t, []string{"provider_list_schema_list", "generate_query_configuration", "execute_query", "get_query_status", "get_query_summary", "prepare_import"}, names)
+	require.ElementsMatch(t, []string{"provider_list_schema_list", "generate_query_configuration", "execute_query", "get_query_status", "get_query_summary", "prepare_import", "verify_import_plan"}, names)
 
 	// The Search addition must not replace refreshed-main Runs factories.
 	for _, name := range []string{"list_runs", "get_run_details", "get_run_comments", "action_run"} {
@@ -220,6 +220,7 @@ func TestSearchGeneratorTransportParityWithoutCredentials(t *testing.T) {
 		{"execute_query", map[string]any{"terraform_org_name": "org", "workspace_name": "ws", "query_configuration": executionConfiguration}},
 		{"get_query_status", map[string]any{"query_run_id": "qry-test"}},
 		{"get_query_summary", map[string]any{"query_run_id": "qry-test"}},
+		{"verify_import_plan", map[string]any{"terraform_org_name": "org", "workspace_name": "target", "run_id": "run-example"}},
 		{"prepare_import", map[string]any{"terraform_org_name": "org", "workspace_name": "target", "query_run_id": "qry-test", "selections": []any{map[string]any{"query_result_marker": fmt.Sprintf("qrm1-%064x", 1), "managed_type": "aws_s3_bucket"}}, "locked_providers": map[string]string{"hashicorp/aws": "6.18.0"}}},
 	} {
 		result, err := session.CallTool(ctx, &mcp.CallToolParams{Name: test.name, Arguments: test.args})

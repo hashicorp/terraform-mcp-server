@@ -11,7 +11,13 @@ import (
 // searchDiagnosticCode identifies a stable Search tool failure category.
 type searchDiagnosticCode string
 
-// Query evidence and discovery diagnostics (provider/status codes live below).
+// Shared tool infrastructure diagnostics.
+const (
+	clientUnavailableCode   searchDiagnosticCode = "client_unavailable"
+	providerUnavailableCode searchDiagnosticCode = "provider_data_unavailable"
+)
+
+// Query evidence and discovery diagnostics.
 const (
 	queryBackendUnavailableCode               searchDiagnosticCode = "query_backend_unavailable"
 	queryDuplicateOrInvalidIdentityCode       searchDiagnosticCode = "query_duplicate_or_invalid_identity"
@@ -27,42 +33,49 @@ const (
 	queryNotFinishedCode                      searchDiagnosticCode = "query_not_finished"
 	queryNotSelectableCode                    searchDiagnosticCode = "query_not_selectable"
 	queryOrganizationMismatchCode             searchDiagnosticCode = "query_organization_mismatch"
+	queryOwnershipUnverifiedCode              searchDiagnosticCode = "query_ownership_unverified"
 	queryProvenanceUnavailableCode            searchDiagnosticCode = "query_provenance_unavailable"
 	queryProviderAmbiguousCode                searchDiagnosticCode = "query_provider_ambiguous"
+	queryProviderSourceUnresolvedCode         searchDiagnosticCode = "query_provider_source_unresolved"
 	queryReportedErrorCode                    searchDiagnosticCode = "query_reported_error"
 	queryRunIDInvalidCode                     searchDiagnosticCode = "query_run_id_invalid"
+	queryRunUnavailableCode                   searchDiagnosticCode = "query_run_unavailable"
 	querySummaryUnserializableCode            searchDiagnosticCode = "query_summary_unserializable"
 )
 
-// Shared tool infrastructure diagnostics.
+// Import preparation, arguments, and context diagnostics.
 const (
-	clientUnavailableCode   searchDiagnosticCode = "client_unavailable"
-	providerUnavailableCode searchDiagnosticCode = "provider_data_unavailable"
+	bindingInvalidCode              searchDiagnosticCode = "binding_invalid"
+	importArgumentsInvalidCode      searchDiagnosticCode = "import_arguments_invalid"
+	importContextDigestMismatchCode searchDiagnosticCode = "import_context_digest_mismatch"
+	importContextInvalidCode        searchDiagnosticCode = "import_context_invalid"
+	importContextMarkerInvalidCode  searchDiagnosticCode = "import_context_marker_invalid"
+	importResponseInvalidCode       searchDiagnosticCode = "import_response_invalid"
+	lockVersionsInvalidCode         searchDiagnosticCode = "lock_versions_invalid"
+	lockedProviderSourceInvalidCode searchDiagnosticCode = "locked_provider_source_invalid"
+	prepareInputInvalidCode         searchDiagnosticCode = "prepare_input_invalid"
+	selectionInvalidCode            searchDiagnosticCode = "selection_invalid"
+	targetEvidenceInvalidCode       searchDiagnosticCode = "target_evidence_invalid"
+	targetOwnershipUnverifiedCode   searchDiagnosticCode = "target_ownership_unverified"
+	targetReadUnavailableCode       searchDiagnosticCode = "target_read_unavailable"
 )
 
-// Reusable provider-address and exact locked-version validation diagnostics.
+// Run and Plan verification diagnostics.
 const (
-	queryProviderSourceUnresolvedCode searchDiagnosticCode = "query_provider_source_unresolved"
-	lockVersionsInvalidCode           searchDiagnosticCode = "lock_versions_invalid"
-	lockedProviderSourceInvalidCode   searchDiagnosticCode = "locked_provider_source_invalid"
-)
-
-// QueryRun status and backend ownership diagnostics.
-const (
-	queryOwnershipUnverifiedCode searchDiagnosticCode = "query_ownership_unverified"
-	queryRunUnavailableCode      searchDiagnosticCode = "query_run_unavailable"
-)
-
-// Import preparation diagnostics; Plan verification is introduced separately.
-const (
-	importArgumentsInvalidCode    searchDiagnosticCode = "import_arguments_invalid"
-	importContextInvalidCode      searchDiagnosticCode = "import_context_invalid"
-	importResponseInvalidCode     searchDiagnosticCode = "import_response_invalid"
-	prepareInputInvalidCode       searchDiagnosticCode = "prepare_input_invalid"
-	selectionInvalidCode          searchDiagnosticCode = "selection_invalid"
-	targetReadUnavailableCode     searchDiagnosticCode = "target_read_unavailable"
-	targetOwnershipUnverifiedCode searchDiagnosticCode = "target_ownership_unverified"
-	targetEvidenceInvalidCode     searchDiagnosticCode = "target_evidence_invalid"
+	planActionsUnsupportedCode       searchDiagnosticCode = "plan_actions_unsupported"
+	planDriftEvidenceInvalidCode     searchDiagnosticCode = "plan_drift_evidence_invalid"
+	planEvidenceInvalidCode          searchDiagnosticCode = "plan_evidence_invalid"
+	planIdentityEvidenceInvalidCode  searchDiagnosticCode = "plan_identity_evidence_invalid"
+	planIdentityVersionDuplicateCode searchDiagnosticCode = "plan_identity_version_duplicate"
+	planImportEvidenceInvalidCode    searchDiagnosticCode = "plan_import_evidence_invalid"
+	planJSONInvalidCode              searchDiagnosticCode = "plan_json_invalid"
+	planModuleDepthLimitCode         searchDiagnosticCode = "plan_module_depth_limit"
+	planReadUnavailableCode          searchDiagnosticCode = "plan_read_unavailable"
+	runEvidenceInvalidCode           searchDiagnosticCode = "run_evidence_invalid"
+	runReadUnavailableCode           searchDiagnosticCode = "run_read_unavailable"
+	verifyCanceledCode               searchDiagnosticCode = "verify_canceled"
+	verifyConfigInvalidCode          searchDiagnosticCode = "verify_config_invalid"
+	verifyInputInvalidCode           searchDiagnosticCode = "verify_input_invalid"
 )
 
 type searchDiagnosticFailure struct {
