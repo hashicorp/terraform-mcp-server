@@ -75,25 +75,30 @@ func TestToolLoggingMiddleware(t *testing.T) {
 		assert.False(t, result.IsError)
 	})
 
-	t.Run("does not log Search arguments", func(t *testing.T) {
-		var buf bytes.Buffer
-		logger := log.New()
-		logger.SetOutput(&buf)
-		logger.SetLevel(log.InfoLevel)
-		handler := ToolLoggingMiddleware(logger)(func(context.Context, mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-			return mcp.NewToolResultText("success"), nil
+	for _, test := range []struct{ name, argument string }{
+		{"provider_list_schema_list", "workspace_name"},
+		{"generate_query_configuration", "list_resource_schemas"},
+	} {
+		t.Run("does not log Search arguments/"+test.name, func(t *testing.T) {
+			var buf bytes.Buffer
+			logger := log.New()
+			logger.SetOutput(&buf)
+			logger.SetLevel(log.InfoLevel)
+			handler := ToolLoggingMiddleware(logger)(func(context.Context, mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+				return mcp.NewToolResultText("success"), nil
+			})
+			request := mcp.CallToolRequest{Params: mcp.CallToolParams{Name: test.name, Arguments: map[string]any{
+				test.argument: "search-log-secret-sentinel",
+			}}}
+
+			_, err := handler(context.Background(), request)
+
+			require.NoError(t, err)
+			assert.Contains(t, buf.String(), test.name)
+			assert.NotContains(t, buf.String(), "search-log-secret-sentinel")
+			assert.NotContains(t, buf.String(), test.argument)
 		})
-		request := mcp.CallToolRequest{Params: mcp.CallToolParams{Name: "provider_list_schema_list", Arguments: map[string]any{
-			"workspace_name": "search-log-secret-sentinel",
-		}}}
-
-		_, err := handler(context.Background(), request)
-
-		require.NoError(t, err)
-		assert.Contains(t, buf.String(), "provider_list_schema_list")
-		assert.NotContains(t, buf.String(), "search-log-secret-sentinel")
-		assert.NotContains(t, buf.String(), "workspace_name")
-	})
+	}
 
 	t.Run("passes through tool handler errors and results", func(t *testing.T) {
 		logger := log.New()

@@ -16,6 +16,7 @@ import (
 
 func TestOfficialSearchDescriptionsUseSharedValues(t *testing.T) {
 	require.Equal(t, searchlogic.ProviderListSchemaListDescription, ProviderListSchemaListTool().Description)
+	require.Equal(t, searchlogic.GenerateQueryConfigurationDescription, GenerateQueryConfigurationTool().Description)
 }
 
 func TestOfficialSearchToolAnnotations(t *testing.T) {
@@ -24,6 +25,42 @@ func TestOfficialSearchToolAnnotations(t *testing.T) {
 	require.False(t, *tool.Annotations.DestructiveHint)
 	require.True(t, *tool.Annotations.OpenWorldHint)
 	require.Nil(t, tool.OutputSchema, "provider discovery retains its JSON-text result contract")
+	generator := GenerateQueryConfigurationTool()
+	require.True(t, generator.Annotations.ReadOnlyHint)
+	require.False(t, *generator.Annotations.DestructiveHint)
+	require.False(t, *generator.Annotations.OpenWorldHint)
+	require.Nil(t, generator.OutputSchema, "guidance retains its text result contract")
+}
+
+func TestOfficialGeneratorSchemaAndValidation(t *testing.T) {
+	schema, err := jsonschema.For[GenerateQueryConfigurationArguments](nil)
+	require.NoError(t, err)
+	require.ElementsMatch(t, []string{"list_resource_schemas", "provider_name", "provider_namespace", "provider_version"}, schema.Required)
+	require.Len(t, schema.Properties, 5)
+	require.Equal(t, "string", schema.Properties["resource_types"].Type)
+	valid := GenerateQueryConfigurationArguments{
+		ListResourceSchemas: `{"example_list":{"block":{"attributes":{}}}}`,
+		ProviderName:        "example", ProviderNamespace: "hashicorp", ProviderVersion: "1.2.3",
+	}
+	for _, field := range schema.Required {
+		t.Run(field, func(t *testing.T) {
+			input := valid
+			switch field {
+			case "list_resource_schemas":
+				input.ListResourceSchemas = ""
+			case "provider_name":
+				input.ProviderName = ""
+			case "provider_namespace":
+				input.ProviderNamespace = ""
+			case "provider_version":
+				input.ProviderVersion = ""
+			}
+			result, output, err := GenerateQueryConfigurationFunc(context.Background(), nil, input)
+			require.ErrorContains(t, err, "missing required input: "+field)
+			require.Nil(t, result)
+			require.Nil(t, output)
+		})
+	}
 }
 
 func TestOfficialSearchScopeSchemas(t *testing.T) {

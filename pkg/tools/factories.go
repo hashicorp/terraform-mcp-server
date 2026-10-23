@@ -19,8 +19,9 @@ type toolFactory func(logger *log.Logger) server.ServerTool
 // keyed by toolsets.ToolDef.Name. Two tools that don't fit this plain shape
 // (create_no_code_workspace, create_run) live in specialFactories below
 var toolFactories = map[string]toolFactory{
-	// HCP Terraform Search provider discovery
-	"provider_list_schema_list": searchTools.ProviderListSchemaList,
+	// HCP Terraform Search discovery and configuration guidance
+	"generate_query_configuration": searchTools.GenerateQueryConfiguration,
+	"provider_list_schema_list":    searchTools.ProviderListSchemaList,
 
 	// Public Registry tools
 	"search_provider_docs":        registryTools.ResolveProviderDocID,

@@ -22,7 +22,10 @@ import (
 // side uses. Tools that log, take the server's logger from RegisterTools.
 
 var officialFactories = map[string]func(svr *mcp.Server, logger *slog.Logger){
-	// HCP Terraform Search provider discovery
+	// HCP Terraform Search discovery and configuration guidance
+	"generate_query_configuration": func(svr *mcp.Server, _ *slog.Logger) {
+		mcp.AddTool(svr, searchTools.GenerateQueryConfigurationTool(), searchTools.GenerateQueryConfigurationFunc)
+	},
 	"provider_list_schema_list": func(svr *mcp.Server, _ *slog.Logger) {
 		mcp.AddTool(svr, searchTools.ProviderListSchemaListTool(), searchTools.ProviderListSchemaListFunc)
 	},

@@ -4,10 +4,55 @@
 package tools
 
 import (
+	"context"
+	"io"
 	"testing"
 
+	"github.com/hashicorp/terraform-mcp-server/pkg/client"
 	"github.com/hashicorp/terraform-mcp-server/pkg/toolsets"
+	"github.com/mark3labs/mcp-go/mcp"
+	"github.com/mark3labs/mcp-go/server"
+	log "github.com/sirupsen/logrus"
+	"github.com/stretchr/testify/require"
 )
+
+func TestSearchRegistrationWithoutCredentials(t *testing.T) {
+	t.Setenv("TFE_TOKEN", "")
+	t.Setenv("TFE_ADDRESS", "http://127.0.0.1:1")
+	previous := globalToolRegistry
+	t.Cleanup(func() {
+		globalToolRegistry = previous
+		client.SetToolRegistryCallback(previous)
+	})
+	logger := log.New()
+	logger.SetOutput(io.Discard)
+	svr := server.NewMCPServer("search-test", "0")
+	RegisterTools(svr, logger, toolsets.NewToolsetFilter([]string{toolsets.Search}))
+	require.Len(t, svr.ListTools(), 1)
+	require.Nil(t, svr.GetTool("provider_list_schema_list"))
+	generator := svr.GetTool("generate_query_configuration")
+	require.NotNil(t, generator)
+	result, err := generator.Handler(context.Background(), mcp.CallToolRequest{Params: mcp.CallToolParams{
+		Name: generator.Tool.Name,
+		Arguments: map[string]any{
+			"list_resource_schemas": `{"example_list":{"block":{"attributes":{}}}}`,
+			"provider_name":         "example", "provider_namespace": "hashicorp", "provider_version": "1.2.3",
+		},
+	}})
+	require.NoError(t, err)
+	require.False(t, result.IsError)
+	require.False(t, globalToolRegistry.HasAnySessionWithTFE())
+
+	// Simulate credential availability without constructing a client or calling a backend.
+	globalToolRegistry.RegisterSessionWithTFE("fixture-session")
+	require.Len(t, svr.ListTools(), 2)
+	provider := svr.GetTool("provider_list_schema_list")
+	require.NotNil(t, provider)
+	result, err = provider.Handler(context.Background(), mcp.CallToolRequest{})
+	require.NoError(t, err)
+	require.True(t, result.IsError, "provider discovery must still require an authenticated session")
+	require.Contains(t, result.Content[0].(mcp.TextContent).Text, "requires an active session")
+}
 
 // TestToolFactoriesStayInSyncWithAllTools helps keep toolsets.AllTools and toolFactories in sync
 // This test fails when someone adds a tool to registry.go and forgets to add its builder to factories.go or vice versa

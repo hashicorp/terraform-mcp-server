@@ -7,14 +7,18 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"sync/atomic"
 	"testing"
 
+	searchlogic "github.com/hashicorp/terraform-mcp-server/pkg/tools/search"
 	"github.com/hashicorp/terraform-mcp-server/pkg/toolsets"
+	legacymcp "github.com/mark3labs/mcp-go/mcp"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 )
 
@@ -38,13 +42,16 @@ func TestOfficialSearchRegistration(t *testing.T) {
 	ctx, session := newOfficialSearchSession(t)
 	listed, err := session.ListTools(ctx, nil)
 	require.NoError(t, err)
-	require.Len(t, listed.Tools, 1, "search-only filter must expose only provider discovery")
-	tool := listed.Tools[0]
-	require.Equal(t, "provider_list_schema_list", tool.Name)
-	require.NotNil(t, tool.InputSchema)
-	require.Nil(t, tool.OutputSchema, "retain the JSON-text provider result contract")
-	require.True(t, tool.Annotations.ReadOnlyHint)
-	require.False(t, *tool.Annotations.DestructiveHint)
+	require.Len(t, listed.Tools, 2, "search-only filter must expose only discovery and guidance")
+	names := make([]string, 0, len(listed.Tools))
+	for _, tool := range listed.Tools {
+		names = append(names, tool.Name)
+		require.NotNil(t, tool.InputSchema)
+		require.Nil(t, tool.OutputSchema, "retain the text result contracts")
+		require.True(t, tool.Annotations.ReadOnlyHint)
+		require.False(t, *tool.Annotations.DestructiveHint)
+	}
+	require.ElementsMatch(t, []string{"provider_list_schema_list", "generate_query_configuration"}, names)
 
 	// The Search addition must not replace refreshed-main Runs factories.
 	for _, name := range []string{"list_runs", "get_run_details", "get_run_comments", "action_run"} {
@@ -111,6 +118,14 @@ func TestOfficialSearchScopedCatalog(t *testing.T) {
 	require.Equal(t, "org", fetched.Org)
 	require.Equal(t, "ws", fetched.Workspace)
 	require.JSONEq(t, `{"example_list":{"block":{"attributes":{}}}}`, string(fetched.Schemas))
+	result, err = session.CallTool(ctx, &mcp.CallToolParams{Name: "generate_query_configuration", Arguments: map[string]any{
+		"list_resource_schemas": string(fetched.Schemas), "provider_name": fetched.Name,
+		"provider_namespace": fetched.Namespace, "provider_version": fetched.Version,
+	}})
+	require.NoError(t, err)
+	require.False(t, result.IsError)
+	require.Contains(t, result.Content[0].(*mcp.TextContent).Text, `"resource_type": "example_list"`)
+	require.Contains(t, result.Content[0].(*mcp.TextContent).Text, `"version": "1.0.0"`)
 
 	before := catalogReads.Load()
 	for _, args := range []map[string]any{
@@ -126,4 +141,71 @@ func TestOfficialSearchScopedCatalog(t *testing.T) {
 		require.NotContains(t, result.Content[0].(*mcp.TextContent).Text, backend.URL)
 		require.Equal(t, before, catalogReads.Load(), "invalid scope/provider pair must not access catalog")
 	}
+}
+
+func TestSearchGeneratorTransportParityWithoutCredentials(t *testing.T) {
+	for _, name := range []string{"TFE_TOKEN", "TFE_TOKEN_PATH", "TF_TOKEN_app_terraform_io", "TF_CLOUD_ORGANIZATION", "TF_WORKSPACE", "TF_MCP_QUERY_WORKSPACE"} {
+		t.Setenv(name, "")
+	}
+	t.Setenv("TFE_ADDRESS", "http://127.0.0.1:1")
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("TF_CLI_CONFIG_FILE", t.TempDir()+"/absent.tfrc")
+	ctx, session := newOfficialSearchSession(t)
+	logger := log.New()
+	logger.SetOutput(io.Discard)
+	legacy := searchlogic.GenerateQueryConfiguration(logger)
+	const bare = `{"example_exact_list":{"block":{"attributes":{"region":{"type":"string","required":true}},"block_types":{"filter":{"nesting_mode":"list","min_items":1,"max_items":2,"block":{"attributes":{"name":{"type":"string","required":true}}}}}}}}`
+	for _, test := range []struct {
+		name, schema, resourceTypes string
+		invalid                     bool
+	}{
+		{"bare", bare, "", false},
+		{"wrapped", `{"list_resource_schemas":` + bare + `}`, "example_exact_list", false},
+		{"malformed", "{", "", true},
+		{"empty bare", "{}", "", true},
+		{"empty wrapped", `{"list_resource_schemas":{}}`, "", true},
+		{"unknown resource", bare, "example_managed", true},
+		{"mixed known and unknown", bare, "example_exact_list,example_managed", true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			args := map[string]any{
+				"list_resource_schemas": test.schema, "provider_name": "Example",
+				"provider_namespace": "hashicorp", "provider_version": "1.2.3",
+				"resource_types": test.resourceTypes,
+			}
+			oldResult, err := legacy.Handler(ctx, legacymcp.CallToolRequest{Params: legacymcp.CallToolParams{Name: legacy.Tool.Name, Arguments: args}})
+			require.NoError(t, err)
+			result, err := session.CallTool(ctx, &mcp.CallToolParams{Name: legacy.Tool.Name, Arguments: args})
+			require.NoError(t, err)
+			require.Equal(t, test.invalid, oldResult.IsError)
+			require.Equal(t, test.invalid, result.IsError)
+			require.Nil(t, result.StructuredContent)
+			if test.invalid {
+				require.NotEmpty(t, result.Content)
+				return
+			}
+			text := result.Content[0].(*mcp.TextContent).Text
+			require.Equal(t, oldResult.Content[0].(legacymcp.TextContent).Text, text)
+			require.Contains(t, text, `"version": "1.2.3"`)
+			require.Contains(t, text, `"resource_type": "example_exact_list"`)
+			require.Contains(t, text, `"name": "example"`)
+		})
+	}
+	for _, field := range []string{"list_resource_schemas", "provider_name", "provider_namespace", "provider_version"} {
+		t.Run("missing/"+field, func(t *testing.T) {
+			args := map[string]any{"list_resource_schemas": bare, "provider_name": "example", "provider_namespace": "hashicorp", "provider_version": "1.2.3"}
+			delete(args, field)
+			result, err := session.CallTool(ctx, &mcp.CallToolParams{Name: legacy.Tool.Name, Arguments: args})
+			require.NoError(t, err)
+			require.True(t, result.IsError, "native schema must reject missing required fields")
+		})
+	}
+	// The official SDK lists credential-requiring tools, but checks credentials at call time.
+	result, err := session.CallTool(ctx, &mcp.CallToolParams{Name: "provider_list_schema_list", Arguments: map[string]any{
+		"terraform_org_name": "org", "workspace_name": "ws",
+	}})
+	require.NoError(t, err)
+	require.True(t, result.IsError, "provider discovery must remain unavailable without credentials")
+	require.Nil(t, result.StructuredContent)
+	require.NotContains(t, result.Content[0].(*mcp.TextContent).Text, "127.0.0.1")
 }

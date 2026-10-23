@@ -5,12 +5,21 @@ package search
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/google/jsonschema-go/jsonschema"
 	"github.com/hashicorp/terraform-mcp-server/pkg/mcp-official/client"
 	searchlogic "github.com/hashicorp/terraform-mcp-server/pkg/tools/search"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
+
+type GenerateQueryConfigurationArguments struct {
+	ListResourceSchemas string `json:"list_resource_schemas" jsonschema:"JSON list_resource_schemas object returned by provider_list_schema_list"`
+	ProviderName        string `json:"provider_name" jsonschema:"Short provider name, e.g. aws"`
+	ProviderNamespace   string `json:"provider_namespace" jsonschema:"Provider namespace, e.g. hashicorp"`
+	ProviderVersion     string `json:"provider_version" jsonschema:"Exact catalog provider version"`
+	ResourceTypes       string `json:"resource_types,omitempty" jsonschema:"Optional comma-separated exact list resource type keys"`
+}
 
 type ProviderListSchemaListArguments struct {
 	OrganizationName  string `json:"terraform_org_name,omitempty"`
@@ -27,6 +36,27 @@ func tool(name, description, title string, readOnly, openWorld bool) *mcp.Tool {
 			ReadOnlyHint: readOnly, DestructiveHint: jsonschema.Ptr(false),
 		},
 	}
+}
+
+func GenerateQueryConfigurationTool() *mcp.Tool {
+	return tool("generate_query_configuration", searchlogic.GenerateQueryConfigurationDescription,
+		"Generate a No-Code Query Configuration from a list_resource_schemas schema", true, false)
+}
+
+func GenerateQueryConfigurationFunc(_ context.Context, _ *mcp.CallToolRequest, input GenerateQueryConfigurationArguments) (*mcp.CallToolResult, any, error) {
+	for _, field := range []struct{ name, value string }{
+		{"list_resource_schemas", input.ListResourceSchemas}, {"provider_name", input.ProviderName},
+		{"provider_namespace", input.ProviderNamespace}, {"provider_version", input.ProviderVersion},
+	} {
+		if field.value == "" {
+			return nil, nil, fmt.Errorf("missing required input: %s", field.name)
+		}
+	}
+	text, err := searchlogic.GenerateQueryConfigurationText(input.ListResourceSchemas, input.ProviderName, input.ProviderNamespace, input.ProviderVersion, input.ResourceTypes)
+	if err != nil {
+		return nil, nil, err
+	}
+	return textResult(text), nil, nil
 }
 
 // searchScopeInputSchema applies shared descriptions that cannot be referenced in struct tags.

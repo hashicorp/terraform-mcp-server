@@ -46,7 +46,7 @@ var (
 	}
 	SearchToolset = Toolset{
 		Name:        Search,
-		Description: "HCP Terraform Search provider catalog and list-resource schemas",
+		Description: "HCP Terraform Search provider discovery and schema-backed query configuration guidance",
 	}
 )
 

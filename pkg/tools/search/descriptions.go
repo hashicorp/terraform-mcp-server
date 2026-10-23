@@ -6,5 +6,6 @@ package search
 // Descriptions are shared so the two MCP transports give agents identical
 // Search workflow guidance. Each transport owns its own tool schema and result.
 const (
-	ProviderListSchemaListDescription = providerListSchemaListDescription
+	GenerateQueryConfigurationDescription = generateQueryConfigDescription
+	ProviderListSchemaListDescription     = providerListSchemaListDescription
 )
