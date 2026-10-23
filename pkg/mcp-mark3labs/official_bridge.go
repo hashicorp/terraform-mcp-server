@@ -58,8 +58,9 @@ func getOfficialStreamableServer(ctx context.Context, heartbeatInterval time.Dur
 		return hcServer
 	}, opts)
 
-	// Create a security wrappers around the streamable server
-	streamableServer := client.OrganizationAllowlistMiddleware(organizationAllowlist, logger)(mcpHandler)
+	// RequireTerraformTokenMiddleware is a no-op unless MCP_REQUIRE_TOKEN is true.
+	streamableServer := client.RequireTerraformTokenMiddleware(logger)(mcpHandler)
+	streamableServer = client.OrganizationAllowlistMiddleware(organizationAllowlist, logger)(streamableServer)
 	streamableServer = client.TerraformContextMiddleware(logger)(streamableServer)
 	streamableServer = client.NewSecurityHandler(streamableServer, corsConfig.AllowedOrigins, corsConfig.Mode, logger)
 	return streamableServer
