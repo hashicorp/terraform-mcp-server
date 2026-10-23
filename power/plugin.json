@@ -1,0 +1,22 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "terraform-mcp-server",
+  "version": "1.3.0",
+  "description": "HashiCorp's official Terraform MCP server: live Terraform Registry provider docs, module details, latest versions, and Sentinel policies. Set TFE_TOKEN (and TFE_ADDRESS for Terraform Enterprise) in your environment to add HCP Terraform and Terraform Enterprise tools. Requires Docker.",
+  "author": {
+    "name": "HashiCorp",
+    "url": "https://github.com/hashicorp"
+  },
+  "homepage": "https://github.com/hashicorp/terraform-mcp-server",
+  "repository": "https://github.com/hashicorp/terraform-mcp-server",
+  "license": "MPL-2.0",
+  "keywords": [
+    "terraform",
+    "terraform registry",
+    "provider docs",
+    "terraform modules",
+    "sentinel policies",
+    "hcp terraform",
+    "terraform enterprise"
+  ]
+}
