@@ -8,9 +8,18 @@ import (
 	"encoding/json"
 	"log/slog"
 	"sort"
+	"strings"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
+
+// argumentErrorPrefixes are how the SDK starts its errors when tool arguments don't
+// parse or don't match the input schema. Those errors can include the bad value, so
+// we only log the prefix for them.
+var argumentErrorPrefixes = []string{
+	`validating "arguments"`,
+	"unmarshaling arguments",
+}
 
 // ToolLogging is the go-sdk equivalent of client.ToolLoggingMiddleware:
 // it logs the tool name and argument keys for every tools/call request.
@@ -33,7 +42,7 @@ func ToolLogging(logger *slog.Logger) mcp.Middleware {
 				logger.ErrorContext(ctx, "tool call failed",
 					"tool", toolName,
 					"argument_keys", keys,
-					"error", err)
+					"error", loggableError(err))
 				return result, err
 			}
 
@@ -42,7 +51,7 @@ func ToolLogging(logger *slog.Logger) mcp.Middleware {
 				logger.ErrorContext(ctx, "tool call failed",
 					"tool", toolName,
 					"argument_keys", keys,
-					"error", toolResult.GetError())
+					"error", loggableError(toolResult.GetError()))
 				return result, nil
 			}
 
@@ -55,7 +64,7 @@ func ToolLogging(logger *slog.Logger) mcp.Middleware {
 }
 
 // argumentKeys returns the sorted top-level keys of a tool call's arguments.
-// It never returns values. Missing arguments will give just an empty slice.
+// It never returns values. Missing or malformed arguments give an empty slice.
 func argumentKeys(raw json.RawMessage) []string {
 	keys := make([]string, 0)
 	if len(raw) == 0 {
@@ -70,4 +79,20 @@ func argumentKeys(raw json.RawMessage) []string {
 	}
 	sort.Strings(keys)
 	return keys
+}
+
+// loggableError returns the error message to log. If it's one of the SDK's argument
+// errors we drop everything after the prefix, since the rest can include the value
+// that failed. Errors from our own handlers are logged as is.
+func loggableError(err error) string {
+	if err == nil {
+		return ""
+	}
+	msg := err.Error()
+	for _, prefix := range argumentErrorPrefixes {
+		if strings.Contains(msg, prefix) {
+			return prefix + ": details redacted"
+		}
+	}
+	return msg
 }

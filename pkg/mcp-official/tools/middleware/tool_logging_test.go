@@ -8,6 +8,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log/slog"
 	"testing"
 
@@ -179,6 +180,57 @@ func TestToolLoggingMiddleware_IgnoresNonToolCalls(t *testing.T) {
 
 	assert.True(t, nextCalled)
 	assert.Empty(t, buf.String(), "non-tools/call methods should not be logged")
+}
+
+func TestToolLoggingMiddleware_RedactsArgumentErrors(t *testing.T) {
+	const secret = "9.87654321e+08"
+
+	tests := []struct {
+		name           string
+		next           mcp.MethodHandler
+		expectedPrefix string
+	}{
+		{
+			name: "schema validation error",
+			next: func(ctx context.Context, method string, req mcp.Request) (mcp.Result, error) {
+				result := &mcp.CallToolResult{}
+				result.SetError(fmt.Errorf(`validating "arguments": validating root: validating /properties/variable_value: type: %s has type "number", want "string"`, secret))
+				return result, nil
+			},
+			expectedPrefix: `validating \"arguments\": details redacted`,
+		},
+		{
+			name: "unmarshaling error",
+			next: func(ctx context.Context, method string, req mcp.Request) (mcp.Result, error) {
+				return nil, fmt.Errorf("unmarshaling arguments: bad value %s", secret)
+			},
+			expectedPrefix: "unmarshaling arguments: details redacted",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var buf bytes.Buffer
+			logger := slog.New(slog.NewTextHandler(&buf, nil))
+
+			request := &mcp.CallToolRequest{
+				Params: &mcp.CallToolParamsRaw{Name: "create_workspace_variable"},
+			}
+
+			_, _ = ToolLogging(logger)(tt.next)(context.Background(), "tools/call", request)
+
+			logOutput := buf.String()
+			assert.Contains(t, logOutput, tt.expectedPrefix)
+			assert.NotContains(t, logOutput, secret, "the rejected value must not be logged")
+		})
+	}
+}
+
+func TestLoggableError(t *testing.T) {
+	assert.Equal(t, "", loggableError(nil))
+	assert.Equal(t, "listing workspaces: permission denied", loggableError(errors.New("listing workspaces: permission denied")))
+	assert.Equal(t, `validating "arguments": details redacted`, loggableError(errors.New(`validating "arguments": type: 123 has type "integer"`)))
+	assert.Equal(t, "unmarshaling arguments: details redacted", loggableError(errors.New("calling tool: unmarshaling arguments: secret")))
 }
 
 func TestArgumentKeys(t *testing.T) {
