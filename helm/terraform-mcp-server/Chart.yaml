@@ -5,9 +5,9 @@ type: application
 # Chart version. Has to match appVersion: the release pipeline publishes the
 # chart on the server's production release and then pulls it back by that same
 # tag, so a mismatch fails the smoke test.
-version: 1.4.0
+version: 1.4.1
 # The version of terraform-mcp-server this chart deploys.
-appVersion: "1.4.0"
+appVersion: "1.4.1"
 home: https://github.com/hashicorp/terraform-mcp-server
 sources:
   - https://github.com/hashicorp/terraform-mcp-server
