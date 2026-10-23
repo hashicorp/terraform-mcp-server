@@ -11,7 +11,7 @@ TARGET_DIR ?= $(CURDIR)/dist
 # Build flags
 LDFLAGS=-ldflags="-s -w"
 
-.PHONY: all build crt-build test test-e2e test-e2e-official-public-registry test-security clean deps docker-build run-http run-http-secure docker-run-http test-http test-hcpt cleanup-test-containers update-server-json-version help
+.PHONY: all build crt-build test test-e2e test-e2e-legacy test-security clean deps docker-build run-http run-http-secure docker-run-http test-http test-hcpt cleanup-test-containers update-server-json-version help
 
 # Default target
 all: build
@@ -38,9 +38,9 @@ test:
 test-e2e:
 	@trap '$(MAKE) cleanup-test-containers' EXIT; $(GO) test -v --tags e2e ./e2e
 
-# Run public registry tool e2e tests against the official SDK over Stdio and HTTP excluding CORS tests.
-test-e2e-official-public-registry:
-	@trap '$(MAKE) cleanup-test-containers' EXIT; TF_X_OFFICIAL_SDK_ENABLED=true $(GO) test -v --tags e2e ./e2e -run '.*/(Stdio|HTTP)$$'
+# Run e2e tests against the legacy mark3labs server (rollback path).
+test-e2e-legacy:
+	@trap '$(MAKE) cleanup-test-containers' EXIT; TF_X_OFFICIAL_SDK_ENABLED=false $(GO) test -v --tags e2e ./e2e
 
 # Run hcpt tests
 # Usage: make test-hcpt RUN=TestWorkspace
@@ -114,7 +114,7 @@ help:
 	@echo "  crt-build               - Build using crt-build script"
 	@echo "  test                    - Run all tests"
 	@echo "  test-e2e                - Run end-to-end tests"
-	@echo "  test-e2e-official-public-registry - Run public registry e2e tests against the official SDK over Stdio and HTTP"
+	@echo "  test-e2e-legacy         - Run end-to-end tests against the legacy mark3labs server"
 	@echo "  test-hcpt               - Run hcpt tests (optional: RUN=<pattern> to filter tests)"
 	@echo "  test-security           - Run security-related tests"
 	@echo "  test-http               - Test StreamableHTTP health endpoint"

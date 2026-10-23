@@ -109,13 +109,14 @@ func runDefaultCommand(cmd *cobra.Command, _ []string) {
 	}
 }
 
-// runStdioServer selects the SDK implementation used for stdio.
+// runStdioServer starts the stdio server. The official go-sdk server is the
+// default, TF_X_OFFICIAL_SDK_ENABLED=false falls back to mark3labs
 func runStdioServer(logger *log.Logger, filter toolsets.ToolFilter) error {
-	if os.Getenv("TF_X_OFFICIAL_SDK_ENABLED") == "true" {
-		logger.Info("TF_X_OFFICIAL_SDK_ENABLED set to true in env, enabling the official mcp go-sdk stdio server")
-		return mcpofficial.RunStdioServer(logger, filter)
+	if !mcpofficial.Enabled() {
+		logger.Warnf("%s is false, running the legacy mark3labs stdio server. This fallback will be removed in a future release.", mcpofficial.EnvEnabled)
+		return mcpmark3labs.RunStdioServer(logger, filter)
 	}
-	return mcpmark3labs.RunStdioServer(logger, filter)
+	return mcpofficial.RunStdioServer(logger, filter)
 }
 
 // Run is the terraform-mcp-server entrypoint: it resolves logging, decides

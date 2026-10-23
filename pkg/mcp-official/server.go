@@ -8,8 +8,10 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/hashicorp/terraform-mcp-server/pkg/logging"
 	"github.com/hashicorp/terraform-mcp-server/pkg/mcp-official/resources"
 	"github.com/hashicorp/terraform-mcp-server/pkg/mcp-official/tools"
+	"github.com/hashicorp/terraform-mcp-server/pkg/mcp-official/tools/middleware"
 	"github.com/hashicorp/terraform-mcp-server/pkg/toolsets"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -64,7 +66,11 @@ func NewServer(version, instructions string, heartbeatInterval time.Duration, lo
 		}
 	}
 
-	svr := mcp.NewServer(&mcp.Implementation{Name: "terraform-mcp-official", Version: version}, &cfg.mcpOpts)
+	// Always hide tools that need a Terraform token from users who dont have it
+	// Added last so it is the innermost middleware and sees the final list
+	cfg.middlewares = append(cfg.middlewares, middleware.TFEToolVisibility(logging.WrapSlog(logger)))
+
+	svr := mcp.NewServer(&mcp.Implementation{Name: "terraform-mcp-server", Version: version}, &cfg.mcpOpts)
 
 	// TODO - Must attach after construction - AddReceivingMiddleware isn't a ServerOptions field.
 	if len(cfg.middlewares) > 0 {

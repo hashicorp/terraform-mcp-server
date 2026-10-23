@@ -9,9 +9,9 @@ import (
 	"math/rand"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -105,10 +105,6 @@ func newTestingSession(t *testing.T) *mcp.ClientSession {
 	if err != nil {
 		t.Fatalf("Failed to create MCP client session: %v", err)
 	}
-	if res := session.InitializeResult(); res != nil && res.ServerInfo != nil {
-		officialServer.Store(res.ServerInfo.Name == officialServerName)
-	}
-
 	return session
 }
 
@@ -298,18 +294,10 @@ func uploadConfiguration(t *testing.T, client *tfe.Client, workspaceID string, c
 	})
 }
 
-// officialEndpoint reports whether the tests are pointed at the official
-// server. mark3labs wraps get and create responses in a jsonapi
-// envelope the official sdk returns the resource as a flat typed struct.
 func officialEndpoint() bool {
-	return officialServer.Load()
+	enabled, err := strconv.ParseBool(os.Getenv("TF_X_OFFICIAL_SDK_ENABLED"))
+	return err != nil || enabled
 }
-
-const officialServerName = "terraform-mcp-official"
-
-// officialServer is set by newTestingSession from the initialize response, so
-// the tests know which shape to expect without guessing from the url.
-var officialServer atomic.Bool
 
 // pick returns legacy on mark3labs and official on the official server, for
 // paths where the two shapes differ by more than the jsonapi nesting.
