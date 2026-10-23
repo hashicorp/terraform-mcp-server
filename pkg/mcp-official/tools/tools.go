@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	registryTools "github.com/hashicorp/terraform-mcp-server/pkg/mcp-official/tools/registry"
+	searchTools "github.com/hashicorp/terraform-mcp-server/pkg/mcp-official/tools/search"
 	tfeTools "github.com/hashicorp/terraform-mcp-server/pkg/mcp-official/tools/tfe"
 	"github.com/hashicorp/terraform-mcp-server/pkg/toolsets"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -21,6 +22,10 @@ import (
 // side uses. Tools that log, take the server's logger from RegisterTools.
 
 var officialFactories = map[string]func(svr *mcp.Server, logger *slog.Logger){
+	// HCP Terraform Search provider discovery
+	"provider_list_schema_list": func(svr *mcp.Server, _ *slog.Logger) {
+		mcp.AddTool(svr, searchTools.ProviderListSchemaListTool(), searchTools.ProviderListSchemaListFunc)
+	},
 	// Add entries here as each tool gets ported to the official go-sdk
 	// Public Registry tools
 	"search_provider_docs": func(svr *mcp.Server, logger *slog.Logger) {

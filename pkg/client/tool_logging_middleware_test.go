@@ -75,6 +75,26 @@ func TestToolLoggingMiddleware(t *testing.T) {
 		assert.False(t, result.IsError)
 	})
 
+	t.Run("does not log Search arguments", func(t *testing.T) {
+		var buf bytes.Buffer
+		logger := log.New()
+		logger.SetOutput(&buf)
+		logger.SetLevel(log.InfoLevel)
+		handler := ToolLoggingMiddleware(logger)(func(context.Context, mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			return mcp.NewToolResultText("success"), nil
+		})
+		request := mcp.CallToolRequest{Params: mcp.CallToolParams{Name: "provider_list_schema_list", Arguments: map[string]any{
+			"workspace_name": "search-log-secret-sentinel",
+		}}}
+
+		_, err := handler(context.Background(), request)
+
+		require.NoError(t, err)
+		assert.Contains(t, buf.String(), "provider_list_schema_list")
+		assert.NotContains(t, buf.String(), "search-log-secret-sentinel")
+		assert.NotContains(t, buf.String(), "workspace_name")
+	})
+
 	t.Run("passes through tool handler errors and results", func(t *testing.T) {
 		logger := log.New()
 		logger.SetLevel(log.ErrorLevel) // Suppress log output during error test

@@ -1,3 +1,15 @@
+# Unreleased
+
+FEATURES
+
+* Add the credential-requiring `search` toolset with read-only `provider_list_schema_list` on both MCP SDKs. Verify workspace access before fetching the organization-scoped provider catalog and catalog-selected list-resource schemas.
+* Add explicit Search source scope and confirmed defaults from `TF_CLOUD_ORGANIZATION`, `TF_MCP_QUERY_WORKSPACE`, and `TF_WORKSPACE`, with organization allowlist enforcement. The official SDK uses native input requests; the legacy SDK returns non-error input-required guidance.
+* Add shared provider-source canonicalization and exact caller-supplied locked-version validation primitives. These do not read local files, select versions, or initialize providers.
+
+SECURITY
+
+* Suppress Search arguments in both tool-call logging middlewares and Search protocol/tool-error payloads in official tool-call logs. Provider/client failures preserve safe classification and causes without rendering backend details.
+
 # 1.3.1
 
 BREAKING CHANGES

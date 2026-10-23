@@ -104,6 +104,9 @@ automation and interaction capabilities for Infrastructure as Code (IaC) develop
 |----------|-------------|---------|
 | `TFE_ADDRESS` | Sets the Terraform Enterprise/HCP Terraform address for API calls. Must include the protocol (e.g., `https://app.terraform.io`). In streamable-http mode this is the only way to set the address; it cannot be supplied by clients via header or query parameter. | Optional |
 | `TFE_TOKEN` | Terraform Enterprise API token | `""` (empty) |
+| `TF_CLOUD_ORGANIZATION` | Proposed organization for Search provider discovery when `terraform_org_name` is omitted. Requires confirmation before scoped API access. | `""` (empty) |
+| `TF_MCP_QUERY_WORKSPACE` | Proposed Search source workspace when `workspace_name` is omitted; takes precedence over `TF_WORKSPACE`. Requires confirmation. | `""` (empty) |
+| `TF_WORKSPACE` | Fallback proposed Search source workspace when `TF_MCP_QUERY_WORKSPACE` is unset. Requires confirmation. | `""` (empty) |
 | `TF_MCP_SHARED_SECRET` | Shared secret sent as the `X-Tf-Mcp-Secret` header on requests to HCP Terraform / TFE, used to identify requests originating from a hosted MCP deployment. Should only be used over TLS. | `""` (empty) |
 | `TFE_SKIP_TLS_VERIFY` | Skip HCP Terraform or Terraform Enterprise TLS verification | `false` |
 | `LOG_LEVEL` | Logging level: `trace`, `debug`, `info`, `warn`, `error`, `fatal`, `panic` (overrides `--log-level` flag) | `info` |
@@ -615,6 +618,14 @@ curl http://localhost:8080/health
 
 [Check out available tools here :link:](https://developer.hashicorp.com/terraform/docs/tools/mcp-server/reference#available-tools)
 
+### Search Provider Discovery
+
+Enable `--toolsets=search` (or `--tools=provider_list_schema_list`) and supply valid Terraform credentials to use `provider_list_schema_list`. This read-only tool first verifies workspace access, then reads the organization-scoped Search provider catalog. Omit both provider fields to list supported providers; supply `provider_namespace` and `provider_name` together to fetch `list_resource_schemas`. The catalog selects the exact provider release; do not substitute a latest public-registry version or guess list-resource type names.
+
+Explicit `terraform_org_name` and `workspace_name` override environment defaults. Otherwise, the server proposes `TF_CLOUD_ORGANIZATION` and `TF_MCP_QUERY_WORKSPACE` (falling back to `TF_WORKSPACE`). Blank values count as unset. Defaults are proposals, not authorization: confirm or supply the complete source pair before scoped access. The official SDK uses native `InputRequests` with accept/decline/cancel responses; the legacy SDK returns a non-error `input_required` JSON-text result for the client to resolve and resubmit explicitly. Organization allowlists apply to proposed and accepted scope before scoped access or disallowed proposal disclosure.
+
+Provider results retain their complete JSON-text representation, including confirmed scope. This capability stops at catalog/schema discovery: it does not create queries, modify infrastructure, or read local files. Search argument values are omitted from tool-call logs, and official Search error payloads are not reproduced in those logs; this is not a blanket guarantee about all application or backend logs.
+
 ## Available Resources
 
 [Check out available resources here :link:](https://developer.hashicorp.com/terraform/docs/tools/mcp-server/reference#available-tools)
@@ -647,7 +658,7 @@ terraform-mcp-server --toolsets=registry,terraform
 terraform-mcp-server --tools=search_provider_docs,get_provider_details,list_workspaces
 ```
 
-Available toolsets: `registry`, `registry-private`, `terraform`, `all`, `default`. See `pkg/toolsets/mapping.go` for individual tool names. Cannot use both flags together.
+Available toolsets: `registry`, `registry-private`, `terraform`, `search`, `all`, `default`. See `pkg/toolsets/mapping.go` for individual tool names. Cannot use both flags together.
 
 ## Transport Support
 

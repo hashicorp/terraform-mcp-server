@@ -77,6 +77,44 @@ func TestToolLoggingMiddleware_ToolError(t *testing.T) {
 	assert.Contains(t, logOutput, "listing workspaces: permission denied")
 }
 
+func TestToolLoggingMiddleware_DoesNotLogSearchArgumentsOrErrors(t *testing.T) {
+	for _, outcome := range []string{"success", "protocol error", "tool error"} {
+		t.Run(outcome, func(t *testing.T) {
+			var buf bytes.Buffer
+			logger := slog.New(slog.NewTextHandler(&buf, nil))
+			sensitiveErr := errors.New("search-error-secret-sentinel")
+			expected := &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: "search-result-secret-sentinel"}}}
+			if outcome == "tool error" {
+				expected.SetError(sensitiveErr)
+			}
+			next := func(context.Context, string, mcp.Request) (mcp.Result, error) {
+				if outcome == "protocol error" {
+					return nil, sensitiveErr
+				}
+				return expected, nil
+			}
+			argsJSON, err := json.Marshal(map[string]any{"workspace_name": "search-argument-secret-sentinel"})
+			require.NoError(t, err)
+			request := &mcp.CallToolRequest{Params: &mcp.CallToolParamsRaw{Name: "provider_list_schema_list", Arguments: argsJSON}}
+
+			result, err := ToolLogging(logger)(next)(context.Background(), "tools/call", request)
+
+			if outcome == "protocol error" {
+				require.ErrorIs(t, err, sensitiveErr)
+				require.Nil(t, result)
+			} else {
+				require.NoError(t, err)
+				require.Same(t, expected, result)
+			}
+			assert.Contains(t, buf.String(), "provider_list_schema_list")
+			assert.NotContains(t, buf.String(), "search-error-secret-sentinel")
+			assert.NotContains(t, buf.String(), "search-argument-secret-sentinel")
+			assert.NotContains(t, buf.String(), "search-result-secret-sentinel")
+			assert.NotContains(t, buf.String(), "workspace_name")
+		})
+	}
+}
+
 func TestToolLoggingMiddleware_MethodError(t *testing.T) {
 	var buf bytes.Buffer
 	logger := slog.New(slog.NewTextHandler(&buf, nil))
