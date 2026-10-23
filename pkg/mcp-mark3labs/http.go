@@ -29,6 +29,11 @@ import (
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 )
 
+// maxHeaderBytes limits the total size of request headers. MCP clients only send a
+// few small headers (a bearer token is around 90 bytes), so 32 KiB is plenty, and
+// anything bigger gets rejected before it reaches our handlers.
+const maxHeaderBytes = 32 << 10
+
 type healthResponse struct {
 	Status    string `json:"status"`
 	Service   string `json:"service"`
@@ -223,8 +228,14 @@ func streamableHTTPServerInit(ctx context.Context, hcServer *server.MCPServer, l
 
 	mux := http.NewServeMux()
 
+	// The server never issues session IDs in stateless mode, so just ignore any the client sends.
+	var mcpHandler http.Handler = baseStreamableServer
+	if isStateless {
+		mcpHandler = stripSessionIDMiddleware(mcpHandler)
+	}
+
 	// Apply middleware
-	streamableServer := client.RequireTerraformTokenMiddleware(logger)(baseStreamableServer)
+	streamableServer := client.RequireTerraformTokenMiddleware(logger)(mcpHandler)
 	streamableServer = client.OrganizationAllowlistMiddleware(organizationAllowlist, logger)(streamableServer)
 	streamableServer = client.TerraformContextMiddleware(logger)(streamableServer)
 	streamableServer = client.NewSecurityHandler(streamableServer, corsConfig.AllowedOrigins, corsConfig.Mode, logger)
@@ -305,6 +316,7 @@ func streamableHTTPServerInit(ctx context.Context, hcServer *server.MCPServer, l
 		ReadHeaderTimeout: 30 * time.Second,
 		WriteTimeout:      30 * time.Second,
 		IdleTimeout:       60 * time.Second,
+		MaxHeaderBytes:    maxHeaderBytes,
 	}
 
 	if tlsConfig != nil {
@@ -355,4 +367,15 @@ func shouldUseStatelessMode() bool {
 
 	// All other values (including empty string, "stateful", or any other value) default to stateful mode
 	return false
+}
+
+// stripSessionIDMiddleware removes the Mcp-Session-Id header. The server doesn't
+// hand out session IDs in stateless mode, so any ID a client sends would only end up
+// as a key for per-session state (rate limiters, cached clients, metrics) that never
+// gets cleaned up. Without this, a client could keep just sending new IDs and ramp up memory.
+func stripSessionIDMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		r.Header.Del("Mcp-Session-Id")
+		next.ServeHTTP(w, r)
+	})
 }
