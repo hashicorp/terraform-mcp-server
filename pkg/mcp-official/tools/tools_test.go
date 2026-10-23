@@ -22,11 +22,12 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func newOfficialSearchSession(t *testing.T) (context.Context, *mcp.ClientSession) {
+func newOfficialSearchSession(t *testing.T, middlewares ...mcp.Middleware) (context.Context, *mcp.ClientSession) {
 	t.Helper()
 	ctx := context.Background()
 	serverTransport, clientTransport := mcp.NewInMemoryTransports()
 	srv := mcp.NewServer(&mcp.Implementation{Name: "search-test", Version: "0"}, nil)
+	srv.AddReceivingMiddleware(middlewares...)
 	RegisterTools(srv, slog.Default(), toolsets.NewToolsetFilter([]string{toolsets.Search}))
 	serverSession, err := srv.Connect(ctx, serverTransport, nil)
 	require.NoError(t, err)
@@ -42,12 +43,12 @@ func TestOfficialSearchRegistration(t *testing.T) {
 	ctx, session := newOfficialSearchSession(t)
 	listed, err := session.ListTools(ctx, nil)
 	require.NoError(t, err)
-	require.Len(t, listed.Tools, 4, "search-only filter must expose only discovery, guidance, execution, and status")
+	require.Len(t, listed.Tools, 5, "search-only filter must expose discovery, guidance, execution, status, and summary")
 	names := make([]string, 0, len(listed.Tools))
 	for _, tool := range listed.Tools {
 		names = append(names, tool.Name)
 		require.NotNil(t, tool.InputSchema)
-		if tool.Name == "execute_query" || tool.Name == "get_query_status" {
+		if tool.Name == "execute_query" || tool.Name == "get_query_status" || tool.Name == "get_query_summary" {
 			require.NotNil(t, tool.OutputSchema)
 		} else {
 			require.Nil(t, tool.OutputSchema, "retain the text result contracts")
@@ -55,7 +56,7 @@ func TestOfficialSearchRegistration(t *testing.T) {
 		require.Equal(t, tool.Name != "execute_query", tool.Annotations.ReadOnlyHint)
 		require.False(t, *tool.Annotations.DestructiveHint)
 	}
-	require.ElementsMatch(t, []string{"provider_list_schema_list", "generate_query_configuration", "execute_query", "get_query_status"}, names)
+	require.ElementsMatch(t, []string{"provider_list_schema_list", "generate_query_configuration", "execute_query", "get_query_status", "get_query_summary"}, names)
 
 	// The Search addition must not replace refreshed-main Runs factories.
 	for _, name := range []string{"list_runs", "get_run_details", "get_run_comments", "action_run"} {
@@ -218,6 +219,7 @@ func TestSearchGeneratorTransportParityWithoutCredentials(t *testing.T) {
 	}{
 		{"execute_query", map[string]any{"terraform_org_name": "org", "workspace_name": "ws", "query_configuration": executionConfiguration}},
 		{"get_query_status", map[string]any{"query_run_id": "qry-test"}},
+		{"get_query_summary", map[string]any{"query_run_id": "qry-test"}},
 	} {
 		result, err := session.CallTool(ctx, &mcp.CallToolParams{Name: test.name, Arguments: test.args})
 		require.NoError(t, err)

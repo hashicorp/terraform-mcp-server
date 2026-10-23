@@ -11,6 +11,29 @@ import (
 // searchDiagnosticCode identifies a stable Search tool failure category.
 type searchDiagnosticCode string
 
+// Query evidence and discovery diagnostics (provider/status codes live below).
+const (
+	queryBackendUnavailableCode               searchDiagnosticCode = "query_backend_unavailable"
+	queryDuplicateOrInvalidIdentityCode       searchDiagnosticCode = "query_duplicate_or_invalid_identity"
+	queryEvidenceIncompleteCode               searchDiagnosticCode = "query_evidence_incomplete"
+	queryEvidenceInvalidCode                  searchDiagnosticCode = "query_evidence_invalid"
+	queryGeneratedBlockConflictCode           searchDiagnosticCode = "query_generated_block_conflict"
+	queryGeneratedConfigurationInvalidCode    searchDiagnosticCode = "query_generated_configuration_invalid"
+	queryGeneratedConfigurationUnexpectedCode searchDiagnosticCode = "query_generated_configuration_unexpected"
+	queryIdentityInvalidCode                  searchDiagnosticCode = "query_identity_invalid"
+	queryIdentityVersionInvalidCode           searchDiagnosticCode = "query_identity_version_invalid"
+	queryLogSizeLimitCode                     searchDiagnosticCode = "query_log_size_limit"
+	queryLogUnavailableCode                   searchDiagnosticCode = "query_log_unavailable"
+	queryNotFinishedCode                      searchDiagnosticCode = "query_not_finished"
+	queryNotSelectableCode                    searchDiagnosticCode = "query_not_selectable"
+	queryOrganizationMismatchCode             searchDiagnosticCode = "query_organization_mismatch"
+	queryProvenanceUnavailableCode            searchDiagnosticCode = "query_provenance_unavailable"
+	queryProviderAmbiguousCode                searchDiagnosticCode = "query_provider_ambiguous"
+	queryReportedErrorCode                    searchDiagnosticCode = "query_reported_error"
+	queryRunIDInvalidCode                     searchDiagnosticCode = "query_run_id_invalid"
+	querySummaryUnserializableCode            searchDiagnosticCode = "query_summary_unserializable"
+)
+
 // Shared tool infrastructure diagnostics.
 const (
 	clientUnavailableCode   searchDiagnosticCode = "client_unavailable"

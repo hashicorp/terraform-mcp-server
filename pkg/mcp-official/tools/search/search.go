@@ -41,6 +41,13 @@ type QueryRunArguments struct {
 	QueryRunID string `json:"query_run_id" jsonschema:"Exact query_run_id returned by execute_query or an existing authorized QueryRun ID"`
 }
 
+type QuerySummaryArguments struct {
+	QueryRunID   string `json:"query_run_id" jsonschema:"Exact QueryRun ID returned by execute_query or an existing authorized QueryRun ID"`
+	ResourceType string `json:"resource_type,omitempty" jsonschema:"Optional exact Search list-resource type filter"`
+	Address      string `json:"address,omitempty" jsonschema:"Optional exact list block address filter"`
+	NameContains string `json:"name_contains,omitempty" jsonschema:"Optional case-insensitive display-name substring"`
+}
+
 func tool(name, description, title string, readOnly, openWorld bool) *mcp.Tool {
 	return &mcp.Tool{
 		Name: name, Description: description,
@@ -174,6 +181,38 @@ func GetQueryStatusFunc(logger *slog.Logger) mcp.ToolHandlerFor[QueryRunArgument
 		}
 		return textResult(text), response, nil
 	}
+}
+
+func GetQuerySummaryTool() *mcp.Tool {
+	summaryTool := tool("get_query_summary", searchlogic.GetQuerySummaryDescription,
+		"Get HCP Terraform query summary", true, true)
+	schema, err := jsonschema.For[searchlogic.QueryDiscoverySummary](nil)
+	if err != nil {
+		panic(err)
+	}
+	summaryTool.OutputSchema = schema
+	return summaryTool
+}
+
+func GetQuerySummaryFunc(ctx context.Context, req *mcp.CallToolRequest, input QuerySummaryArguments) (*mcp.CallToolResult, *searchlogic.QueryDiscoverySummary, error) {
+	queryRunID := strings.TrimSpace(input.QueryRunID)
+	if queryRunID == "" {
+		return nil, nil, fmt.Errorf("missing required input: query_run_id")
+	}
+	tfeClient, err := client.GetTfeClient(ctx, client.SessionIDFromRequest(req))
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to get Terraform client; check session configuration")
+	}
+	filter := searchlogic.QueryDiscoveryFilter{ResourceType: input.ResourceType, Address: input.Address, NameContains: input.NameContains}
+	summary, err := searchlogic.ReadQueryDiscoverySummary(ctx, tfeClient, queryRunID, filter)
+	if err != nil {
+		return nil, nil, fmt.Errorf("query summary unavailable: %w", err)
+	}
+	text, err := searchlogic.FormatQueryDiscoverySummary(summary)
+	if err != nil {
+		return nil, nil, fmt.Errorf("query summary unavailable: %w", err)
+	}
+	return textResult(text), summary, nil
 }
 
 func textResult(text string) *mcp.CallToolResult {
