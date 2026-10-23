@@ -16,6 +16,7 @@ IMPROVEMENTS
 FIXES
 
 * In stateless mode, the streamable HTTP server now ignores the `Mcp-Session-Id` header. Client-supplied session IDs were used to key per-session state that was never cleaned up, so arbitrary IDs could grow server memory. Request headers are also now capped at 32 KiB.
+* Tool call logs no longer include argument values. Both the mark3labs and official SDK servers now log the tool name and argument keys only, so customer data such as sensitive variable values is not written to logs.
 * `list_runs` now applies the `status` filter. The tool accepts `status` as an array but read it as a string, so the filter was always dropped and runs of every status were returned.
 * `list_runs` now reports the `workspace_name` of each run. The runs were listed without including their workspace, so the name was always empty.
 
