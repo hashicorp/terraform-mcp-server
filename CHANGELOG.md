@@ -1,3 +1,9 @@
+# 1.4.2
+
+FIXES
+
+* `search_modules` now returns its "no modules found" message when the registry returns no matches, instead of reporting that it failed to parse the results.
+
 # 1.4.1
 
 FIXES
