@@ -6,10 +6,10 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
-	"strconv"
 	"testing"
 	"time"
 
+	mcpofficial "github.com/hashicorp/terraform-mcp-server/pkg/mcp-official"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/require"
 )
@@ -29,8 +29,7 @@ type e2eServerConfig struct {
 // server is the default, set TF_X_OFFICIAL_SDK_ENABLED=false to test the legacy
 // mark3labs fallback.
 func officialSDKEnabled() bool {
-	enabled, err := strconv.ParseBool(os.Getenv(officialSDKEnabledEnv))
-	return err != nil || enabled
+	return mcpofficial.Enabled()
 }
 
 // sdkEnvArgs returns the docker flags that select the server. The official

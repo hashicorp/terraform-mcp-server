@@ -9,13 +9,13 @@ import (
 	"math/rand"
 	"net/http"
 	"os"
-	"strconv"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/hashicorp/go-tfe"
+	mcpofficial "github.com/hashicorp/terraform-mcp-server/pkg/mcp-official"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/require"
 )
@@ -295,8 +295,7 @@ func uploadConfiguration(t *testing.T, client *tfe.Client, workspaceID string, c
 }
 
 func officialEndpoint() bool {
-	enabled, err := strconv.ParseBool(os.Getenv("TF_X_OFFICIAL_SDK_ENABLED"))
-	return err != nil || enabled
+	return mcpofficial.Enabled()
 }
 
 // pick returns legacy on mark3labs and official on the official server, for
