@@ -1,3 +1,9 @@
+# 1.4.2
+
+BREAKING CHANGES
+
+* The server now runs on the official MCP Go SDK by default, for both stdio and streamable HTTP. Tool responses that used a JSON:API envelope are now flat JSON, and hand-written HTTP clients must send `Accept: application/json, text/event-stream`. Set `TF_X_OFFICIAL_SDK_ENABLED=false` to fall back to the previous server. The fallback is temporary.
+
 # 1.4.1
 
 FIXES
@@ -11,7 +17,6 @@ FIXES
 BREAKING CHANGES
 
 * `search_providers` is renamed to `search_provider_docs`. The tool searches documentation within a provider rather than for providers, and the old name was misleading. Update any toolset configuration or client that references the old name.
-* The server now runs on the official MCP Go SDK by default, for both stdio and streamable HTTP. Tool responses that used a JSON:API envelope are now flat JSON, and hand-written HTTP clients must send `Accept: application/json, text/event-stream`. Set `TF_X_OFFICIAL_SDK_ENABLED=false` to fall back to the previous server. The fallback is temporary.
 
 IMPROVEMENTS
 
