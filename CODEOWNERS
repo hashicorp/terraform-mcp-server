@@ -1,2 +1,12 @@
-# Default owner
+# Default repository and MCP integration ownership
 * @hashicorp/team-proj-mcp-servers
+
+# Terraform Search domain implementation
+/pkg/tools/search/** @hashicorp/team-tf-search
+
+# Terraform Search official MCP SDK adapter
+/pkg/mcp-official/tools/search/** @hashicorp/team-tf-search
+
+# Terraform Search toolset definitions
+/pkg/toolsets/search.go @hashicorp/team-tf-search
+/pkg/toolsets/search_test.go @hashicorp/team-tf-search
