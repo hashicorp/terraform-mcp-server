@@ -93,6 +93,27 @@ func TestCreateHTTPClientUsesRedactingRetryLogger(t *testing.T) {
 	require.NotContains(t, output.String(), "secret-sentinel")
 }
 
+func TestCreateHTTPClientRedactsRetryLogs(t *testing.T) {
+	var output bytes.Buffer
+	testLogger := log.New()
+	testLogger.SetOutput(&output)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("x-ratelimit-reset", "0")
+		w.WriteHeader(http.StatusTooManyRequests)
+	}))
+	defer server.Close()
+
+	secretURL := server.URL + "/private/log?X-Amz-Signature=secret-sentinel"
+	resp, err := CreateHTTPClient(false, testLogger).Get(secretURL)
+	require.Error(t, err)
+	require.Nil(t, resp)
+
+	logged := output.String()
+	require.Contains(t, logged, "retrying")
+	require.Contains(t, logged, server.URL+"/private/log?___REDACTED___")
+	require.NotContains(t, logged, "secret-sentinel")
+}
+
 func TestCreateHTTPClientAllowsNilLogger(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
