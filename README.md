@@ -126,6 +126,7 @@ automation and interaction capabilities for Infrastructure as Code (IaC) develop
 | `MCP_REMOTE_IP_METHOD` | How the client IP is sourced when forwarding is enabled: `RemoteAddr` (direct connection only), `X-Real-IP`, or `X-Forwarded-For` | `RemoteAddr` |
 | `MCP_XFF_TRUSTED_HOPS` | Number of trusted proxy hops counted from the right of the `X-Forwarded-For` chain. Only used when `MCP_REMOTE_IP_METHOD=X-Forwarded-For` | `0` |
 | `ENABLE_TF_OPERATIONS` | Enable tools that require explicit approval | `false` |
+| `TF_X_OFFICIAL_SDK_ENABLED` | Set to `false` to fall back to the legacy mark3labs server. Temporary, it will be removed in a future release. | unset (official go-sdk server) |
 | `OTEL_METRICS_ENABLED` | Enable tools and server metrics using otel | `false` |
 | `OTEL_METRICS_SERVICE_VERSION` | Version of the terraform-mcp-server sending metrics, which is used to set metric attributes. It also helps track metrics across different deployments | `latest` |
 | `OTEL_METRICS_SERVICE_NAME` | Identifies the source of the metrics (e.g., "terraform-mcp-server") | `terraform-mcp-server` |

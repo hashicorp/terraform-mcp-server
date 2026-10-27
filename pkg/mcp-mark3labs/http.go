@@ -19,6 +19,7 @@ import (
 	"github.com/hashicorp/terraform-mcp-server/pkg/client"
 	"github.com/hashicorp/terraform-mcp-server/pkg/instana"
 	"github.com/hashicorp/terraform-mcp-server/pkg/logging"
+	mcpofficial "github.com/hashicorp/terraform-mcp-server/pkg/mcp-official"
 	"github.com/hashicorp/terraform-mcp-server/pkg/toolsets"
 	"github.com/hashicorp/terraform-mcp-server/version"
 	instanasdk "github.com/instana/go-sensor"
@@ -240,13 +241,15 @@ func streamableHTTPServerInit(ctx context.Context, hcServer *server.MCPServer, l
 	streamableServer = client.TerraformContextMiddleware(logger)(streamableServer)
 	streamableServer = client.NewSecurityHandler(streamableServer, corsConfig.AllowedOrigins, corsConfig.Mode, logger)
 
-	// Handle the /mcp endpoint with the streamable server (with security wrapper)
-	mux.Handle(endpointPath, streamableServer)
-	mux.Handle(endpointPath+"/", streamableServer)
+	if !mcpofficial.Enabled() {
+		// Rollback path: serve the legacy mark3labs server on the MCP endpoint.
+		logger.Warnf("%s is false, serving the legacy mark3labs server on %s. This fallback will be removed in a future release.", mcpofficial.EnvEnabled, endpointPath)
+		mux.Handle(endpointPath, streamableServer)
+		mux.Handle(endpointPath+"/", streamableServer)
+	}
 
-	// Create the official go-sdk streamable server
-	if enableOfficialSDK := os.Getenv("TF_X_OFFICIAL_SDK_ENABLED"); enableOfficialSDK == "true" {
-		logger.Info("TF_X_OFFICIAL_SDK_ENABLED set to true in env, enabling the official mcp go-sdk server")
+	// The official go-sdk server is the default
+	if mcpofficial.Enabled() {
 		logFile, err := rootCmd.PersistentFlags().GetString("log-file")
 		if err != nil {
 			return fmt.Errorf("failed to get log file: %w", err)
@@ -267,7 +270,10 @@ func streamableHTTPServerInit(ctx context.Context, hcServer *server.MCPServer, l
 
 		officialLogger = officialLogger.With("component", "mcp-official")
 		officialStreamableServer := getOfficialStreamableServer(ctx, heartbeatInterval, isStateless, corsConfig, logger, officialLogger, organizationAllowlist, filter, rateLimiter, metricsConfig)
-		// Handle the /mcp endpoint with the official go-sdk streamable server (with security wrapper)
+		// Serve the official go-sdk streamable server (with security wrapper) on the MCP endpoint
+		mux.Handle(endpointPath, officialStreamableServer)
+		mux.Handle(endpointPath+"/", officialStreamableServer)
+		// Keep the old preview path working for clients that were configured for it
 		mux.Handle(endpointPath+"/official", officialStreamableServer)
 		mux.Handle(endpointPath+"/official/", officialStreamableServer)
 	}
