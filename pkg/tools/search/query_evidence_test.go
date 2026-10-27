@@ -90,6 +90,52 @@ func TestQueryEvidenceRejectsEntireResultOnInvalidInput(t *testing.T) {
 	}
 }
 
+func TestQueryEvidenceRequiresCompletionForEveryStartedList(t *testing.T) {
+	start := `{"type":"list_start","list_start":{"address":"list.aws_s3_buckets.empty"}}`
+	complete := `{"type":"list_complete","list_complete":{"address":"list.aws_s3_buckets.empty","total":0}}`
+	for _, tc := range []struct {
+		name string
+		data string
+		code string
+	}{
+		{"started only", start, "query_evidence_incomplete"},
+		{"completed list then unfinished list", string(queryEvidenceFixture("0")) + start, "query_evidence_incomplete"},
+		{"zero result list completed", start + "\n" + complete, ""},
+		{"all started lists completed", start + "\n" + string(queryEvidenceFixture("0")) + complete, ""},
+		{"missing start payload", `{"type":"list_start"}`, "query_evidence_invalid"},
+		{"missing start address", `{"type":"list_start","list_start":{}}`, "query_evidence_invalid"},
+		{"blank start address", `{"type":"list_start","list_start":{"address":" "}}`, "query_evidence_invalid"},
+		{"damaged start text", string(queryEvidenceFixture("0")) + "list_start: not JSON", "query_evidence_invalid"},
+		{"start disguised as progress", string(queryEvidenceFixture("0")) + `{"type":"log","list_start":{"address":"hidden"}}`, "query_evidence_invalid"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			evidence, err := parseQueryEvidence("qry-one", []byte(tc.data), testQueryProviders())
+			if tc.code != "" {
+				require.EqualError(t, err, tc.code)
+				require.Nil(t, evidence)
+				return
+			}
+			require.NoError(t, err)
+			require.NotNil(t, evidence)
+		})
+	}
+}
+
+func TestUnfinishedStartedListPreventsSummaryAndPreparationFinalization(t *testing.T) {
+	data := string(queryEvidenceFixture("0")) + `{"type":"list_start","list_start":{"address":"list.aws_s3_buckets.unfinished"}}`
+	marker, err := queryResultMarker("qry-one", testQueryProviders()["aws_s3_buckets"], "aws_s3_buckets", map[string]any{"bucket": "example"})
+	require.NoError(t, err)
+	for name, collector := range map[string]queryEvidenceCollector{
+		"summary": newQueryDiscoverySummaryCollector(&queryDiscoveryProvenance{QueryRunID: "qry-one"}, QueryDiscoveryFilter{}),
+		"prepare": newSelectedQueryEvidenceCollector([]ImportSelection{{QueryResultMarker: marker, ManagedType: "aws_s3_bucket"}}),
+	} {
+		t.Run(name, func(t *testing.T) {
+			err := parseQueryEvidenceReaderWithCollector("qry-one", strings.NewReader(data), testQueryProviders(), collector)
+			require.EqualError(t, err, "query_evidence_incomplete")
+		})
+	}
+}
+
 func TestQueryEvidenceDoesNotApplyByteOrDepthCaps(t *testing.T) {
 	raw := []byte(strings.Repeat("[", 40) + `{"value":"` + strings.Repeat("x", 128*1024) + `"}` + strings.Repeat("]", 40))
 	var value any
