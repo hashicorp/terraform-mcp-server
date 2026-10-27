@@ -119,6 +119,9 @@ func generatedConfigurationScalarExpression(expression hclsyntax.Expression) boo
 func generatedConfigurationValue(value cty.Value) (any, bool) {
 	typeOf := value.Type()
 	if typeOf == cty.String || typeOf == cty.Bool || typeOf == cty.Number {
+		if typeOf == cty.String && value.AsString() == "" {
+			return nil, false
+		}
 		return generatedConfigurationScalar(value)
 	}
 	if !typeOf.IsMapType() && !typeOf.IsObjectType() || value.LengthInt() == 0 {
@@ -148,9 +151,6 @@ func generatedConfigurationValue(value cty.Value) (any, bool) {
 func generatedConfigurationScalar(value cty.Value) (any, bool) {
 	typeOf := value.Type()
 	if typeOf != cty.String && typeOf != cty.Bool && typeOf != cty.Number {
-		return nil, false
-	}
-	if typeOf == cty.String && value.AsString() == "" {
 		return nil, false
 	}
 	raw, err := ctyjson.Marshal(value, typeOf)

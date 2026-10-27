@@ -69,7 +69,7 @@ resource "example_resource" "result" {
 	require.Equal(t, map[string]any{"keep": "value"}, attributes)
 }
 
-func TestProjectGeneratedConfigurationOmitsEmptyStrings(t *testing.T) {
+func TestProjectGeneratedConfigurationOmitsEmptyTopLevelStringsButPreservesMapValues(t *testing.T) {
 	attributes, err := projectGeneratedConfiguration(`
 resource "example_resource" "result" {
   description = ""
@@ -83,6 +83,8 @@ resource "example_resource" "result" {
 }`)
 	require.NoError(t, err)
 	require.Equal(t, map[string]any{
+		"empty_map":  map[string]any{"one": ""},
+		"mixed_map":  map[string]any{"one": "value", "two": ""},
 		"keep":       "value",
 		"whitespace": " ",
 		"enabled":    false,
@@ -94,7 +96,6 @@ resource "example_resource" "result" {
 
 	emptyOnly, err := projectGeneratedConfiguration(`resource "example_resource" "result" {
   description = ""
-  tags = { one = "" }
 }`)
 	require.NoError(t, err)
 	require.Nil(t, emptyOnly)
