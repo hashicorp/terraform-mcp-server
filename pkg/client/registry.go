@@ -27,7 +27,8 @@ const DefaultPublicRegistryURL = "https://registry.terraform.io"
 
 var retryLogURLPattern = regexp.MustCompile(`[A-Za-z][A-Za-z0-9+.-]*://[^\s"'<>]+`)
 
-// Signed query parameters make the URL itself a bearer capability.
+// Signed query parameters contain temporary authorization material and must not
+// be written to retry logs.
 var signedURLQueryKeys = map[string]struct{}{
 	"signature":        {},
 	"sig":              {},
@@ -44,8 +45,8 @@ func (l redactingRetryLogger) Printf(format string, args ...interface{}) {
 	l.logger.Print(retryLogURLPattern.ReplaceAllStringFunc(message, redactRetryURL))
 }
 
-// redactRetryURL preserves useful URL context while removing capability-bearing
-// Archivist paths, signed queries, and embedded credentials.
+// redactRetryURL preserves useful URL context while removing sensitive
+// Archivist object paths, signed query values, and embedded credentials.
 func redactRetryURL(raw string) string {
 	trailing := ""
 	for len(raw) > 0 && strings.ContainsRune(".,;:!?)]}", rune(raw[len(raw)-1])) {
