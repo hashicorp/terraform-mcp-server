@@ -140,7 +140,7 @@ func TestSearchModulesRejectsUnknownQuery(t *testing.T) {
 		})
 
 		require.True(t, result.IsError, "search_modules should return an error when no modules match")
-		assert.Contains(t, text, "failed to parse module results", "error should explain that the query did not produce usable results")
+		assert.Contains(t, text, "no modules found", "error should explain that the query did not produce usable results")
 		assert.Contains(t, text, query, "error should include the original query")
 	})
 }

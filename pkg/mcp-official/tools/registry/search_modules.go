@@ -118,7 +118,7 @@ func unmarshalTerraformModules(response []byte, moduleQuery string) (string, err
 		return "", fmt.Errorf("unmarshalling modules: %w", err)
 	}
 	if len(terraformModules.Data) == 0 {
-		return "", fmt.Errorf("no modules found for query: %s", moduleQuery)
+		return "", nil
 	}
 
 	sort.Slice(terraformModules.Data, func(i, j int) bool {
