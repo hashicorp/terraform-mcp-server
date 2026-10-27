@@ -377,6 +377,8 @@ More about using MCP server tools in Claude Desktop [user documentation](https:/
 </tr>
 </table>
 
+> **NOTE:** Claude Desktop does not support configuring remote MCP servers via configuration file, use [Custom Connectors](https://support.claude.com/en/articles/11175166-get-started-with-custom-connectors-using-remote-mcp) instead.
+
 ### Usage with Claude Code
 
 More about using and adding MCP server tools in Claude Code [user documentation](https://docs.claude.com/en/docs/claude-code/mcp)
