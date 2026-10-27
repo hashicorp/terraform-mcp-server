@@ -98,7 +98,7 @@ func buildTFEConfig(terraformAddress string, terraformSkipTLSVerify bool, terraf
 		config.Headers.Set(SharedSecretHeader, secret)
 	}
 
-	// QueryRun/Plan log and artifact locations can be bearer-capability URLs.
+	// Artifact locations such as plan logs can be bearer-capability URLs.
 	// CreateHTTPClient preserves retry diagnostics while redacting their
 	// capability-bearing path and query components before logging.
 	config.HTTPClient = CreateHTTPClient(terraformSkipTLSVerify, logger)
