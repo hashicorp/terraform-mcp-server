@@ -72,6 +72,7 @@ type queryResultMarkerPayload struct {
 
 type queryLogRecord struct {
 	Type       string               `json:"type"`
+	Start      *queryListStart      `json:"list_start"`
 	Found      *queryFoundResource  `json:"list_resource_found"`
 	Complete   *queryListCompletion `json:"list_complete"`
 	Diagnostic *queryLogDiagnostic  `json:"diagnostic"`
@@ -87,6 +88,10 @@ type queryFoundResource struct {
 	ImportConfig  *string         `json:"import_config"`
 	Configuration *string         `json:"configuration"`
 	ImportBlock   *string         `json:"import_configuration"`
+}
+
+type queryListStart struct {
+	Address string `json:"address"`
 }
 
 type queryListCompletion struct {
@@ -242,6 +247,7 @@ type queryEvidenceParser struct {
 	queryID       string
 	providers     map[string]queryResultProvider
 	collector     queryEvidenceCollector
+	started       map[string]bool
 	counts        map[string]int
 	totals        map[string]int
 	seen          map[string]bool
@@ -258,6 +264,7 @@ func newQueryEvidenceParser(queryID string, providers map[string]queryResultProv
 		queryID:       queryID,
 		providers:     providers,
 		collector:     collector,
+		started:       map[string]bool{},
 		counts:        map[string]int{},
 		totals:        map[string]int{},
 		seen:          map[string]bool{},
@@ -312,7 +319,7 @@ func (p *queryEvidenceParser) consumeLine(line []byte) error {
 		return nil
 	}
 	if !bytes.HasPrefix(line, []byte{'{'}) {
-		if bytes.HasPrefix(line, []byte{'['}) || bytes.Contains(line, []byte("list_resource_found")) || bytes.Contains(line, []byte("list_complete")) || bytes.Contains(line, []byte("diagnostic")) {
+		if bytes.HasPrefix(line, []byte{'['}) || bytes.Contains(line, []byte("list_start")) || bytes.Contains(line, []byte("list_resource_found")) || bytes.Contains(line, []byte("list_complete")) || bytes.Contains(line, []byte("diagnostic")) {
 			return searchDiagnosticError(queryEvidenceInvalidCode)
 		}
 		return nil
@@ -325,14 +332,23 @@ func (p *queryEvidenceParser) consumeLine(line []byte) error {
 }
 
 func (p *queryEvidenceParser) consumeRecord(record queryLogRecord) error {
+	if record.Start != nil && record.Type != "list_start" {
+		return searchDiagnosticError(queryEvidenceInvalidCode)
+	}
 	switch record.Type {
+	case "list_start":
+		if record.Start == nil || strings.TrimSpace(record.Start.Address) == "" || record.Found != nil || record.Complete != nil || record.Diagnostic != nil {
+			return searchDiagnosticError(queryEvidenceInvalidCode)
+		}
+		p.started[record.Start.Address] = true
+		return nil
 	case "list_resource_found":
 		return p.consumeFound(record.Found)
 	case "list_complete":
 		return p.consumeCompletion(record.Complete)
 	case "diagnostic":
 		return p.consumeDiagnostic(record.Diagnostic)
-	case "version", "log", "list_start":
+	case "version", "log":
 		if record.Found != nil || record.Complete != nil || record.Diagnostic != nil {
 			return searchDiagnosticError(queryEvidenceInvalidCode)
 		}
@@ -414,6 +430,11 @@ func (p *queryEvidenceParser) consumeDiagnostic(diagnostic *queryLogDiagnostic) 
 func (p *queryEvidenceParser) finish() error {
 	if len(p.totals) == 0 {
 		return searchDiagnosticError(queryEvidenceIncompleteCode)
+	}
+	for addr := range p.started {
+		if _, ok := p.totals[addr]; !ok {
+			return searchDiagnosticError(queryEvidenceIncompleteCode)
+		}
 	}
 	for addr, total := range p.totals {
 		if p.counts[addr] != total {
