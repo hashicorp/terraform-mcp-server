@@ -150,6 +150,9 @@ func generatedConfigurationScalar(value cty.Value) (any, bool) {
 	if typeOf != cty.String && typeOf != cty.Bool && typeOf != cty.Number {
 		return nil, false
 	}
+	if typeOf == cty.String && value.AsString() == "" {
+		return nil, false
+	}
 	raw, err := ctyjson.Marshal(value, typeOf)
 	if err != nil {
 		return nil, false
