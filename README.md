@@ -27,7 +27,8 @@ automation and interaction capabilities for Infrastructure as Code (IaC) develop
 <a href="#usage-with-claude-code">Claude Code</a><br>
 <a href="#usage-with-codex-cli">Codex CLI</a><br>
 <a href="#usage-with-gemini-extensions">Gemini extensions</a><br>
-<a href="#usage-with-bob-ide--shell">Bob IDE and Shell</a>
+<a href="#usage-with-bob-ide--shell">Bob IDE and Shell</a><br>
+<a href="#usage-with-opencode">OpenCode</a>
 </td>
 <td width="33%" valign="top">
 <a href="#install-from-source">Install from source</a><br>
@@ -157,7 +158,7 @@ Add the following JSON block to your User Settings (JSON) file in VS Code. You c
 More about using MCP server tools in VS Code's [agent mode documentation](https://code.visualstudio.com/docs/copilot/chat/mcp-servers).
 
 <table>
-<tr><th>Version 0.3.0+ or greater</th><th>Version 0.2.3 or lower</th></tr>
+<tr><th>Local</th><th>Remote</th></tr>
 <tr valign=top>
 <td>
 
@@ -202,13 +203,11 @@ More about using MCP server tools in VS Code's [agent mode documentation](https:
   "mcp": {
     "servers": {
       "terraform": {
-        "command": "docker",
-        "args": [
-          "run",
-          "-i",
-          "--rm",
-          "hashicorp/terraform-mcp-server:0.2.3"
-        ]
+        "type": "http",
+        "url": "https://mcp.terraform.io/mcp",
+        "headers": {
+          "Authorization": "Bearer <<TFE_TOKEN>>"
+        }
       }
     }
   }
@@ -222,7 +221,7 @@ More about using MCP server tools in VS Code's [agent mode documentation](https:
 Optionally, you can add a similar example (i.e. without the mcp key) to a file called `.vscode/mcp.json` in your workspace. This will allow you to share the configuration with others.
 
 <table>
-<tr><th>Version 0.3.0+ or greater</th><th>Version 0.2.3 or lower</th></tr>
+<tr><th>Local</th><th>Remote</th></tr>
 <tr valign=top>
 <td>
 
@@ -265,13 +264,11 @@ Optionally, you can add a similar example (i.e. without the mcp key) to a file c
 {
   "servers": {
     "terraform": {
-      "command": "docker",
-      "args": [
-        "run",
-        "-i",
-        "--rm",
-        "hashicorp/terraform-mcp-server:0.2.3"
-      ]
+      "type": "http",
+      "url": "https://mcp.terraform.io/mcp",
+      "headers": {
+        "Authorization": "Bearer <<TFE_TOKEN>>"
+      }
     }
   }
 }
@@ -289,7 +286,7 @@ Optionally, you can add a similar example (i.e. without the mcp key) to a file c
 Add this to your Cursor config (`~/.cursor/mcp.json`) or via Settings → Cursor Settings → MCP:
 
 <table>
-<tr><th>Version 0.3.0+ or greater</th><th>Version 0.2.3 or lower</th></tr>
+<tr><th>Local</th><th>Remote</th></tr>
 <tr valign=top>
 <td>
 
@@ -316,15 +313,12 @@ Add this to your Cursor config (`~/.cursor/mcp.json`) or via Settings → Cursor
 
 ```json
 {
-  "servers": {
+  "mcpServers": {
     "terraform": {
-      "command": "docker",
-      "args": [
-        "run",
-        "-i",
-        "--rm",
-        "hashicorp/terraform-mcp-server:0.2.3"
-      ]
+      "url": "https://mcp.terraform.io/mcp",
+      "headers": {
+        "Authorization": "Bearer <<TFE_TOKEN>>"
+      }
     }
   }
 }
@@ -342,7 +336,7 @@ Add this to your Cursor config (`~/.cursor/mcp.json`) or via Settings → Cursor
 More about using MCP server tools in Claude Desktop [user documentation](https://modelcontextprotocol.io/quickstart/user). Read more about using MCP server in [Amazon Q Developer](https://docs.aws.amazon.com/amazonq/latest/qdeveloper-ug/qdev-mcp.html) and [Kiro CLI](https://kiro.dev/docs/mcp/).
 
 <table>
-<tr><th>Version 0.3.0+ or greater</th><th>Version 0.2.3 or lower</th></tr>
+<tr><th>Local</th><th>Remote</th></tr>
 <tr valign=top>
 <td>
 
@@ -371,13 +365,10 @@ More about using MCP server tools in Claude Desktop [user documentation](https:/
 {
   "mcpServers": {
     "terraform": {
-      "command": "docker",
-      "args": [
-        "run",
-        "-i",
-        "--rm",
-        "hashicorp/terraform-mcp-server:0.2.3"
-      ]
+      "url": "https://mcp.terraform.io/mcp",
+      "headers": {
+        "Authorization": "Bearer <<TFE_TOKEN>>"
+      }
     }
   }
 }
@@ -390,21 +381,27 @@ More about using MCP server tools in Claude Desktop [user documentation](https:/
 
 More about using and adding MCP server tools in Claude Code [user documentation](https://docs.claude.com/en/docs/claude-code/mcp)
 
-- Local (`stdio`) Transport
+<table>
+<tr><th>Local</th><th>Remote</th></tr>
+<tr valign=top>
+<td>
 
 ```sh
 claude mcp add terraform -s user -t stdio -- docker run -i --rm hashicorp/terraform-mcp-server
 ```
 
-- Remote (`streamable-http`) Transport
+</td>
+<td>
 
 ```sh
-# Run server (example)
-docker run -p 8080:8080 --rm -e TRANSPORT_MODE=streamable-http -e TRANSPORT_HOST=0.0.0.0 hashicorp/terraform-mcp-server
-
-# Add to Claude Code
-claude mcp add --transport http terraform http://localhost:8080/mcp
+claude mcp add terraform -s user -t http \
+  --header "Authorization: Bearer <<TFE_TOKEN>>" \
+  https://mcp.terraform.io/mcp
 ```
+
+</td>
+</tr>
+</table>
 
 ### Usage with Codex CLI
 
@@ -412,21 +409,29 @@ More about using and adding MCP server tools in Codex CLI [user documentation](h
 
 > **Note:** Add `TFE_ADDRESS` and `TFE_TOKEN` to the Docker commands for authenticated HCP Terraform or Terraform Enterprise tools.
 
-- Local (`stdio`) Transport
+<table>
+<tr><th>Local</th><th>Remote</th></tr>
+<tr valign=top>
+<td>
 
 ```sh
 codex mcp add terraform -- docker run -i --rm hashicorp/terraform-mcp-server
 ```
 
-- Remote (`streamable-http`) Transport
+</td>
+<td>
 
-```sh
-# Run server (example)
-docker run --rm -p 127.0.0.1:8080:8080 -e TRANSPORT_MODE=streamable-http -e TRANSPORT_HOST=0.0.0.0 hashicorp/terraform-mcp-server
+`codex mcp add` has no flag for custom headers, so add the server to `~/.codex/config.toml`:
 
-# Add to Codex
-codex mcp add terraform --url http://localhost:8080/mcp
+```toml
+[mcp_servers.terraform]
+url = "https://mcp.terraform.io/mcp"
+http_headers = { "Authorization" = "Bearer <<TFE_TOKEN>>" }
 ```
+
+</td>
+</tr>
+</table>
 
 ### Usage with Gemini extensions
 
@@ -450,7 +455,7 @@ gemini
 More about using and adding MCP servers tools in Bob IDE or Shell [Using MCP in Bob](https://bob.ibm.com/docs/ide/configuration/mcp/mcp-in-bob).
 
 <table>
-<tr><th>Version 0.3.0+ or greater</th><th>Version 0.2.3 or lower</th></tr>
+<tr><th>Local</th><th>Remote</th></tr>
 <tr valign=top>
 <td>
 
@@ -480,14 +485,71 @@ More about using and adding MCP servers tools in Bob IDE or Shell [Using MCP in 
 {
   "mcpServers": {
     "terraform": {
-      "command": "docker",
-      "args": [
-        "run",
-        "-i",
-        "--rm",
-        "hashicorp/terraform-mcp-server:0.2.3"
-      ],
+      "url": "https://mcp.terraform.io/mcp",
+      "headers": {
+        "Authorization": "Bearer <<TFE_TOKEN>>"
+      },
       "disabled": false
+    }
+  }
+}
+```
+
+</td>
+</tr>
+</table>
+
+### Usage with OpenCode
+
+More about using and adding MCP servers in OpenCode [user documentation](https://opencode.ai/v2/docs/mcp-servers). Add the server to your project `opencode.json` or the global `~/.config/opencode/opencode.json`.
+
+<table>
+<tr><th>Local</th><th>Remote</th></tr>
+<tr valign=top>
+<td>
+
+```json
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "servers": {
+      "terraform": {
+        "type": "local",
+        "command": [
+          "docker",
+          "run",
+          "-i",
+          "--rm",
+          "-e", "TFE_ADDRESS",
+          "-e", "TFE_TOKEN",
+          "hashicorp/terraform-mcp-server:1.4.1"
+        ],
+        "environment": {
+          "TFE_ADDRESS": "{env:TFE_ADDRESS}",
+          "TFE_TOKEN": "{env:TFE_TOKEN}"
+        }
+      }
+    }
+  }
+}
+```
+
+</td>
+<td>
+
+```json
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "servers": {
+      "terraform": {
+        "type": "remote",
+        "url": "https://mcp.terraform.io/mcp",
+        "oauth": false,
+        "headers": {
+          "Authorization": "Bearer <<TFE_TOKEN>>"
+        }
+      }
     }
   }
 }
@@ -516,7 +578,7 @@ go install github.com/hashicorp/terraform-mcp-server/cmd/terraform-mcp-server@ma
 ```
 
 <table>
-<tr><th>Version 0.3.0+ or greater</th><th>Version 0.2.3 or lower</th></tr>
+<tr><th>Local</th><th>Remote</th></tr>
 <tr valign=top>
 <td>
 
@@ -529,7 +591,7 @@ go install github.com/hashicorp/terraform-mcp-server/cmd/terraform-mcp-server@ma
         "command": "/path/to/terraform-mcp-server",
         "env": {
           "TFE_TOKEN": "<<TFE_TOKEN_HERE>>"
-        },
+        }
       }
     }
   }
@@ -544,8 +606,11 @@ go install github.com/hashicorp/terraform-mcp-server/cmd/terraform-mcp-server@ma
   "mcp": {
     "servers": {
       "terraform": {
-        "type": "stdio",
-        "command": "/path/to/terraform-mcp-server"
+        "type": "http",
+        "url": "https://mcp.terraform.io/mcp",
+        "headers": {
+          "Authorization": "Bearer <<TFE_TOKEN>>"
+        }
       }
     }
   }
