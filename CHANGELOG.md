@@ -1,5 +1,9 @@
 # 1.4.2
 
+IMPROVEMENTS
+
+* Bump `golang.org/x/net` to v0.62.0 to address [GO-2026-6860](https://pkg.go.dev/vuln/GO-2026-6860) and [GO-2026-6866](https://pkg.go.dev/vuln/GO-2026-6866) in the HTML parser and renderer.
+
 FIXES
 
 * `search_modules` now returns its "no modules found" message when the registry returns no matches, instead of reporting that it failed to parse the results.
