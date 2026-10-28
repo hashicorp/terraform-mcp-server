@@ -10,7 +10,6 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/hashicorp/terraform-mcp-server/pkg/toolsets"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -38,18 +37,6 @@ func ToolLogging(logger *slog.Logger) mcp.Middleware {
 			keys := argumentKeys(params.Arguments)
 
 			result, err := next(ctx, method, req)
-			if toolsets.IsSearchTool(toolName) {
-				if err != nil {
-					logger.ErrorContext(ctx, "tool call failed", "tool", toolName)
-					return result, err
-				}
-				if toolResult, ok := result.(*mcp.CallToolResult); ok && toolResult.IsError {
-					logger.ErrorContext(ctx, "tool call failed", "tool", toolName)
-					return result, nil
-				}
-				logger.InfoContext(ctx, "tool call completed", "tool", toolName)
-				return result, nil
-			}
 			// Protocol-level error
 			if err != nil {
 				logger.ErrorContext(ctx, "tool call failed",
