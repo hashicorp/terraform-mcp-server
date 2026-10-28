@@ -35,7 +35,7 @@ func CreateHTTPClient(insecureSkipVerify bool, logger *log.Logger) *http.Client 
 
 	retryClient.HTTPClient = cleanhttp.DefaultClient()
 	retryClient.HTTPClient.Timeout = 10 * time.Second
-	retryClient.HTTPClient.Transport = transport
+	retryClient.HTTPClient.Transport = &requestIDTransport{base: transport}
 	retryClient.RetryMax = 3
 
 	retryClient.Backoff = func(min, max time.Duration, attemptNum int, resp *http.Response) time.Duration {
@@ -74,7 +74,7 @@ func SendRegistryCall(ctx context.Context, client *http.Client, method string, u
 	}
 	logger.Debugf("Requested URL: %s", url)
 
-	req, err := http.NewRequest(method, url.String(), nil)
+	req, err := http.NewRequestWithContext(ctx, method, url.String(), nil)
 	if err != nil {
 		return nil, err
 	}

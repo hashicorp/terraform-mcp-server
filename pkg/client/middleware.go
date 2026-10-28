@@ -339,7 +339,13 @@ func TerraformContextMiddleware(logger *log.Logger) func(http.Handler) http.Hand
 	clientIPCfg := LoadClientIPConfigFromEnv()
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			ctx := r.Context()
+			// Every request gets its own request id. It goes out as X-Request-Id on
+			// our calls to HCPT, TFE and the registry, and back to the client, so we
+			// can match up a request on both sides. We always make our own and don't
+			// use one the client sends.
+			requestID := NewRequestID()
+			ctx := WithRequestID(r.Context(), requestID)
+			w.Header().Set(RequestIDHeader, requestID)
 
 			// TFE_ADDRESS is never sourced from the client in streamable-http mode.
 			// Allowing a client to set the address via header or query parameter would
