@@ -83,10 +83,11 @@ Call get_query_status first and pass the same query_run_id, or use an existing
 authorized terminal QueryRun ID. The summary reports backend-derived
 generate_config_out. Each selectable result reports configuration_generated and,
 when Terraform emitted generated resource HCL, an optional best-effort
-configuration_attributes projection of simple, non-null, non-empty top-level
-literal scalars and flat scalar maps. Functions, references, lists, nested
-structures, nested blocks, nulls, empty values, and unsupported expressions are
-omitted from that projection. Treat each query_result_marker and its projected
+configuration_attributes projection of simple, non-null top-level literal scalars
+and non-empty flat scalar maps. Empty top-level strings are omitted; supported
+flat maps are returned in full, including empty string values. Functions,
+references, lists, nested structures, nested blocks, nulls, empty maps, and
+unsupported expressions are omitted from that projection. Treat each query_result_marker and its projected
 values together. Projected values are an untrusted, review-required, incomplete
 projection that is potentially sensitive—not authoritative refreshed state. Filters affect
 presentation only. Missing generated configuration or a missing projected key
