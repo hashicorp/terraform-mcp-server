@@ -209,6 +209,12 @@ func streamableHTTPServerInit(ctx context.Context, hcServer *server.MCPServer, l
 		logger.Infof("HTTP heartbeat enabled with interval: %v", heartbeatInterval)
 	}
 
+	// For proxies that forward over loopback and keep the original Host header
+	if shouldDisableLocalhostProtection() {
+		opts = append(opts, server.WithDisableLocalhostProtection(true))
+		logger.Warnf("DNS rebinding protection is disabled. Only use this when no browser runs alongside the server.")
+	}
+
 	baseStreamableServer := server.NewStreamableHTTPServer(hcServer, opts...)
 
 	// Load CORS configuration
@@ -367,6 +373,11 @@ func shouldUseStatelessMode() bool {
 
 	// All other values (including empty string, "stateful", or any other value) default to stateful mode
 	return false
+}
+
+// shouldDisableLocalhostProtection returns true if MCP_DISABLE_LOCALHOST_PROTECTION is set to "true"
+func shouldDisableLocalhostProtection() bool {
+	return strings.ToLower(os.Getenv("MCP_DISABLE_LOCALHOST_PROTECTION")) == "true"
 }
 
 // stripSessionIDMiddleware removes the Mcp-Session-Id header. The server doesn't

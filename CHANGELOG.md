@@ -1,5 +1,9 @@
 # 1.4.2
 
+IMPROVEMENTS
+
+* Add `MCP_DISABLE_LOCALHOST_PROTECTION`. Since 1.3.0, the streamable HTTP server rejects requests on a loopback connection with a non-localhost `Host` header (DNS rebinding protection), which blocks proxies that forward over localhost and keep the original `Host`, such as AWS Bedrock AgentCore Runtime. Set it to `true` to disable the protection on `/mcp` and `/mcp/official`. Defaults to off.
+
 FIXES
 
 * `search_modules` now returns its "no modules found" message when the registry returns no matches, instead of reporting that it failed to parse the results.
