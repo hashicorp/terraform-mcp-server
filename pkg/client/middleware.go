@@ -356,8 +356,18 @@ func TerraformContextMiddleware(logger *log.Logger) func(http.Handler) http.Hand
 				logger.Debug("Terraform address configured server-side")
 			}
 
-			// The remaining vals may still be sourced from the client.
-			clientHeaders := []string{TerraformToken, TerraformSkipTLSVerify}
+			// TFE_SKIP_TLS_VERIFY is a server setting like TFE_ADDRESS, so it only comes
+			// from env. If a client could set it, they could turn off cert checks on the
+			// server's calls to HCP Terraform.
+			if r.Header.Get(TerraformSkipTLSVerify) != "" || r.URL.Query().Get(TerraformSkipTLSVerify) != "" {
+				if logger != nil {
+					logger.Warn("Ignoring TFE_SKIP_TLS_VERIFY sent by the client, it can only be set on the server")
+				}
+			}
+			ctx = context.WithValue(ctx, contextKey(TerraformSkipTLSVerify), utils.GetEnv(TerraformSkipTLSVerify, ""))
+
+			// The token is the only value that can come from the client.
+			clientHeaders := []string{TerraformToken}
 			for _, header := range clientHeaders {
 				var headerValue string
 

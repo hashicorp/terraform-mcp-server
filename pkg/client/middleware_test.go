@@ -839,13 +839,13 @@ func TestTerraformContextMiddleware(t *testing.T) {
 		errorMessage        string
 	}{
 		{
-			name: "headers take priority over query params and env vars",
+			name: "token header is used and skip TLS verify comes from env",
 			headers: map[string]string{
 				TerraformToken:         "header-token",
 				TerraformSkipTLSVerify: "true",
 			},
 			queryParams: map[string]string{
-				TerraformSkipTLSVerify: "false",
+				TerraformSkipTLSVerify: "true",
 			},
 			envVars: map[string]string{
 				TerraformSkipTLSVerify: "false",
@@ -853,7 +853,7 @@ func TestTerraformContextMiddleware(t *testing.T) {
 			expectedStatus: http.StatusOK,
 			expectedContextVals: map[string]string{
 				TerraformToken:         "header-token",
-				TerraformSkipTLSVerify: "true",
+				TerraformSkipTLSVerify: "false",
 			},
 		},
 		{
@@ -882,7 +882,7 @@ func TestTerraformContextMiddleware(t *testing.T) {
 			},
 		},
 		{
-			name:    "query params take priority over env vars (except token)",
+			name:    "client skip TLS verify query param is ignored",
 			headers: map[string]string{},
 			queryParams: map[string]string{
 				TerraformSkipTLSVerify: "true",
@@ -894,7 +894,21 @@ func TestTerraformContextMiddleware(t *testing.T) {
 			expectedStatus: http.StatusOK,
 			expectedContextVals: map[string]string{
 				TerraformToken:         "env-token",
+				TerraformSkipTLSVerify: "false",
+			},
+		},
+		{
+			name: "client cannot turn off TLS verification",
+			headers: map[string]string{
+				"Authorization":        "Bearer bearer-token",
 				TerraformSkipTLSVerify: "true",
+			},
+			queryParams:    map[string]string{},
+			envVars:        map[string]string{},
+			expectedStatus: http.StatusOK,
+			expectedContextVals: map[string]string{
+				TerraformToken:         "bearer-token",
+				TerraformSkipTLSVerify: "",
 			},
 		},
 		{
@@ -960,26 +974,26 @@ func TestTerraformContextMiddleware(t *testing.T) {
 			expectedStatus: http.StatusOK,
 			expectedContextVals: map[string]string{
 				TerraformToken:         "canonical-token",
-				TerraformSkipTLSVerify: "true",
+				TerraformSkipTLSVerify: "", // client value is ignored
 			},
 		},
 		{
-			name: "mixed sources - token via header, skip-tls via query, address from env",
+			name: "mixed sources - token via header, address and skip-tls from env",
 			headers: map[string]string{
 				TerraformToken: "header-token",
 			},
 			queryParams: map[string]string{
-				TerraformSkipTLSVerify: "true", // Query param wins over env
+				TerraformSkipTLSVerify: "true", // ignored, only env counts
 			},
 			envVars: map[string]string{
 				TerraformAddress:       "https://env.terraform.io",
-				TerraformSkipTLSVerify: "false", // Overridden by query param
+				TerraformSkipTLSVerify: "false",
 			},
 			expectedStatus: http.StatusOK,
 			expectedContextVals: map[string]string{
 				TerraformAddress:       "https://env.terraform.io",
 				TerraformToken:         "header-token",
-				TerraformSkipTLSVerify: "true",
+				TerraformSkipTLSVerify: "false",
 			},
 		},
 	}

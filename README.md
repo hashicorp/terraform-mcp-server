@@ -789,7 +789,6 @@ Earlier versions used the leftmost `X-Forwarded-For` value when the header was p
 |--------|-------------|
 | `TFE_TOKEN` | Terraform API token |
 | `Authorization: Bearer <token>` | Alternative method using standard Bearer auth |
-| `TFE_SKIP_TLS_VERIFY` | Skip TLS verification for the request |
 
 ### Example: curl
 
@@ -810,6 +809,7 @@ curl -X POST http://localhost:8080/mcp \
 ### Security Considerations
 
 - **TFE_ADDRESS cannot be set by clients.** In streamable-http mode the Terraform address is sourced only from the server-side `TFE_ADDRESS` environment variable (or the default). Requests that attempt to set `TFE_ADDRESS` via HTTP header or query parameter are rejected with a 403. This prevents a client from redirecting requests, and the `Authorization` token, to a malicious server.
+- **TFE_SKIP_TLS_VERIFY cannot be set by clients.** In streamable-http mode it is read only from the server-side environment variable. If a client sends it as a header or query parameter it is ignored and a warning is logged, so a client cannot turn off certificate verification on the server's calls to HCP Terraform / TFE.
 - **Hosted deployment identification:** setting `TF_MCP_SHARED_SECRET` sends that value as the `X-Tf-Mcp-Secret` header on every HCP Terraform / TFE request, letting the backend identify requests from a known hosted deployment (e.g. to apply IP allowlists). It is a static secret sent in a header, so only use it over TLS and treat the value as a credential.
 - **Never pass tokens in query parameters** - the server will reject such requests with a 400 error.
 - Always use TLS (`MCP_TLS_CERT_FILE`/`MCP_TLS_KEY_FILE`) when deploying centrally to protect tokens in transit.
