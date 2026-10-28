@@ -3,6 +3,7 @@
 IMPROVEMENTS
 
 * Bump `golang.org/x/net` to v0.62.0 to address [GO-2026-6860](https://pkg.go.dev/vuln/GO-2026-6860) and [GO-2026-6866](https://pkg.go.dev/vuln/GO-2026-6866) in the HTML parser and renderer.
+* Every request now gets a correlation ID. It's sent as the `X-Request-Id` header on calls to HCP Terraform, Terraform Enterprise and the public registry, returned to the client as `X-Request-Id` in streamable-http mode, and included as `request_id` in tool call logs, so one request can be traced from the MCP client through to HCP Terraform.
 
 FIXES
 

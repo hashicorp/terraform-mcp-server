@@ -807,6 +807,10 @@ curl -X POST http://localhost:8080/mcp \
   -d '{"jsonrpc":"2.0","id":1,"method":"initialize",...}'
 ```
 
+### Request IDs
+
+In streamable-http mode every request gets its own correlation ID. The server sends it as the `X-Request-Id` header on its calls to HCP Terraform / TFE and the public registry, returns it to the client in the `X-Request-Id` response header, and logs it as `request_id` on tool calls. In stdio mode each tool call gets its own ID. The server always generates the ID itself, so an `X-Request-Id` sent by the client is ignored.
+
 ### Security Considerations
 
 - **TFE_ADDRESS cannot be set by clients.** In streamable-http mode the Terraform address is sourced only from the server-side `TFE_ADDRESS` environment variable (or the default). Requests that attempt to set `TFE_ADDRESS` via HTTP header or query parameter are rejected with a 403. This prevents a client from redirecting requests, and the `Authorization` token, to a malicious server.

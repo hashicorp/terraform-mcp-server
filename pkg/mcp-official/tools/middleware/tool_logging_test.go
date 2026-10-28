@@ -12,6 +12,7 @@ import (
 	"log/slog"
 	"testing"
 
+	tfeclient "github.com/hashicorp/terraform-mcp-server/pkg/client"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -49,6 +50,43 @@ func TestToolLoggingMiddleware(t *testing.T) {
 	assert.Contains(t, logOutput, "list_workspaces")
 	assert.Contains(t, logOutput, "terraform_org_name")
 	assert.NotContains(t, logOutput, "my-org", "argument values should not be logged")
+}
+
+func TestToolLoggingMiddleware_RequestID(t *testing.T) {
+	request := &mcp.CallToolRequest{Params: &mcp.CallToolParamsRaw{Name: "list_workspaces"}}
+
+	t.Run("logs the ID from the context and passes it on", func(t *testing.T) {
+		var buf bytes.Buffer
+		logger := slog.New(slog.NewTextHandler(&buf, nil))
+
+		var nextID string
+		next := func(ctx context.Context, method string, req mcp.Request) (mcp.Result, error) {
+			nextID = tfeclient.RequestIDFromContext(ctx)
+			return &mcp.CallToolResult{}, nil
+		}
+
+		ctx := tfeclient.WithRequestID(context.Background(), "req-123")
+		_, err := ToolLogging(logger)(next)(ctx, "tools/call", request)
+		require.NoError(t, err)
+		assert.Equal(t, "req-123", nextID)
+		assert.Contains(t, buf.String(), "request_id=req-123")
+	})
+
+	t.Run("adds an ID when there isn't one, like in stdio mode", func(t *testing.T) {
+		var buf bytes.Buffer
+		logger := slog.New(slog.NewTextHandler(&buf, nil))
+
+		var nextID string
+		next := func(ctx context.Context, method string, req mcp.Request) (mcp.Result, error) {
+			nextID = tfeclient.RequestIDFromContext(ctx)
+			return &mcp.CallToolResult{}, nil
+		}
+
+		_, err := ToolLogging(logger)(next)(context.Background(), "tools/call", request)
+		require.NoError(t, err)
+		require.NotEmpty(t, nextID)
+		assert.Contains(t, buf.String(), "request_id="+nextID)
+	})
 }
 
 func TestToolLoggingMiddleware_DoesNotLogArgumentValues(t *testing.T) {
