@@ -69,6 +69,38 @@ resource "example_resource" "result" {
 	require.Equal(t, map[string]any{"keep": "value"}, attributes)
 }
 
+func TestProjectGeneratedConfigurationOmitsEmptyTopLevelStringsButPreservesMapValues(t *testing.T) {
+	attributes, err := projectGeneratedConfiguration(`
+resource "example_resource" "result" {
+  description = ""
+  empty_map = { one = "" }
+  mixed_map = { one = "value", two = "" }
+  keep = "value"
+  whitespace = " "
+  enabled = false
+  count = 0
+  valid_map = { text = "value", enabled = false, count = 0 }
+}`)
+	require.NoError(t, err)
+	require.Equal(t, map[string]any{
+		"empty_map":  map[string]any{"one": ""},
+		"mixed_map":  map[string]any{"one": "value", "two": ""},
+		"keep":       "value",
+		"whitespace": " ",
+		"enabled":    false,
+		"count":      json.Number("0"),
+		"valid_map": map[string]any{
+			"text": "value", "enabled": false, "count": json.Number("0"),
+		},
+	}, attributes)
+
+	emptyOnly, err := projectGeneratedConfiguration(`resource "example_resource" "result" {
+  description = ""
+}`)
+	require.NoError(t, err)
+	require.Nil(t, emptyOnly)
+}
+
 func TestProjectGeneratedConfigurationRejectsNonliteralMapKeys(t *testing.T) {
 	attributes, err := projectGeneratedConfiguration(`
 resource "example_resource" "result" {
