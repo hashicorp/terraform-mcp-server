@@ -190,13 +190,16 @@ func decodeQueryEvidence(raw []byte, target any) error {
 	return nil
 }
 
-// validateQueryEvidenceJSON rejects duplicate keys and trailing JSON values
-// without imposing application-defined byte or nesting-depth limits.
+// maxQueryEvidenceJSONDepth bounds recursive validation to 1000 nested containers.
+const maxQueryEvidenceJSONDepth = 1000
+
+// validateQueryEvidenceJSON rejects duplicate keys, trailing JSON values, and
+// nesting beyond maxQueryEvidenceJSONDepth without imposing a byte limit.
 func validateQueryEvidenceJSON(raw []byte) error {
 	decoder := json.NewDecoder(bytes.NewReader(raw))
 	decoder.UseNumber()
-	var walk func() error
-	walk = func() error {
+	var walk func(int) error
+	walk = func(depth int) error {
 		token, err := decoder.Token()
 		if err != nil {
 			return searchDiagnosticError(queryEvidenceInvalidCode)
@@ -206,6 +209,9 @@ func validateQueryEvidenceJSON(raw []byte) error {
 			return nil
 		}
 		if delim != '{' && delim != '[' {
+			return searchDiagnosticError(queryEvidenceInvalidCode)
+		}
+		if depth >= maxQueryEvidenceJSONDepth {
 			return searchDiagnosticError(queryEvidenceInvalidCode)
 		}
 		keys := make(map[string]bool)
@@ -218,7 +224,7 @@ func validateQueryEvidenceJSON(raw []byte) error {
 				}
 				keys[name] = true
 			}
-			if err := walk(); err != nil {
+			if err := walk(depth + 1); err != nil {
 				return err
 			}
 		}
@@ -227,7 +233,7 @@ func validateQueryEvidenceJSON(raw []byte) error {
 		}
 		return nil
 	}
-	if err := walk(); err != nil {
+	if err := walk(0); err != nil {
 		return err
 	}
 	if _, err := decoder.Token(); !errors.Is(err, io.EOF) {

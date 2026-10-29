@@ -216,7 +216,7 @@ func TestImportInputDoesNotAssumeHCPIdentifierFormats(t *testing.T) {
 	require.True(t, validNormalizedPrepareImportInput(input))
 }
 
-func TestImportArgumentDecodingHasNoApplicationSizeOrDepthLimit(t *testing.T) {
+func TestImportArgumentDecodingAcceptsLargeValuesWithinDepthLimit(t *testing.T) {
 	type arguments struct {
 		Value any `json:"value"`
 	}

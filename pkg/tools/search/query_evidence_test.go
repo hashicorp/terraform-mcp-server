@@ -136,7 +136,7 @@ func TestUnfinishedStartedListPreventsSummaryAndPreparationFinalization(t *testi
 	}
 }
 
-func TestQueryEvidenceDoesNotApplyByteOrDepthCaps(t *testing.T) {
+func TestQueryEvidenceAcceptsLargeValuesWithinDepthLimit(t *testing.T) {
 	raw := []byte(strings.Repeat("[", 40) + `{"value":"` + strings.Repeat("x", 128*1024) + `"}` + strings.Repeat("]", 40))
 	var value any
 	require.NoError(t, decodeQueryEvidence(raw, &value))
@@ -248,8 +248,43 @@ func TestValidateQueryEvidenceJSONAcceptsDeepContainersAndRejectsNestedDuplicate
 	raw := []byte(strings.Repeat("[", 1000) + `0` + strings.Repeat("]", 1000))
 	require.NoError(t, validateQueryEvidenceJSON(raw))
 
-	duplicate := []byte(strings.Repeat("[", 1000) + `{"key":1,"key":2}` + strings.Repeat("]", 1000))
+	duplicate := []byte(strings.Repeat("[", 999) + `{"key":1,"key":2}` + strings.Repeat("]", 999))
 	require.EqualError(t, validateQueryEvidenceJSON(duplicate), "query_evidence_invalid")
+}
+
+func TestQueryEvidenceJSONDepthLimit(t *testing.T) {
+	for _, shape := range []struct {
+		name, open, close string
+	}{
+		{"arrays", "[", "]"},
+		{"objects", `{"value":`, "}"},
+		{"mixed", `[{"value":`, "}]"},
+	} {
+		// Include extreme input to exercise early rejection without recursively
+		// constructing or decoding a million-level Go value.
+		for _, depth := range []int{999, 1000, 1001, 1_000_000} {
+			t.Run(fmt.Sprintf("%s/%d", shape.name, depth), func(t *testing.T) {
+				levels := depth
+				prefix, suffix := "", ""
+				if shape.name == "mixed" {
+					levels = depth / 2
+					if depth%2 != 0 {
+						prefix, suffix = "[", "]"
+					}
+				}
+				raw := []byte(prefix + strings.Repeat(shape.open, levels) + `"private-value"` + strings.Repeat(shape.close, levels) + suffix)
+				var decoded any
+				err := decodeQueryEvidence(raw, &decoded)
+				if depth > maxQueryEvidenceJSONDepth {
+					require.EqualError(t, err, "query_evidence_invalid")
+					require.Nil(t, decoded)
+				} else {
+					require.NoError(t, err)
+					require.NotNil(t, decoded)
+				}
+			})
+		}
+	}
 }
 
 func TestQueryEvidenceIgnoresResourceObject(t *testing.T) {
