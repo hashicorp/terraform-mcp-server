@@ -392,6 +392,31 @@ func TestToolFilter_IndividualMode(t *testing.T) {
 	}
 }
 
+func TestGetToolsetForTool_AllTools(t *testing.T) {
+	for _, tool := range AllTools {
+		t.Run(tool.Name, func(t *testing.T) {
+			got, exists := GetToolsetForTool(tool.Name)
+			if !exists || got != tool.Toolset {
+				t.Errorf("GetToolsetForTool(%q) = (%q, %v), want (%q, true)", tool.Name, got, exists, tool.Toolset)
+			}
+		})
+	}
+}
+
+func TestToolLookups_UnknownTools(t *testing.T) {
+	known := KnownToolNames()
+	for _, name := range []string{"", "unknown_tool", "search_providers"} {
+		t.Run(name, func(t *testing.T) {
+			if got, exists := GetToolsetForTool(name); exists || got != "" {
+				t.Errorf("GetToolsetForTool(%q) = (%q, %v), want (\"\", false)", name, got, exists)
+			}
+			if _, exists := known[name]; exists {
+				t.Errorf("KnownToolNames() contains unregistered tool %q", name)
+			}
+		})
+	}
+}
+
 func TestKnownToolNames(t *testing.T) {
 	validTools := KnownToolNames()
 
@@ -421,6 +446,11 @@ func TestKnownToolNames(t *testing.T) {
 	// Verify count matches AllTools (the single source of truth in registry.go)
 	if len(validTools) != len(AllTools) {
 		t.Errorf("KnownToolNames() returned %d tools, want %d", len(validTools), len(AllTools))
+	}
+	for _, tool := range AllTools {
+		if !validTools[tool.Name] {
+			t.Errorf("KnownToolNames() missing registered tool: %s", tool.Name)
+		}
 	}
 }
 
