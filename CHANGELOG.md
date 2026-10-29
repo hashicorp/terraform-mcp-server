@@ -7,6 +7,7 @@ IMPROVEMENTS
 
 FIXES
 
+* The streamable HTTP server now reads `TFE_SKIP_TLS_VERIFY` only from the server environment and ignores it when a client sends it as a header or query parameter, so clients can no longer turn off certificate verification for the server's calls to HCP Terraform or TFE
 * `search_modules` now returns its "no modules found" message when the registry returns no matches, instead of reporting that it failed to parse the results.
 
 # 1.4.1
