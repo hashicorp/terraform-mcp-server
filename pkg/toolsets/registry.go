@@ -103,4 +103,13 @@ var AllTools = []ToolDef{
 	// Terraform - State Versions
 	{Name: "list_state_versions", Toolset: Terraform, RequiresTFE: true},
 	{Name: "get_state_version", Toolset: Terraform, RequiresTFE: true},
+
+	// Search tools (HCP Terraform no-code search)
+	{Name: "generate_query_configuration", Toolset: Search},
+	{Name: "provider_list_schema_list", Toolset: Search, RequiresTFE: true},
+	{Name: "execute_query", Toolset: Search, RequiresTFE: true},
+	{Name: "get_query_status", Toolset: Search, RequiresTFE: true},
+	{Name: "get_query_summary", Toolset: Search, RequiresTFE: true},
+	{Name: "prepare_import", Toolset: Search, RequiresTFE: true},
+	{Name: "verify_import_plan", Toolset: Search, RequiresTFE: true},
 }
