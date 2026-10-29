@@ -10,7 +10,6 @@ import (
 	"os"
 	"strings"
 
-	terraformclient "github.com/hashicorp/terraform-mcp-server/pkg/client"
 	"github.com/mark3labs/mcp-go/mcp"
 )
 
@@ -108,10 +107,7 @@ func AcceptedSearchScope(content map[string]any) (SearchScope, error) {
 	}, nil
 }
 
-func resolveMark3LabsScope(ctx context.Context, proposed SearchScope, role SearchScopeRole) (SearchScope, *mcp.CallToolResult) {
-	if err := terraformclient.CheckOrganizationAllowlist(ctx, proposed.Organization.Value); err != nil {
-		return SearchScope{}, mcp.NewToolResultError(err.Error())
-	}
+func resolveMark3LabsScope(_ context.Context, proposed SearchScope, role SearchScopeRole) (SearchScope, *mcp.CallToolResult) {
 	if !proposed.NeedsInteraction() {
 		return proposed, nil
 	}

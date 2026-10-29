@@ -21,7 +21,6 @@ func OrganizationAllowlist(allowlist []string, logger *slog.Logger) mcp.Middlewa
 
 	return func(next mcp.MethodHandler) mcp.MethodHandler {
 		return func(ctx context.Context, method string, req mcp.Request) (mcp.Result, error) {
-			ctx = tfeclient.WithOrganizationAllowlist(ctx, allowlist)
 			// Only tool calls carry an organization argument to check
 			if method != "tools/call" {
 				return next(ctx, method, req)

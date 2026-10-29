@@ -8,7 +8,6 @@ import (
 	"encoding/json"
 	"testing"
 
-	terraformclient "github.com/hashicorp/terraform-mcp-server/pkg/client"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -174,30 +173,31 @@ func TestMark3LabsProviderToolReturnsConfiguredProposalBeforeClientUse(t *testin
 	assert.Empty(t, payload.MissingInputs)
 }
 
-func TestMark3LabsScopeRejectsResolvedOrganizationBeforeDisclosure(t *testing.T) {
-	ctx := context.Background()
-	ctx = terraformclient.WithOrganizationAllowlist(ctx, []string{"allowed-org"})
-	proposed := SearchScope{SearchScopeValue{"blocked-org", "TF_CLOUD_ORGANIZATION"}, SearchScopeValue{"workspace", "TF_WORKSPACE"}}
+func TestMark3LabsScopeRequestsConfirmationForResolvedOrganization(t *testing.T) {
+	proposed := SearchScope{SearchScopeValue{"configured-org", "TF_CLOUD_ORGANIZATION"}, SearchScopeValue{"workspace", "TF_WORKSPACE"}}
 
-	_, result := resolveMark3LabsScope(ctx, proposed, QuerySourceScope)
+	scope, result := resolveMark3LabsScope(context.Background(), proposed, QuerySourceScope)
 
-	require.True(t, result.IsError)
+	require.Equal(t, SearchScope{}, scope)
+	require.NotNil(t, result)
+	require.False(t, result.IsError)
 	text, ok := mcp.AsTextContent(result.Content[0])
 	require.True(t, ok)
-	assert.NotContains(t, text.Text, "blocked-org")
+	var payload mark3LabsScopeInput
+	require.NoError(t, json.Unmarshal([]byte(text.Text), &payload))
+	assert.Equal(t, "input_required", payload.Status)
+	assert.Equal(t, "configured-org", payload.ProposedScope.OrganizationName)
+	assert.Equal(t, "workspace", payload.ProposedScope.WorkspaceName)
+	assert.Empty(t, payload.MissingInputs)
 }
 
-func TestMark3LabsScopeChecksExplicitOrganization(t *testing.T) {
-	ctx := context.Background()
-	ctx = terraformclient.WithOrganizationAllowlist(ctx, []string{"allowed-org"})
-	explicit := SearchScope{SearchScopeValue{"blocked-org", "argument"}, SearchScopeValue{"workspace", "argument"}}
+func TestMark3LabsScopeResolvesExplicitOrganizationWithoutConfirmation(t *testing.T) {
+	explicit := SearchScope{SearchScopeValue{"explicit-org", "argument"}, SearchScopeValue{"workspace", "argument"}}
 
-	_, result := resolveMark3LabsScope(ctx, explicit, QuerySourceScope)
+	scope, result := resolveMark3LabsScope(context.Background(), explicit, QuerySourceScope)
 
-	require.True(t, result.IsError)
-	text, ok := mcp.AsTextContent(result.Content[0])
-	require.True(t, ok)
-	assert.NotContains(t, text.Text, "blocked-org")
+	require.Nil(t, result)
+	assert.Equal(t, explicit, scope)
 }
 
 func TestSearchScopeDescriptionsUseCanonicalOrganizationAndIndependentTargets(t *testing.T) {

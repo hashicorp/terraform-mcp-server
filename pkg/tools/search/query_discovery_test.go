@@ -14,7 +14,6 @@ import (
 	"testing"
 
 	"github.com/hashicorp/go-tfe"
-	terraformclient "github.com/hashicorp/terraform-mcp-server/pkg/client"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/stretchr/testify/require"
 )
@@ -221,10 +220,12 @@ func TestQueryProvenanceChecksBackendAssociations(t *testing.T) {
 	defer backend.Close()
 	client, err := tfe.NewClient(&tfe.Config{Address: backend.URL, Token: "test-token", HTTPClient: backend.Client()})
 	require.NoError(t, err)
-	ctx := terraformclient.WithOrganizationAllowlist(context.Background(), []string{"org"})
-	prov, err := readQueryDiscoveryProvenance(ctx, client, "qry-test")
+	prov, err := readQueryDiscoveryProvenance(context.Background(), client, "qry-test")
 	require.NoError(t, err)
+	require.Equal(t, "qry-test", prov.QueryRunID)
 	require.Equal(t, "org", prov.Organization)
+	require.Equal(t, "ws-test", prov.WorkspaceID)
+	require.Equal(t, "ws", prov.WorkspaceName)
 	require.True(t, prov.GenerateConfigOut)
 	require.Equal(t, "registry.terraform.io/hashicorp/aws", prov.Providers["aws_s3_buckets"].Source)
 }
@@ -309,7 +310,7 @@ func TestCanonicalQueryProviderSourceRejectsInvalidCatalogPartsWithoutReflection
 	}
 }
 
-func TestQuerySummaryRejectsDisallowedOrganizationBeforeEvidenceDisclosure(t *testing.T) {
+func TestQuerySummaryRejectsMismatchedWorkspaceBeforeEvidenceDisclosure(t *testing.T) {
 	for _, status := range []tfe.QueryRunStatus{tfe.QueryRunFinished, tfe.QueryRunErrored, tfe.QueryRunCanceled} {
 		t.Run(string(status), func(t *testing.T) {
 			var queryReads, workspaceReads, evidenceReads int
@@ -323,7 +324,7 @@ func TestQuerySummaryRejectsDisallowedOrganizationBeforeEvidenceDisclosure(t *te
 					_, _ = fmt.Fprintf(w, `{"data":{"type":"queries","id":"qry-test","attributes":{"status":%q,"log-read-url":"%s/logs"},"relationships":{"workspace":{"data":{"type":"workspaces","id":"ws-test"}}}}}`, status, "https://example.invalid")
 				case "/api/v2/workspaces/ws-test":
 					workspaceReads++
-					_, _ = fmt.Fprint(w, `{"data":{"type":"workspaces","id":"ws-test","attributes":{"name":"private-workspace"},"relationships":{"organization":{"data":{"type":"organizations","id":"blocked-org"}}}}}`)
+					_, _ = fmt.Fprint(w, `{"data":{"type":"workspaces","id":"ws-other","attributes":{"name":"private-workspace"},"relationships":{"organization":{"data":{"type":"organizations","id":"private-org"}}}}}`)
 				default:
 					evidenceReads++
 					http.NotFound(w, r)
@@ -332,12 +333,11 @@ func TestQuerySummaryRejectsDisallowedOrganizationBeforeEvidenceDisclosure(t *te
 			defer backend.Close()
 			client, err := tfe.NewClient(&tfe.Config{Address: backend.URL, Token: "test-token", HTTPClient: backend.Client()})
 			require.NoError(t, err)
-			ctx := terraformclient.WithOrganizationAllowlist(context.Background(), []string{"allowed-org"})
 
-			summary, err := ReadQueryDiscoverySummary(ctx, client, "qry-test", QueryDiscoveryFilter{})
+			summary, err := ReadQueryDiscoverySummary(context.Background(), client, "qry-test", QueryDiscoveryFilter{})
 
-			require.ErrorIs(t, err, terraformclient.ErrOrganizationNotAllowed)
-			require.NotContains(t, err.Error(), "blocked-org")
+			require.EqualError(t, err, string(queryOwnershipUnverifiedCode))
+			require.NotContains(t, err.Error(), "private-org")
 			require.NotContains(t, err.Error(), "private-workspace")
 			require.Nil(t, summary)
 			require.Equal(t, 1, queryReads)
@@ -347,29 +347,86 @@ func TestQuerySummaryRejectsDisallowedOrganizationBeforeEvidenceDisclosure(t *te
 	}
 }
 
-func TestQuerySummaryFailsClosedWhenAllowlistedOwnershipCannotBeResolved(t *testing.T) {
-	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/vnd.api+json")
-		switch r.URL.Path {
-		case "/api/v2/ping":
-			w.WriteHeader(http.StatusOK)
-		case "/api/v2/queries/qry-test":
-			_, _ = fmt.Fprint(w, `{"data":{"type":"queries","id":"qry-test","attributes":{"status":"finished"},"relationships":{"workspace":{"data":{"type":"workspaces","id":"ws-test"}}}}}`)
-		case "/api/v2/workspaces/ws-test":
-			_, _ = fmt.Fprint(w, `{"data":{"type":"workspaces","id":"ws-test","attributes":{"name":"ws"}}}`)
-		default:
-			http.NotFound(w, r)
-		}
-	}))
-	defer backend.Close()
-	client, err := tfe.NewClient(&tfe.Config{Address: backend.URL, Token: "test-token", HTTPClient: backend.Client()})
-	require.NoError(t, err)
-	ctx := terraformclient.WithOrganizationAllowlist(context.Background(), []string{"allowed-org"})
+func TestQuerySummaryFailsClosedWhenOwnershipCannotBeResolved(t *testing.T) {
+	for _, test := range []struct {
+		name               string
+		queryResponse      string
+		workspaceResponse  string
+		workspaceStatus    int
+		wantWorkspaceReads int
+	}{
+		{
+			name:          "mismatched query run ID",
+			queryResponse: `{"data":{"type":"queries","id":"qry-other","attributes":{"status":"finished"},"relationships":{"workspace":{"data":{"type":"workspaces","id":"ws-test"}}}}}`,
+		},
+		{
+			name:          "missing query workspace",
+			queryResponse: `{"data":{"type":"queries","id":"qry-test","attributes":{"status":"finished"}}}`,
+		},
+		{
+			name:          "blank query workspace ID",
+			queryResponse: `{"data":{"type":"queries","id":"qry-test","attributes":{"status":"finished"},"relationships":{"workspace":{"data":{"type":"workspaces","id":" "}}}}}`,
+		},
+		{
+			name:               "missing workspace organization",
+			workspaceResponse:  `{"data":{"type":"workspaces","id":"ws-test","attributes":{"name":"ws"}}}`,
+			wantWorkspaceReads: 1,
+		},
+		{
+			name:               "blank workspace organization",
+			workspaceResponse:  `{"data":{"type":"workspaces","id":"ws-test","attributes":{"name":"ws"},"relationships":{"organization":{"data":{"type":"organizations","id":" "}}}}}`,
+			wantWorkspaceReads: 1,
+		},
+		{
+			name:               "missing workspace name",
+			workspaceResponse:  `{"data":{"type":"workspaces","id":"ws-test","relationships":{"organization":{"data":{"type":"organizations","id":"org"}}}}}`,
+			wantWorkspaceReads: 1,
+		},
+		{
+			name:               "workspace read failure",
+			workspaceStatus:    http.StatusNotFound,
+			workspaceResponse:  `{"errors":[{"detail":"workspace unavailable"}]}`,
+			wantWorkspaceReads: 1,
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			var queryReads, workspaceReads, evidenceReads int
+			backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "application/vnd.api+json")
+				switch r.URL.Path {
+				case "/api/v2/ping":
+					w.WriteHeader(http.StatusOK)
+				case "/api/v2/queries/qry-test":
+					queryReads++
+					if test.queryResponse != "" {
+						_, _ = fmt.Fprint(w, test.queryResponse)
+						return
+					}
+					_, _ = fmt.Fprint(w, `{"data":{"type":"queries","id":"qry-test","attributes":{"status":"finished"},"relationships":{"workspace":{"data":{"type":"workspaces","id":"ws-test"}}}}}`)
+				case "/api/v2/workspaces/ws-test":
+					workspaceReads++
+					if test.workspaceStatus != 0 {
+						w.WriteHeader(test.workspaceStatus)
+					}
+					_, _ = fmt.Fprint(w, test.workspaceResponse)
+				default:
+					evidenceReads++
+					http.NotFound(w, r)
+				}
+			}))
+			defer backend.Close()
+			client, err := tfe.NewClient(&tfe.Config{Address: backend.URL, Token: "test-token", HTTPClient: backend.Client()})
+			require.NoError(t, err)
 
-	summary, err := ReadQueryDiscoverySummary(ctx, client, "qry-test", QueryDiscoveryFilter{})
+			summary, err := ReadQueryDiscoverySummary(context.Background(), client, "qry-test", QueryDiscoveryFilter{})
 
-	require.EqualError(t, err, string(queryOwnershipUnverifiedCode))
-	require.Nil(t, summary)
+			require.EqualError(t, err, string(queryOwnershipUnverifiedCode))
+			require.Nil(t, summary)
+			require.Equal(t, 1, queryReads)
+			require.Equal(t, test.wantWorkspaceReads, workspaceReads)
+			require.Zero(t, evidenceReads)
+		})
+	}
 }
 
 func TestQueryProvenanceRejectsWhitespaceOnlyRawRelationshipID(t *testing.T) {

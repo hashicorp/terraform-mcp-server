@@ -10,7 +10,6 @@ import (
 	"testing"
 
 	"github.com/google/jsonschema-go/jsonschema"
-	terraformclient "github.com/hashicorp/terraform-mcp-server/pkg/client"
 	searchlogic "github.com/hashicorp/terraform-mcp-server/pkg/tools/search"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/require"
@@ -178,36 +177,43 @@ func TestOfficialExecuteQueryValidatesAfterAcceptedScope(t *testing.T) {
 	require.ErrorContains(t, err, "invalid query_configuration")
 }
 
-func TestOfficialScopeRejectsResolvedOrganizationBeforeInputRequest(t *testing.T) {
-	ctx := terraformclient.WithOrganizationAllowlist(context.Background(), []string{"allowed-org"})
+func TestOfficialScopeRequestsConfirmationForResolvedOrganization(t *testing.T) {
 	proposed := searchlogic.SearchScope{
-		Organization: searchlogic.SearchScopeValue{Value: "blocked-org", Source: "TF_CLOUD_ORGANIZATION"},
+		Organization: searchlogic.SearchScopeValue{Value: "configured-org", Source: "TF_CLOUD_ORGANIZATION"},
 		Workspace:    searchlogic.SearchScopeValue{Value: "workspace", Source: "TF_WORKSPACE"},
 	}
 
-	_, result, err := resolveOfficialScope(ctx, nil, proposed, searchlogic.QuerySourceScope)
+	scope, result, err := resolveOfficialScope(context.Background(), nil, proposed, searchlogic.QuerySourceScope)
 
-	require.ErrorIs(t, err, terraformclient.ErrOrganizationNotAllowed)
-	require.Nil(t, result)
-	require.NotContains(t, err.Error(), "blocked-org")
+	require.NoError(t, err)
+	require.Equal(t, searchlogic.SearchScope{}, scope)
+	require.NotNil(t, result)
+	require.Contains(t, result.InputRequests, searchlogic.ScopeInputRequestID)
+	request, ok := result.InputRequests[searchlogic.ScopeInputRequestID].(*mcp.ElicitParams)
+	require.True(t, ok)
+	require.Contains(t, request.Message, "configured-org")
+	require.Contains(t, request.Message, "workspace")
+	require.Empty(t, result.Content)
 }
 
-func TestOfficialScopeRechecksAcceptedOrganization(t *testing.T) {
-	ctx := terraformclient.WithOrganizationAllowlist(context.Background(), []string{"allowed-org"})
+func TestOfficialScopeAcceptsUserOrganizationOverride(t *testing.T) {
 	request := &mcp.CallToolRequest{Params: &mcp.CallToolParamsRaw{InputResponses: mcp.InputResponseMap{
 		searchlogic.ScopeInputRequestID: &mcp.ElicitResult{Action: "accept", Content: map[string]any{
-			searchlogic.ScopeOrganizationInput: "blocked-org",
+			searchlogic.ScopeOrganizationInput: "selected-org",
 			searchlogic.ScopeWorkspaceInput:    "workspace",
 		}},
 	}}}
 	proposed := searchlogic.SearchScope{
-		Organization: searchlogic.SearchScopeValue{Value: "allowed-org", Source: "TF_CLOUD_ORGANIZATION"},
+		Organization: searchlogic.SearchScopeValue{Value: "configured-org", Source: "TF_CLOUD_ORGANIZATION"},
 		Workspace:    searchlogic.SearchScopeValue{Value: "workspace", Source: "TF_WORKSPACE"},
 	}
 
-	_, result, err := resolveOfficialScope(ctx, request, proposed, searchlogic.QuerySourceScope)
+	scope, result, err := resolveOfficialScope(context.Background(), request, proposed, searchlogic.QuerySourceScope)
 
-	require.ErrorIs(t, err, terraformclient.ErrOrganizationNotAllowed)
+	require.NoError(t, err)
 	require.Nil(t, result)
-	require.NotContains(t, err.Error(), "blocked-org")
+	require.Equal(t, searchlogic.SearchScope{
+		Organization: searchlogic.SearchScopeValue{Value: "selected-org", Source: "user_input"},
+		Workspace:    searchlogic.SearchScopeValue{Value: "workspace", Source: "user_input"},
+	}, scope)
 }

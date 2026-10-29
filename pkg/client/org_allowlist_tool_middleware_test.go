@@ -73,14 +73,3 @@ func TestOrganizationAllowlistToolMiddleware(t *testing.T) {
 		})
 	}
 }
-
-func TestCheckOrganizationAllowlist(t *testing.T) {
-	assert.False(t, OrganizationAllowlistConfigured(context.Background()))
-
-	ctx := WithOrganizationAllowlist(context.Background(), []string{" Allowed-Org "})
-	assert.True(t, OrganizationAllowlistConfigured(ctx))
-	assert.NoError(t, CheckOrganizationAllowlist(ctx, ""), "missing scope must reach native input")
-	assert.NoError(t, CheckOrganizationAllowlist(ctx, "allowed-org"))
-	assert.ErrorIs(t, CheckOrganizationAllowlist(ctx, "blocked-org"), ErrOrganizationNotAllowed)
-	assert.NoError(t, CheckOrganizationAllowlist(context.Background(), "blocked-org"), "no configured policy is a no-op")
-}
