@@ -9,15 +9,11 @@ import (
 	"fmt"
 
 	"github.com/google/jsonschema-go/jsonschema"
-	terraformclient "github.com/hashicorp/terraform-mcp-server/pkg/client"
 	searchlogic "github.com/hashicorp/terraform-mcp-server/pkg/tools/search"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-func resolveOfficialScope(ctx context.Context, request *mcp.CallToolRequest, proposed searchlogic.SearchScope, role searchlogic.SearchScopeRole) (searchlogic.SearchScope, *mcp.CallToolResult, error) {
-	if err := terraformclient.CheckOrganizationAllowlist(ctx, proposed.Organization.Value); err != nil {
-		return searchlogic.SearchScope{}, nil, err
-	}
+func resolveOfficialScope(_ context.Context, request *mcp.CallToolRequest, proposed searchlogic.SearchScope, role searchlogic.SearchScopeRole) (searchlogic.SearchScope, *mcp.CallToolResult, error) {
 	if !proposed.NeedsInteraction() {
 		return proposed, nil, nil
 	}
@@ -47,9 +43,6 @@ func resolveOfficialScope(ctx context.Context, request *mcp.CallToolRequest, pro
 		accepted, err := searchlogic.AcceptedSearchScope(response.Content)
 		if err != nil {
 			return searchlogic.SearchScope{}, nil, fmt.Errorf("invalid scope response: %w", err)
-		}
-		if err := terraformclient.CheckOrganizationAllowlist(ctx, accepted.Organization.Value); err != nil {
-			return searchlogic.SearchScope{}, nil, err
 		}
 		return accepted, nil, nil
 	default:

@@ -160,11 +160,20 @@ func readQueryDiscoveryProvenance(ctx context.Context, c *tfe.Client, queryID st
 	if err != nil {
 		return nil, searchDiagnosticError(queryRunUnavailableCode)
 	}
-	w, err := readQueryRunWorkspaceWithOrgPolicy(ctx, ctx, c, queryID, run)
-	if err != nil {
-		return nil, err
+	// Verify backend-owned identity and provenance independently of tool-argument
+	// allowlist enforcement. ID-only access is authorized by the Terraform API.
+	if run == nil || run.ID != queryID || run.Workspace == nil || strings.TrimSpace(run.Workspace.ID) == "" {
+		return nil, searchDiagnosticError(queryOwnershipUnverifiedCode)
 	}
-	if w.Name == "" {
+	workspaceID := run.Workspace.ID
+	w, err := c.Workspaces.ReadByID(ctx, workspaceID)
+	if err != nil {
+		if ctx.Err() != nil {
+			return nil, context.Cause(ctx)
+		}
+		return nil, searchDiagnosticError(queryOwnershipUnverifiedCode)
+	}
+	if w == nil || w.ID != workspaceID || w.Name == "" || w.Organization == nil || strings.TrimSpace(w.Organization.Name) == "" {
 		return nil, searchDiagnosticError(queryOwnershipUnverifiedCode)
 	}
 	prov := &queryDiscoveryProvenance{QueryRunID: queryID, Organization: w.Organization.Name, WorkspaceName: w.Name, WorkspaceID: w.ID}
