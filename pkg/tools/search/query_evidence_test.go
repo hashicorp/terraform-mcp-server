@@ -260,7 +260,9 @@ func TestQueryEvidenceJSONDepthLimit(t *testing.T) {
 		{"objects", `{"value":`, "}"},
 		{"mixed", `[{"value":`, "}]"},
 	} {
-		for _, depth := range []int{999, 1000, 1001} {
+		// Include extreme input to exercise early rejection without recursively
+		// constructing or decoding a million-level Go value.
+		for _, depth := range []int{999, 1000, 1001, 1_000_000} {
 			t.Run(fmt.Sprintf("%s/%d", shape.name, depth), func(t *testing.T) {
 				levels := depth
 				prefix, suffix := "", ""
