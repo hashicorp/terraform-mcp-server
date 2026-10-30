@@ -17,6 +17,7 @@ automation and interaction capabilities for Infrastructure as Code (IaC) develop
 <a href="#features">Features</a><br>
 <a href="#prerequisites">Prerequisites</a><br>
 <a href="#command-line-options">Command Line Options</a><br>
+<a href="#query-and-import-context">Query and Import Context</a><br>
 <a href="#instructions">Instructions</a>
 </td>
 <td width="34%" valign="top">
@@ -139,6 +140,8 @@ automation and interaction capabilities for Infrastructure as Code (IaC) develop
 | `INSTANA_ENABLED` | Enable Instana instrumentation (metrics and HTTP request tracing) for the streamable-http server. Requires an Instana agent that is reachable by the server. | `false` |
 | `INSTANA_SERVICE_NAME` | If Instana instrumentation is enabled, the service name to use for the MCP server | `terraform-mcp-server` |
 
+### Query and Import Context
+
 **Query/import context selection:** Search tools resolve a proposed source from explicit arguments first, then server-configured query defaults. Without an override, the source workspace uses `TF_MCP_QUERY_WORKSPACE`, then `TF_WORKSPACE`, and the source organization uses `TF_CLOUD_ORGANIZATION`. Import tools independently resolve a proposed target workspace from an explicit argument, then `TF_MCP_IMPORT_WORKSPACE`, then `TF_WORKSPACE`; they never use `TF_MCP_QUERY_WORKSPACE` as the target default. The target organization uses an explicit argument, then `TF_CLOUD_ORGANIZATION`, and must still match the QueryRun source organization. Overrides apply independently to each field. If either field was omitted, present and confirm the complete resolved pair before continuing. Empty and whitespace-only values are treated as unset. No `TF_MCP_ORGANIZATION` variable is used.
 
 On a remote server, these environment variables are server-wide defaults shared by all users of that server. Explicit `terraform_org_name` and `workspace_name` arguments override the corresponding defaults for that request; they do not change the server configuration or other users' requests. `organization_name` is not accepted as a Search tool input alias.
@@ -148,6 +151,8 @@ When either scope field is omitted, the Mark3Labs route returns a normal, non-er
 **Source confirmation and query execution approval:** Before provider discovery for a new query, the agent confirms the resolved source organization and workspace. Before calling `execute_query`, the agent separately summarizes that source and the query selections (provider, resource types, and filters, if any), explains that execution starts a query run without creating or modifying infrastructure, and waits for user approval. If the source or query selections change, approval must be obtained again. This is agent-driven guidance, not a server-enforced approval parameter or status; clients calling the tool directly are not blocked by an approval check.
 
 Pass workspace variables to the **MCP server process**, for example through the environment settings in OpenCode's JSON/JSONC configuration or an equivalent MCP-client configuration. A container or remote deployment must receive them in its own environment. The server does not read client configuration files or inherit the agent's separate shell environment. When import is requested, the agent always asks for and confirms the target organization, target workspace, and existing local configuration directory. A query default or configured import default never authorizes that target. After confirmation, pass the complete target explicitly to `prepare_import` and `verify_import_plan`. The read-only import tools do not upload configuration, create a speculative Run, apply an import, or modify infrastructure.
+
+### Command Examples
 
 ```bash
 # Stdio mode
