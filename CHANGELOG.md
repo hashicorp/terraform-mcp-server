@@ -1,5 +1,9 @@
 # 1.4.2
 
+FEATURES
+
+* [New Tool] `get_plan_changes` Lists the resources and outputs a plan changes: action (`delete`, `replace`, `forget`, `update`, `create`, `import`, `move`) and address, with counts per action and resource drift. Never returns attribute values. It reads the redacted JSON plan, so unlike `get_plan_json_output` it works with tokens that don't have workspace admin access. Accepts `run_id` or `plan_id`.
+
 IMPROVEMENTS
 
 * Bump `golang.org/x/net` to v0.62.0 to address [GO-2026-6860](https://pkg.go.dev/vuln/GO-2026-6860) and [GO-2026-6866](https://pkg.go.dev/vuln/GO-2026-6866) in the HTML parser and renderer.
