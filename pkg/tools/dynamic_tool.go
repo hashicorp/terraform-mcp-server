@@ -122,7 +122,6 @@ func (r *DynamicToolRegistry) registerTFETools() {
 
 		r.mcpServer.AddTool(built.Tool, r.wrapWithAvailabilityCheck(td.Name, built.Handler))
 	}
-
 	r.tfeToolsRegistered = true
 }
 
