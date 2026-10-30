@@ -73,6 +73,7 @@ var AllTools = []ToolDef{
 	{Name: "get_plan_details", Toolset: Terraform, RequiresTFE: true},
 	{Name: "get_plan_logs", Toolset: Terraform, RequiresTFE: true},
 	{Name: "get_plan_json_output", Toolset: Terraform, RequiresTFE: true},
+	{Name: "get_plan_changes", Toolset: Terraform, RequiresTFE: true},
 	{Name: "get_apply_details", Toolset: Terraform, RequiresTFE: true},
 	{Name: "get_apply_logs", Toolset: Terraform, RequiresTFE: true},
 	{Name: "get_sentinel_mock", Toolset: Terraform, RequiresTFE: true},

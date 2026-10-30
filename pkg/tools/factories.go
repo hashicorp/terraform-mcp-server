@@ -72,6 +72,7 @@ var toolFactories = map[string]toolFactory{
 	"get_plan_details":     tfeTools.GetPlanDetails,
 	"get_plan_logs":        tfeTools.GetPlanLogs,
 	"get_plan_json_output": tfeTools.GetPlanJSONOutput,
+	"get_plan_changes":     tfeTools.GetPlanChanges,
 	"get_apply_details":    tfeTools.GetApplyDetails,
 	"get_apply_logs":       tfeTools.GetApplyLogs,
 	"get_sentinel_mock":    tfeTools.GetSentinelMock,

@@ -156,6 +156,9 @@ var officialFactories = map[string]func(svr *mcp.Server, logger *slog.Logger){
 	"get_plan_json_output": func(svr *mcp.Server, _ *slog.Logger) {
 		mcp.AddTool(svr, tfeTools.GetPlanJSONOutputTool(), tfeTools.GetPlanJSONOutputFunc)
 	},
+	"get_plan_changes": func(svr *mcp.Server, _ *slog.Logger) {
+		mcp.AddTool(svr, tfeTools.GetPlanChangesTool(), tfeTools.GetPlanChangesFunc)
+	},
 	"get_apply_logs": func(svr *mcp.Server, _ *slog.Logger) {
 		mcp.AddTool(svr, tfeTools.GetApplyLogsTool(), tfeTools.GetApplyLogsFunc)
 	},
