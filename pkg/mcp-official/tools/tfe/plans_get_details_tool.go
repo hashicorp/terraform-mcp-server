@@ -45,7 +45,7 @@ func GetPlanDetailsFunc(ctx context.Context, request *mcp.CallToolRequest, input
 
 	plan, err := tfeClient.Plans.Read(ctx, planID)
 	if err != nil {
-		return nil, nil, fmt.Errorf("plan not found: %s: %w", planID, err)
+		return nil, nil, fmt.Errorf("failed to read plan %s: %w", planID, err)
 	}
 
 	buf := bytes.NewBuffer(nil)

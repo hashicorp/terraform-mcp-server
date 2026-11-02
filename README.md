@@ -688,6 +688,28 @@ curl http://localhost:8080/health
 
 [Check out available tools here :link:](https://developer.hashicorp.com/terraform/docs/tools/mcp-server/reference#available-tools)
 
+### Tool errors
+
+On the official SDK server (`/mcp/official`), when a tool fails because of an HCP Terraform or TFE API response we can identify, the error text starts with a code and the result's `_meta` carries the code and HTTP status:
+
+```json
+{
+  "isError": true,
+  "content": [{ "type": "text", "text": "unauthorized: failed to read run run-123: unauthorized" }],
+  "_meta": { "error_code": "unauthorized", "http_status": 401 }
+}
+```
+
+| `error_code` | `http_status` | Meaning |
+|--------------|---------------|---------|
+| `unauthorized` | 401 | The token is missing, invalid or expired |
+| `not_found` | 404 | The resource doesn't exist, or the token can't see it |
+| `conflict` | 409 | The workspace is locked, not locked, or can't be safely deleted |
+
+Other failures, like network errors or validation errors from the API, don't get a code.
+
+In streamable HTTP mode, a tool call that fails with `unauthorized` also gets an HTTP `401` with `WWW-Authenticate: Bearer error="invalid_token"`, so clients can refresh the token without reading the body. If the tool streamed something before its result (a progress update or an elicitation prompt), the `200` has already been sent, and the `error_code` in `_meta` is the signal.
+
 ## Available Resources
 
 [Check out available resources here :link:](https://developer.hashicorp.com/terraform/docs/tools/mcp-server/reference#available-tools)
