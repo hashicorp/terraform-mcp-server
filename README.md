@@ -690,7 +690,7 @@ curl http://localhost:8080/health
 
 ### Tool errors
 
-On the official SDK server (`/mcp/official`), when a tool fails because of an HCP Terraform or TFE API response we can identify, the error text starts with a code and the result's `_meta` carries the code and HTTP status:
+when a tool fails because of an HCP Terraform or TFE API response we can identify, the error text starts with a code and the result's `_meta` carries the code and HTTP status:
 
 ```json
 {
