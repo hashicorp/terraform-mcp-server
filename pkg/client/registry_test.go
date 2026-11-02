@@ -37,6 +37,26 @@ func TestRedactRetryURL(t *testing.T) {
 			input: "https://storage.example/private/log?X-Goog-Signature=secret-sentinel",
 			want:  "https://storage.example/private/log?___REDACTED___",
 		},
+		"apostrophe in query value": {
+			input: "https://storage.example/log?name=O'Reilly&X-Amz-Signature=secret-sentinel",
+			want:  "https://storage.example/log?___REDACTED___",
+		},
+		"relative object path": {
+			input: "/v1/object/secret-object?sig=secret-sentinel",
+			want:  "/v1/object/___REDACTED___",
+		},
+		"dot-relative signed query": {
+			input: "./log?name=example&sig=secret-sentinel",
+			want:  "./log?___REDACTED___",
+		},
+		"parent-relative signed query": {
+			input: "../log?name=example&sig=secret-sentinel",
+			want:  "../log?___REDACTED___",
+		},
+		"ordinary relative URL": {
+			input: "/v1/providers/hashicorp/random/versions",
+			want:  "/v1/providers/hashicorp/random/versions",
+		},
 		"embedded credentials": {
 			input: "https://user:password@example.com/private/log",
 			want:  "https://redacted@example.com/private/log",
@@ -91,6 +111,45 @@ func TestCreateHTTPClientUsesRedactingRetryLogger(t *testing.T) {
 	require.NoError(t, resp.Body.Close())
 	require.Contains(t, output.String(), server.URL+"/private/log?___REDACTED___")
 	require.NotContains(t, output.String(), "secret-sentinel")
+}
+
+func TestCreateHTTPClientRedactsSignedURLAfterApostrophe(t *testing.T) {
+	var output bytes.Buffer
+	testLogger := log.New()
+	testLogger.SetOutput(&output)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	secretURL := server.URL + "/log?name=O'Reilly&X-Amz-Signature=secret-sentinel"
+	resp, err := CreateHTTPClient(false, testLogger).Get(secretURL)
+	require.NoError(t, err)
+	require.NoError(t, resp.Body.Close())
+
+	logged := output.String()
+	require.Contains(t, logged, server.URL+"/log?___REDACTED___")
+	require.NotContains(t, logged, "secret-sentinel")
+}
+
+func TestCreateHTTPClientRedactsRelativeRedirectFailure(t *testing.T) {
+	var output bytes.Buffer
+	testLogger := log.New()
+	testLogger.SetOutput(&output)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Location", "/v1/object/secret-object?sig=secret-signature")
+		w.WriteHeader(http.StatusFound)
+	}))
+	defer server.Close()
+
+	resp, err := CreateHTTPClient(false, testLogger).Get(server.URL)
+	require.Error(t, err)
+	require.Nil(t, resp)
+
+	logged := output.String()
+	require.Contains(t, logged, "/v1/object/___REDACTED___")
+	require.NotContains(t, logged, "secret-object")
+	require.NotContains(t, logged, "secret-signature")
 }
 
 func TestCreateHTTPClientRedactsRetryLogs(t *testing.T) {

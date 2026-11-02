@@ -25,7 +25,9 @@ import (
 
 const DefaultPublicRegistryURL = "https://registry.terraform.io"
 
-var retryLogURLPattern = regexp.MustCompile(`[A-Za-z][A-Za-z0-9+.-]*://[^\s"'<>]+`)
+// retryLogURLPattern matches absolute URLs and the relative URL forms supported
+// by the Terraform registry protocols.
+var retryLogURLPattern = regexp.MustCompile(`(?:[A-Za-z][A-Za-z0-9+.-]*://|\.\.?/|/)[^\s"<>]+`)
 
 // Signed query parameters contain temporary authorization material and must not
 // be written to retry logs.
@@ -55,7 +57,7 @@ func redactRetryURL(raw string) string {
 	}
 
 	u, err := url.Parse(raw)
-	if err != nil || u.Scheme == "" || u.Host == "" {
+	if err != nil {
 		return "[redacted-url]" + trailing
 	}
 
