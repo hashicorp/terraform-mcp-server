@@ -64,6 +64,8 @@ ARG TARGETOS TARGETARCH
 LABEL version=$PRODUCT_VERSION
 LABEL revision=$PRODUCT_REVISION
 LABEL io.modelcontextprotocol.server.name="io.github.hashicorp/terraform-mcp-server"
+LABEL org.opencontainers.image.source="https://github.com/hashicorp/terraform-mcp-server" \
+      org.opencontainers.image.licenses="MPL-2.0"
 COPY dist/$TARGETOS/$TARGETARCH/$BIN_NAME /bin/terraform-mcp-server
 COPY --from=certbuild /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
 # Run as a non-root user for Kubernetes compatibility.
