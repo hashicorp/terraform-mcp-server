@@ -43,7 +43,7 @@ func GetPlanJSONOutputFunc(ctx context.Context, request *mcp.CallToolRequest, in
 
 	jsonBytes, err := tfeClient.Plans.ReadJSONOutput(ctx, planID)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to retrieve plan JSON output: %s", planID)
+		return nil, nil, fmt.Errorf("failed to retrieve plan JSON output for %s: %w", planID, err)
 	}
 
 	return textResult(string(jsonBytes)), nil, nil
