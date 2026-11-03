@@ -118,6 +118,7 @@ automation and interaction capabilities for Infrastructure as Code (IaC) develop
 | `MCP_SESSION_MODE` | Session mode: `stateful` or `stateless` | `stateful` |
 | `MCP_ALLOWED_ORIGINS` | Comma-separated list of allowed origins for CORS | `""` (empty) |
 | `MCP_CORS_MODE` | CORS mode: `strict`, `development`, or `disabled` | `strict` |
+| `MCP_DISABLE_LOCALHOST_PROTECTION` | Set to `true` to disable DNS rebinding protection, which rejects requests on a loopback connection whose `Host` is not localhost. Needed behind a proxy that forwards over localhost and keeps the original `Host` (for example AWS Bedrock AgentCore Runtime). Only disable it when no browser runs alongside the server | `false` |
 | `MCP_TLS_CERT_FILE` | Path to TLS cert file, required for non-localhost deployment (e.g. `/path/to/cert.pem`) | `""` (empty) |
 | `MCP_TLS_KEY_FILE` |  Path to TLS key file, required for non-localhost deployment (e.g. `/path/to/key.pem`)| `""` (empty) |
 | `MCP_RATE_LIMIT_GLOBAL` | Global rate limit (format: `rps:burst`) | `10:20` |
