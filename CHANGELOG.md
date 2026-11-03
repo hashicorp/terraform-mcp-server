@@ -19,6 +19,7 @@ FIXES
 
 * The streamable HTTP server now reads `TFE_SKIP_TLS_VERIFY` only from the server environment and ignores it when a client sends it as a header or query parameter, so clients can no longer turn off certificate verification for the server's calls to HCP Terraform or TFE
 * On the official SDK server, tool errors caused by an HCP Terraform or Terraform Enterprise API response now say why the call failed. The error text starts with a code (`unauthorized`, `not_found` or `conflict`) and the result's `_meta` includes `error_code` and `http_status`, so clients can tell an expired token from a missing resource. Tools that reported "not found" for any failure, including a 401, now only say not found when the API returned 404.
+* When the token comes from `credentials.tfrc.json` (what `terraform login` writes), the session's TFE client is now reused across tool calls instead of being rebuilt on every call. Stateless mode also now reads the token from `credentials.tfrc.json` when there's no Authorization header or `TFE_TOKEN`.
 * `search_modules` now returns its "no modules found" message when the registry returns no matches, instead of reporting that it failed to parse the results.
 
 # 1.4.1
