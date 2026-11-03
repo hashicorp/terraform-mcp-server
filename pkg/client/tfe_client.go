@@ -169,57 +169,70 @@ func GetTfeClientFromContext(ctx context.Context, logger *log.Logger) (*tfe.Clie
 // this package's contextKey type - the same type TerraformContextMiddleware
 // writes into ctx, so both transports have the same per-request values
 func GetTfeClientForSession(ctx context.Context, sessionID string, logger *log.Logger) (*tfe.Client, error) {
-	currentToken, _ := ctx.Value(contextKey(TerraformToken)).(string)
-	if currentToken == "" {
-		currentToken = utils.GetEnv(TerraformToken, "")
-	}
+	terraformAddress := terraformAddressForRequest(ctx)
+	terraformToken := terraformTokenForRequest(ctx, terraformAddress, logger)
 
 	// In a stateless mode the server does not assign any session ID to requests. We need to create new TF clients for every request in that case
 	if sessionID == "" {
 		logger.Info("Session ID is empty. Creating a new TF client")
-		currentAddress, _ := ctx.Value(contextKey(TerraformAddress)).(string)
-		if currentAddress == "" {
-			currentAddress = utils.GetEnv(TerraformAddress, DefaultTerraformAddress)
-		}
 		clientIP, _ := ctx.Value(contextKey(ClientIPKey)).(string)
-		return NewTfeClientForToken(currentAddress, parseTerraformSkipTLSVerify(ctx), currentToken, clientIP, logger)
+		return NewTfeClientForToken(terraformAddress, parseTerraformSkipTLSVerify(ctx), terraformToken, clientIP, logger)
 	}
 
-	// Check if the cached session ID's token+address match the current token+address
+	// Reuse the session's client as long as the token hasn't changed
 	if value, ok := activeTfeClients.Load(sessionID); ok {
 		cachedClient := value.(cachedTfeClient)
-		if cachedClient.token == sha256.Sum256([]byte(currentToken)) {
+		if cachedClient.token == sha256.Sum256([]byte(terraformToken)) {
 			return cachedClient.client, nil
 		}
-		// Current request token and address not found in cache. Delete the session ID from the sync map.
+		// The token changed, so drop the old client and build a new one
 		activeTfeClients.Delete(sessionID)
 	}
 	logger.Warnf("TFE client not found, creating a new one")
-	return CreateTfeClientForSession(ctx, sessionID, logger)
+	return newSessionTfeClient(ctx, sessionID, terraformAddress, terraformToken, logger)
 }
 
 // CreateTfeClientForSession creates only a TFE client for the session
 func CreateTfeClientForSession(ctx context.Context, sessionID string, logger *log.Logger) (*tfe.Client, error) {
-	var err error
-	terraformAddress, ok := ctx.Value(contextKey(TerraformAddress)).(string)
-	if !ok || terraformAddress == "" {
-		terraformAddress = utils.GetEnv(TerraformAddress, DefaultTerraformAddress)
-	}
+	terraformAddress := terraformAddressForRequest(ctx)
+	terraformToken := terraformTokenForRequest(ctx, terraformAddress, logger)
+	return newSessionTfeClient(ctx, sessionID, terraformAddress, terraformToken, logger)
+}
 
-	terraformToken, ok := ctx.Value(contextKey(TerraformToken)).(string)
-	if !ok || terraformToken == "" {
-		terraformToken = utils.GetEnv(TerraformToken, "")
-	}
-	if terraformToken == "" {
-		terraformToken, err = ReadCredentialsFile(extractHostname(terraformAddress), logger)
-		if err != nil {
-			return nil, err
-		}
-		logger.Info("Read TFE_TOKEN from credentials.tfrc.json")
-	}
-
+func newSessionTfeClient(ctx context.Context, sessionID, terraformAddress, terraformToken string, logger *log.Logger) (*tfe.Client, error) {
 	// Get client IP from context for X-Forwarded-For header
 	clientIP, _ := ctx.Value(contextKey(ClientIPKey)).(string)
-	client, err := NewTfeClient(sessionID, terraformAddress, parseTerraformSkipTLSVerify(ctx), terraformToken, clientIP, logger)
-	return client, err
+	return NewTfeClient(sessionID, terraformAddress, parseTerraformSkipTLSVerify(ctx), terraformToken, clientIP, logger)
+}
+
+// terraformAddressForRequest returns the address TerraformContextMiddleware put
+// in ctx, or the TFE_ADDRESS env var, or the default.
+func terraformAddressForRequest(ctx context.Context) string {
+	if address, _ := ctx.Value(contextKey(TerraformAddress)).(string); address != "" {
+		return address
+	}
+	return utils.GetEnv(TerraformAddress, DefaultTerraformAddress)
+}
+
+// terraformTokenForRequest gets the token for the request. It checks ctx first
+// (set by TerraformContextMiddleware), then TFE_TOKEN, then
+// credentials.tfrc.json from terraform login. Everything uses this so the cache
+// check always compares against the same token the client was built with. If
+// there's no token it returns "", and building a client with that fails with
+// "no Terraform token provided".
+func terraformTokenForRequest(ctx context.Context, terraformAddress string, logger *log.Logger) string {
+	if token, _ := ctx.Value(contextKey(TerraformToken)).(string); token != "" {
+		return token
+	}
+	if token := utils.GetEnv(TerraformToken, ""); token != "" {
+		return token
+	}
+	// ReadCredentialsFile logs why it couldn't find a token, so the error isn't
+	// returned here
+	token, err := ReadCredentialsFile(extractHostname(terraformAddress), logger)
+	if err != nil {
+		return ""
+	}
+	logger.Debug("Using TFE_TOKEN from credentials.tfrc.json")
+	return token
 }
