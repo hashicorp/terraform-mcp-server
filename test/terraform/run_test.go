@@ -207,6 +207,16 @@ func TestRunLifecycle(t *testing.T) {
 		assert.JSONEq(t, string(directJSON), resultText)
 	})
 
+	t.Run("Get plan redacted", func(t *testing.T) {
+		for name, args := range map[string]map[string]any{"run_id": {"run_id": runID}, "plan_id": {"plan_id": planID}} {
+			result, resultText := callTool(t, s, "get_plan_redacted", args)
+			require.False(t, result.IsError, "get_plan_redacted with %s should not return an error", name)
+			require.True(t, gjson.Valid(resultText), "get_plan_redacted should return valid JSON")
+			assert.Equal(t, "create", gjson.Get(resultText, `resource_changes.#(address=="terraform_data.run_test").action`).String())
+			assert.Equal(t, int64(1), gjson.Get(resultText, "counts.create").Int())
+		}
+	})
+
 	t.Run("Get Sentinel mock", func(t *testing.T) {
 		requireSentinelEntitlement(t, client)
 
@@ -365,6 +375,16 @@ func TestPlanAndApplyTools(t *testing.T) {
 		directJSON, err := client.Plans.ReadJSONOutput(t.Context(), planID)
 		require.NoError(t, err)
 		assert.JSONEq(t, string(directJSON), resultText)
+	})
+
+	t.Run("Get plan redacted", func(t *testing.T) {
+		for name, args := range map[string]map[string]any{"run_id": {"run_id": runID}, "plan_id": {"plan_id": planID}} {
+			result, resultText := callTool(t, s, "get_plan_redacted", args)
+			require.False(t, result.IsError, "get_plan_redacted with %s should not return an error", name)
+			require.True(t, gjson.Valid(resultText), "get_plan_redacted should return valid JSON")
+			assert.Equal(t, "create", gjson.Get(resultText, `resource_changes.#(address=="terraform_data.run_test").action`).String())
+			assert.Equal(t, int64(1), gjson.Get(resultText, "counts.create").Int())
+		}
 	})
 
 	t.Run("Get Sentinel mock", func(t *testing.T) {

@@ -1,5 +1,9 @@
 # 1.4.2
 
+FEATURES
+
+* [New Tool] `get_plan_redacted` Lists what a plan changes: action and address for each resource and output, counts per action, and resource drift. Never returns attribute values. Reads the redacted JSON plan, so unlike `get_plan_json_output` it doesn't need workspace admin access. Accepts `run_id` or `plan_id`.
+
 IMPROVEMENTS
 
 * Bump `golang.org/x/net` to v0.62.0 to address [GO-2026-6860](https://pkg.go.dev/vuln/GO-2026-6860) and [GO-2026-6866](https://pkg.go.dev/vuln/GO-2026-6866) in the HTML parser and renderer.
