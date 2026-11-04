@@ -160,7 +160,7 @@ func TestValidToolsetNames(t *testing.T) {
 	validNames := ValidToolsetNames()
 
 	// Check that all expected toolsets are present
-	expected := []string{"registry", "registry-private", "terraform", "all", "default"}
+	expected := []string{"registry", "registry-private", "terraform", "search", "all", "default"}
 	for _, name := range expected {
 		if !validNames[name] {
 			t.Errorf("ValidToolsetNames() missing expected toolset: %s", name)
@@ -213,6 +213,48 @@ func TestToolFilter_ToolsetsMode(t *testing.T) {
 			name:            "private registry tool",
 			toolName:        "search_private_modules",
 			enabledToolsets: []string{"registry-private"},
+			expected:        true,
+		},
+		{
+			name:            "search tool enabled by search toolset",
+			toolName:        "generate_query_configuration",
+			enabledToolsets: []string{"search"},
+			expected:        true,
+		},
+		{
+			name:            "search tool not enabled by registry toolset",
+			toolName:        "generate_query_configuration",
+			enabledToolsets: []string{"registry"},
+			expected:        false,
+		},
+		{
+			name:            "search tool enabled by all toolset",
+			toolName:        "generate_query_configuration",
+			enabledToolsets: []string{"all"},
+			expected:        true,
+		},
+		{
+			name:            "execute query enabled by search toolset",
+			toolName:        "execute_query",
+			enabledToolsets: []string{"search"},
+			expected:        true,
+		},
+		{
+			name:            "execute query disabled by registry toolset",
+			toolName:        "execute_query",
+			enabledToolsets: []string{"registry"},
+			expected:        false,
+		},
+		{
+			name:            "query status enabled by search toolset",
+			toolName:        "get_query_status",
+			enabledToolsets: []string{"search"},
+			expected:        true,
+		},
+		{
+			name:            "query summary enabled by search toolset",
+			toolName:        "get_query_summary",
+			enabledToolsets: []string{"search"},
 			expected:        true,
 		},
 	}
@@ -319,6 +361,24 @@ func TestToolFilter_IndividualMode(t *testing.T) {
 			toolNames: []string{"search_private_modules"},
 			expected:  true,
 		},
+		{
+			name:      "execute query in individual mode",
+			toolName:  "execute_query",
+			toolNames: []string{"execute_query"},
+			expected:  true,
+		},
+		{
+			name:      "query status in individual mode",
+			toolName:  "get_query_status",
+			toolNames: []string{"get_query_status"},
+			expected:  true,
+		},
+		{
+			name:      "query summary in individual mode",
+			toolName:  "get_query_summary",
+			toolNames: []string{"get_query_summary"},
+			expected:  true,
+		},
 	}
 
 	for _, tt := range tests {
@@ -347,6 +407,9 @@ func TestKnownToolNames(t *testing.T) {
 		"create_workspace",
 		"search_private_modules",
 		"search_private_providers",
+		"execute_query",
+		"get_query_status",
+		"get_query_summary",
 	}
 
 	for _, tool := range expectedTools {

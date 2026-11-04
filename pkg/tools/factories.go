@@ -5,6 +5,7 @@ package tools
 
 import (
 	registryTools "github.com/hashicorp/terraform-mcp-server/pkg/tools/registry"
+	searchTools "github.com/hashicorp/terraform-mcp-server/pkg/tools/search"
 	tfeTools "github.com/hashicorp/terraform-mcp-server/pkg/tools/tfe"
 	"github.com/mark3labs/mcp-go/server"
 	log "github.com/sirupsen/logrus"
@@ -18,8 +19,17 @@ type toolFactory func(logger *log.Logger) server.ServerTool
 // keyed by toolsets.ToolDef.Name. Two tools that don't fit this plain shape
 // (create_no_code_workspace, create_run) live in specialFactories below
 var toolFactories = map[string]toolFactory{
+	// HCP Terraform no-code search tools
+	"generate_query_configuration": searchTools.GenerateQueryConfiguration,
+	"provider_list_schema_list":    searchTools.ProviderListSchemaList,
+	"execute_query":                searchTools.ExecuteQuery,
+	"get_query_status":             searchTools.GetQueryStatus,
+	"get_query_summary":            searchTools.GetQuerySummary,
+	"prepare_import":               searchTools.PrepareImport,
+	"verify_import_plan":           searchTools.VerifyImportPlan,
+
 	// Public Registry tools
-	"search_provider_docs":            registryTools.ResolveProviderDocID,
+	"search_provider_docs":        registryTools.ResolveProviderDocID,
 	"get_provider_details":        registryTools.GetProviderDocs,
 	"get_latest_provider_version": registryTools.GetLatestProviderVersion,
 	"get_provider_capabilities":   registryTools.GetProviderCapabilities,
@@ -104,7 +114,8 @@ var toolFactories = map[string]toolFactory{
 	"get_state_version":   tfeTools.GetStateVersion,
 }
 
-// specialFactories covers the 2 tools that don't fit toolFactory's shape:
+// specialFactories covers tools that need the MCP server for elicitation or
+// select a factory based on ENABLE_TF_OPERATIONS:
 //   - create_no_code_workspace: also needs *server.MCPServer for elicitation
 //   - create_run: picks CreateRun or CreateRunSafe based on ENABLE_TF_OPERATIONS
 //
