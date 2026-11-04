@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# Copyright IBM Corp. 2025, 2026
+# SPDX-License-Identifier: MPL-2.0
+
 # Script to compare version numbers using version/VERSION as source of truth
 set -euo pipefail
 echo "Checking version consistency using version/VERSION as source of truth..."

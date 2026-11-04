@@ -1,3 +1,6 @@
+# Copyright IBM Corp. 2025, 2026
+# SPDX-License-Identifier: MPL-2.0
+
 variable "integration_test_message" {
   description = "Message used to verify private registry module inputs"
   type        = string
