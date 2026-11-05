@@ -3,6 +3,7 @@ package client
 import (
 	"context"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/hashicorp/terraform-mcp-server/version"
@@ -121,6 +122,41 @@ func RecordToolCall(ctx context.Context, startTime time.Time, toolErr bool, id a
 	if !toolErr {
 		RecordOrgToolCall(ctx, message.GetString(OrgNameArgument, ""), config, logger)
 	}
+}
+
+// OrgAttributeKey is the metric attribute that carries the Terraform organization name
+const OrgAttributeKey = "terraform.org.name"
+
+// RecordOrgToolCall counts one successful tool call against the Terraform
+// organization it targeted, so dashboards can count distinct organizations
+// (distinct values of the terraform.org.name attribute) using the server.
+//
+// It is shared by the mark3labs path (RecordToolCall) and the go-sdk path
+// (pkg/mcp-official/tools/middleware.Metrics). Callers must only invoke it for
+// calls that did not fail: failed calls include typos, unknown organizations
+// and organizations rejected by the allowlist, none of which are real usage
+// and all of which would add junk series. Tools without a terraform_org_name
+// argument pass an empty orgName and are skipped
+func RecordOrgToolCall(ctx context.Context, orgName string, config MetricsConfig, logger *log.Logger) {
+	if !config.Enabled || config.OrgToolCallCounter == nil {
+		logger.Debugf("Either metrics are not enabled or OrgToolCallCounter is NIL! Initialization failed.")
+		return
+	}
+	orgName = NormalizeOrgName(orgName)
+	if orgName == "" {
+		return
+	}
+	config.OrgToolCallCounter.Add(ctx, 1, metric.WithAttributes(
+		attribute.String(OrgAttributeKey, orgName),
+		attribute.String("service.name", config.ServiceName),
+		attribute.String("service.version", config.ServiceVersion),
+	))
+}
+
+// NormalizeOrgName trims and lowercases an organization name so the same
+// organization is never counted twice
+func NormalizeOrgName(orgName string) string {
+	return strings.ToLower(strings.TrimSpace(orgName))
 }
 
 // RecordClientType records the type and version of the client making the tool call (e.g., CLI, VSCode, Web, etc.)
