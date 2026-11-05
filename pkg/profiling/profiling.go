@@ -50,8 +50,12 @@ func start(addr string, logger *log.Logger) (*http.Server, error) {
 	server := &http.Server{
 		Handler:           handler(),
 		ReadHeaderTimeout: 10 * time.Second,
-		// No WriteTimeout here, /debug/pprof/profile and /debug/pprof/trace
-		// keep streaming for however many seconds you ask for.
+		ReadTimeout:       30 * time.Second,
+		// pprof extends the write deadline by the seconds you ask for on
+		// profile, trace and delta profiles, so long profiles still finish.
+		// This just keeps a stuck client from hanging onto a connection.
+		WriteTimeout: 60 * time.Second,
+		IdleTimeout:  120 * time.Second,
 	}
 	go func() {
 		if err := server.Serve(listener); err != nil && !errors.Is(err, http.ErrServerClosed) {

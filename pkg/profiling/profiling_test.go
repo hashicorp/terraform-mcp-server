@@ -55,6 +55,11 @@ func TestStartServesPprof(t *testing.T) {
 		assert.Contains(t, body, "goroutine profile")
 	})
 
+	t.Run("cpu profile works with the write timeout set", func(t *testing.T) {
+		status, _ := get(t, "http://"+addr+"/debug/pprof/profile?seconds=1")
+		assert.Equal(t, http.StatusOK, status)
+	})
+
 	t.Run("loopback doesn't warn", func(t *testing.T) {
 		assert.NotContains(t, logs.String(), "isn't loopback")
 	})
