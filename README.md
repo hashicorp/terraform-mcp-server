@@ -126,6 +126,7 @@ automation and interaction capabilities for Infrastructure as Code (IaC) develop
 | `MCP_FORWARD_CLIENT_IP` | Forward the client IP to HCP Terraform / TFE via `X-Forwarded-For`. Set to `true` to enable | `false` |
 | `MCP_REMOTE_IP_METHOD` | How the client IP is sourced when forwarding is enabled: `RemoteAddr` (direct connection only), `X-Real-IP`, or `X-Forwarded-For` | `RemoteAddr` |
 | `MCP_XFF_TRUSTED_HOPS` | Number of trusted proxy hops counted from the right of the `X-Forwarded-For` chain. Only used when `MCP_REMOTE_IP_METHOD=X-Forwarded-For` | `0` |
+| `MCP_PPROF_ADDR` | Address to serve Go pprof profiling endpoints on, like `127.0.0.1:6060`. Off when unset. See [Profiling](#profiling) | `""` (empty) |
 | `ENABLE_TF_OPERATIONS` | Enable tools that require explicit approval | `false` |
 | `OTEL_METRICS_ENABLED` | Enable tools and server metrics using otel | `false` |
 | `OTEL_METRICS_SERVICE_VERSION` | Version of the terraform-mcp-server sending metrics, which is used to set metric attributes. It also helps track metrics across different deployments | `latest` |
@@ -832,6 +833,29 @@ docker run -p 8080:8080 \
 ```
 
 Users then connect with their individual tokens passed via headers, enabling per-user RBAC enforcement.
+
+## Profiling
+
+Set `MCP_PPROF_ADDR` to serve Go's [pprof](https://pkg.go.dev/net/http/pprof) endpoints on a separate port from the MCP server. It's off by default and works in every transport mode.
+
+```bash
+MCP_PPROF_ADDR=127.0.0.1:6060 TRANSPORT_MODE=streamable-http terraform-mcp-server
+```
+
+Then grab a profile with `go tool pprof`:
+
+```bash
+# 30 second CPU profile
+go tool pprof http://127.0.0.1:6060/debug/pprof/profile?seconds=30
+
+# memory in use right now
+go tool pprof http://127.0.0.1:6060/debug/pprof/heap
+
+# every goroutine and what it's doing
+curl http://127.0.0.1:6060/debug/pprof/goroutine?debug=1
+```
+
+`http://127.0.0.1:6060/debug/pprof/` lists everything you can grab. Profiles show the server's internals, so keep it on loopback, the server logs a warning if it's bound to anything else. In Kubernetes, bind it to `127.0.0.1` and use `kubectl port-forward pod/<pod> 6060:6060` to get to it.
 
 ## Troubleshooting
 
