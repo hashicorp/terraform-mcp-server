@@ -95,3 +95,10 @@ otel:
   enabled: false
   metricsEndpoint: ""
   serviceName: "terraform-mcp-server"
+
+# MCP analytics in your own PostHog project. Off unless projectToken is set.
+posthog:
+  # project token (phc_...).
+  projectToken: ""
+  # e.g. https://eu.i.posthog.com. empty uses PostHog's US host.
+  host: ""

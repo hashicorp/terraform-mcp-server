@@ -101,6 +101,16 @@ spec:
             - name: OTEL_METRICS_SERVICE_NAME
               value: {{ .Values.otel.serviceName | default "terraform-mcp-server" | quote }}
             {{- end }}
+            {{- with .Values.posthog }}
+            {{- if .projectToken }}
+            - name: MCP_POSTHOG_PROJECT_TOKEN
+              value: {{ .projectToken | quote }}
+            {{- if .host }}
+            - name: MCP_POSTHOG_HOST
+              value: {{ .host | quote }}
+            {{- end }}
+            {{- end }}
+            {{- end }}
           ports:
             - name: http
               containerPort: {{ .Values.service.port }}
