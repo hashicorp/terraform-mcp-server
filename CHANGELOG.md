@@ -8,6 +8,7 @@ IMPROVEMENTS
 
 * Bump `golang.org/x/net` to v0.62.0 to address [GO-2026-6860](https://pkg.go.dev/vuln/GO-2026-6860) and [GO-2026-6866](https://pkg.go.dev/vuln/GO-2026-6866) in the HTML parser and renderer.
 * Harden CI workflows by updating `actions/checkout` to v7.0.1, which blocks unsafe fork checkouts in privileged workflow contexts, and `dorny/paths-filter` to v4.0.3, which safely escapes multiline filenames in file-list outputs. Other workflow actions now use their current Node.js 24-compatible releases, and artifact uploads include improved rate-limit retry handling.
+* Add a new otel metric to count total number of successful tool calls by an organization.
 
 FIXES
 
@@ -17,6 +18,7 @@ FIXES
 
 FIXES
 
+* Retry client logs now redact sensitive Archivist paths, signed query strings, and embedded URL credentials while preserving safe URL context for troubleshooting.
 * In stateless mode, the streamable HTTP server now ignores the `Mcp-Session-Id` header. Client-supplied session IDs were used to key per-session state that was never cleaned up, so arbitrary IDs could grow server memory. Request headers are also now capped at 32 KiB.
 * Tool call logs no longer include argument values. Both the mark3labs and official SDK servers now log the tool name and argument keys only, so customer data such as sensitive variable values is not written to logs.
 * `MCP_REMOTE_IP_METHOD=X-Forwarded-For` now selects the correct entry. The server picked the entry one position too far left, which returned a client-supplied address when one was present, and it only read the first `X-Forwarded-For` header line. It now selects the entry `MCP_XFF_TRUSTED_HOPS` positions from the right and joins multiple header lines.

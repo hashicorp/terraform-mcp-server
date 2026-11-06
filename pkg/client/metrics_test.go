@@ -190,14 +190,54 @@ func newTestMetricsConfig(t *testing.T) (MetricsConfig, *sdkmetric.ManualReader)
 	meter := provider.Meter("test-service")
 	clientTypeCounter, err := meter.Int64Counter("mcp_client_types_total")
 	require.NoError(t, err)
+	toolCounter, err := meter.Int64Counter("mcp_tool_calls_total")
+	require.NoError(t, err)
+	errorCounter, err := meter.Int64Counter("mcp_tool_errors_total")
+	require.NoError(t, err)
+	latencyHistogram, err := meter.Float64Histogram("mcp_tool_duration_seconds")
+	require.NoError(t, err)
+	orgToolCallCounter, err := meter.Int64Counter("mcp_org_tool_calls_total")
+	require.NoError(t, err)
 
 	return MetricsConfig{
-		Enabled:           true,
-		ServiceName:       "terraform-mcp-server",
-		ServiceVersion:    "test-version",
-		MeterProvider:     provider,
-		ClientTypeCounter: clientTypeCounter,
+		Enabled:               true,
+		ServiceName:           "terraform-mcp-server",
+		ServiceVersion:        "test-version",
+		MeterProvider:         provider,
+		ClientTypeCounter:     clientTypeCounter,
+		ToolCounter:           toolCounter,
+		ErrorCounter:          errorCounter,
+		ToolCallLatencyBucket: latencyHistogram,
+		OrgToolCallCounter:    orgToolCallCounter,
 	}, reader
+}
+
+// orgCallCounts returns the mcp_org_tool_calls_total value per terraform.org.name.
+// The second result reports whether the instrument exported anything at all.
+func orgCallCounts(t *testing.T, reader *sdkmetric.ManualReader) (map[string]int64, bool) {
+	t.Helper()
+
+	for _, scope := range collectResourceMetrics(t, reader).ScopeMetrics {
+		for _, m := range scope.Metrics {
+			if m.Name != "mcp_org_tool_calls_total" {
+				continue
+			}
+			sum, ok := m.Data.(metricdata.Sum[int64])
+			require.True(t, ok)
+			counts := map[string]int64{}
+			for _, dp := range sum.DataPoints {
+				org, ok := dp.Attributes.Value(OrgAttributeKey)
+				require.True(t, ok, "every data point must carry %s", OrgAttributeKey)
+				counts[org.AsString()] += dp.Value
+			}
+			return counts, true
+		}
+	}
+	return nil, false
+}
+
+func orgToolRequest(args map[string]any) *mcp.CallToolRequest {
+	return &mcp.CallToolRequest{Params: mcp.CallToolParams{Name: "list_workspaces", Arguments: args}}
 }
 
 // Test 1: Records client type with correct attributes
@@ -290,4 +330,91 @@ func TestRecordClientTypeMetricsDisabled(t *testing.T) {
 	assert.NotPanics(t, func() {
 		RecordClientType(ctx, ci, config, testLogger())
 	})
+}
+
+// An org is counted when the call succeeds and is not counted when it fails.
+// The success case doubles as the positive control for the error case: it proves
+// the instrument is wired up, so "not counted" cannot pass just because the
+// counter is nil.
+func TestRecordToolCallCountsOrgOnSuccessNotOnError(t *testing.T) {
+	config, reader := newTestMetricsConfig(t)
+	args := map[string]any{"terraform_org_name": "acme"}
+
+	RecordToolCall(context.Background(), time.Now(), false, "r1", orgToolRequest(args), config, testLogger())
+	RecordToolCall(context.Background(), time.Now(), true, "r2", orgToolRequest(args), config, testLogger())
+	RecordToolCall(context.Background(), time.Now(), true, "r3", orgToolRequest(map[string]any{"terraform_org_name": "failed-only-org"}), config, testLogger())
+
+	counts, found := orgCallCounts(t, reader)
+	require.True(t, found)
+	assert.Equal(t, map[string]int64{"acme": 1}, counts, "only the successful call counts, and an org with only failures does not appear")
+
+	// The error counter still sees both failures: the org metric did not change existing behavior
+	errorCalls := findInt64SumMetric(t, collectResourceMetrics(t, reader), "mcp_tool_errors_total")
+	var errs int64
+	for _, dp := range errorCalls.DataPoints {
+		errs += dp.Value
+	}
+	assert.EqualValues(t, 2, errs)
+}
+
+func TestRecordOrgToolCallNormalizesOrgName(t *testing.T) {
+	config, reader := newTestMetricsConfig(t)
+
+	for _, org := range []string{"Acme-Corp", "acme-corp", "  ACME-CORP  ", "\tacme-corp\n"} {
+		RecordOrgToolCall(context.Background(), org, config, testLogger())
+	}
+	RecordOrgToolCall(context.Background(), "other-org", config, testLogger())
+
+	counts, found := orgCallCounts(t, reader)
+	require.True(t, found)
+	assert.Equal(t, map[string]int64{"acme-corp": 4, "other-org": 1}, counts, "spellings of one org must collapse into one series")
+}
+
+func TestNormalizeOrgName(t *testing.T) {
+	assert.Equal(t, "acme-corp", NormalizeOrgName("  Acme-Corp "))
+	assert.Equal(t, "", NormalizeOrgName("   "))
+	assert.Equal(t, "", NormalizeOrgName(""))
+}
+
+// Tools without a usable org argument are skipped. A control call with a real
+// org is recorded in every case, so an empty result means "skipped", not "broken".
+func TestRecordToolCallSkipsToolsWithoutOrg(t *testing.T) {
+	tests := []struct {
+		name string
+		args map[string]any
+	}{
+		{name: "tool with no org argument (e.g. get_run_details)", args: map[string]any{"run_id": "run-123"}},
+		{name: "no arguments at all", args: nil},
+		{name: "blank org", args: map[string]any{"terraform_org_name": ""}},
+		{name: "whitespace org", args: map[string]any{"terraform_org_name": "   "}},
+		{name: "non-string org", args: map[string]any{"terraform_org_name": 42}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			config, reader := newTestMetricsConfig(t)
+
+			RecordToolCall(context.Background(), time.Now(), false, "r1", orgToolRequest(tt.args), config, testLogger())
+			RecordToolCall(context.Background(), time.Now(), false, "r2", orgToolRequest(map[string]any{"terraform_org_name": "control-org"}), config, testLogger())
+
+			counts, found := orgCallCounts(t, reader)
+			require.True(t, found, "control call must be recorded")
+			assert.Equal(t, map[string]int64{"control-org": 1}, counts, "the call without a usable org must add nothing")
+		})
+	}
+}
+
+func TestRecordOrgToolCallNoopWhenNotConfigured(t *testing.T) {
+	config, reader := newTestMetricsConfig(t)
+
+	assert.NotPanics(t, func() {
+		noCounter := config
+		noCounter.OrgToolCallCounter = nil
+		RecordOrgToolCall(context.Background(), "acme", noCounter, testLogger())
+
+		disabled := config
+		disabled.Enabled = false
+		RecordOrgToolCall(context.Background(), "acme", disabled, testLogger())
+	})
+	_, found := orgCallCounts(t, reader)
+	assert.False(t, found)
 }
