@@ -4,6 +4,10 @@ BREAKING CHANGES
 
 * The server now runs on the official MCP Go SDK by default, for both stdio and streamable HTTP. Tool responses that used a JSON:API envelope are now flat JSON, and hand-written HTTP clients must send `Accept: application/json, text/event-stream`. Set `TF_X_OFFICIAL_SDK_ENABLED=false` to fall back to the previous server. The fallback is temporary.
 
+IMPROVEMENTS
+
+* Add optional MCP analytics through PostHog. Setting `MCP_POSTHOG_PROJECT_TOKEN` (or `posthog.projectToken` in the Helm chart) sends each tool call's name, duration, errors, client, session, organization, and the agent's stated reason to that PostHog project. Tool arguments and results are never sent, and nothing is sent without a token.
+
 # 1.4.1
 
 FIXES

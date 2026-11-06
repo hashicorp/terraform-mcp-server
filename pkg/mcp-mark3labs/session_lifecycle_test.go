@@ -71,6 +71,7 @@ func TestGetOfficialStreamableServer_SessionLifecycle(t *testing.T) {
 		toolsets.NewToolsetFilter([]string{"list_workspaces"}),
 		rateLimiter,
 		client.MetricsConfig{Enabled: false},
+		nil, // analytics
 	)
 
 	srv := httptest.NewServer(handler)
