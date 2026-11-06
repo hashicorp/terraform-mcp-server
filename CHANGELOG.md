@@ -9,6 +9,7 @@ IMPROVEMENTS
 
 FIXES
 
+* When the token comes from `credentials.tfrc.json` (what `terraform login` writes), the session's TFE client is now reused across tool calls instead of being rebuilt on every call. Stateless mode also now reads the token from `credentials.tfrc.json` when there's no Authorization header or `TFE_TOKEN`.
 * `search_modules` now returns its "no modules found" message when the registry returns no matches, instead of reporting that it failed to parse the results.
 
 # 1.4.1
