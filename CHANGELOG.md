@@ -1,23 +1,28 @@
-# 1.4.2
+# 1.5.0
 
 IMPROVEMENTS
 
-* Add `MCP_PPROF_ADDR` to serve Go pprof profiling endpoints on a separate port, so CPU and memory profiles can be taken from a running server. It's off by default.
-* Bump `golang.org/x/net` to v0.62.0 to address [GO-2026-6860](https://pkg.go.dev/vuln/GO-2026-6860) and [GO-2026-6866](https://pkg.go.dev/vuln/GO-2026-6866) in the HTML parser and renderer.
-* Harden CI workflows by updating `actions/checkout` to v7.0.1, which blocks unsafe fork checkouts in privileged workflow contexts, and `dorny/paths-filter` to v4.0.3, which safely escapes multiline filenames in file-list outputs. Other workflow actions now use their current Node.js 24-compatible releases, and artifact uploads include improved rate-limit retry handling.
-* Add a new otel metric to count total number of successful tool calls by an organization.
-* Every request now gets a correlation ID. It's sent as the `X-Request-Id` header on calls to HCP Terraform, Terraform Enterprise and the public registry, returned to the client as `X-Request-Id` in streamable-http mode, and included as `request_id` in tool call logs, so one request can be traced from the MCP client through to HCP Terraform.
+* Add `MCP_PPROF_ADDR` to serve Go pprof profiling endpoints on a separate port, so CPU and memory profiles can be taken from a running server. It's off by default. [640](https://github.com/hashicorp/terraform-mcp-server/pull/640)
+* Bump `golang.org/x/net` to v0.62.0 to address [GO-2026-6860](https://pkg.go.dev/vuln/GO-2026-6860) and [GO-2026-6866](https://pkg.go.dev/vuln/GO-2026-6866) in the HTML parser and renderer. [616](https://github.com/hashicorp/terraform-mcp-server/pull/616)
+* Harden CI workflows by updating `actions/checkout` to v7.0.1, which blocks unsafe fork checkouts in privileged workflow contexts, and `dorny/paths-filter` to v4.0.3, which safely escapes multiline filenames in file-list outputs. Other workflow actions now use their current Node.js 24-compatible releases, and artifact uploads include improved rate-limit retry handling. [608](https://github.com/hashicorp/terraform-mcp-server/pull/608)
+* Add a new otel metric to count total number of successful tool calls by an organization. [626](https://github.com/hashicorp/terraform-mcp-server/pull/626)
+* Every request now gets a correlation ID. It's sent as the `X-Request-Id` header on calls to HCP Terraform, Terraform Enterprise and the public registry, returned to the client as `X-Request-Id` in streamable-http mode, and included as `request_id` in tool call logs, so one request can be traced from the MCP client through to HCP Terraform. [619](https://github.com/hashicorp/terraform-mcp-server/pull/619)
 
 FIXES
 
-* The streamable HTTP server now reads `TFE_SKIP_TLS_VERIFY` only from the server environment and ignores it when a client sends it as a header or query parameter, so clients can no longer turn off certificate verification for the server's calls to HCP Terraform or TFE
-* `search_modules` now returns its "no modules found" message when the registry returns no matches, instead of reporting that it failed to parse the results.
+* The streamable HTTP server now reads `TFE_SKIP_TLS_VERIFY` only from the server environment and ignores it when a client sends it as a header or query parameter, so clients can no longer turn off certificate verification for the server's calls to HCP Terraform or TFE. [617](https://github.com/hashicorp/terraform-mcp-server/pull/617)
+* `search_modules` now returns its "no modules found" message when the registry returns no matches, instead of reporting that it failed to parse the results. [601](https://github.com/hashicorp/terraform-mcp-server/pull/601)
+* Retry client logs now redact sensitive Archivist paths, signed query strings, and embedded URL credentials while preserving safe URL context for troubleshooting. [606](https://github.com/hashicorp/terraform-mcp-server/pull/606)
+
+FEATURES
+
+* [New Tools] Terraform Search adds `provider_list_schema_list`, `generate_query_configuration`, `execute_query`, `get_query_status`, and `get_query_summary` on both the legacy and official MCP servers. Query status polling is bounded per call. [539](https://github.com/hashicorp/terraform-mcp-server/pull/539)
+* [New Tools] Terraform Search adds read-only `prepare_import` and `verify_import_plan` tools for preparing explicitly selected Search results and verifying the associated plan-only HCP Terraform Run. These tools do not upload configuration, create a Run, or apply imports. [539](https://github.com/hashicorp/terraform-mcp-server/pull/539)
 
 # 1.4.1
 
 FIXES
 
-* Retry client logs now redact sensitive Archivist paths, signed query strings, and embedded URL credentials while preserving safe URL context for troubleshooting.
 * In stateless mode, the streamable HTTP server now ignores the `Mcp-Session-Id` header. Client-supplied session IDs were used to key per-session state that was never cleaned up, so arbitrary IDs could grow server memory. Request headers are also now capped at 32 KiB.
 * Tool call logs no longer include argument values. Both the mark3labs and official SDK servers now log the tool name and argument keys only, so customer data such as sensitive variable values is not written to logs.
 * `MCP_REMOTE_IP_METHOD=X-Forwarded-For` now selects the correct entry. The server picked the entry one position too far left, which returned a client-supplied address when one was present, and it only read the first `X-Forwarded-For` header line. It now selects the entry `MCP_XFF_TRUSTED_HOPS` positions from the right and joins multiple header lines.
@@ -27,11 +32,6 @@ FIXES
 BREAKING CHANGES
 
 * `search_providers` is renamed to `search_provider_docs`. The tool searches documentation within a provider rather than for providers, and the old name was misleading. Update any toolset configuration or client that references the old name.
-
-FEATURES
-
-* [New Tools] Terraform Search adds `provider_list_schema_list`, `generate_query_configuration`, `execute_query`, `get_query_status`, and `get_query_summary` on both the legacy and official MCP servers. Query status polling is bounded per call.
-* [New Tools] Terraform Search adds read-only `prepare_import` and `verify_import_plan` tools for preparing explicitly selected Search results and verifying the associated plan-only HCP Terraform Run. These tools do not upload configuration, create a Run, or apply imports.
 
 IMPROVEMENTS
 
