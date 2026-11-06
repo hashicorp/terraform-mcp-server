@@ -45,7 +45,7 @@ func GetApplyDetailsFunc(ctx context.Context, request *mcp.CallToolRequest, inpu
 
 	apply, err := tfeClient.Applies.Read(ctx, applyID)
 	if err != nil {
-		return nil, nil, fmt.Errorf("apply not found: %s: %w", applyID, err)
+		return nil, nil, fmt.Errorf("failed to read apply %s: %w", applyID, err)
 	}
 
 	buf := bytes.NewBuffer(nil)
