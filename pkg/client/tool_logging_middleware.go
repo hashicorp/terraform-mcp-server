@@ -18,8 +18,9 @@ import (
 func ToolLoggingMiddleware(logger *log.Logger) server.ToolHandlerMiddleware {
 	return func(nextToolHandler server.ToolHandlerFunc) server.ToolHandlerFunc {
 		return func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			ctx, requestID := EnsureRequestID(ctx)
 			if logger != nil {
-				logger.Infof("Tool call %q executed with argument keys: %v", request.Params.Name, toolArgumentKeys(request.GetArguments()))
+				logger.WithField("request_id", requestID).Infof("Tool call %q executed with argument keys: %v", request.Params.Name, toolArgumentKeys(request.GetArguments()))
 			}
 			return nextToolHandler(ctx, request)
 		}
