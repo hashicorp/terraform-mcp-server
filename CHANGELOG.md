@@ -1,44 +1,37 @@
-# Unreleased
+# 1.5.0
+
+IMPROVEMENTS
+
+* The loadtest now reports p50, p95, p99 and max latency for successful and failed calls. Tool calls that return an error and workers that can't connect now count as failures, so a run against a failing or unreachable server exits with an error. [653](https://github.com/hashicorp/terraform-mcp-server/pull/653)
+* Add `MCP_PPROF_ADDR` to serve Go pprof profiling endpoints on a separate port, so CPU and memory profiles can be taken from a running server. It's off by default. [640](https://github.com/hashicorp/terraform-mcp-server/pull/640)
+* Bump `golang.org/x/net` to v0.62.0 to address [GO-2026-6860](https://pkg.go.dev/vuln/GO-2026-6860) and [GO-2026-6866](https://pkg.go.dev/vuln/GO-2026-6866) in the HTML parser and renderer. [616](https://github.com/hashicorp/terraform-mcp-server/pull/616)
+* Harden CI workflows by updating `actions/checkout` to v7.0.1, which blocks unsafe fork checkouts in privileged workflow contexts, and `dorny/paths-filter` to v4.0.3, which safely escapes multiline filenames in file-list outputs. Other workflow actions now use their current Node.js 24-compatible releases, and artifact uploads include improved rate-limit retry handling. [608](https://github.com/hashicorp/terraform-mcp-server/pull/608)
+* Add a new otel metric to count total number of successful tool calls by an organization. [626](https://github.com/hashicorp/terraform-mcp-server/pull/626)
+* Every request now gets a correlation ID. It's sent as the `X-Request-Id` header on calls to HCP Terraform, Terraform Enterprise and the public registry, returned to the client as `X-Request-Id` in streamable-http mode, and included as `request_id` in tool call logs, so one request can be traced from the MCP client through to HCP Terraform. [619](https://github.com/hashicorp/terraform-mcp-server/pull/619)
+* Bump `github.com/hashicorp/go-tfe` to v1.112.0. On the official SDK server, `get_run_details` now reports whether a run uses minimal refresh in the `minimal_refresh` field. [664](https://github.com/hashicorp/terraform-mcp-server/pull/664)
+* Bump `actions/setup-go` from v7.0.0 to v7.1.0. [664](https://github.com/hashicorp/terraform-mcp-server/pull/664)
+* Bump `github.com/mark3labs/mcp-go` to v1.6.0 to address [GO-2026-6911](https://pkg.go.dev/vuln/GO-2026-6911), an SSRF and credential-disclosure vulnerability in Streamable HTTP redirect handling. [664](https://github.com/hashicorp/terraform-mcp-server/pull/664)
+* Bump Go to 1.26.11 to address [GO-2026-6859](https://pkg.go.dev/vuln/GO-2026-6859), a `net/http` race that can cause HTTP/1 servers to panic when request-body limits are exceeded.
+
+FIXES
+
+* `create_no_code_workspace` on the official server asks for the module's variables with an input request instead of a server-initiated elicitation, so it works for clients on MCP protocol 2026-07-28, which no longer allows those requests. Older clients still get the same form. [662](https://github.com/hashicorp/terraform-mcp-server/pull/662)
+* Registry tools no longer report `404 Not Found` for every failed registry call. Rate limits and server errors now come through with their real status, and on the official SDK server they get the `rate_limited` or `unavailable` error code. `search_provider_docs` also no longer retries the `hashicorp` namespace when the registry rate limits or errors. [649](https://github.com/hashicorp/terraform-mcp-server/pull/649)
+* When the token comes from `credentials.tfrc.json` (what `terraform login` writes), the session's TFE client is now reused across tool calls instead of being rebuilt on every call. Stateless mode also now reads the token from `credentials.tfrc.json` when there's no Authorization header or `TFE_TOKEN`. [637](https://github.com/hashicorp/terraform-mcp-server/pull/637)
+* On the official SDK server, tool errors caused by an HCP Terraform or Terraform Enterprise API response now say why the call failed. The error text starts with a code (`unauthorized`, `not_found` or `conflict`) and the result's `_meta` includes `error_code` and `http_status`, so clients can tell an expired token from a missing resource. Tools that reported "not found" for any failure, including a 401, now only say not found when the API returned 404. [634](https://github.com/hashicorp/terraform-mcp-server/pull/634)
+* The streamable HTTP server now reads `TFE_SKIP_TLS_VERIFY` only from the server environment and ignores it when a client sends it as a header or query parameter, so clients can no longer turn off certificate verification for the server's calls to HCP Terraform or TFE. [617](https://github.com/hashicorp/terraform-mcp-server/pull/617)
+* `search_modules` now returns its "no modules found" message when the registry returns no matches, instead of reporting that it failed to parse the results. [601](https://github.com/hashicorp/terraform-mcp-server/pull/601)
+* Retry client logs now redact sensitive Archivist paths, signed query strings, and embedded URL credentials while preserving safe URL context for troubleshooting. [606](https://github.com/hashicorp/terraform-mcp-server/pull/606)
 
 FEATURES
 
-* [New Tools] Terraform Search adds `get_search_list_resource_schemas`, `generate_search_query_configuration`, `execute_search_query`, `get_search_query_status`, and `get_search_query_summary` on both the legacy and official MCP servers. Query status polling is bounded per call.
-* [New Tools] Terraform Search adds read-only `prepare_import` and `verify_import_plan` tools for preparing explicitly selected Search results and verifying the associated plan-only HCP Terraform Run. These tools do not upload configuration, create a Run, or apply imports.
-
-IMPROVEMENTS
-
-* Bump Go to 1.26.11 to address [GO-2026-6859](https://pkg.go.dev/vuln/GO-2026-6859), a `net/http` race that can cause HTTP/1 servers to panic when request-body limits are exceeded.
-* Bump `github.com/hashicorp/go-tfe` to v1.112.0. On the official SDK server, `get_run_details` now reports whether a run uses minimal refresh in the `minimal_refresh` field.
-* Bump `github.com/mark3labs/mcp-go` to v1.6.0.
-* Bump `actions/setup-go` from v7.0.0 to v7.1.0.
-
-FIXES
-
-* `create_no_code_workspace` on the official server asks for the module's variables with an input request instead of a server-initiated elicitation, so it works for clients on MCP protocol 2026-07-28, which no longer allows those requests. Older clients still get the same form.
-
-# 1.4.2
-
-IMPROVEMENTS
-* The loadtest now reports p50, p95, p99 and max latency for successful and failed calls. Tool calls that return an error and workers that can't connect now count as failures, so a run against a failing or unreachable server exits with an error.
-* Add `MCP_PPROF_ADDR` to serve Go pprof profiling endpoints on a separate port, so CPU and memory profiles can be taken from a running server. It's off by default.
-* Bump `golang.org/x/net` to v0.62.0 to address [GO-2026-6860](https://pkg.go.dev/vuln/GO-2026-6860) and [GO-2026-6866](https://pkg.go.dev/vuln/GO-2026-6866) in the HTML parser and renderer.
-* Harden CI workflows by updating `actions/checkout` to v7.0.1, which blocks unsafe fork checkouts in privileged workflow contexts, and `dorny/paths-filter` to v4.0.3, which safely escapes multiline filenames in file-list outputs. Other workflow actions now use their current Node.js 24-compatible releases, and artifact uploads include improved rate-limit retry handling.
-* Add a new otel metric to count total number of successful tool calls by an organization.
-* Every request now gets a correlation ID. It's sent as the `X-Request-Id` header on calls to HCP Terraform, Terraform Enterprise and the public registry, returned to the client as `X-Request-Id` in streamable-http mode, and included as `request_id` in tool call logs, so one request can be traced from the MCP client through to HCP Terraform.
-
-FIXES
-
-* The streamable HTTP server now reads `TFE_SKIP_TLS_VERIFY` only from the server environment and ignores it when a client sends it as a header or query parameter, so clients can no longer turn off certificate verification for the server's calls to HCP Terraform or TFE
-* On the official SDK server, tool errors caused by an HCP Terraform or Terraform Enterprise API response now say why the call failed. The error text starts with a code (`unauthorized`, `not_found` or `conflict`) and the result's `_meta` includes `error_code` and `http_status`, so clients can tell an expired token from a missing resource. Tools that reported "not found" for any failure, including a 401, now only say not found when the API returned 404.
-* When the token comes from `credentials.tfrc.json` (what `terraform login` writes), the session's TFE client is now reused across tool calls instead of being rebuilt on every call. Stateless mode also now reads the token from `credentials.tfrc.json` when there's no Authorization header or `TFE_TOKEN`.
-* Registry tools no longer report `404 Not Found` for every failed registry call. Rate limits and server errors now come through with their real status, and on the official SDK server they get the `rate_limited` or `unavailable` error code. `search_provider_docs` also no longer retries the `hashicorp` namespace when the registry rate limits or errors.
-* `search_modules` now returns its "no modules found" message when the registry returns no matches, instead of reporting that it failed to parse the results.
+* [New Tools] Terraform Search adds `get_search_list_resource_schemas`, `generate_search_query_configuration`, `execute_search_query`, `get_search_query_status`, and `get_search_query_summary` on both the legacy and official MCP servers. Query status polling is bounded per call. [539](https://github.com/hashicorp/terraform-mcp-server/pull/539)
+* [New Tools] Terraform Search adds read-only `prepare_import` and `verify_import_plan` tools for preparing explicitly selected Search results and verifying the associated plan-only HCP Terraform Run. These tools do not upload configuration, create a Run, or apply imports. [539](https://github.com/hashicorp/terraform-mcp-server/pull/539)
 
 # 1.4.1
 
 FIXES
 
-* Retry client logs now redact sensitive Archivist paths, signed query strings, and embedded URL credentials while preserving safe URL context for troubleshooting.
 * In stateless mode, the streamable HTTP server now ignores the `Mcp-Session-Id` header. Client-supplied session IDs were used to key per-session state that was never cleaned up, so arbitrary IDs could grow server memory. Request headers are also now capped at 32 KiB.
 * Tool call logs no longer include argument values. Both the mark3labs and official SDK servers now log the tool name and argument keys only, so customer data such as sensitive variable values is not written to logs.
 * `MCP_REMOTE_IP_METHOD=X-Forwarded-For` now selects the correct entry. The server picked the entry one position too far left, which returned a client-supplied address when one was present, and it only read the first `X-Forwarded-For` header line. It now selects the entry `MCP_XFF_TRUSTED_HOPS` positions from the right and joins multiple header lines.
