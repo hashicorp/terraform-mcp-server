@@ -89,7 +89,7 @@ func GenerateQueryConfiguration(logger *log.Logger) server.ServerTool {
 				mcp.Required(),
 				mcp.Description(
 					"The list_resource_schemas JSON object for a single provider version. "+
-						"This is the value returned by the `list_search_provider_list_schemas` tool, "+
+						"This is the value returned by the `get_search_list_resource_schemas` tool, "+
 						"or the value of the `list_resource_schemas` key in a provider schema "+
 						"snapshot produced by `terraform providers schema -json`. "+
 						"The value must be a JSON object whose keys are resource type names "+
@@ -112,7 +112,7 @@ func GenerateQueryConfiguration(logger *log.Logger) server.ServerTool {
 			),
 			mcp.WithString("provider_version",
 				mcp.Required(),
-				mcp.Description("Exact provider version returned by list_search_provider_list_schemas. Do not infer or substitute a version."),
+				mcp.Description("Exact provider version returned by get_search_list_resource_schemas. Do not infer or substitute a version."),
 			),
 			mcp.WithString("resource_types",
 				mcp.Description(
@@ -357,7 +357,7 @@ func writeInstructions(b *strings.Builder, namespace, name, version string) {
 	b.WriteString("## Rules for building the payload\n\n")
 	b.WriteString("1. **`terraform_org_name` / `workspace_name`** — pass the complete accepted source pair as separate arguments to `execute_search_query`. Do not include them in this JSON object.\n")
 	b.WriteString("2. **`generate_config_out`** — optional boolean. Omit it (or set to `false`) to skip HCL scaffolding. Set it to `true` when generated HCL is needed or when selection depends on additional result data that is not available as a list-resource query filter. Terraform then emits `generated_config.tf` and requests resource objects from the provider. Resource-object and attribute capture remain provider- and resource-dependent; use only fields actually projected by `get_search_query_summary`.\n")
-	b.WriteString("3. **`namespace` / `name` / `version`** — copy these exact values from `list_search_provider_list_schemas`; never infer or substitute a provider version.\n")
+	b.WriteString("3. **`namespace` / `name` / `version`** — copy these exact values from `get_search_list_resource_schemas`; never infer or substitute a provider version.\n")
 	b.WriteString("4. **`resource_type`** — must be an exact resource type key listed in the schema catalog below. A provider's ordinary managed resources are not automatically list resources; never infer or substitute a type that is absent from this catalog.\n")
 	b.WriteString("5. **`attributes`** — include only attributes that appear in the schema for that resource type.\n")
 	b.WriteString("   - Omit optional attributes that you do not need to filter on.\n")
@@ -652,7 +652,7 @@ const generateQueryConfigDescription = `Generates schema-backed guidance and an 
 Terraform No-Code Search query; it does not execute the query.
 
 Pass list_resource_schemas and the exact provider namespace, name and version
-returned by list_search_provider_list_schemas. Any requested resource type must be an
+returned by get_search_list_resource_schemas. Any requested resource type must be an
 exact schema key. The result describes supported scalar and nested attributes,
 required values, nesting/cardinality, variable syntax and generate_config_out
 so the query_configuration for execute_search_query can be constructed without

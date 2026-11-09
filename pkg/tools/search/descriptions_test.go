@@ -15,8 +15,8 @@ func TestSearchDescriptionsOwnToolLocalContracts(t *testing.T) {
 		description string
 		required    []string
 	}{
-		{"list_search_provider_list_schemas", ProviderListSchemaListDescription, []string{"terraform_org_name", "workspace_name", "catalog", "generate_search_query_configuration", "target managed-resource"}},
-		{"generate_search_query_configuration", GenerateQueryConfigurationDescription, []string{"does not execute the query", "list_search_provider_list_schemas", "exact schema key", "execute_search_query", "cannot be used as a query-time filter", "generate_config_out=true", "does not guarantee capture"}},
+		{"get_search_list_resource_schemas", ProviderListSchemaListDescription, []string{"terraform_org_name", "workspace_name", "catalog", "generate_search_query_configuration", "target managed-resource"}},
+		{"generate_search_query_configuration", GenerateQueryConfigurationDescription, []string{"does not execute the query", "get_search_list_resource_schemas", "exact schema key", "execute_search_query", "cannot be used as a query-time filter", "generate_config_out=true", "does not guarantee capture"}},
 		{"execute_search_query", ExecuteQueryDescription, []string{"QueryRun", "exact list_resource_schemas key", "query_run_id", "get_search_query_status", "do not blindly execute", "absent from the list-resource schema"}},
 		{"get_search_query_status", GetQueryStatusDescription, []string{"bounded call", "same ID", "get_search_query_summary", "Terminal status does not imply selectable"}},
 		{"get_search_query_summary", GetQuerySummaryDescription, []string{"presentation filters", "query_result_marker", "Search-only intent", "target workspace or local path", "never select a first-N subset", "generate_config_out", "does not guarantee capture", "new markers", "does not expose arbitrary resource attributes"}},

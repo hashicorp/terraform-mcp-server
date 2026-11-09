@@ -61,7 +61,7 @@ func ExecuteQuery(logger *log.Logger) server.ServerTool {
 				mcp.Required(),
 				mcp.Description(
 					"JSON object containing no_code_query_providers and optional generate_config_out. "+
-						"Use list_search_provider_list_schemas and generate_search_query_configuration to construct this value. "+
+						"Use get_search_list_resource_schemas and generate_search_query_configuration to construct this value. "+
 						"Every resource_type must be an exact list_resource_schemas key; ordinary managed "+
 						"resource names are not necessarily supported list resources. The tool adds the JSON:API "+
 						"envelope and workspace relationship automatically.",
@@ -277,7 +277,7 @@ creates Search query records and a QueryRun, but does not create or modify cloud
 infrastructure.
 
 Before calling, confirm the source organization/workspace, then use
-list_search_provider_list_schemas and generate_search_query_configuration for that same source.
+get_search_list_resource_schemas and generate_search_query_configuration for that same source.
 Pass the accepted terraform_org_name and workspace_name explicitly. If either is
 omitted, the server requests confirmation of configured defaults before scoped
 API access.

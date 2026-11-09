@@ -106,7 +106,7 @@ var AllTools = []ToolDef{
 
 	// Search tools (HCP Terraform no-code search)
 	{Name: "generate_search_query_configuration", Toolset: Search},
-	{Name: "list_search_provider_list_schemas", Toolset: Search, RequiresTFE: true},
+	{Name: "get_search_list_resource_schemas", Toolset: Search, RequiresTFE: true},
 	{Name: "execute_search_query", Toolset: Search, RequiresTFE: true},
 	{Name: "get_search_query_status", Toolset: Search, RequiresTFE: true},
 	{Name: "get_search_query_summary", Toolset: Search, RequiresTFE: true},

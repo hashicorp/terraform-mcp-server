@@ -55,7 +55,7 @@ var officialFactories = map[string]func(svr *mcp.Server, logger *slog.Logger){
 	"generate_search_query_configuration": func(svr *mcp.Server, _ *slog.Logger) {
 		mcp.AddTool(svr, searchTools.GenerateQueryConfigurationTool(), searchTools.GenerateQueryConfigurationFunc)
 	},
-	"list_search_provider_list_schemas": func(svr *mcp.Server, _ *slog.Logger) {
+	"get_search_list_resource_schemas": func(svr *mcp.Server, _ *slog.Logger) {
 		mcp.AddTool(svr, searchTools.ProviderListSchemaListTool(), searchTools.ProviderListSchemaListFunc)
 	},
 	"execute_search_query": func(svr *mcp.Server, _ *slog.Logger) {

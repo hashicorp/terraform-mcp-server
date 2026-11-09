@@ -496,7 +496,7 @@ func TestProviderListSchemaList_ToolDefinition(t *testing.T) {
 	logger := silentLogger()
 	tool := ProviderListSchemaList(logger)
 
-	assert.Equal(t, "list_search_provider_list_schemas", tool.Tool.Name)
+	assert.Equal(t, "get_search_list_resource_schemas", tool.Tool.Name)
 	assert.NotEmpty(t, tool.Tool.Description)
 	assert.NotNil(t, tool.Handler)
 

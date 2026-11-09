@@ -106,7 +106,7 @@ func TestOfficialSearchRegistrationAndConfigurationCall(t *testing.T) {
 	listed, err := session.ListTools(ctx, nil)
 	require.NoError(t, err)
 	want := map[string]bool{
-		"generate_search_query_configuration": false, "list_search_provider_list_schemas": false,
+		"generate_search_query_configuration": false, "get_search_list_resource_schemas": false,
 		"execute_search_query": false, "get_search_query_status": false, "get_search_query_summary": false,
 		"prepare_import": false, "verify_import_plan": false,
 	}
@@ -207,11 +207,11 @@ func TestOfficialSearchScopedCatalogAndQuerySubmission(t *testing.T) {
 	t.Setenv("TFE_TOKEN", "test-token")
 	ctx, session := newOfficialSearchSession(t)
 
-	result, err := session.CallTool(ctx, &mcp.CallToolParams{Name: "list_search_provider_list_schemas", Arguments: map[string]any{"terraform_org_name": "org", "workspace_name": "ws"}})
+	result, err := session.CallTool(ctx, &mcp.CallToolParams{Name: "get_search_list_resource_schemas", Arguments: map[string]any{"terraform_org_name": "org", "workspace_name": "ws"}})
 	require.NoError(t, err)
 	require.False(t, result.IsError, "catalog result: %#v", result.Content)
 	require.Contains(t, result.Content[0].(*mcp.TextContent).Text, "supported_providers")
-	result, err = session.CallTool(ctx, &mcp.CallToolParams{Name: "list_search_provider_list_schemas", Arguments: map[string]any{"terraform_org_name": "org", "workspace_name": "ws", "provider_namespace": "hashicorp", "provider_name": "example"}})
+	result, err = session.CallTool(ctx, &mcp.CallToolParams{Name: "get_search_list_resource_schemas", Arguments: map[string]any{"terraform_org_name": "org", "workspace_name": "ws", "provider_namespace": "hashicorp", "provider_name": "example"}})
 	require.NoError(t, err)
 	require.False(t, result.IsError, "schema detail without provider metadata: %#v", result.Content)
 	var fetched struct {
@@ -228,7 +228,7 @@ func TestOfficialSearchScopedCatalogAndQuerySubmission(t *testing.T) {
 	require.NoError(t, err)
 	require.False(t, result.IsError, "FETCH metadata must generate a guide: %#v", result.Content)
 	require.Contains(t, result.Content[0].(*mcp.TextContent).Text, "example_list")
-	result, err = session.CallTool(ctx, &mcp.CallToolParams{Name: "list_search_provider_list_schemas", Arguments: map[string]any{"terraform_org_name": "org", "workspace_name": "not-found"}})
+	result, err = session.CallTool(ctx, &mcp.CallToolParams{Name: "get_search_list_resource_schemas", Arguments: map[string]any{"terraform_org_name": "org", "workspace_name": "not-found"}})
 	require.NoError(t, err)
 	require.True(t, result.IsError, "missing workspace must not be treated as authorized")
 

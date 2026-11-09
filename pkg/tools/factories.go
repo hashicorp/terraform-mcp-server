@@ -21,7 +21,7 @@ type toolFactory func(logger *log.Logger) server.ServerTool
 var toolFactories = map[string]toolFactory{
 	// HCP Terraform no-code search tools
 	"generate_search_query_configuration": searchTools.GenerateQueryConfiguration,
-	"list_search_provider_list_schemas":   searchTools.ProviderListSchemaList,
+	"get_search_list_resource_schemas":    searchTools.ProviderListSchemaList,
 	"execute_search_query":                searchTools.ExecuteQuery,
 	"get_search_query_status":             searchTools.GetQueryStatus,
 	"get_search_query_summary":            searchTools.GetQuerySummary,

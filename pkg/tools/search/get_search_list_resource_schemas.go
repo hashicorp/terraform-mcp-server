@@ -37,7 +37,7 @@ import (
 // organization context so the agent can pick one and call the tool again.
 func ProviderListSchemaList(logger *log.Logger) server.ServerTool {
 	return server.ServerTool{
-		Tool: mcp.NewTool("list_search_provider_list_schemas",
+		Tool: mcp.NewTool("get_search_list_resource_schemas",
 			mcp.WithDescription(providerListSchemaListDescription),
 			mcp.WithTitleAnnotation("Fetch list_resource_schemas for a search-compatible provider"),
 			mcp.WithOpenWorldHintAnnotation(true),
@@ -77,7 +77,7 @@ func providerListSchemaListHandler(ctx context.Context, request mcp.CallToolRequ
 
 	tfeClient, err := client.GetTfeClientFromContext(ctx, logger)
 	if err != nil {
-		return toolErrorf(logger, "list_search_provider_list_schemas", "%v", TerraformClientUnavailableError(err))
+		return toolErrorf(logger, "get_search_list_resource_schemas", "%v", TerraformClientUnavailableError(err))
 	}
 	return providerListSchemaListWithClient(ctx, tfeClient, orgName, workspaceName, providerNamespace, providerName, logger)
 }
@@ -85,7 +85,7 @@ func providerListSchemaListHandler(ctx context.Context, request mcp.CallToolRequ
 func providerListSchemaListWithClient(ctx context.Context, tfeClient *tfe.Client, orgName, workspaceName, providerNamespace, providerName string, logger *log.Logger) (*mcp.CallToolResult, error) {
 	text, err := ProviderListSchemaListText(ctx, tfeClient, orgName, workspaceName, providerNamespace, providerName)
 	if err != nil {
-		return toolErrorf(logger, "list_search_provider_list_schemas", "%v", ProviderDataUnavailableError(err))
+		return toolErrorf(logger, "get_search_list_resource_schemas", "%v", ProviderDataUnavailableError(err))
 	}
 	return mcp.NewToolResultText(text), nil
 }
@@ -177,7 +177,7 @@ type noCodeProviderSchemaResponse struct {
 func listSupportedProviders(ctx context.Context, tfeClient *tfe.Client, orgName string, logger *log.Logger) (*mcp.CallToolResult, error) {
 	text, err := listSupportedProvidersText(ctx, tfeClient, orgName)
 	if err != nil {
-		return toolErrorf(logger, "list_search_provider_list_schemas", "%v", err)
+		return toolErrorf(logger, "get_search_list_resource_schemas", "%v", err)
 	}
 	return mcp.NewToolResultText(text), nil
 }
@@ -212,7 +212,7 @@ func listSupportedProvidersText(ctx context.Context, tfeClient *tfe.Client, orgN
 
 	out, err := json.MarshalIndent(map[string]any{
 		"supported_providers": summaries,
-		"note":                "Call list_search_provider_list_schemas again with the same terraform_org_name and workspace_name, plus provider_namespace and provider_name, to fetch the full list_resource_schemas for a specific provider. FETCH uses the catalog-selected version.",
+		"note":                "Call get_search_list_resource_schemas again with the same terraform_org_name and workspace_name, plus provider_namespace and provider_name, to fetch the full list_resource_schemas for a specific provider. FETCH uses the catalog-selected version.",
 	}, "", "  ")
 	if err != nil {
 		return "", fmt.Errorf("failed to marshal provider list: %w", err)
@@ -246,7 +246,7 @@ func discoverProviderSelection(ctx context.Context, tfeClient *tfe.Client, orgNa
 
 	return noCodeProviderSelection{}, fmt.Errorf(
 		"provider %s/%s is not in the search-compatible catalog — "+
-			"call list_search_provider_list_schemas with terraform_org_name and workspace_name to see supported providers, "+
+			"call get_search_list_resource_schemas with terraform_org_name and workspace_name to see supported providers, "+
 			"or use search_provider_docs to find a provider in the public Terraform Registry",
 		namespace, name,
 	)
@@ -257,7 +257,7 @@ func discoverProviderSelection(ctx context.Context, tfeClient *tfe.Client, orgNa
 func fetchProviderSchema(ctx context.Context, tfeClient *tfe.Client, orgName, namespace, name, version string, logger *log.Logger) (*mcp.CallToolResult, error) {
 	text, err := fetchProviderSchemaText(ctx, tfeClient, orgName, namespace, name, version)
 	if err != nil {
-		return toolErrorf(logger, "list_search_provider_list_schemas", "%v", err)
+		return toolErrorf(logger, "get_search_list_resource_schemas", "%v", err)
 	}
 	return mcp.NewToolResultText(text), nil
 }

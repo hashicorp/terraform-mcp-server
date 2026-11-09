@@ -17,7 +17,7 @@ import (
 )
 
 type GenerateQueryConfigurationArguments struct {
-	ListResourceSchemas string `json:"list_resource_schemas" jsonschema:"JSON list_resource_schemas object returned by list_search_provider_list_schemas"`
+	ListResourceSchemas string `json:"list_resource_schemas" jsonschema:"JSON list_resource_schemas object returned by get_search_list_resource_schemas"`
 	ProviderName        string `json:"provider_name" jsonschema:"Short provider name, e.g. aws"`
 	ProviderNamespace   string `json:"provider_namespace" jsonschema:"Provider namespace, e.g. hashicorp"`
 	ProviderVersion     string `json:"provider_version" jsonschema:"Exact catalog provider version"`
@@ -34,7 +34,7 @@ type ProviderListSchemaListArguments struct {
 type ExecuteQueryArguments struct {
 	OrganizationName   string `json:"terraform_org_name,omitempty"`
 	WorkspaceName      string `json:"workspace_name,omitempty"`
-	QueryConfiguration string `json:"query_configuration" jsonschema:"JSON no-code query configuration produced using list_search_provider_list_schemas and generate_search_query_configuration"`
+	QueryConfiguration string `json:"query_configuration" jsonschema:"JSON no-code query configuration produced using get_search_list_resource_schemas and generate_search_query_configuration"`
 }
 
 type QueryRunArguments struct {
@@ -91,7 +91,7 @@ func searchScopeInputSchema[T any]() *jsonschema.Schema {
 }
 
 func ProviderListSchemaListTool() *mcp.Tool {
-	providerTool := tool("list_search_provider_list_schemas", searchlogic.ProviderListSchemaListDescription,
+	providerTool := tool("get_search_list_resource_schemas", searchlogic.ProviderListSchemaListDescription,
 		"Fetch list_resource_schemas for a search-compatible provider", true, true)
 	providerTool.InputSchema = searchScopeInputSchema[ProviderListSchemaListArguments]()
 	return providerTool

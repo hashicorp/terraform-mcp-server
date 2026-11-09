@@ -51,7 +51,7 @@ func TestExecuteQueryDefinition(t *testing.T) {
 	assert.False(t, *tool.Tool.Annotations.DestructiveHint)
 	require.NotNil(t, tool.Tool.Annotations.OpenWorldHint)
 	assert.True(t, *tool.Tool.Annotations.OpenWorldHint)
-	assert.Contains(t, tool.Tool.Description, "list_search_provider_list_schemas")
+	assert.Contains(t, tool.Tool.Description, "get_search_list_resource_schemas")
 	assert.Contains(t, tool.Tool.Description, "generate_search_query_configuration")
 	assert.Contains(t, tool.Tool.Description, "get_search_query_status")
 	assert.Contains(t, tool.Tool.Description, "exact list_resource_schemas key")
