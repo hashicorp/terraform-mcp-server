@@ -58,11 +58,8 @@ func getOfficialStreamableServer(ctx context.Context, heartbeatInterval time.Dur
 		return hcServer
 	}, opts)
 
-	// UnauthorizedStatus turns a tool call that failed on an expired or invalid
-	// token into an HTTP 401 instead of a 200.
-	streamableServer := mcpofficial.UnauthorizedStatus(mcpHandler)
 	// RequireTerraformTokenMiddleware is a no-op unless MCP_REQUIRE_TOKEN is true.
-	streamableServer = client.RequireTerraformTokenMiddleware(logger)(streamableServer)
+	streamableServer := client.RequireTerraformTokenMiddleware(logger)(mcpHandler)
 	streamableServer = client.OrganizationAllowlistMiddleware(organizationAllowlist, logger)(streamableServer)
 	streamableServer = client.TerraformContextMiddleware(logger)(streamableServer)
 	streamableServer = client.NewSecurityHandler(streamableServer, corsConfig.AllowedOrigins, corsConfig.Mode, logger)
