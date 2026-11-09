@@ -1,8 +1,10 @@
-# 1.4.2
+# Unreleased
 
 BREAKING CHANGES
 
 * Terraform Search tools are renamed for clearer routing in MCP's flat tool namespace: `provider_list_schema_list` to `get_search_list_resource_schemas`, `generate_query_configuration` to `generate_search_query_configuration`, `execute_query` to `execute_search_query`, `get_query_status` to `get_search_query_status`, and `get_query_summary` to `get_search_query_summary`. Update any individual tool configuration or client references that use the old names.
+
+# 1.4.2
 
 IMPROVEMENTS
 
