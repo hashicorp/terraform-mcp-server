@@ -303,6 +303,8 @@ func TestDiscoverProviderSelection_NotFound(t *testing.T) {
 	_, err := discoverProviderSelection(context.Background(), newProviderListTFEClient(t, s.server), "", "hashicorp", "aws")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "hashicorp/aws is not in the search-compatible catalog")
+	assert.Contains(t, err.Error(), "search_provider_docs")
+	assert.NotContains(t, err.Error(), "search_providers")
 }
 
 // ── fetchProviderSchema ───────────────────────────────────────────────────────
@@ -328,7 +330,7 @@ func TestFetchProviderSchema_Success(t *testing.T) {
 	assert.Equal(t, "aws", out["name"])
 	assert.Equal(t, "5.0.0", out["version"])
 	assert.NotNil(t, out["list_resource_schemas"])
-	assert.Contains(t, out["note"].(string), "generate_query_configuration")
+	assert.Contains(t, out["note"].(string), "generate_search_query_configuration")
 	assert.Contains(t, out["note"].(string), "exact resource type keys")
 }
 
@@ -494,7 +496,7 @@ func TestProviderListSchemaList_ToolDefinition(t *testing.T) {
 	logger := silentLogger()
 	tool := ProviderListSchemaList(logger)
 
-	assert.Equal(t, "provider_list_schema_list", tool.Tool.Name)
+	assert.Equal(t, "list_search_provider_list_schemas", tool.Tool.Name)
 	assert.NotEmpty(t, tool.Tool.Description)
 	assert.NotNil(t, tool.Handler)
 

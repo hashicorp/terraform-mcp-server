@@ -17,7 +17,7 @@ import (
 )
 
 type GenerateQueryConfigurationArguments struct {
-	ListResourceSchemas string `json:"list_resource_schemas" jsonschema:"JSON list_resource_schemas object returned by provider_list_schema_list"`
+	ListResourceSchemas string `json:"list_resource_schemas" jsonschema:"JSON list_resource_schemas object returned by list_search_provider_list_schemas"`
 	ProviderName        string `json:"provider_name" jsonschema:"Short provider name, e.g. aws"`
 	ProviderNamespace   string `json:"provider_namespace" jsonschema:"Provider namespace, e.g. hashicorp"`
 	ProviderVersion     string `json:"provider_version" jsonschema:"Exact catalog provider version"`
@@ -34,15 +34,15 @@ type ProviderListSchemaListArguments struct {
 type ExecuteQueryArguments struct {
 	OrganizationName   string `json:"terraform_org_name,omitempty"`
 	WorkspaceName      string `json:"workspace_name,omitempty"`
-	QueryConfiguration string `json:"query_configuration" jsonschema:"JSON no-code query configuration produced using provider_list_schema_list and generate_query_configuration"`
+	QueryConfiguration string `json:"query_configuration" jsonschema:"JSON no-code query configuration produced using list_search_provider_list_schemas and generate_search_query_configuration"`
 }
 
 type QueryRunArguments struct {
-	QueryRunID string `json:"query_run_id" jsonschema:"Exact query_run_id returned by execute_query or an existing authorized QueryRun ID"`
+	QueryRunID string `json:"query_run_id" jsonschema:"Exact query_run_id returned by execute_search_query or an existing authorized QueryRun ID"`
 }
 
 type QuerySummaryArguments struct {
-	QueryRunID   string `json:"query_run_id" jsonschema:"Exact QueryRun ID returned by execute_query or an existing authorized QueryRun ID"`
+	QueryRunID   string `json:"query_run_id" jsonschema:"Exact QueryRun ID returned by execute_search_query or an existing authorized QueryRun ID"`
 	ResourceType string `json:"resource_type,omitempty" jsonschema:"Optional exact Search list-resource type filter"`
 	Address      string `json:"address,omitempty" jsonschema:"Optional exact list block address filter"`
 	NameContains string `json:"name_contains,omitempty" jsonschema:"Optional case-insensitive display-name substring"`
@@ -59,7 +59,7 @@ func tool(name, description, title string, readOnly, openWorld bool) *mcp.Tool {
 }
 
 func GenerateQueryConfigurationTool() *mcp.Tool {
-	return tool("generate_query_configuration", searchlogic.GenerateQueryConfigurationDescription,
+	return tool("generate_search_query_configuration", searchlogic.GenerateQueryConfigurationDescription,
 		"Generate a No-Code Query Configuration from a list_resource_schemas schema", true, false)
 }
 
@@ -91,7 +91,7 @@ func searchScopeInputSchema[T any]() *jsonschema.Schema {
 }
 
 func ProviderListSchemaListTool() *mcp.Tool {
-	providerTool := tool("provider_list_schema_list", searchlogic.ProviderListSchemaListDescription,
+	providerTool := tool("list_search_provider_list_schemas", searchlogic.ProviderListSchemaListDescription,
 		"Fetch list_resource_schemas for a search-compatible provider", true, true)
 	providerTool.InputSchema = searchScopeInputSchema[ProviderListSchemaListArguments]()
 	return providerTool
@@ -115,7 +115,7 @@ func ProviderListSchemaListFunc(ctx context.Context, req *mcp.CallToolRequest, i
 }
 
 func ExecuteQueryTool() *mcp.Tool {
-	queryTool := tool("execute_query", searchlogic.ExecuteQueryDescription,
+	queryTool := tool("execute_search_query", searchlogic.ExecuteQueryDescription,
 		"Create and execute an HCP Terraform no-code query", false, true)
 	queryTool.InputSchema = searchScopeInputSchema[ExecuteQueryArguments]()
 	schema, err := jsonschema.For[searchlogic.ExecuteQueryResponse](nil)
@@ -150,7 +150,7 @@ func ExecuteQueryFunc(ctx context.Context, req *mcp.CallToolRequest, input Execu
 }
 
 func GetQueryStatusTool() *mcp.Tool {
-	statusTool := tool("get_query_status", searchlogic.GetQueryStatusDescription,
+	statusTool := tool("get_search_query_status", searchlogic.GetQueryStatusDescription,
 		"Get HCP Terraform query run status", true, true)
 	schema, err := jsonschema.For[searchlogic.QueryStatusResponse](nil)
 	if err != nil {
@@ -184,7 +184,7 @@ func GetQueryStatusFunc(logger *slog.Logger) mcp.ToolHandlerFor[QueryRunArgument
 }
 
 func GetQuerySummaryTool() *mcp.Tool {
-	summaryTool := tool("get_query_summary", searchlogic.GetQuerySummaryDescription,
+	summaryTool := tool("get_search_query_summary", searchlogic.GetQuerySummaryDescription,
 		"Get HCP Terraform query summary", true, true)
 	schema, err := jsonschema.For[searchlogic.QueryDiscoverySummary](nil)
 	if err != nil {

@@ -106,8 +106,8 @@ func TestOfficialSearchRegistrationAndConfigurationCall(t *testing.T) {
 	listed, err := session.ListTools(ctx, nil)
 	require.NoError(t, err)
 	want := map[string]bool{
-		"generate_query_configuration": false, "provider_list_schema_list": false,
-		"execute_query": false, "get_query_status": false, "get_query_summary": false,
+		"generate_search_query_configuration": false, "list_search_provider_list_schemas": false,
+		"execute_search_query": false, "get_search_query_status": false, "get_search_query_summary": false,
 		"prepare_import": false, "verify_import_plan": false,
 	}
 	require.Len(t, listed.Tools, len(want), "search-only filter must not expose other tools")
@@ -130,7 +130,7 @@ func TestOfficialSearchRegistrationAndConfigurationCall(t *testing.T) {
 		"list_resource_schemas": `{"example_list":{"block":{"attributes":{}}}}`,
 		"provider_name":         "example", "provider_namespace": "hashicorp", "provider_version": "1.0.0",
 	}
-	result, err := session.CallTool(ctx, &mcp.CallToolParams{Name: "generate_query_configuration", Arguments: args})
+	result, err := session.CallTool(ctx, &mcp.CallToolParams{Name: "generate_search_query_configuration", Arguments: args})
 	require.NoError(t, err)
 	require.NotEmpty(t, result.Content)
 	require.False(t, result.IsError, "tool result: %s", result.Content[0].(*mcp.TextContent).Text)
@@ -155,17 +155,17 @@ func TestOfficialSearchRegistrationAndConfigurationCall(t *testing.T) {
 	t.Cleanup(backend.Close)
 	t.Setenv("TFE_ADDRESS", backend.URL)
 	t.Setenv("TFE_TOKEN", "test-token")
-	statusResult, err := session.CallTool(ctx, &mcp.CallToolParams{Name: "get_query_status", Arguments: map[string]string{"query_run_id": "qry-test"}})
+	statusResult, err := session.CallTool(ctx, &mcp.CallToolParams{Name: "get_search_query_status", Arguments: map[string]string{"query_run_id": "qry-test"}})
 	require.NoError(t, err)
 	require.False(t, statusResult.IsError, "status result: %#v", statusResult.Content)
 	require.Equal(t, "qry-test", statusResult.StructuredContent.(map[string]any)["query_run_id"])
 	require.Equal(t, true, statusResult.StructuredContent.(map[string]any)["terminal"])
-	require.Contains(t, statusResult.Content[0].(*mcp.TextContent).Text, "get_query_summary")
-	failedRun, err := session.CallTool(ctx, &mcp.CallToolParams{Name: "get_query_status", Arguments: map[string]string{"query_run_id": "qry-errored"}})
+	require.Contains(t, statusResult.Content[0].(*mcp.TextContent).Text, "get_search_query_summary")
+	failedRun, err := session.CallTool(ctx, &mcp.CallToolParams{Name: "get_search_query_status", Arguments: map[string]string{"query_run_id": "qry-errored"}})
 	require.NoError(t, err)
 	require.False(t, failedRun.IsError, "observed Terraform failures are factual status results")
 	require.Equal(t, "errored", failedRun.StructuredContent.(map[string]any)["status"])
-	missingRun, err := session.CallTool(ctx, &mcp.CallToolParams{Name: "get_query_status", Arguments: map[string]string{"query_run_id": "qry-missing"}})
+	missingRun, err := session.CallTool(ctx, &mcp.CallToolParams{Name: "get_search_query_status", Arguments: map[string]string{"query_run_id": "qry-missing"}})
 	require.NoError(t, err)
 	require.True(t, missingRun.IsError, "unreadable backend QueryRun must not be pending")
 }
@@ -207,11 +207,11 @@ func TestOfficialSearchScopedCatalogAndQuerySubmission(t *testing.T) {
 	t.Setenv("TFE_TOKEN", "test-token")
 	ctx, session := newOfficialSearchSession(t)
 
-	result, err := session.CallTool(ctx, &mcp.CallToolParams{Name: "provider_list_schema_list", Arguments: map[string]any{"terraform_org_name": "org", "workspace_name": "ws"}})
+	result, err := session.CallTool(ctx, &mcp.CallToolParams{Name: "list_search_provider_list_schemas", Arguments: map[string]any{"terraform_org_name": "org", "workspace_name": "ws"}})
 	require.NoError(t, err)
 	require.False(t, result.IsError, "catalog result: %#v", result.Content)
 	require.Contains(t, result.Content[0].(*mcp.TextContent).Text, "supported_providers")
-	result, err = session.CallTool(ctx, &mcp.CallToolParams{Name: "provider_list_schema_list", Arguments: map[string]any{"terraform_org_name": "org", "workspace_name": "ws", "provider_namespace": "hashicorp", "provider_name": "example"}})
+	result, err = session.CallTool(ctx, &mcp.CallToolParams{Name: "list_search_provider_list_schemas", Arguments: map[string]any{"terraform_org_name": "org", "workspace_name": "ws", "provider_namespace": "hashicorp", "provider_name": "example"}})
 	require.NoError(t, err)
 	require.False(t, result.IsError, "schema detail without provider metadata: %#v", result.Content)
 	var fetched struct {
@@ -224,15 +224,15 @@ func TestOfficialSearchScopedCatalogAndQuerySubmission(t *testing.T) {
 	require.Equal(t, "hashicorp", fetched.Namespace)
 	require.Equal(t, "example", fetched.Name)
 	require.Equal(t, "1.0.0", fetched.Version)
-	result, err = session.CallTool(ctx, &mcp.CallToolParams{Name: "generate_query_configuration", Arguments: map[string]any{"provider_namespace": fetched.Namespace, "provider_name": fetched.Name, "provider_version": fetched.Version, "list_resource_schemas": string(fetched.Schemas), "resource_types": "example_list"}})
+	result, err = session.CallTool(ctx, &mcp.CallToolParams{Name: "generate_search_query_configuration", Arguments: map[string]any{"provider_namespace": fetched.Namespace, "provider_name": fetched.Name, "provider_version": fetched.Version, "list_resource_schemas": string(fetched.Schemas), "resource_types": "example_list"}})
 	require.NoError(t, err)
 	require.False(t, result.IsError, "FETCH metadata must generate a guide: %#v", result.Content)
 	require.Contains(t, result.Content[0].(*mcp.TextContent).Text, "example_list")
-	result, err = session.CallTool(ctx, &mcp.CallToolParams{Name: "provider_list_schema_list", Arguments: map[string]any{"terraform_org_name": "org", "workspace_name": "not-found"}})
+	result, err = session.CallTool(ctx, &mcp.CallToolParams{Name: "list_search_provider_list_schemas", Arguments: map[string]any{"terraform_org_name": "org", "workspace_name": "not-found"}})
 	require.NoError(t, err)
 	require.True(t, result.IsError, "missing workspace must not be treated as authorized")
 
-	result, err = session.CallTool(ctx, &mcp.CallToolParams{Name: "execute_query", Arguments: map[string]any{
+	result, err = session.CallTool(ctx, &mcp.CallToolParams{Name: "execute_search_query", Arguments: map[string]any{
 		"terraform_org_name": "org", "workspace_name": "ws",
 		"query_configuration": `{"no_code_query_providers":[{"namespace":"hashicorp","name":"example","version":"1.0.0","no_code_query_resources":[{"body":{"resource_type":"example_list"}}]}]}`,
 	}})
@@ -329,7 +329,7 @@ func TestOfficialImportPrepareAndFinishedPlan(t *testing.T) {
 	t.Setenv("TFE_TOKEN", "test-token")
 	t.Setenv("MCP_ORGANIZATION_ALLOWLIST", "org")
 	ctx, session := newOfficialSearchSession(t)
-	summary, err := session.CallTool(ctx, &mcp.CallToolParams{Name: "get_query_summary", Arguments: map[string]any{"query_run_id": "  qry-test\t"}})
+	summary, err := session.CallTool(ctx, &mcp.CallToolParams{Name: "get_search_query_summary", Arguments: map[string]any{"query_run_id": "  qry-test\t"}})
 	require.NoError(t, err)
 	require.False(t, summary.IsError)
 	require.Equal(t, "qry-test", summary.StructuredContent.(map[string]any)["query_run_id"])
@@ -404,7 +404,7 @@ func TestOfficialSearchQuerySummarySelectableAndNonselectable(t *testing.T) {
 			t.Setenv("TFE_TOKEN", "test-token")
 			t.Setenv("MCP_ORGANIZATION_ALLOWLIST", "org")
 			ctx, session := newOfficialSearchSession(t)
-			result, err := session.CallTool(ctx, &mcp.CallToolParams{Name: "get_query_summary", Arguments: map[string]any{"query_run_id": "qry-test"}})
+			result, err := session.CallTool(ctx, &mcp.CallToolParams{Name: "get_search_query_summary", Arguments: map[string]any{"query_run_id": "qry-test"}})
 			require.NoError(t, err)
 			require.False(t, result.IsError, "result: %#v", result.Content)
 			structured := result.StructuredContent.(map[string]any)

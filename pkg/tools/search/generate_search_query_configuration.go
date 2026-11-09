@@ -79,7 +79,7 @@ var mdLinkRe = regexp.MustCompile(`\[([^\]]+)\]\([^)]*\)`)
 // annotated scaffold the agent can use to build a No-Code Query Config payload.
 func GenerateQueryConfiguration(logger *log.Logger) server.ServerTool {
 	return server.ServerTool{
-		Tool: mcp.NewTool("generate_query_configuration",
+		Tool: mcp.NewTool("generate_search_query_configuration",
 			mcp.WithDescription(generateQueryConfigDescription),
 			mcp.WithTitleAnnotation("Generate a No-Code Query Configuration from a list_resource_schemas schema"),
 			mcp.WithOpenWorldHintAnnotation(false),
@@ -89,7 +89,7 @@ func GenerateQueryConfiguration(logger *log.Logger) server.ServerTool {
 				mcp.Required(),
 				mcp.Description(
 					"The list_resource_schemas JSON object for a single provider version. "+
-						"This is the value returned by the `provider_list_schema_list` tool, "+
+						"This is the value returned by the `list_search_provider_list_schemas` tool, "+
 						"or the value of the `list_resource_schemas` key in a provider schema "+
 						"snapshot produced by `terraform providers schema -json`. "+
 						"The value must be a JSON object whose keys are resource type names "+
@@ -112,7 +112,7 @@ func GenerateQueryConfiguration(logger *log.Logger) server.ServerTool {
 			),
 			mcp.WithString("provider_version",
 				mcp.Required(),
-				mcp.Description("Exact provider version returned by provider_list_schema_list. Do not infer or substitute a version."),
+				mcp.Description("Exact provider version returned by list_search_provider_list_schemas. Do not infer or substitute a version."),
 			),
 			mcp.WithString("resource_types",
 				mcp.Description(
@@ -133,29 +133,29 @@ func generateQueryConfigurationHandler(_ context.Context, request mcp.CallToolRe
 	// ── 1. Parse inputs ───────────────────────────────────────────────────────
 	rawSchema, err := request.RequireString("list_resource_schemas")
 	if err != nil || rawSchema == "" {
-		return toolErrorf(logger, "generate_query_configuration", "missing required input: list_resource_schemas")
+		return toolErrorf(logger, "generate_search_query_configuration", "missing required input: list_resource_schemas")
 	}
 
 	providerName, err := request.RequireString("provider_name")
 	if err != nil || providerName == "" {
-		return toolErrorf(logger, "generate_query_configuration", "missing required input: provider_name")
+		return toolErrorf(logger, "generate_search_query_configuration", "missing required input: provider_name")
 	}
 	providerName = strings.ToLower(providerName)
 
 	providerNamespace, err := request.RequireString("provider_namespace")
 	if err != nil || providerNamespace == "" {
-		return toolErrorf(logger, "generate_query_configuration", "missing required input: provider_namespace")
+		return toolErrorf(logger, "generate_search_query_configuration", "missing required input: provider_namespace")
 	}
 
 	providerVersion, err := request.RequireString("provider_version")
 	if err != nil || providerVersion == "" {
-		return toolErrorf(logger, "generate_query_configuration", "missing required input: provider_version")
+		return toolErrorf(logger, "generate_search_query_configuration", "missing required input: provider_version")
 	}
 
 	resourceTypesFlag := request.GetString("resource_types", "")
 	result, err := GenerateQueryConfigurationText(rawSchema, providerName, providerNamespace, providerVersion, resourceTypesFlag)
 	if err != nil {
-		return toolErrorf(logger, "generate_query_configuration", "%v", err)
+		return toolErrorf(logger, "generate_search_query_configuration", "%v", err)
 	}
 	return mcp.NewToolResultText(result), nil
 }
@@ -319,14 +319,14 @@ func writeInstructions(b *strings.Builder, namespace, name, version string) {
 
 	b.WriteString("## What is a No-Code Query Config?\n\n")
 	b.WriteString("A No-Code Query Config describes the provider and resources passed to the\n")
-	b.WriteString("`execute_query` MCP tool to create **and immediately execute** a Terraform Search query from HCP Terraform\n")
+	b.WriteString("`execute_search_query` MCP tool to create **and immediately execute** a Terraform Search query from HCP Terraform\n")
 	b.WriteString("without writing `.tfquery.hcl` files by hand.\n\n")
 
 	b.WriteString("## Pre-conditions\n\n")
 	b.WriteString("Before calling the endpoint, verify:\n\n")
 	b.WriteString("1. The workspace's Terraform version is **>= 1.14.0**. Requests against older versions are rejected with `422 Unprocessable Entity`.\n")
-	b.WriteString("2. After `execute_query` succeeds, pass its `query_run_id` to the `get_query_status` MCP tool. Once it returns a terminal status, pass the same ID to `get_query_summary` to retrieve the parsed result. Do not use curl or call the query API directly.\n")
-	b.WriteString("3. Confirm the source organization and workspace before discovery. Pass the accepted `terraform_org_name` and `workspace_name` explicitly to `execute_query`. If either is omitted, the server requests confirmation before scoped API access. The tool resolves the workspace ID through go-tfe.\n\n")
+	b.WriteString("2. After `execute_search_query` succeeds, pass its `query_run_id` to the `get_search_query_status` MCP tool. Once it returns a terminal status, pass the same ID to `get_search_query_summary` to retrieve the parsed result. Do not use curl or call the query API directly.\n")
+	b.WriteString("3. Confirm the source organization and workspace before discovery. Pass the accepted `terraform_org_name` and `workspace_name` explicitly to `execute_search_query`. If either is omitted, the server requests confirmation before scoped API access. The tool resolves the workspace ID through go-tfe.\n\n")
 
 	b.WriteString("## Query configuration structure\n\n")
 	b.WriteString("```json\n")
@@ -355,9 +355,9 @@ func writeInstructions(b *strings.Builder, namespace, name, version string) {
 	b.WriteString("```\n\n")
 
 	b.WriteString("## Rules for building the payload\n\n")
-	b.WriteString("1. **`terraform_org_name` / `workspace_name`** — pass the complete accepted source pair as separate arguments to `execute_query`. Do not include them in this JSON object.\n")
-	b.WriteString("2. **`generate_config_out`** — optional boolean. Omit it (or set to `false`) to skip HCL scaffolding. Set it to `true` when generated HCL is needed or when selection depends on additional result data that is not available as a list-resource query filter. Terraform then emits `generated_config.tf` and requests resource objects from the provider. Resource-object and attribute capture remain provider- and resource-dependent; use only fields actually projected by `get_query_summary`.\n")
-	b.WriteString("3. **`namespace` / `name` / `version`** — copy these exact values from `provider_list_schema_list`; never infer or substitute a provider version.\n")
+	b.WriteString("1. **`terraform_org_name` / `workspace_name`** — pass the complete accepted source pair as separate arguments to `execute_search_query`. Do not include them in this JSON object.\n")
+	b.WriteString("2. **`generate_config_out`** — optional boolean. Omit it (or set to `false`) to skip HCL scaffolding. Set it to `true` when generated HCL is needed or when selection depends on additional result data that is not available as a list-resource query filter. Terraform then emits `generated_config.tf` and requests resource objects from the provider. Resource-object and attribute capture remain provider- and resource-dependent; use only fields actually projected by `get_search_query_summary`.\n")
+	b.WriteString("3. **`namespace` / `name` / `version`** — copy these exact values from `list_search_provider_list_schemas`; never infer or substitute a provider version.\n")
 	b.WriteString("4. **`resource_type`** — must be an exact resource type key listed in the schema catalog below. A provider's ordinary managed resources are not automatically list resources; never infer or substitute a type that is absent from this catalog.\n")
 	b.WriteString("5. **`attributes`** — include only attributes that appear in the schema for that resource type.\n")
 	b.WriteString("   - Omit optional attributes that you do not need to filter on.\n")
@@ -652,21 +652,21 @@ const generateQueryConfigDescription = `Generates schema-backed guidance and an 
 Terraform No-Code Search query; it does not execute the query.
 
 Pass list_resource_schemas and the exact provider namespace, name and version
-returned by provider_list_schema_list. Any requested resource type must be an
+returned by list_search_provider_list_schemas. Any requested resource type must be an
 exact schema key. The result describes supported scalar and nested attributes,
 required values, nesting/cardinality, variable syntax and generate_config_out
-so the query_configuration for execute_query can be constructed without
+so the query_configuration for execute_search_query can be constructed without
 inventing fields. Required schema attributes remain required.
 
-Review and fill the generated configuration, then call execute_query with the
+Review and fill the generated configuration, then call execute_search_query with the
 same confirmed source organization/workspace. Omit source arguments to use the
 confirmed configured query defaults, or pass explicit user corrections as
 overrides. If the requested resource has no exact
 list-resource schema key, report that it is not searchable with this catalog
-provider version and do not call execute_query. If a requested selection
+provider version and do not call execute_search_query. If a requested selection
 condition is absent from an otherwise supported list-resource schema, explain
 that it cannot be used as a query-time filter and do not invent it. Preserve
 supported filters and set generate_config_out=true when selection depends on
 additional result data; this requests generated HCL and provider resource
-objects but does not guarantee capture, and get_query_summary exposes only its
+objects but does not guarantee capture, and get_search_query_summary exposes only its
 declared projections.`

@@ -20,13 +20,13 @@ type toolFactory func(logger *log.Logger) server.ServerTool
 // (create_no_code_workspace, create_run) live in specialFactories below
 var toolFactories = map[string]toolFactory{
 	// HCP Terraform no-code search tools
-	"generate_query_configuration": searchTools.GenerateQueryConfiguration,
-	"provider_list_schema_list":    searchTools.ProviderListSchemaList,
-	"execute_query":                searchTools.ExecuteQuery,
-	"get_query_status":             searchTools.GetQueryStatus,
-	"get_query_summary":            searchTools.GetQuerySummary,
-	"prepare_import":               searchTools.PrepareImport,
-	"verify_import_plan":           searchTools.VerifyImportPlan,
+	"generate_search_query_configuration": searchTools.GenerateQueryConfiguration,
+	"list_search_provider_list_schemas":   searchTools.ProviderListSchemaList,
+	"execute_search_query":                searchTools.ExecuteQuery,
+	"get_search_query_status":             searchTools.GetQueryStatus,
+	"get_search_query_summary":            searchTools.GetQuerySummary,
+	"prepare_import":                      searchTools.PrepareImport,
+	"verify_import_plan":                  searchTools.VerifyImportPlan,
 
 	// Public Registry tools
 	"search_provider_docs":        registryTools.ResolveProviderDocID,

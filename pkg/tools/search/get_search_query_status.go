@@ -62,7 +62,7 @@ func defaultQueryStatusPollConfig() queryStatusPollConfig {
 // GetQueryStatus gets the current status and details of an HCP Terraform query run.
 func GetQueryStatus(logger *log.Logger) server.ServerTool {
 	return server.ServerTool{
-		Tool: mcp.NewTool("get_query_status",
+		Tool: mcp.NewTool("get_search_query_status",
 			mcp.WithDescription(getQueryStatusDescription),
 			mcp.WithTitleAnnotation("Get HCP Terraform query run status"),
 			mcp.WithOpenWorldHintAnnotation(true),
@@ -70,7 +70,7 @@ func GetQueryStatus(logger *log.Logger) server.ServerTool {
 			mcp.WithDestructiveHintAnnotation(false),
 			mcp.WithString("query_run_id",
 				mcp.Required(),
-				mcp.Description("Query run ID returned by execute_query as query_run_id (or an existing authorized QueryRun ID)."),
+				mcp.Description("Query run ID returned by execute_search_query as query_run_id (or an existing authorized QueryRun ID)."),
 			),
 			mcp.WithOutputSchema[queryStatusResponse](),
 		),
@@ -88,13 +88,13 @@ func getQueryStatusHandlerWithConfig(ctx context.Context, request mcp.CallToolRe
 	queryRunID, err := request.RequireString("query_run_id")
 	queryRunID = strings.TrimSpace(queryRunID)
 	if err != nil || queryRunID == "" {
-		return toolErrorf(logger, "get_query_status", "missing required input: query_run_id")
+		return toolErrorf(logger, "get_search_query_status", "missing required input: query_run_id")
 	}
 	if config.pollInterval <= 0 {
-		return toolErrorf(logger, "get_query_status", "poll interval must be greater than zero")
+		return toolErrorf(logger, "get_search_query_status", "poll interval must be greater than zero")
 	}
 	if config.waitBudget <= 0 {
-		return toolErrorf(logger, "get_query_status", "wait budget must be greater than zero")
+		return toolErrorf(logger, "get_search_query_status", "wait budget must be greater than zero")
 	}
 
 	pollCtx, cancel := context.WithTimeoutCause(ctx, config.waitBudget, errQueryStatusWaitBudgetExceeded)
@@ -102,7 +102,7 @@ func getQueryStatusHandlerWithConfig(ctx context.Context, request mcp.CallToolRe
 
 	tfeClient, err := client.GetTfeClientFromContext(pollCtx, logger)
 	if err != nil {
-		return toolErrorf(logger, "get_query_status", "%v", TerraformClientUnavailableError(err))
+		return toolErrorf(logger, "get_search_query_status", "%v", TerraformClientUnavailableError(err))
 	}
 	return getQueryStatusWithClient(ctx, pollCtx, tfeClient, queryRunID, logger, config)
 }
@@ -122,20 +122,20 @@ func PollQueryStatus(ctx context.Context, tfeClient *tfe.Client, queryRunID stri
 func getQueryStatusWithClient(ctx, pollCtx context.Context, tfeClient *tfe.Client, queryRunID string, logger *log.Logger, config queryStatusPollConfig) (*mcp.CallToolResult, error) {
 	queryRunID = strings.TrimSpace(queryRunID)
 	if queryRunID == "" {
-		return toolErrorf(logger, "get_query_status", "missing required input: query_run_id")
+		return toolErrorf(logger, "get_search_query_status", "missing required input: query_run_id")
 	}
 	if err := callerCancellation(ctx); err != nil {
-		return toolErrorf(logger, "get_query_status", "%v", QueryStatusUnavailableError(err))
+		return toolErrorf(logger, "get_search_query_status", "%v", QueryStatusUnavailableError(err))
 	}
 
 	response, err := waitForQueryStatus(ctx, pollCtx, tfeClient, queryRunID, config.pollInterval, logger)
 	if err != nil {
-		return toolErrorf(logger, "get_query_status", "%v", QueryStatusUnavailableError(err))
+		return toolErrorf(logger, "get_search_query_status", "%v", QueryStatusUnavailableError(err))
 	}
 
 	formatted, err := FormatQueryStatus(response)
 	if err != nil {
-		return toolErrorf(logger, "get_query_status", "%v", QueryStatusUnavailableError(err))
+		return toolErrorf(logger, "get_search_query_status", "%v", QueryStatusUnavailableError(err))
 	}
 	return mcp.NewToolResultStructured(response, formatted), nil
 }
@@ -187,12 +187,12 @@ func waitForQueryStatus(parentCtx, pollCtx context.Context, tfeClient *tfe.Clien
 		}
 		response := queryStatusResponseFromRun(queryRun)
 		if isTerminalQueryStatus(queryRun.Status) {
-			response.Message = fmt.Sprintf("Query run reached terminal status %q. Call get_query_summary with the same query_run_id; terminal status does not imply selectable results.", queryRun.Status)
+			response.Message = fmt.Sprintf("Query run reached terminal status %q. Call get_search_query_summary with the same query_run_id; terminal status does not imply selectable results.", queryRun.Status)
 			logQueryStatusPoll(logger, queryRunID, reads, startedAt, &response, "terminal", nil)
 			return &response, nil
 		}
 		response.RetryAfterSeconds = queryStatusRetryAfterSeconds
-		response.Message = fmt.Sprintf("Query run is still %q. Call get_query_status again with the same query_run_id after %d seconds; do not execute another query.", queryRun.Status, response.RetryAfterSeconds)
+		response.Message = fmt.Sprintf("Query run is still %q. Call get_search_query_status again with the same query_run_id after %d seconds; do not execute another query.", queryRun.Status, response.RetryAfterSeconds)
 		lastResponse = &response
 		logQueryStatusPoll(logger, queryRunID, reads, startedAt, lastResponse, "status_read", nil)
 
@@ -292,9 +292,9 @@ func queryStatusTimestamps(timestamps *tfe.QueryRunStatusTimestamps) *queryStatu
 const getQueryStatusDescription = `Reads and polls one HCP Terraform QueryRun within a bounded call, without
 returning its raw backend record or log capability.
 
-Pass the query_run_id returned by execute_query or an existing authorized
+Pass the query_run_id returned by execute_search_query or an existing authorized
 QueryRun ID. If the QueryRun remains active when this call's wait budget ends,
 the result includes its last observed status and retry_after_seconds; call
-get_query_status again with the same ID and do not execute another query. For a
-terminal finished, errored or canceled status, call get_query_summary with the
+get_search_query_status again with the same ID and do not execute another query. For a
+terminal finished, errored or canceled status, call get_search_query_summary with the
 same ID. Terminal status does not imply selectable results.`

@@ -49,7 +49,7 @@ const executeQuerySource = "terraform-mcp"
 // ExecuteQuery creates and immediately executes an HCP Terraform no-code query.
 func ExecuteQuery(logger *log.Logger) server.ServerTool {
 	return server.ServerTool{
-		Tool: mcp.NewTool("execute_query",
+		Tool: mcp.NewTool("execute_search_query",
 			mcp.WithDescription(executeQueryDescription),
 			mcp.WithTitleAnnotation("Create and execute an HCP Terraform no-code query"),
 			mcp.WithOpenWorldHintAnnotation(true),
@@ -61,7 +61,7 @@ func ExecuteQuery(logger *log.Logger) server.ServerTool {
 				mcp.Required(),
 				mcp.Description(
 					"JSON object containing no_code_query_providers and optional generate_config_out. "+
-						"Use provider_list_schema_list and generate_query_configuration to construct this value. "+
+						"Use list_search_provider_list_schemas and generate_search_query_configuration to construct this value. "+
 						"Every resource_type must be an exact list_resource_schemas key; ordinary managed "+
 						"resource names are not necessarily supported list resources. The tool adds the JSON:API "+
 						"envelope and workspace relationship automatically.",
@@ -85,17 +85,17 @@ func executeQueryHandler(ctx context.Context, request mcp.CallToolRequest, logge
 
 	rawConfiguration, err := request.RequireString("query_configuration")
 	if err != nil || strings.TrimSpace(rawConfiguration) == "" {
-		return toolErrorf(logger, "execute_query", "missing required input: query_configuration")
+		return toolErrorf(logger, "execute_search_query", "missing required input: query_configuration")
 	}
 
 	err = ValidateQueryConfiguration(rawConfiguration)
 	if err != nil {
-		return toolErrorf(logger, "execute_query", "invalid query_configuration: %v", err)
+		return toolErrorf(logger, "execute_search_query", "invalid query_configuration: %v", err)
 	}
 
 	tfeClient, err := client.GetTfeClientFromContext(ctx, logger)
 	if err != nil {
-		return toolErrorf(logger, "execute_query", "failed to get Terraform client; check session configuration")
+		return toolErrorf(logger, "execute_search_query", "failed to get Terraform client; check session configuration")
 	}
 	return executeQueryWithClient(ctx, tfeClient, organizationName, workspaceName, rawConfiguration, logger)
 }
@@ -103,11 +103,11 @@ func executeQueryHandler(ctx context.Context, request mcp.CallToolRequest, logge
 func executeQueryWithClient(ctx context.Context, tfeClient *tfe.Client, organizationName, workspaceName, rawConfiguration string, logger *log.Logger) (*mcp.CallToolResult, error) {
 	result, err := SubmitQuery(ctx, tfeClient, organizationName, workspaceName, rawConfiguration)
 	if err != nil {
-		return toolErrorf(logger, "execute_query", "%v", err)
+		return toolErrorf(logger, "execute_search_query", "%v", err)
 	}
 	text, err := json.Marshal(result)
 	if err != nil {
-		return toolErrorf(logger, "execute_query", "failed to format query result")
+		return toolErrorf(logger, "execute_search_query", "failed to format query result")
 	}
 	return mcp.NewToolResultStructured(result, string(text)), nil
 }
@@ -277,7 +277,7 @@ creates Search query records and a QueryRun, but does not create or modify cloud
 infrastructure.
 
 Before calling, confirm the source organization/workspace, then use
-provider_list_schema_list and generate_query_configuration for that same source.
+list_search_provider_list_schemas and generate_search_query_configuration for that same source.
 Pass the accepted terraform_org_name and workspace_name explicitly. If either is
 omitted, the server requests confirmation of configured defaults before scoped
 API access.
@@ -293,5 +293,5 @@ follow the generator guidance for generate_config_out when later selection
 depends on additional result data.
 
 Established success returns only query_run_id. Pass that exact ID to
-get_query_status. If creation does not return a trustworthy ID, reconcile the
+get_search_query_status. If creation does not return a trustworthy ID, reconcile the
 outcome before another submission; do not blindly execute the query again.`
