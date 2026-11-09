@@ -6,12 +6,15 @@ FEATURES
 
 IMPROVEMENTS
 
+* Add `MCP_PPROF_ADDR` to serve Go pprof profiling endpoints on a separate port, so CPU and memory profiles can be taken from a running server. It's off by default.
 * Bump `golang.org/x/net` to v0.62.0 to address [GO-2026-6860](https://pkg.go.dev/vuln/GO-2026-6860) and [GO-2026-6866](https://pkg.go.dev/vuln/GO-2026-6866) in the HTML parser and renderer.
 * Harden CI workflows by updating `actions/checkout` to v7.0.1, which blocks unsafe fork checkouts in privileged workflow contexts, and `dorny/paths-filter` to v4.0.3, which safely escapes multiline filenames in file-list outputs. Other workflow actions now use their current Node.js 24-compatible releases, and artifact uploads include improved rate-limit retry handling.
 * Add a new otel metric to count total number of successful tool calls by an organization.
+* Every request now gets a correlation ID. It's sent as the `X-Request-Id` header on calls to HCP Terraform, Terraform Enterprise and the public registry, returned to the client as `X-Request-Id` in streamable-http mode, and included as `request_id` in tool call logs, so one request can be traced from the MCP client through to HCP Terraform.
 
 FIXES
 
+* The streamable HTTP server now reads `TFE_SKIP_TLS_VERIFY` only from the server environment and ignores it when a client sends it as a header or query parameter, so clients can no longer turn off certificate verification for the server's calls to HCP Terraform or TFE
 * `search_modules` now returns its "no modules found" message when the registry returns no matches, instead of reporting that it failed to parse the results.
 
 # 1.4.1
