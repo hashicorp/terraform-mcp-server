@@ -60,7 +60,7 @@ func NewTfeClientForToken(terraformAddress string, terraformSkipTLSVerify bool, 
 func newTfeClient(terraformAddress string, terraformSkipTLSVerify bool, terraformToken string, clientIP string, logger *log.Logger) (*tfe.Client, error) {
 	if terraformToken == "" {
 		logger.Warn("No Terraform token provided, TFE client will not be available")
-		return nil, utils.LogAndReturnError(logger, "required input: no Terraform token provided", nil)
+		return nil, errors.New("required input: no Terraform token provided")
 	}
 
 	config := buildTFEConfig(terraformAddress, terraformSkipTLSVerify, terraformToken, clientIP, logger)
