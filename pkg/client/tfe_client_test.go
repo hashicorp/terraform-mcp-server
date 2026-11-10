@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"io/fs"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -293,8 +294,56 @@ func TestTerraformTokenForRequest(t *testing.T) {
 			}
 			t.Setenv(TerraformToken, tt.envToken)
 
-			got := terraformTokenForRequest(ctxWithAddress(address, tt.ctxToken), address, logger)
+			got, err := terraformTokenForRequest(ctxWithAddress(address, tt.ctxToken), address, logger)
+			require.NoError(t, err)
 			assert.Equal(t, tt.want, got)
 		})
 	}
+}
+
+func TestTerraformTokenForRequestCredentialsFileErrors(t *testing.T) {
+	logger := log.New()
+	logger.SetOutput(io.Discard)
+	const address = "https://tfe.example.com"
+
+	writeFile := func(t *testing.T, content string, mode os.FileMode) {
+		t.Helper()
+		home := t.TempDir()
+		dir := filepath.Join(home, ".terraform.d")
+		require.NoError(t, os.MkdirAll(dir, 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "credentials.tfrc.json"), []byte(content), mode))
+		t.Setenv("HOME", home)
+		t.Setenv(TerraformToken, "")
+	}
+
+	t.Run("no entry for this host is just no token", func(t *testing.T) {
+		writeFile(t, `{"credentials":{"app.terraform.io":{"token":"other"}}}`, 0o600)
+		token, err := terraformTokenForRequest(ctxWithAddress(address, ""), address, logger)
+		require.NoError(t, err)
+		assert.Empty(t, token)
+	})
+
+	t.Run("malformed file returns the parse error", func(t *testing.T) {
+		writeFile(t, `{not json`, 0o600)
+		_, err := terraformTokenForRequest(ctxWithAddress(address, ""), address, logger)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "reading credentials.tfrc.json")
+
+		// and it comes back from building the session client too, instead of
+		// "no Terraform token provided"
+		_, err = CreateTfeClientForSession(ctxWithAddress(address, ""), "session-bad-file", logger)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "reading credentials.tfrc.json")
+		assert.NotContains(t, err.Error(), "no Terraform token provided")
+	})
+
+	t.Run("unreadable file returns the permission error", func(t *testing.T) {
+		if os.Geteuid() == 0 {
+			t.Skip("root can read the file anyway")
+		}
+		writeFile(t, `{"credentials":{"tfe.example.com":{"token":"file-token"}}}`, 0o000)
+		_, err := terraformTokenForRequest(ctxWithAddress(address, ""), address, logger)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, fs.ErrPermission)
+	})
 }

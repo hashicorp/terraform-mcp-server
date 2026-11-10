@@ -6,7 +6,9 @@ package client
 import (
 	"context"
 	"crypto/sha256"
+	"errors"
 	"fmt"
+	"io/fs"
 	"net/http"
 	"sync"
 
@@ -173,7 +175,10 @@ func GetTfeClientFromContext(ctx context.Context, logger *log.Logger) (*tfe.Clie
 // writes into ctx, so both transports have the same per-request values
 func GetTfeClientForSession(ctx context.Context, sessionID string, logger *log.Logger) (*tfe.Client, error) {
 	terraformAddress := terraformAddressForRequest(ctx)
-	terraformToken := terraformTokenForRequest(ctx, terraformAddress, logger)
+	terraformToken, err := terraformTokenForRequest(ctx, terraformAddress, logger)
+	if err != nil {
+		return nil, err
+	}
 
 	// In a stateless mode the server does not assign any session ID to requests. We need to create new TF clients for every request in that case
 	if sessionID == "" {
@@ -198,7 +203,10 @@ func GetTfeClientForSession(ctx context.Context, sessionID string, logger *log.L
 // CreateTfeClientForSession creates only a TFE client for the session
 func CreateTfeClientForSession(ctx context.Context, sessionID string, logger *log.Logger) (*tfe.Client, error) {
 	terraformAddress := terraformAddressForRequest(ctx)
-	terraformToken := terraformTokenForRequest(ctx, terraformAddress, logger)
+	terraformToken, err := terraformTokenForRequest(ctx, terraformAddress, logger)
+	if err != nil {
+		return nil, err
+	}
 	return newSessionTfeClient(ctx, sessionID, terraformAddress, terraformToken, logger)
 }
 
@@ -220,22 +228,27 @@ func terraformAddressForRequest(ctx context.Context) string {
 // terraformTokenForRequest gets the token for the request. It checks ctx first
 // (set by TerraformContextMiddleware), then TFE_TOKEN, then
 // credentials.tfrc.json from terraform login. Everything uses this so the cache
-// check always compares against the same token the client was built with. If
-// there's no token it returns "", and building a client with that fails with
-// "no Terraform token provided".
-func terraformTokenForRequest(ctx context.Context, terraformAddress string, logger *log.Logger) string {
+// check always compares against the same token the client was built with.
+//
+// No credentials file, or no entry for this host, just means there's no token,
+// so it returns "" and building the client fails with "no Terraform token
+// provided". A file that's there but can't be read or parsed returns the error
+// so it doesn't get hidden behind "no token".
+func terraformTokenForRequest(ctx context.Context, terraformAddress string, logger *log.Logger) (string, error) {
 	if token, _ := ctx.Value(contextKey(TerraformToken)).(string); token != "" {
-		return token
+		return token, nil
 	}
 	if token := utils.GetEnv(TerraformToken, ""); token != "" {
-		return token
+		return token, nil
 	}
-	// ReadCredentialsFile logs why it couldn't find a token, so the error isn't
-	// returned here
 	token, err := ReadCredentialsFile(extractHostname(terraformAddress), logger)
 	if err != nil {
-		return ""
+		var noCreds *noCredentialsForHostError
+		if errors.Is(err, fs.ErrNotExist) || errors.As(err, &noCreds) {
+			return "", nil
+		}
+		return "", fmt.Errorf("reading credentials.tfrc.json: %w", err)
 	}
 	logger.Debug("Using TFE_TOKEN from credentials.tfrc.json")
-	return token
+	return token, nil
 }
