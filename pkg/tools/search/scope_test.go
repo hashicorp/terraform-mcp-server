@@ -140,8 +140,8 @@ func TestMark3LabsSearchToolsRequestScopeBeforeClientUse(t *testing.T) {
 		name    string
 		handler func(context.Context, mcp.CallToolRequest) (*mcp.CallToolResult, error)
 	}{
-		{name: "provider_list_schema_list", handler: ProviderListSchemaList(silentLogger()).Handler},
-		{name: "execute_query", handler: ExecuteQuery(silentLogger()).Handler},
+		{name: "get_search_list_resource_schemas", handler: ProviderListSchemaList(silentLogger()).Handler},
+		{name: "execute_search_query", handler: ExecuteQuery(silentLogger()).Handler},
 	} {
 		t.Run(tool.name, func(t *testing.T) {
 			result, err := tool.handler(context.Background(), mcp.CallToolRequest{})
