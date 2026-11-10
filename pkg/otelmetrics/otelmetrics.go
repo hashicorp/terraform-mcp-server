@@ -5,7 +5,11 @@ package otelmetrics
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"fmt"
+	"os"
+	"strings"
 
 	"github.com/hashicorp/terraform-mcp-server/pkg/client"
 	log "github.com/sirupsen/logrus"
@@ -16,6 +20,10 @@ import (
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/resource"
 )
+
+// ServiceInstanceIDEnv overrides the service.instance.id resource attribute
+// The Helm chart sets it from the pod UID
+const ServiceInstanceIDEnv = "OTEL_INSTANCE_ID"
 
 // Setup reads metrics config from the environment and, if metrics are
 // enabled, initializes the OTel exporter and meter provider. It always
@@ -54,10 +62,8 @@ func Init(ctx context.Context, config *client.MetricsConfig, logger *log.Logger)
 	}
 	// Create the MeterProvider with a PeriodicReader
 	// The reader flushes metrics to the exporter periodically
-	resourceAttrs := resource.NewSchemaless(
-		attribute.String("service.name", config.ServiceName),
-		attribute.String("service.version", config.ServiceVersion),
-	)
+	resourceAttrs := newResource(config)
+
 	config.MeterProvider = sdkmetric.NewMeterProvider(
 		sdkmetric.WithReader(sdkmetric.NewPeriodicReader(exporter, sdkmetric.WithInterval(config.ExportInterval))),
 		sdkmetric.WithResource(resourceAttrs),
@@ -93,7 +99,8 @@ func Init(ctx context.Context, config *client.MetricsConfig, logger *log.Logger)
 	}
 
 	config.OrgToolCallCounter, err = meter.Int64Counter("mcp_org_tool_calls_total",
-		metric.WithDescription("Total number of successful tool calls by Terraform organization"))
+		metric.WithDescription("Successful tool calls per Terraform organization, counted only for tools that take a terraform_org_name argument. "+
+			"Sum by terraform.org.name for calls per organization; count distinct terraform.org.name for the number of organizations"))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create org tool call counter: %w", err)
 	}
@@ -104,4 +111,29 @@ func Init(ctx context.Context, config *client.MetricsConfig, logger *log.Logger)
 			logger.Errorf("Error shutting down meter provider: %v", err)
 		}
 	}, nil
+}
+
+func newResource(config *client.MetricsConfig) *resource.Resource {
+	return resource.NewSchemaless(
+		attribute.String("service.name", config.ServiceName),
+		attribute.String("service.version", config.ServiceVersion),
+		attribute.String("service.instance.id", serviceInstanceID()),
+	)
+}
+
+// serviceInstanceID returns OTEL_INSTANCE_ID if set (the Helm chart sets it to
+// the pod UID), otherwise the hostname (the pod name in Kubernetes), otherwise
+// a random ID, so two replicas never share one.
+func serviceInstanceID() string {
+	if id := strings.TrimSpace(os.Getenv(ServiceInstanceIDEnv)); id != "" {
+		return id
+	}
+	if host, err := os.Hostname(); err == nil && strings.TrimSpace(host) != "" {
+		return host
+	}
+	b := make([]byte, 8)
+	if _, err := rand.Read(b); err != nil {
+		return "unknown"
+	}
+	return hex.EncodeToString(b)
 }

@@ -108,7 +108,7 @@ Ingress is disabled by default and has no cloud-specific annotations. Set the an
 
 Metrics are disabled by default, and none of the `OTEL_` environment variables are set on the container unless `otel.enabled` is true. If you enable them, set `otel.metricsEndpoint` to your OTLP collector endpoint.
 
-The chart sets `OTEL_INSTANCE_ID` from the pod UID so each replica reports a distinct `service.instance.id`. Without it, telemetry from every replica is attributed to a single instance.
+The chart sets `OTEL_INSTANCE_ID` from the pod UID so each replica reports a distinct `service.instance.id`. Without it, the server uses the pod hostname instead.
 
 ## Security notes
 
