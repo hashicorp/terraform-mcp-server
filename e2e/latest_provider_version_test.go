@@ -1,6 +1,7 @@
 package e2e
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -133,7 +134,7 @@ func TestGetLatestProviderVersionRejectsUnknownProvider(t *testing.T) {
 		})
 
 		require.True(t, result.IsError, "lookup should reject an unknown provider")
-		assert.Contains(t, text, "provider not found")
+		assert.Contains(t, strings.ToLower(text), "not found")
 		assert.Contains(t, text, namespace)
 		assert.Contains(t, text, name)
 	})

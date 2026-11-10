@@ -230,6 +230,24 @@ func TestSendRegistryCall(t *testing.T) {
 			mockResponse:     `{"error": "not_found_v2"}`,
 			expectErrContent: "404 Not Found",
 		},
+		{
+			name:             "429TooManyRequests_v1_GET",
+			uri:              "providers/hashicorp/aws",
+			apiVersion:       "v1",
+			httpMethod:       "GET",
+			mockStatusCode:   http.StatusTooManyRequests,
+			mockResponse:     `{"errors": ["too many requests"]}`,
+			expectErrContent: "429 Too Many Requests",
+		},
+		{
+			name:             "503ServiceUnavailable_v2_GET",
+			uri:              "provider-docs/123",
+			apiVersion:       "v2",
+			httpMethod:       "GET",
+			mockStatusCode:   http.StatusServiceUnavailable,
+			mockResponse:     `{"errors": ["unavailable"]}`,
+			expectErrContent: "503 Service Unavailable",
+		},
 	}
 
 	for _, tc := range tests {
@@ -275,6 +293,10 @@ func TestSendRegistryCall(t *testing.T) {
 			} else {
 				require.Error(t, err, "TestSendRegistryCall (%s): expected an error but got nil", tc.name)
 				assert.Contains(t, err.Error(), tc.expectErrContent, "TestSendRegistryCall (%s): error message mismatch", tc.name)
+
+				var registryErr *RegistryError
+				require.ErrorAs(t, err, &registryErr)
+				assert.Equal(t, tc.mockStatusCode, registryErr.StatusCode)
 			}
 		})
 	}

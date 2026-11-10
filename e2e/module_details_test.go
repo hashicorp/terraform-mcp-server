@@ -99,7 +99,7 @@ func TestGetModuleDetailsRejectsUnknownModule(t *testing.T) {
 		})
 
 		require.True(t, result.IsError, "module details should reject a nonexistent module")
-		assert.Contains(t, text, "module not found")
+		assert.Contains(t, strings.ToLower(text), "not found")
 		assert.Contains(t, text, "use search_modules", "error should explain how to find a valid module ID")
 		assert.Contains(t, text, moduleID)
 	})

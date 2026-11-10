@@ -690,7 +690,7 @@ curl http://localhost:8080/health
 
 ### Tool errors
 
-When a tool fails because of an HCP Terraform or TFE API response we can identify, the error text starts with a code and the result's `_meta` carries the code and HTTP status:
+When a tool fails because of an HCP Terraform, TFE or public registry API response we can identify, the error text starts with a code and the result's `_meta` carries the code and HTTP status:
 
 ```json
 {
@@ -703,8 +703,10 @@ When a tool fails because of an HCP Terraform or TFE API response we can identif
 | `error_code` | `http_status` | Meaning |
 |--------------|---------------|---------|
 | `unauthorized` | 401 | The token is invalid or expired |
-| `not_found` | 404 | The resource doesn't exist, or the token can't see it |
+| `not_found` | 404 | The resource doesn't exist, or the token can't see it. For registry tools, the provider, module or policy doesn't exist |
 | `conflict` | 409 | The workspace is locked, not locked, or can't be safely deleted |
+| `rate_limited` | 429 | The registry is rate limiting requests. Wait and retry |
+| `unavailable` | 5xx | The registry is having problems. Retry later |
 
 Other failures, like network errors or validation errors from the API, don't get a code.
 

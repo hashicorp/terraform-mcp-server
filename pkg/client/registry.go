@@ -147,13 +147,27 @@ func CreateHTTPClient(insecureSkipVerify bool, logger *log.Logger) *http.Client 
 	return retryClient.StandardClient()
 }
 
+// RegistryError is returned for any non-200 from the registry, so we can tell
+// a missing provider or module apart from a rate limit or an outage.
+type RegistryError struct {
+	StatusCode int
+}
+
+func (e *RegistryError) Error() string {
+	return fmt.Sprintf("registry returned %d %s", e.StatusCode, http.StatusText(e.StatusCode))
+}
+
 func SendRegistryCall(ctx context.Context, client *http.Client, method string, uri string, logger *log.Logger, callOptions ...string) ([]byte, error) {
 	ver := "v1"
 	if len(callOptions) > 0 {
 		ver = callOptions[0] // API version will be the first optional arg to this function
 	}
+	baseURL := DefaultPublicRegistryURL
+	if len(callOptions) > 1 && callOptions[1] != "" {
+		baseURL = callOptions[1]
+	}
 
-	url, err := url.Parse(fmt.Sprintf("%s/%s/%s", DefaultPublicRegistryURL, ver, uri))
+	url, err := url.Parse(fmt.Sprintf("%s/%s/%s", baseURL, ver, uri))
 	if err != nil {
 		return nil, fmt.Errorf("error parsing terraform registry URL: %w", err)
 	}
@@ -174,11 +188,14 @@ func SendRegistryCall(ctx context.Context, client *http.Client, method string, u
 		return nil, err
 	}
 
+	defer resp.Body.Close()
+
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("error: %s", "404 Not Found")
+		// Read some of the body so the connection can be reused.
+		_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 64<<10))
+		return nil, &RegistryError{StatusCode: resp.StatusCode}
 	}
 
-	defer resp.Body.Close()
 	// Read the response body
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {

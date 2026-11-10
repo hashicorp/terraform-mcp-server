@@ -106,7 +106,7 @@ func sendSearchModulesCall(ctx context.Context, httpClient *http.Client, moduleQ
 
 	response, err := registryapi.SendRegistryCall(ctx, httpClient, http.MethodGet, uri, logger)
 	if err != nil {
-		return nil, fmt.Errorf("getting module(s) for: %v, call error: %v", moduleQuery, err)
+		return nil, fmt.Errorf("getting module(s) for %v: %w", moduleQuery, err)
 	}
 
 	return response, nil
