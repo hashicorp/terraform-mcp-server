@@ -6,6 +6,11 @@ package otelmetrics
 import (
 	"context"
 	"io"
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -81,4 +86,64 @@ func TestSetupEnabledInitializesAndReturnsShutdown(t *testing.T) {
 	assert.NotNil(t, metricsConfig.ErrorCounter)
 	assert.NotNil(t, metricsConfig.ToolCallLatencyBucket)
 	assert.NotPanics(t, shutdown)
+}
+
+func TestNewResourceHasServiceInstanceID(t *testing.T) {
+	hostname, err := os.Hostname()
+	require.NoError(t, err)
+	require.NotEmpty(t, hostname, "this test needs a hostname to check the fallback")
+
+	tests := []struct {
+		name string
+		env  string
+		want string
+	}{
+		{name: "env set", env: "3f1c2a9e-7b1d-4c55-9a53-0d6f3a8b1e11", want: "3f1c2a9e-7b1d-4c55-9a53-0d6f3a8b1e11"},
+		{name: "env set with surrounding whitespace is trimmed", env: "  pod-a \n", want: "pod-a"},
+		{name: "env empty falls back to hostname", env: "", want: hostname},
+		{name: "env whitespace only falls back to hostname", env: "   \t\n", want: hostname},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv(ServiceInstanceIDEnv, tt.env)
+			config := client.DefaultMetricsConfig()
+
+			// Look the attribute up on the resource itself: this is what the meter provider exports
+			value, ok := newResource(&config).Set().Value("service.instance.id")
+
+			require.True(t, ok, "newResource must set service.instance.id")
+			assert.Equal(t, tt.want, value.AsString())
+		})
+	}
+}
+
+// newResource is only useful if Init passes it to the meter provider, so check
+// what a real exporter sends to a collector.
+func TestInitExportsServiceInstanceID(t *testing.T) {
+	var mu sync.Mutex
+	var payload []byte
+	collector := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		mu.Lock()
+		payload = append(payload, body...)
+		mu.Unlock()
+	}))
+	defer collector.Close()
+
+	t.Setenv(ServiceInstanceIDEnv, "pod-from-env")
+	config := client.DefaultMetricsConfig()
+	config.Enabled = true
+	config.Endpoint = strings.TrimPrefix(collector.URL, "http://")
+	config.ExportInterval = 50 * time.Millisecond
+
+	shutdown, err := Init(context.Background(), &config, testLogger())
+	require.NoError(t, err)
+	// Record one data point so there is something to export
+	client.RecordOrgToolCall(context.Background(), "acme", config, testLogger())
+	shutdown() // flushes pending metrics to the collector
+
+	mu.Lock()
+	defer mu.Unlock()
+	assert.Contains(t, string(payload), "service.instance.id")
+	assert.Contains(t, string(payload), "pod-from-env")
 }
