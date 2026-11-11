@@ -37,7 +37,7 @@ const validExecuteQueryConfiguration = `{
 func TestExecuteQueryDefinition(t *testing.T) {
 	tool := ExecuteQuery(silentLogger())
 
-	assert.Equal(t, "execute_query", tool.Tool.Name)
+	assert.Equal(t, "execute_search_query", tool.Tool.Name)
 	assert.NotContains(t, tool.Tool.InputSchema.Required, ScopeOrganizationInput)
 	assert.Contains(t, tool.Tool.InputSchema.Properties, ScopeOrganizationInput)
 	assert.NotContains(t, tool.Tool.InputSchema.Properties, "organization_name")
@@ -51,9 +51,9 @@ func TestExecuteQueryDefinition(t *testing.T) {
 	assert.False(t, *tool.Tool.Annotations.DestructiveHint)
 	require.NotNil(t, tool.Tool.Annotations.OpenWorldHint)
 	assert.True(t, *tool.Tool.Annotations.OpenWorldHint)
-	assert.Contains(t, tool.Tool.Description, "provider_list_schema_list")
-	assert.Contains(t, tool.Tool.Description, "generate_query_configuration")
-	assert.Contains(t, tool.Tool.Description, "get_query_status")
+	assert.Contains(t, tool.Tool.Description, "get_search_list_resource_schemas")
+	assert.Contains(t, tool.Tool.Description, "generate_search_query_configuration")
+	assert.Contains(t, tool.Tool.Description, "get_search_query_status")
 	assert.Contains(t, tool.Tool.Description, "exact list_resource_schemas key")
 	assert.Contains(t, tool.Tool.Description, "ordinary managed-resource name")
 	assert.Contains(t, tool.Tool.Description, "confirm the source organization/workspace")
