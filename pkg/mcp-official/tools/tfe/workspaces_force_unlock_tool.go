@@ -52,7 +52,7 @@ func ForceUnlockWorkspaceFunc(ctx context.Context, request *mcp.CallToolRequest,
 	// Verify the workspace exists before attempting the unlock.
 	workspace, err := tfeClient.Workspaces.ReadByID(ctx, workspaceID)
 	if err != nil {
-		return nil, nil, fmt.Errorf("workspace not found: %s", workspaceID)
+		return nil, nil, fmt.Errorf("failed to read workspace %s: %w", workspaceID, err)
 	}
 
 	// Reject early if the workspace is not locked, to avoid a misleading

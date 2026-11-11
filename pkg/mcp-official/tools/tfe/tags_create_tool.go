@@ -82,7 +82,7 @@ func CreateWorkspaceTagsFunc(ctx context.Context, request *mcp.CallToolRequest, 
 
 	workspace, err := tfeClient.Workspaces.Read(ctx, terraformOrgName, workspaceName)
 	if err != nil {
-		return nil, nil, fmt.Errorf("workspace %q not found in org %q: %w", workspaceName, terraformOrgName, err)
+		return nil, nil, fmt.Errorf("failed to read workspace %q in org %q: %w", workspaceName, terraformOrgName, err)
 	}
 
 	addedBindings, err := tfeClient.Workspaces.AddTagBindings(ctx, workspace.ID, tfe.WorkspaceAddTagBindingsOptions{
