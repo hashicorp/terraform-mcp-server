@@ -14,6 +14,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/hashicorp/go-cleanhttp"
@@ -102,6 +103,36 @@ func redactRetryURL(raw string) string {
 	return u.String() + trailing
 }
 
+// maxIdleConnsPerHost is how many idle connections we keep per host. Most of
+// our traffic goes to HCPT and the registry, so the default of 2 (or
+// GOMAXPROCS+1 from cleanhttp) is too low.
+const maxIdleConnsPerHost = 20
+
+// Every client shares one transport per TLS setting so connections to HCPT and
+// the registry get reused across requests and sessions. Skip-verify gets its
+// own since the TLS config lives on the transport.
+var (
+	sharedTransportsOnce [2]sync.Once
+	sharedTransports     [2]*http.Transport
+)
+
+func sharedTransport(insecureSkipVerify bool) *http.Transport {
+	i := 0
+	if insecureSkipVerify {
+		i = 1
+	}
+	sharedTransportsOnce[i].Do(func() {
+		// cleanhttp's pooled transport gives us dial, keepalive and TLS handshake
+		// timeouts, closes idle connections after 90s, and keeps HTTP/2 on with
+		// our own TLS config
+		transport := cleanhttp.DefaultPooledTransport()
+		transport.TLSClientConfig = &tls.Config{InsecureSkipVerify: insecureSkipVerify}
+		transport.MaxIdleConnsPerHost = maxIdleConnsPerHost
+		sharedTransports[i] = transport
+	})
+	return sharedTransports[i]
+}
+
 // CreateHTTPClient initializes a retryable HTTP client
 func CreateHTTPClient(insecureSkipVerify bool, logger *log.Logger) *http.Client {
 	retryClient := retryablehttp.NewClient()
@@ -113,14 +144,9 @@ func CreateHTTPClient(insecureSkipVerify bool, logger *log.Logger) *http.Client 
 		retryClient.Logger = redactingRetryLogger{logger: logger}
 	}
 
-	transport := &http.Transport{
-		TLSClientConfig: &tls.Config{InsecureSkipVerify: insecureSkipVerify},
-	}
-	transport.Proxy = http.ProxyFromEnvironment
-
 	retryClient.HTTPClient = cleanhttp.DefaultClient()
 	retryClient.HTTPClient.Timeout = 10 * time.Second
-	retryClient.HTTPClient.Transport = &requestIDTransport{base: transport}
+	retryClient.HTTPClient.Transport = &requestIDTransport{base: sharedTransport(insecureSkipVerify)}
 	retryClient.RetryMax = 3
 
 	retryClient.Backoff = func(min, max time.Duration, attemptNum int, resp *http.Response) time.Duration {
