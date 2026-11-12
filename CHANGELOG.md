@@ -7,6 +7,10 @@ FEATURES
 
 # 1.4.2
 
+FEATURES
+
+* [New Tool] `get_plan_redacted` Lists what a plan changes: action and address for each resource and output, counts per action, and resource drift. Never returns attribute values. Reads the redacted JSON plan, so unlike `get_plan_json_output` it doesn't need workspace admin access. Accepts `run_id` or `plan_id`.
+
 IMPROVEMENTS
 
 * Add `MCP_PPROF_ADDR` to serve Go pprof profiling endpoints on a separate port, so CPU and memory profiles can be taken from a running server. It's off by default.
