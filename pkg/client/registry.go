@@ -122,6 +122,9 @@ func CreateHTTPClient(insecureSkipVerify bool, logger *log.Logger) *http.Client 
 	retryClient.HTTPClient.Timeout = 10 * time.Second
 	retryClient.HTTPClient.Transport = &requestIDTransport{base: transport}
 	retryClient.RetryMax = 3
+	// By default retryablehttp drops the last response once retries run out,
+	// so a 429 would come back as a generic error instead of a RegistryError
+	retryClient.ErrorHandler = retryablehttp.PassthroughErrorHandler
 
 	retryClient.Backoff = func(min, max time.Duration, attemptNum int, resp *http.Response) time.Duration {
 		if resp != nil && resp.StatusCode == http.StatusTooManyRequests {

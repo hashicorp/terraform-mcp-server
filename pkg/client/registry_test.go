@@ -164,8 +164,9 @@ func TestCreateHTTPClientRedactsRetryLogs(t *testing.T) {
 
 	secretURL := server.URL + "/private/log?X-Amz-Signature=secret-sentinel"
 	resp, err := CreateHTTPClient(false, testLogger).Get(secretURL)
-	require.Error(t, err)
-	require.Nil(t, resp)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusTooManyRequests, resp.StatusCode)
+	require.NoError(t, resp.Body.Close())
 
 	logged := output.String()
 	require.Contains(t, logged, "retrying")
@@ -281,12 +282,16 @@ func TestSendRegistryCall(t *testing.T) {
 					}
 				}
 
+				if tc.mockStatusCode == http.StatusTooManyRequests {
+					// we only retry 429s that have this header
+					w.Header().Set("x-ratelimit-reset", "0")
+				}
 				w.WriteHeader(tc.mockStatusCode)
 				fmt.Fprint(w, tc.mockResponse)
 			}))
 			defer server.Close()
 
-			_, err := SendRegistryCall(context.Background(), server.Client(), tc.httpMethod, tc.uri, logger, tc.apiVersion, server.URL)
+			_, err := SendRegistryCall(context.Background(), CreateHTTPClient(false, logger), tc.httpMethod, tc.uri, logger, tc.apiVersion, server.URL)
 
 			if tc.expectErrContent == "" {
 				require.NoError(t, err, "TestSendRegistryCall (%s)", tc.name)

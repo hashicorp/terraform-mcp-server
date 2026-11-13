@@ -130,8 +130,8 @@ func searchProviders(ctx context.Context, request *mcp.CallToolRequest, input Se
 	if utils.IsV2ProviderDocumentType(providerDetail.ProviderDocumentType) {
 		content, err := providerDetailsV2(ctx, httpClient, providerDetail, logger)
 		if err != nil {
-			return nil, nil, fmt.Errorf("failed to find %s documentation for provider '%s' in the '%s' namespace - %s",
-				providerDetail.ProviderDocumentType, providerDetail.ProviderName, providerDetail.ProviderNamespace, defaultErrorGuide)
+			return nil, nil, fmt.Errorf("failed to find %s documentation for provider '%s' in the '%s' namespace: %w - %s",
+				providerDetail.ProviderDocumentType, providerDetail.ProviderName, providerDetail.ProviderNamespace, err, defaultErrorGuide)
 		}
 
 		fullContent := fmt.Sprintf("# %s provider docs\n\n%s",

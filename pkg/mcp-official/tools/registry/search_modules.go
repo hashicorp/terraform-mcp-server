@@ -82,7 +82,7 @@ func searchModules(ctx context.Context, request *mcp.CallToolRequest, input Sear
 
 	response, err := sendSearchModulesCall(ctx, httpClient, moduleQuery, input.CurrentOffset, logger)
 	if err != nil {
-		return nil, nil, fmt.Errorf("no modules found for query: %s - try a different search term", moduleQuery)
+		return nil, nil, fmt.Errorf("searching modules: %w", err)
 	}
 
 	modulesData, err := unmarshalTerraformModules(response, moduleQuery)
