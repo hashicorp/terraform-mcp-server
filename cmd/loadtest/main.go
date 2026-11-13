@@ -89,6 +89,15 @@ func main() {
 		start   = time.Now()
 		success atomic.Int64
 		failure atomic.Int64
+		// Workers that fail to connect never make a call, so count them on their
+		// own or a down server would look like a clean run.
+		connectFailures atomic.Int64
+
+		// Each worker keeps its own durations and adds them once it's done, so
+		// timing calls doesn't add lock contention.
+		latencyMu        sync.Mutex
+		successLatencies []time.Duration
+		failureLatencies []time.Duration
 	)
 
 	log.Printf("loadtest: %d workers, %d qps/worker, %s duration, tool=%s", *workers, *qps, *duration, *tool)
@@ -102,10 +111,21 @@ func main() {
 			client := mcp.NewClient(&mcp.Implementation{Name: "loadtest", Version: "v1.0.0"}, nil)
 			session, err := client.Connect(ctx, &mcp.StreamableClientTransport{Endpoint: endpoint, HTTPClient: httpClient}, nil)
 			if err != nil {
+				if ctx.Err() == nil {
+					connectFailures.Add(1)
+				}
 				log.Printf("connect error: %v", err)
 				return
 			}
 			defer session.Close()
+
+			var okDurations, errDurations []time.Duration
+			defer func() {
+				latencyMu.Lock()
+				successLatencies = append(successLatencies, okDurations...)
+				failureLatencies = append(failureLatencies, errDurations...)
+				latencyMu.Unlock()
+			}()
 
 			ticker := time.NewTicker(time.Second / time.Duration(*qps))
 			defer ticker.Stop()
@@ -116,10 +136,12 @@ func main() {
 					return
 				case <-ticker.C:
 					reqCtx, reqCancel := context.WithTimeout(ctx, *timeout)
+					callStart := time.Now()
 					res, err := session.CallTool(reqCtx, &mcp.CallToolParams{
 						Name:      *tool,
 						Arguments: json.RawMessage(*jsonArgs),
 					})
+					elapsed := time.Since(callStart)
 					reqCancel()
 
 					if err != nil {
@@ -127,11 +149,22 @@ func main() {
 							return
 						}
 						failure.Add(1)
+						errDurations = append(errDurations, elapsed)
 						if *verbose {
 							log.Printf("error: %v", err)
 						}
+					} else if res.IsError {
+						// The call went through but the tool failed (not found,
+						// rate limited, etc), so count it as a failure
+						failure.Add(1)
+						errDurations = append(errDurations, elapsed)
+						if *verbose {
+							data, _ := json.Marshal(res)
+							log.Printf("tool error: %s", data)
+						}
 					} else {
 						success.Add(1)
+						okDurations = append(okDurations, elapsed)
 						if *verbose {
 							data, _ := json.Marshal(res)
 							log.Printf("ok: %s", data)
@@ -153,8 +186,17 @@ func main() {
 	fmt.Printf("  success: %d (%.1f/s)\n", succ, float64(succ)/dur.Seconds())
 	fmt.Printf("  failure: %d (%.1f/s)\n", fail, float64(fail)/dur.Seconds())
 	fmt.Printf("  total:   %d (%.1f/s)\n", total, float64(total)/dur.Seconds())
+	if n := connectFailures.Load(); n > 0 {
+		fmt.Printf("  connect errors: %d of %d workers couldn't connect\n", n, *workers)
+	}
+	if s := summarizeLatencies(successLatencies); s.count > 0 {
+		fmt.Printf("  latency (success): %s\n", s)
+	}
+	if s := summarizeLatencies(failureLatencies); s.count > 0 {
+		fmt.Printf("  latency (failure): %s\n", s)
+	}
 
-	if fail > 0 {
+	if fail > 0 || connectFailures.Load() > 0 {
 		os.Exit(1)
 	}
 }
