@@ -33,8 +33,8 @@ func (t *authTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 
 var (
 	duration = flag.Duration("duration", 1*time.Minute, "duration of the load test")
-	tool     = flag.String("tool", "search_provider_docs", "tool to call")
-	jsonArgs = flag.String("args", `{"query": "aws"}`, "JSON arguments to pass")
+	tool     = flag.String("tool", "search_modules", "tool to call")
+	jsonArgs = flag.String("args", `{"module_query": "vpc"}`, "JSON arguments to pass")
 	workers  = flag.Int("workers", 10, "number of concurrent workers")
 	timeout  = flag.Duration("timeout", 10*time.Second, "request timeout")
 	qps      = flag.Int("qps", 10, "tool calls per second, per worker")
@@ -47,7 +47,7 @@ func main() {
 		fmt.Fprintf(os.Stderr, "Usage: loadtest [flags] <URL>\n\n")
 		fmt.Fprintf(os.Stderr, "Examples:\n")
 		fmt.Fprintf(os.Stderr, "  loadtest http://localhost:8080/mcp\n")
-		fmt.Fprintf(os.Stderr, "  loadtest -tool=search_modules -args='{\"query\": \"vpc\"}' http://localhost:8080/mcp\n")
+		fmt.Fprintf(os.Stderr, "  loadtest -tool=get_latest_provider_version -args='{\"namespace\": \"hashicorp\", \"name\": \"aws\"}' http://localhost:8080/mcp\n")
 		fmt.Fprintf(os.Stderr, "  loadtest -workers=50 -qps=20 -duration=5m http://localhost:8080/mcp\n")
 		fmt.Fprintf(os.Stderr, "  loadtest -race http://localhost:8080/mcp\n\n")
 		flag.PrintDefaults()
