@@ -4,11 +4,16 @@
 package tools
 
 import (
+	"errors"
+	"fmt"
+	"net/http"
 	"testing"
 
 	"github.com/google/jsonschema-go/jsonschema"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/hashicorp/terraform-mcp-server/pkg/client"
 )
 
 func TestSearchProviderDocsTool(t *testing.T) {
@@ -71,6 +76,25 @@ func TestSearchProviderDocsParameterValidation(t *testing.T) {
 			} else {
 				assert.NoError(t, err)
 			}
+		})
+	}
+}
+
+func TestIsRegistryBusy(t *testing.T) {
+	tests := []struct {
+		name string
+		err  error
+		want bool
+	}{
+		{name: "rate limited", err: fmt.Errorf("getting latest version: %w", &client.RegistryError{StatusCode: http.StatusTooManyRequests}), want: true},
+		{name: "server error", err: &client.RegistryError{StatusCode: http.StatusServiceUnavailable}, want: true},
+		{name: "not found falls back", err: &client.RegistryError{StatusCode: http.StatusNotFound}},
+		{name: "other errors fall back", err: errors.New("unexpected end of JSON input")},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, isRegistryBusy(tt.err))
 		})
 	}
 }

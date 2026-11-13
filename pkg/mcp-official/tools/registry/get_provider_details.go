@@ -62,7 +62,7 @@ func getProviderDetails(ctx context.Context, request *mcp.CallToolRequest, input
 
 	detailResp, err := registryapi.SendRegistryCall(ctx, httpClient, "GET", path.Join("provider-docs", providerDocID), logger, "v2")
 	if err != nil {
-		return nil, nil, fmt.Errorf("provider doc not found: %s - use search_provider_docs first to find valid provider_doc_id values", providerDocID)
+		return nil, nil, fmt.Errorf("getting provider doc %s: %w - use search_provider_docs first to find valid provider_doc_id values", providerDocID, err)
 	}
 
 	var details registryapi.ProviderResourceDetails

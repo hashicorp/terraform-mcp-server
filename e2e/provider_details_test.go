@@ -2,6 +2,7 @@ package e2e
 
 import (
 	"regexp"
+	"strings"
 	"testing"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -85,7 +86,7 @@ func TestGetProviderDetailsRejectsUnknownNumericID(t *testing.T) {
 		})
 
 		require.True(t, result.IsError, "provider details should reject an unknown numeric document ID")
-		assert.Contains(t, text, "provider doc not found")
+		assert.Contains(t, strings.ToLower(text), "not found")
 		assert.Contains(t, text, providerDocID, "error should identify the missing document ID")
 	})
 }

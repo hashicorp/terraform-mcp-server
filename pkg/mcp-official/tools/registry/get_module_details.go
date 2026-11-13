@@ -63,7 +63,7 @@ func getModuleDetailsHandler(ctx context.Context, request *mcp.CallToolRequest, 
 
 	response, err := getModuleDetails(ctx, httpClient, moduleID, 0, logger)
 	if err != nil {
-		return nil, nil, fmt.Errorf("module not found: %s - use search_modules first to find valid module IDs", moduleID)
+		return nil, nil, fmt.Errorf("getting module %s: %w - use search_modules first to find valid module IDs", moduleID, err)
 	}
 
 	moduleData, err := unmarshalTerraformModule(response)
@@ -81,7 +81,7 @@ func getModuleDetails(ctx context.Context, httpClient *http.Client, moduleID str
 	uri := fmt.Sprintf("modules/%s?offset=%v", moduleID, currentOffset)
 	response, err := registryapi.SendRegistryCall(ctx, httpClient, http.MethodGet, uri, logger)
 	if err != nil {
-		return nil, fmt.Errorf("getting module(s) for: %v, please provide a different provider name like aws, azurerm or google etc", moduleID)
+		return nil, err
 	}
 
 	return response, nil

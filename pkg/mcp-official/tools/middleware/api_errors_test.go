@@ -14,6 +14,8 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	tfeclient "github.com/hashicorp/terraform-mcp-server/pkg/client"
 )
 
 func errorResult(err error) *mcp.CallToolResult {
@@ -45,6 +47,20 @@ func TestAPIErrors(t *testing.T) {
 			wantText:   "not_found: failed to read run run-123: resource not found",
 			wantCode:   APIErrorNotFound,
 			wantStatus: 404,
+		},
+		{
+			name:       "registry rate limited",
+			result:     errorResult(fmt.Errorf("getting provider doc 123: %w", &tfeclient.RegistryError{StatusCode: 429})),
+			wantText:   "rate_limited: getting provider doc 123: registry returned 429 Too Many Requests",
+			wantCode:   APIErrorRateLimited,
+			wantStatus: 429,
+		},
+		{
+			name:       "registry unavailable",
+			result:     errorResult(fmt.Errorf("searching modules: %w", &tfeclient.RegistryError{StatusCode: 502})),
+			wantText:   "unavailable: searching modules: registry returned 502 Bad Gateway",
+			wantCode:   APIErrorUnavailable,
+			wantStatus: 502,
 		},
 		{
 			name:     "unknown error is left alone",
@@ -122,6 +138,11 @@ func TestClassifyAPIError(t *testing.T) {
 		{name: "workspace locked", err: tfe.ErrWorkspaceLocked, want: apiError{Code: APIErrorConflict, Status: http.StatusConflict}, wantOK: true},
 		{name: "locked by run", err: fmt.Errorf("unlocking: %w", tfe.ErrWorkspaceLockedByRun), want: apiError{Code: APIErrorConflict, Status: http.StatusConflict}, wantOK: true},
 		{name: "not safe to delete", err: tfe.ErrWorkspaceNotSafeToDelete, want: apiError{Code: APIErrorConflict, Status: http.StatusConflict}, wantOK: true},
+		{name: "registry not found", err: fmt.Errorf("getting provider doc 123: %w", &tfeclient.RegistryError{StatusCode: http.StatusNotFound}), want: apiError{Code: APIErrorNotFound, Status: http.StatusNotFound}, wantOK: true},
+		{name: "registry rate limited", err: fmt.Errorf("searching modules: %w", &tfeclient.RegistryError{StatusCode: http.StatusTooManyRequests}), want: apiError{Code: APIErrorRateLimited, Status: http.StatusTooManyRequests}, wantOK: true},
+		{name: "registry 500", err: &tfeclient.RegistryError{StatusCode: http.StatusInternalServerError}, want: apiError{Code: APIErrorUnavailable, Status: http.StatusInternalServerError}, wantOK: true},
+		{name: "registry 503", err: &tfeclient.RegistryError{StatusCode: http.StatusServiceUnavailable}, want: apiError{Code: APIErrorUnavailable, Status: http.StatusServiceUnavailable}, wantOK: true},
+		{name: "registry 400 is not guessed", err: &tfeclient.RegistryError{StatusCode: http.StatusBadRequest}},
 		{name: "plain error is not guessed", err: errors.New("invalid attribute")},
 		{name: "network error is not guessed", err: context.DeadlineExceeded},
 		{name: "error text alone is not enough", err: errors.New("unauthorized")},
