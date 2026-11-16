@@ -102,7 +102,7 @@ func TestListWorkspacePolicySetsErrorPaths(t *testing.T) {
 			"workspace_id":       "ws-doesnotexist123",
 		})
 		require.True(t, result.IsError, "list_workspace_policy_sets should reject a non-existent workspace ID")
-		assert.Contains(t, resultText, "workspace not found", "error should identify the workspace as not found")
+		assert.Contains(t, resultText, "not found", "error should identify the workspace as not found")
 	})
 }
 

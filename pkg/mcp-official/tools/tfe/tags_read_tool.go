@@ -73,7 +73,7 @@ func ReadWorkspaceTagsFunc(ctx context.Context, request *mcp.CallToolRequest, in
 
 	workspace, err := tfeClient.Workspaces.Read(ctx, terraformOrgName, workspaceName)
 	if err != nil {
-		return nil, nil, fmt.Errorf("workspace %q not found in org %q: %w", workspaceName, terraformOrgName, err)
+		return nil, nil, fmt.Errorf("failed to read workspace %q in org %q: %w", workspaceName, terraformOrgName, err)
 	}
 
 	tags, err := tfeClient.Workspaces.ListTags(ctx, workspace.ID, nil)

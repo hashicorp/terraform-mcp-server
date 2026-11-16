@@ -688,6 +688,28 @@ curl http://localhost:8080/health
 
 [Check out available tools here :link:](https://developer.hashicorp.com/terraform/docs/tools/mcp-server/reference#available-tools)
 
+### Tool errors
+
+When a tool fails because of an HCP Terraform or TFE API response we can identify, the error text starts with a code and the result's `_meta` carries the code and HTTP status:
+
+```json
+{
+  "isError": true,
+  "content": [{ "type": "text", "text": "unauthorized: failed to read run run-123: unauthorized" }],
+  "_meta": { "error_code": "unauthorized", "http_status": 401 }
+}
+```
+
+| `error_code` | `http_status` | Meaning |
+|--------------|---------------|---------|
+| `unauthorized` | 401 | The token is invalid or expired |
+| `not_found` | 404 | The resource doesn't exist, or the token can't see it |
+| `conflict` | 409 | The workspace is locked, not locked, or can't be safely deleted |
+
+Other failures, like network errors or validation errors from the API, don't get a code.
+
+These are normal tool results, so the HTTP status is still `200`. A missing token doesn't get a code since it fails before calling the API. To reject requests without a token with an HTTP `401`, set `MCP_REQUIRE_TOKEN=true`.
+
 ## Available Resources
 
 [Check out available resources here :link:](https://developer.hashicorp.com/terraform/docs/tools/mcp-server/reference#available-tools)
