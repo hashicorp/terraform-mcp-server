@@ -213,3 +213,48 @@ func TestToolLoggingMiddlewareRequestID(t *testing.T) {
 		assert.Contains(t, buf.String(), "request_id="+nextID)
 	})
 }
+
+func TestRequestIDTransportForwardedFor(t *testing.T) {
+	var gotHeader string
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotHeader = r.Header.Get("X-Forwarded-For")
+		w.WriteHeader(http.StatusOK)
+	}))
+	t.Cleanup(upstream.Close)
+
+	logger := log.New()
+	logger.SetOutput(io.Discard)
+	httpClient := CreateHTTPClient(false, logger)
+
+	tests := []struct {
+		name           string
+		clientIP       string
+		existingHeader string
+		expected       string
+	}{
+		{name: "sets header from context", clientIP: "203.0.113.7", expected: "203.0.113.7"},
+		{name: "no client IP in context sends no header", expected: ""},
+		{name: "does not overwrite a header the caller set", clientIP: "203.0.113.7", existingHeader: "198.51.100.1", expected: "198.51.100.1"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			gotHeader = ""
+			ctx := context.Background()
+			if tt.clientIP != "" {
+				ctx = context.WithValue(ctx, contextKey(ClientIPKey), tt.clientIP)
+			}
+			req, err := http.NewRequestWithContext(ctx, http.MethodGet, upstream.URL, nil)
+			require.NoError(t, err)
+			if tt.existingHeader != "" {
+				req.Header.Set("X-Forwarded-For", tt.existingHeader)
+			}
+
+			resp, err := httpClient.Do(req)
+			require.NoError(t, err)
+			resp.Body.Close()
+
+			assert.Equal(t, tt.expected, gotHeader)
+		})
+	}
+}

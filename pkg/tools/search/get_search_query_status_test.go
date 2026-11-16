@@ -596,7 +596,7 @@ func queryStatusHandlerContext(t *testing.T, testServer *httptest.Server) contex
 	t.Helper()
 	sessionID := "get-query-status-" + t.Name()
 	t.Setenv(client.TerraformToken, "test-token")
-	_, err := client.NewTfeClient(sessionID, testServer.URL, false, "test-token", "", silentLogger())
+	_, err := client.NewTfeClient(sessionID, testServer.URL, false, "test-token", silentLogger())
 	require.NoError(t, err)
 	t.Cleanup(func() { client.DeleteTfeClient(sessionID) })
 	mcpServer := server.NewMCPServer("test", "test")

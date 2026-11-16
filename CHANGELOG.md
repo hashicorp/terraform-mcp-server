@@ -5,6 +5,10 @@ FEATURES
 * [New Tools] Terraform Search adds `get_search_list_resource_schemas`, `generate_search_query_configuration`, `execute_search_query`, `get_search_query_status`, and `get_search_query_summary` on both the legacy and official MCP servers. Query status polling is bounded per call.
 * [New Tools] Terraform Search adds read-only `prepare_import` and `verify_import_plan` tools for preparing explicitly selected Search results and verifying the associated plan-only HCP Terraform Run. These tools do not upload configuration, create a Run, or apply imports.
 
+IMPROVEMENTS
+
+* Reuse HCP Terraform clients across requests in stateless mode instead of building a new one (and pinging the API) on every request. Clients are cached per address and token, capped at 1000, and dropped after 10 minutes idle. `X-Forwarded-For` is now set per request, so cached clients always forward the right client IP.
+
 # 1.4.2
 
 IMPROVEMENTS

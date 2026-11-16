@@ -283,8 +283,7 @@ func RequireTerraformTokenMiddleware(logger *log.Logger) func(http.Handler) http
 
 var organizationListerForRequest = func(ctx context.Context, token string, logger *log.Logger) (organizationLister, error) {
 	terraformAddress := utils.GetEnv(TerraformAddress, DefaultTerraformAddress)
-	clientIP, _ := ctx.Value(contextKey(ClientIPKey)).(string)
-	tfeClient, err := NewTfeClientForToken(terraformAddress, parseTerraformSkipTLSVerify(ctx), token, clientIP, logger)
+	tfeClient, err := statelessTfeClient(terraformAddress, parseTerraformSkipTLSVerify(ctx), token, logger)
 	if err != nil {
 		return nil, err
 	}
