@@ -10,15 +10,18 @@ import (
 
 	"github.com/hashicorp/go-tfe"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+
+	tfeclient "github.com/hashicorp/terraform-mcp-server/pkg/client"
 )
 
-// Error codes for tool errors that came from an HCPT or TFE API response.
-// Clients can check these instead of parsing the text, like refreshing the
-// token on unauthorized.
+// Error codes for tool errors from HCPT, TFE or the registry. Clients can check
+// these instead of parsing the error text.
 const (
 	APIErrorUnauthorized = "unauthorized"
 	APIErrorNotFound     = "not_found"
 	APIErrorConflict     = "conflict"
+	APIErrorRateLimited  = "rate_limited"
+	APIErrorUnavailable  = "unavailable"
 )
 
 // Keys for the error info in a tool result's _meta.
@@ -46,8 +49,8 @@ var conflictErrors = []error{
 	tfe.ErrWorkspaceNotSafeToDelete,
 }
 
-// classifyAPIError maps the go-tfe error from a failed API call to a code and
-// the status the API sent back. Anything we can't tell for sure, like a network
+// classifyAPIError maps the go-tfe or registry error from a failed API call to
+// a code and the status the API sent back. Anything we can't tell for sure, like a network
 // error or a 400 with a custom message, returns false so we don't guess.
 //
 // HCPT sends a 404 for things the token can't see, so not_found can also mean
@@ -65,6 +68,25 @@ func classifyAPIError(err error) (apiError, bool) {
 		if errors.Is(err, conflict) {
 			return apiError{Code: APIErrorConflict, Status: http.StatusConflict}, true
 		}
+	}
+
+	var registryErr *tfeclient.RegistryError
+	if errors.As(err, &registryErr) {
+		return classifyRegistryStatus(registryErr.StatusCode)
+	}
+	return apiError{}, false
+}
+
+// classifyRegistryStatus maps a status from the public registry to a code.
+// Other statuses, like a 400, return false since we can't say much about them.
+func classifyRegistryStatus(status int) (apiError, bool) {
+	switch {
+	case status == http.StatusNotFound:
+		return apiError{Code: APIErrorNotFound, Status: status}, true
+	case status == http.StatusTooManyRequests:
+		return apiError{Code: APIErrorRateLimited, Status: status}, true
+	case status >= http.StatusInternalServerError:
+		return apiError{Code: APIErrorUnavailable, Status: status}, true
 	}
 	return apiError{}, false
 }

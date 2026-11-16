@@ -164,8 +164,9 @@ func TestCreateHTTPClientRedactsRetryLogs(t *testing.T) {
 
 	secretURL := server.URL + "/private/log?X-Amz-Signature=secret-sentinel"
 	resp, err := CreateHTTPClient(false, testLogger).Get(secretURL)
-	require.Error(t, err)
-	require.Nil(t, resp)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusTooManyRequests, resp.StatusCode)
+	require.NoError(t, resp.Body.Close())
 
 	logged := output.String()
 	require.Contains(t, logged, "retrying")
@@ -230,6 +231,24 @@ func TestSendRegistryCall(t *testing.T) {
 			mockResponse:     `{"error": "not_found_v2"}`,
 			expectErrContent: "404 Not Found",
 		},
+		{
+			name:             "429TooManyRequests_v1_GET",
+			uri:              "providers/hashicorp/aws",
+			apiVersion:       "v1",
+			httpMethod:       "GET",
+			mockStatusCode:   http.StatusTooManyRequests,
+			mockResponse:     `{"errors": ["too many requests"]}`,
+			expectErrContent: "429 Too Many Requests",
+		},
+		{
+			name:             "503ServiceUnavailable_v2_GET",
+			uri:              "provider-docs/123",
+			apiVersion:       "v2",
+			httpMethod:       "GET",
+			mockStatusCode:   http.StatusServiceUnavailable,
+			mockResponse:     `{"errors": ["unavailable"]}`,
+			expectErrContent: "503 Service Unavailable",
+		},
 	}
 
 	for _, tc := range tests {
@@ -263,18 +282,26 @@ func TestSendRegistryCall(t *testing.T) {
 					}
 				}
 
+				if tc.mockStatusCode == http.StatusTooManyRequests {
+					// we only retry 429s that have this header
+					w.Header().Set("x-ratelimit-reset", "0")
+				}
 				w.WriteHeader(tc.mockStatusCode)
 				fmt.Fprint(w, tc.mockResponse)
 			}))
 			defer server.Close()
 
-			_, err := SendRegistryCall(context.Background(), server.Client(), tc.httpMethod, tc.uri, logger, tc.apiVersion, server.URL)
+			_, err := SendRegistryCall(context.Background(), CreateHTTPClient(false, logger), tc.httpMethod, tc.uri, logger, tc.apiVersion, server.URL)
 
 			if tc.expectErrContent == "" {
 				require.NoError(t, err, "TestSendRegistryCall (%s)", tc.name)
 			} else {
 				require.Error(t, err, "TestSendRegistryCall (%s): expected an error but got nil", tc.name)
 				assert.Contains(t, err.Error(), tc.expectErrContent, "TestSendRegistryCall (%s): error message mismatch", tc.name)
+
+				var registryErr *RegistryError
+				require.ErrorAs(t, err, &registryErr)
+				assert.Equal(t, tc.mockStatusCode, registryErr.StatusCode)
 			}
 		})
 	}
