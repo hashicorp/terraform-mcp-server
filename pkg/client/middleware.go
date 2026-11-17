@@ -339,7 +339,13 @@ func TerraformContextMiddleware(logger *log.Logger) func(http.Handler) http.Hand
 	clientIPCfg := LoadClientIPConfigFromEnv()
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			ctx := r.Context()
+			// Every request gets its own request id. It goes out as X-Request-Id on
+			// our calls to HCPT, TFE and the registry, and back to the client, so we
+			// can match up a request on both sides. We always make our own and don't
+			// use one the client sends.
+			requestID := NewRequestID()
+			ctx := WithRequestID(r.Context(), requestID)
+			w.Header().Set(RequestIDHeader, requestID)
 
 			// TFE_ADDRESS is never sourced from the client in streamable-http mode.
 			// Allowing a client to set the address via header or query parameter would
@@ -356,8 +362,18 @@ func TerraformContextMiddleware(logger *log.Logger) func(http.Handler) http.Hand
 				logger.Debug("Terraform address configured server-side")
 			}
 
-			// The remaining vals may still be sourced from the client.
-			clientHeaders := []string{TerraformToken, TerraformSkipTLSVerify}
+			// TFE_SKIP_TLS_VERIFY is a server setting like TFE_ADDRESS, so it only comes
+			// from env. If a client could set it, they could turn off cert checks on the
+			// server's calls to HCP Terraform.
+			if r.Header.Get(TerraformSkipTLSVerify) != "" || r.URL.Query().Get(TerraformSkipTLSVerify) != "" {
+				if logger != nil {
+					logger.Warn("Ignoring TFE_SKIP_TLS_VERIFY sent by the client, it can only be set on the server")
+				}
+			}
+			ctx = context.WithValue(ctx, contextKey(TerraformSkipTLSVerify), utils.GetEnv(TerraformSkipTLSVerify, ""))
+
+			// The token is the only value that can come from the client.
+			clientHeaders := []string{TerraformToken}
 			for _, header := range clientHeaders {
 				var headerValue string
 

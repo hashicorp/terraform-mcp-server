@@ -4,6 +4,7 @@
 package client
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"net/http"
@@ -18,6 +19,171 @@ import (
 
 // --- sendRegistryCall ---
 var logger = log.New()
+
+func TestRedactRetryURL(t *testing.T) {
+	tests := map[string]struct {
+		input string
+		want  string
+	}{
+		"archivist object": {
+			input: "https://archivist.example/v1/object/secret-object?X-Amz-Signature=secret-sentinel",
+			want:  "https://archivist.example/v1/object/___REDACTED___",
+		},
+		"archivist path": {
+			input: "https://archivist.example/private/log?token=secret-sentinel",
+			want:  "https://archivist.example/___REDACTED___",
+		},
+		"signed query": {
+			input: "https://storage.example/private/log?X-Goog-Signature=secret-sentinel",
+			want:  "https://storage.example/private/log?___REDACTED___",
+		},
+		"apostrophe in query value": {
+			input: "https://storage.example/log?name=O'Reilly&X-Amz-Signature=secret-sentinel",
+			want:  "https://storage.example/log?___REDACTED___",
+		},
+		"relative object path": {
+			input: "/v1/object/secret-object?sig=secret-sentinel",
+			want:  "/v1/object/___REDACTED___",
+		},
+		"dot-relative signed query": {
+			input: "./log?name=example&sig=secret-sentinel",
+			want:  "./log?___REDACTED___",
+		},
+		"parent-relative signed query": {
+			input: "../log?name=example&sig=secret-sentinel",
+			want:  "../log?___REDACTED___",
+		},
+		"ordinary relative URL": {
+			input: "/v1/providers/hashicorp/random/versions",
+			want:  "/v1/providers/hashicorp/random/versions",
+		},
+		"embedded credentials": {
+			input: "https://user:password@example.com/private/log",
+			want:  "https://redacted@example.com/private/log",
+		},
+		"ordinary URL": {
+			input: "https://registry.terraform.io/v1/providers",
+			want:  "https://registry.terraform.io/v1/providers",
+		},
+		"trailing punctuation": {
+			input: "https://archivist.example/v1/object/secret-object?sig=secret-sentinel.",
+			want:  "https://archivist.example/v1/object/___REDACTED___.",
+		},
+	}
+
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			require.Equal(t, test.want, redactRetryURL(test.input))
+		})
+	}
+}
+
+func TestRetryLoggerRedactsCapabilityURLParts(t *testing.T) {
+	var output bytes.Buffer
+	testLogger := log.New()
+	testLogger.SetOutput(&output)
+	redactingRetryLogger{logger: testLogger}.Printf(
+		"[ERR] GET %s request failed: redirect from %s",
+		"https://archivist.example/v1/object/secret-object?X-Amz-Signature=secret-sentinel",
+		"http://storage.example/downgrade?X-Amz-Signature=other-secret",
+	)
+
+	logged := output.String()
+	require.Contains(t, logged, "https://archivist.example/v1/object/___REDACTED___")
+	require.Contains(t, logged, "http://storage.example/downgrade?___REDACTED___")
+	for _, secret := range []string{"secret-object", "secret-sentinel", "other-secret"} {
+		require.NotContains(t, logged, secret)
+	}
+}
+
+func TestCreateHTTPClientUsesRedactingRetryLogger(t *testing.T) {
+	var output bytes.Buffer
+	testLogger := log.New()
+	testLogger.SetOutput(&output)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	secretURL := server.URL + "/private/log?X-Amz-Signature=secret-sentinel"
+	resp, err := CreateHTTPClient(false, testLogger).Get(secretURL)
+	require.NoError(t, err)
+	require.NoError(t, resp.Body.Close())
+	require.Contains(t, output.String(), server.URL+"/private/log?___REDACTED___")
+	require.NotContains(t, output.String(), "secret-sentinel")
+}
+
+func TestCreateHTTPClientRedactsSignedURLAfterApostrophe(t *testing.T) {
+	var output bytes.Buffer
+	testLogger := log.New()
+	testLogger.SetOutput(&output)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	secretURL := server.URL + "/log?name=O'Reilly&X-Amz-Signature=secret-sentinel"
+	resp, err := CreateHTTPClient(false, testLogger).Get(secretURL)
+	require.NoError(t, err)
+	require.NoError(t, resp.Body.Close())
+
+	logged := output.String()
+	require.Contains(t, logged, server.URL+"/log?___REDACTED___")
+	require.NotContains(t, logged, "secret-sentinel")
+}
+
+func TestCreateHTTPClientRedactsRelativeRedirectFailure(t *testing.T) {
+	var output bytes.Buffer
+	testLogger := log.New()
+	testLogger.SetOutput(&output)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Location", "/v1/object/secret-object?sig=secret-signature")
+		w.WriteHeader(http.StatusFound)
+	}))
+	defer server.Close()
+
+	resp, err := CreateHTTPClient(false, testLogger).Get(server.URL)
+	require.Error(t, err)
+	require.Nil(t, resp)
+
+	logged := output.String()
+	require.Contains(t, logged, "/v1/object/___REDACTED___")
+	require.NotContains(t, logged, "secret-object")
+	require.NotContains(t, logged, "secret-signature")
+}
+
+func TestCreateHTTPClientRedactsRetryLogs(t *testing.T) {
+	var output bytes.Buffer
+	testLogger := log.New()
+	testLogger.SetOutput(&output)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("x-ratelimit-reset", "0")
+		w.WriteHeader(http.StatusTooManyRequests)
+	}))
+	defer server.Close()
+
+	secretURL := server.URL + "/private/log?X-Amz-Signature=secret-sentinel"
+	resp, err := CreateHTTPClient(false, testLogger).Get(secretURL)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusTooManyRequests, resp.StatusCode)
+	require.NoError(t, resp.Body.Close())
+
+	logged := output.String()
+	require.Contains(t, logged, "retrying")
+	require.Contains(t, logged, server.URL+"/private/log?___REDACTED___")
+	require.NotContains(t, logged, "secret-sentinel")
+}
+
+func TestCreateHTTPClientAllowsNilLogger(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	resp, err := CreateHTTPClient(false, nil).Get(server.URL)
+	require.NoError(t, err)
+	require.NoError(t, resp.Body.Close())
+}
 
 func TestSendRegistryCall(t *testing.T) {
 	tests := []struct {
@@ -65,6 +231,24 @@ func TestSendRegistryCall(t *testing.T) {
 			mockResponse:     `{"error": "not_found_v2"}`,
 			expectErrContent: "404 Not Found",
 		},
+		{
+			name:             "429TooManyRequests_v1_GET",
+			uri:              "providers/hashicorp/aws",
+			apiVersion:       "v1",
+			httpMethod:       "GET",
+			mockStatusCode:   http.StatusTooManyRequests,
+			mockResponse:     `{"errors": ["too many requests"]}`,
+			expectErrContent: "429 Too Many Requests",
+		},
+		{
+			name:             "503ServiceUnavailable_v2_GET",
+			uri:              "provider-docs/123",
+			apiVersion:       "v2",
+			httpMethod:       "GET",
+			mockStatusCode:   http.StatusServiceUnavailable,
+			mockResponse:     `{"errors": ["unavailable"]}`,
+			expectErrContent: "503 Service Unavailable",
+		},
 	}
 
 	for _, tc := range tests {
@@ -98,18 +282,26 @@ func TestSendRegistryCall(t *testing.T) {
 					}
 				}
 
+				if tc.mockStatusCode == http.StatusTooManyRequests {
+					// we only retry 429s that have this header
+					w.Header().Set("x-ratelimit-reset", "0")
+				}
 				w.WriteHeader(tc.mockStatusCode)
 				fmt.Fprint(w, tc.mockResponse)
 			}))
 			defer server.Close()
 
-			_, err := SendRegistryCall(context.Background(), server.Client(), tc.httpMethod, tc.uri, logger, tc.apiVersion, server.URL)
+			_, err := SendRegistryCall(context.Background(), CreateHTTPClient(false, logger), tc.httpMethod, tc.uri, logger, tc.apiVersion, server.URL)
 
 			if tc.expectErrContent == "" {
 				require.NoError(t, err, "TestSendRegistryCall (%s)", tc.name)
 			} else {
 				require.Error(t, err, "TestSendRegistryCall (%s): expected an error but got nil", tc.name)
 				assert.Contains(t, err.Error(), tc.expectErrContent, "TestSendRegistryCall (%s): error message mismatch", tc.name)
+
+				var registryErr *RegistryError
+				require.ErrorAs(t, err, &registryErr)
+				assert.Equal(t, tc.mockStatusCode, registryErr.StatusCode)
 			}
 		})
 	}

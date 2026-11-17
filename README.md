@@ -132,6 +132,7 @@ automation and interaction capabilities for Infrastructure as Code (IaC) develop
 | `MCP_FORWARD_CLIENT_IP` | Forward the client IP to HCP Terraform / TFE via `X-Forwarded-For`. Set to `true` to enable | `false` |
 | `MCP_REMOTE_IP_METHOD` | How the client IP is sourced when forwarding is enabled: `RemoteAddr` (direct connection only), `X-Real-IP`, or `X-Forwarded-For` | `RemoteAddr` |
 | `MCP_XFF_TRUSTED_HOPS` | Number of trusted proxy hops counted from the right of the `X-Forwarded-For` chain. Only used when `MCP_REMOTE_IP_METHOD=X-Forwarded-For` | `0` |
+| `MCP_PPROF_ADDR` | Address to serve Go pprof profiling endpoints on, like `127.0.0.1:6060`. Off when unset. See [Profiling](#profiling) | `""` (empty) |
 | `ENABLE_TF_OPERATIONS` | Enable tools that require explicit approval | `false` |
 | `OTEL_METRICS_ENABLED` | Enable tools and server metrics using otel | `false` |
 | `OTEL_METRICS_SERVICE_VERSION` | Version of the terraform-mcp-server sending metrics, which is used to set metric attributes. It also helps track metrics across different deployments | `latest` |
@@ -688,6 +689,30 @@ curl http://localhost:8080/health
 
 [Check out available tools here :link:](https://developer.hashicorp.com/terraform/docs/tools/mcp-server/reference#available-tools)
 
+### Tool errors
+
+When a tool fails because of an HCP Terraform, TFE or public registry API response we can identify, the error text starts with a code and the result's `_meta` carries the code and HTTP status:
+
+```json
+{
+  "isError": true,
+  "content": [{ "type": "text", "text": "unauthorized: failed to read run run-123: unauthorized" }],
+  "_meta": { "error_code": "unauthorized", "http_status": 401 }
+}
+```
+
+| `error_code` | `http_status` | Meaning |
+|--------------|---------------|---------|
+| `unauthorized` | 401 | The token is invalid or expired |
+| `not_found` | 404 | The resource doesn't exist, or the token can't see it. For registry tools, the provider, module or policy doesn't exist |
+| `conflict` | 409 | The workspace is locked, not locked, or can't be safely deleted |
+| `rate_limited` | 429 | The registry is rate limiting requests. Wait and retry |
+| `unavailable` | 5xx | The registry is having problems. Retry later |
+
+Other failures, like network errors or validation errors from the API, don't get a code.
+
+These are normal tool results, so the HTTP status is still `200`. A missing token doesn't get a code since it fails before calling the API. To reject requests without a token with an HTTP `401`, set `MCP_REQUIRE_TOKEN=true`.
+
 ## Available Resources
 
 [Check out available resources here :link:](https://developer.hashicorp.com/terraform/docs/tools/mcp-server/reference#available-tools)
@@ -706,7 +731,8 @@ Second, the MCP server records custom tool metrics around tool execution using M
 1. mcp_tool_calls_total
 2. mcp_tool_errors_total
 3. mcp_tool_duration_seconds
-
+4. mcp_client_type_total
+5. mcp_org_tool_calls_total
 
 ### Tool Filtering
 
@@ -730,7 +756,7 @@ On a remote server, these environment variables are server-wide defaults shared 
 
 When either scope field is omitted, the Mark3Labs route returns a normal, non-error JSON result with `status` (`input_required`), `proposed_scope`, and `missing_inputs` before tool-handler client acquisition or scoped API access. The agent presents the complete proposal, obtains confirmation or corrections, and retries with explicit `terraform_org_name` and `workspace_name`. The official SDK route requests the same complete pair through `CallToolResult.InputRequests`. Both routes require explicit scope on the continued call and make no scoped API request while requesting input.
 
-**Source confirmation and query execution approval:** Before provider discovery for a new query, the agent confirms the resolved source organization and workspace. Before calling `execute_query`, the agent separately summarizes that source and the query selections (provider, resource types, and filters, if any), explains that execution starts a query run without creating or modifying infrastructure, and waits for user approval. If the source or query selections change, approval must be obtained again. This is agent-driven guidance, not a server-enforced approval parameter or status; clients calling the tool directly are not blocked by an approval check.
+**Source confirmation and query execution approval:** Before provider discovery for a new query, the agent confirms the resolved source organization and workspace. Before calling `execute_search_query`, the agent separately summarizes that source and the query selections (provider, resource types, and filters, if any), explains that execution starts a query run without creating or modifying infrastructure, and waits for user approval. If the source or query selections change, approval must be obtained again. This is agent-driven guidance, not a server-enforced approval parameter or status; clients calling the tool directly are not blocked by an approval check.
 
 Pass workspace variables to the **MCP server process**, for example through the environment settings in OpenCode's JSON/JSONC configuration or an equivalent MCP-client configuration. A container or remote deployment must receive them in its own environment. The server does not read client configuration files or inherit the agent's separate shell environment. When import is requested, the agent always asks for and confirms the target organization, target workspace, and existing local configuration directory. A query default or configured import default never authorizes that target. After confirmation, pass the complete target explicitly to `prepare_import` and `verify_import_plan`. The read-only import tools do not upload configuration, create a speculative Run, apply an import, or modify infrastructure.
 
@@ -807,7 +833,6 @@ Earlier versions used the leftmost `X-Forwarded-For` value when the header was p
 |--------|-------------|
 | `TFE_TOKEN` | Terraform API token |
 | `Authorization: Bearer <token>` | Alternative method using standard Bearer auth |
-| `TFE_SKIP_TLS_VERIFY` | Skip TLS verification for the request |
 
 ### Example: curl
 
@@ -825,9 +850,14 @@ curl -X POST http://localhost:8080/mcp \
   -d '{"jsonrpc":"2.0","id":1,"method":"initialize",...}'
 ```
 
+### Request IDs
+
+In streamable-http mode every request gets its own correlation ID. The server sends it as the `X-Request-Id` header on its calls to HCP Terraform / TFE and the public registry, returns it to the client in the `X-Request-Id` response header, and logs it as `request_id` on tool calls. In stdio mode each tool call gets its own ID. The server always generates the ID itself, so an `X-Request-Id` sent by the client is ignored.
+
 ### Security Considerations
 
 - **TFE_ADDRESS cannot be set by clients.** In streamable-http mode the Terraform address is sourced only from the server-side `TFE_ADDRESS` environment variable (or the default). Requests that attempt to set `TFE_ADDRESS` via HTTP header or query parameter are rejected with a 403. This prevents a client from redirecting requests, and the `Authorization` token, to a malicious server.
+- **TFE_SKIP_TLS_VERIFY cannot be set by clients.** In streamable-http mode it is read only from the server-side environment variable. If a client sends it as a header or query parameter it is ignored and a warning is logged, so a client cannot turn off certificate verification on the server's calls to HCP Terraform / TFE.
 - **Hosted deployment identification:** setting `TF_MCP_SHARED_SECRET` sends that value as the `X-Tf-Mcp-Secret` header on every HCP Terraform / TFE request, letting the backend identify requests from a known hosted deployment (e.g. to apply IP allowlists). It is a static secret sent in a header, so only use it over TLS and treat the value as a credential.
 - **Never pass tokens in query parameters** - the server will reject such requests with a 400 error.
 - Always use TLS (`MCP_TLS_CERT_FILE`/`MCP_TLS_KEY_FILE`) when deploying centrally to protect tokens in transit.
@@ -850,6 +880,29 @@ docker run -p 8080:8080 \
 ```
 
 Users then connect with their individual tokens passed via headers, enabling per-user RBAC enforcement.
+
+## Profiling
+
+Set `MCP_PPROF_ADDR` to serve Go's [pprof](https://pkg.go.dev/net/http/pprof) endpoints on a separate port from the MCP server. It's off by default and works in every transport mode.
+
+```bash
+MCP_PPROF_ADDR=127.0.0.1:6060 TRANSPORT_MODE=streamable-http terraform-mcp-server
+```
+
+Then grab a profile with `go tool pprof`:
+
+```bash
+# 30 second CPU profile
+go tool pprof http://127.0.0.1:6060/debug/pprof/profile?seconds=30
+
+# memory in use right now
+go tool pprof http://127.0.0.1:6060/debug/pprof/heap
+
+# every goroutine and what it's doing
+curl http://127.0.0.1:6060/debug/pprof/goroutine?debug=1
+```
+
+`http://127.0.0.1:6060/debug/pprof/` lists everything you can grab. Profiles show the server's internals, so keep it on loopback, the server logs a warning if it's bound to anything else. In Kubernetes, bind it to `127.0.0.1` and use `kubectl port-forward pod/<pod> 6060:6060` to get to it.
 
 ## Troubleshooting
 

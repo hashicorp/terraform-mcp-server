@@ -82,7 +82,7 @@ func searchModules(ctx context.Context, request *mcp.CallToolRequest, input Sear
 
 	response, err := sendSearchModulesCall(ctx, httpClient, moduleQuery, input.CurrentOffset, logger)
 	if err != nil {
-		return nil, nil, fmt.Errorf("no modules found for query: %s - try a different search term", moduleQuery)
+		return nil, nil, fmt.Errorf("searching modules: %w", err)
 	}
 
 	modulesData, err := unmarshalTerraformModules(response, moduleQuery)
@@ -106,7 +106,7 @@ func sendSearchModulesCall(ctx context.Context, httpClient *http.Client, moduleQ
 
 	response, err := registryapi.SendRegistryCall(ctx, httpClient, http.MethodGet, uri, logger)
 	if err != nil {
-		return nil, fmt.Errorf("getting module(s) for: %v, call error: %v", moduleQuery, err)
+		return nil, fmt.Errorf("getting module(s) for %v: %w", moduleQuery, err)
 	}
 
 	return response, nil

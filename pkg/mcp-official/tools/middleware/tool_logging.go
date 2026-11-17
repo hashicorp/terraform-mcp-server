@@ -10,6 +10,7 @@ import (
 	"sort"
 	"strings"
 
+	tfeclient "github.com/hashicorp/terraform-mcp-server/pkg/client"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -32,6 +33,7 @@ func ToolLogging(logger *slog.Logger) mcp.Middleware {
 				return next(ctx, method, req)
 			}
 
+			ctx, requestID := tfeclient.EnsureRequestID(ctx)
 			params := req.GetParams().(*mcp.CallToolParamsRaw)
 			toolName := params.Name
 			keys := argumentKeys(params.Arguments)
@@ -42,6 +44,7 @@ func ToolLogging(logger *slog.Logger) mcp.Middleware {
 				logger.ErrorContext(ctx, "tool call failed",
 					"tool", toolName,
 					"argument_keys", keys,
+					"request_id", requestID,
 					"error", loggableError(err))
 				return result, err
 			}
@@ -51,13 +54,15 @@ func ToolLogging(logger *slog.Logger) mcp.Middleware {
 				logger.ErrorContext(ctx, "tool call failed",
 					"tool", toolName,
 					"argument_keys", keys,
+					"request_id", requestID,
 					"error", loggableError(toolResult.GetError()))
 				return result, nil
 			}
 
 			logger.InfoContext(ctx, "tool call completed",
 				"tool", toolName,
-				"argument_keys", keys)
+				"argument_keys", keys,
+				"request_id", requestID)
 			return result, nil
 		}
 	}

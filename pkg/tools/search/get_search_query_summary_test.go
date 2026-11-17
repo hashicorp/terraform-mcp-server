@@ -14,7 +14,7 @@ import (
 func TestGetQuerySummaryDefinition(t *testing.T) {
 	tool := GetQuerySummary(silentLogger())
 
-	assert.Equal(t, "get_query_summary", tool.Tool.Name)
+	assert.Equal(t, "get_search_query_summary", tool.Tool.Name)
 	assert.Contains(t, tool.Tool.InputSchema.Required, "query_run_id")
 	assert.NotContains(t, tool.Tool.InputSchema.Properties, "after")
 	assert.NotContains(t, tool.Tool.InputSchema.Properties, "limit")
@@ -27,7 +27,7 @@ func TestGetQuerySummaryDefinition(t *testing.T) {
 	assert.Contains(t, string(outputSchema), `"configuration_generated"`)
 	assert.NotContains(t, tool.Tool.OutputSchema.Properties, "log_digest")
 	assert.NotContains(t, tool.Tool.OutputSchema.Properties, "returned")
-	assert.Contains(t, tool.Tool.Description, "get_query_status")
+	assert.Contains(t, tool.Tool.Description, "get_search_query_status")
 	assert.Contains(t, tool.Tool.Description, "query_result_marker")
 	assert.Contains(t, tool.Tool.Description, "configuration_attributes")
 	assert.Contains(t, tool.Tool.Description, "raw resource objects")

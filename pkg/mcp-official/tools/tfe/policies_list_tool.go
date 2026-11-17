@@ -94,7 +94,7 @@ func ListWorkspacePolicySetsFunc(ctx context.Context, request *mcp.CallToolReque
 
 	workspace, err := tfeClient.Workspaces.ReadByID(ctx, workspaceID)
 	if err != nil {
-		return nil, nil, fmt.Errorf("workspace not found %q: %w", workspaceID, err)
+		return nil, nil, fmt.Errorf("failed to read workspace %q: %w", workspaceID, err)
 	}
 
 	// A workspace belongs to exactly one org and policy sets are org-scoped, so a

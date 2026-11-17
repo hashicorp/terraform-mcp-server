@@ -1,6 +1,7 @@
 package e2e
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -64,7 +65,7 @@ func TestGetPolicyDetailsRejectsMalformedID(t *testing.T) {
 		})
 
 		require.True(t, result.IsError, "policy details should reject a malformed policy ID")
-		assert.Contains(t, text, "policy not found")
+		assert.Contains(t, strings.ToLower(text), "not found")
 		assert.Contains(t, text, policyID)
 		assert.Contains(t, text, "search_policies", "error should explain how to find a valid policy ID")
 	})
@@ -81,7 +82,7 @@ func TestGetPolicyDetailsRejectsUnknownID(t *testing.T) {
 		})
 
 		require.True(t, result.IsError, "policy details should reject a nonexistent policy")
-		assert.Contains(t, text, "policy not found")
+		assert.Contains(t, strings.ToLower(text), "not found")
 		assert.Contains(t, text, policyID)
 		assert.Contains(t, text, "search_policies", "error should explain how to find a valid policy ID")
 	})

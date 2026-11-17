@@ -92,6 +92,12 @@ func Init(ctx context.Context, config *client.MetricsConfig, logger *log.Logger)
 		return nil, fmt.Errorf("failed to create client type counter: %w", err)
 	}
 
+	config.OrgToolCallCounter, err = meter.Int64Counter("mcp_org_tool_calls_total",
+		metric.WithDescription("Total number of successful tool calls by Terraform organization"))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create org tool call counter: %w", err)
+	}
+
 	return func() {
 		logger.Infof("Shutting down metrics exporter..")
 		if err := config.MeterProvider.Shutdown(ctx); err != nil {

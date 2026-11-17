@@ -52,19 +52,19 @@ var officialFactories = map[string]func(svr *mcp.Server, logger *slog.Logger){
 		mcp.AddTool(svr, registryTools.GetPolicyDetailsTool(), registryTools.GetPolicyDetailsFunc(logger))
 	},
 	// Search tools
-	"generate_query_configuration": func(svr *mcp.Server, _ *slog.Logger) {
+	"generate_search_query_configuration": func(svr *mcp.Server, _ *slog.Logger) {
 		mcp.AddTool(svr, searchTools.GenerateQueryConfigurationTool(), searchTools.GenerateQueryConfigurationFunc)
 	},
-	"provider_list_schema_list": func(svr *mcp.Server, _ *slog.Logger) {
+	"get_search_list_resource_schemas": func(svr *mcp.Server, _ *slog.Logger) {
 		mcp.AddTool(svr, searchTools.ProviderListSchemaListTool(), searchTools.ProviderListSchemaListFunc)
 	},
-	"execute_query": func(svr *mcp.Server, _ *slog.Logger) {
+	"execute_search_query": func(svr *mcp.Server, _ *slog.Logger) {
 		mcp.AddTool(svr, searchTools.ExecuteQueryTool(), searchTools.ExecuteQueryFunc)
 	},
-	"get_query_status": func(svr *mcp.Server, logger *slog.Logger) {
+	"get_search_query_status": func(svr *mcp.Server, logger *slog.Logger) {
 		mcp.AddTool(svr, searchTools.GetQueryStatusTool(), searchTools.GetQueryStatusFunc(logger))
 	},
-	"get_query_summary": func(svr *mcp.Server, _ *slog.Logger) {
+	"get_search_query_summary": func(svr *mcp.Server, _ *slog.Logger) {
 		mcp.AddTool(svr, searchTools.GetQuerySummaryTool(), searchTools.GetQuerySummaryFunc)
 	},
 	"prepare_import": func(svr *mcp.Server, _ *slog.Logger) {

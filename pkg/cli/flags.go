@@ -15,6 +15,7 @@ import (
 	mcpmark3labs "github.com/hashicorp/terraform-mcp-server/pkg/mcp-mark3labs"
 	mcpofficial "github.com/hashicorp/terraform-mcp-server/pkg/mcp-official"
 	"github.com/hashicorp/terraform-mcp-server/pkg/otelmetrics"
+	"github.com/hashicorp/terraform-mcp-server/pkg/profiling"
 	"github.com/hashicorp/terraform-mcp-server/pkg/toolsets"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
@@ -131,6 +132,8 @@ func Run() {
 	if err != nil {
 		stdlog.Fatal("Failed to initialize logger:", err)
 	}
+	// Off unless MCP_PPROF_ADDR is set. Started here so it covers every mode.
+	profiling.Start(logger)
 	if shouldUseStreamableHTTPMode() {
 		logger.Info("Starting in Streamable HTTP mode based on environment configuration")
 

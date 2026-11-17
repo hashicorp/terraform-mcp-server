@@ -64,14 +64,14 @@ func (s queryStatusTestSession) SessionID() string { return s.id }
 func TestGetQueryStatusDefinition(t *testing.T) {
 	tool := GetQueryStatus(silentLogger())
 
-	assert.Equal(t, "get_query_status", tool.Tool.Name)
+	assert.Equal(t, "get_search_query_status", tool.Tool.Name)
 	assert.Contains(t, tool.Tool.InputSchema.Required, "query_run_id")
 	assert.Contains(t, tool.Tool.Description, "bounded call")
 	assert.Contains(t, tool.Tool.Description, "same ID")
 	assert.Contains(t, tool.Tool.Description, "finished, errored or canceled")
 	assert.Contains(t, tool.Tool.Description, "existing authorized")
 	assert.NotContains(t, tool.Tool.Description, "latest-query-run")
-	assert.Contains(t, tool.Tool.Description, "get_query_summary")
+	assert.Contains(t, tool.Tool.Description, "get_search_query_summary")
 	assert.Contains(t, tool.Tool.Description, "do not execute another query")
 	assert.Contains(t, tool.Tool.Description, "Terminal status does not imply selectable")
 	assert.Equal(t, "object", tool.Tool.OutputSchema.Type)
@@ -116,7 +116,7 @@ func TestWaitForQueryStatusPollsUntilFinished(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, tfe.QueryRunFinished, response.Status)
 	assert.True(t, response.Terminal)
-	assert.Contains(t, response.Message, "get_query_summary")
+	assert.Contains(t, response.Message, "get_search_query_summary")
 	assert.Equal(t, int32(2), reads.Load())
 }
 
@@ -165,7 +165,7 @@ func TestWaitForQueryStatusReturnsEachTerminalStatus(t *testing.T) {
 			assert.Equal(t, status, response.Status)
 			assert.True(t, response.Terminal)
 			assert.Zero(t, response.RetryAfterSeconds)
-			assert.Contains(t, response.Message, "get_query_summary")
+			assert.Contains(t, response.Message, "get_search_query_summary")
 			assert.Contains(t, response.Message, "does not imply selectable")
 			assert.Equal(t, int32(1), reads.Load())
 		})
@@ -366,7 +366,7 @@ func TestGetQueryStatusHandlerReturnsStructuredAndTextResults(t *testing.T) {
 	})
 	ctx := queryStatusHandlerContext(t, server)
 	request := mcp.CallToolRequest{Params: mcp.CallToolParams{
-		Name:      "get_query_status",
+		Name:      "get_search_query_status",
 		Arguments: map[string]any{"query_run_id": "qry-test"},
 	}}
 
@@ -384,7 +384,7 @@ func TestGetQueryStatusHandlerReturnsStructuredAndTextResults(t *testing.T) {
 	require.Len(t, result.Content, 1)
 	text, ok := mcp.AsTextContent(result.Content[0])
 	require.True(t, ok)
-	assert.Contains(t, text.Text, "get_query_summary")
+	assert.Contains(t, text.Text, "get_search_query_summary")
 	assert.Contains(t, text.Text, `"query_run_id":"qry-test"`)
 	assert.Contains(t, text.Text, `"terminal":true`)
 	assert.NotContains(t, text.Text, `"retry_after_seconds"`)
@@ -396,7 +396,7 @@ func TestGetQueryStatusHandlerReturnsNonterminalStatusAsSuccess(t *testing.T) {
 	})
 	ctx := queryStatusHandlerContext(t, server)
 	request := mcp.CallToolRequest{Params: mcp.CallToolParams{
-		Name:      "get_query_status",
+		Name:      "get_search_query_status",
 		Arguments: map[string]any{"query_run_id": "qry-test"},
 	}}
 
@@ -414,7 +414,7 @@ func TestGetQueryStatusHandlerReturnsNonterminalStatusAsSuccess(t *testing.T) {
 	require.Len(t, result.Content, 1)
 	text, ok := mcp.AsTextContent(result.Content[0])
 	require.True(t, ok)
-	assert.Contains(t, text.Text, "get_query_status again with the same query_run_id after 5 seconds")
+	assert.Contains(t, text.Text, "get_search_query_status again with the same query_run_id after 5 seconds")
 	assert.Contains(t, text.Text, `"query_run_id":"qry-test"`)
 	assert.Contains(t, text.Text, `"retry_after_seconds":5`)
 }
@@ -427,7 +427,7 @@ func TestGetQueryStatusHandlerReturnsAPIFailureAsToolError(t *testing.T) {
 	})
 	ctx := queryStatusHandlerContext(t, server)
 	request := mcp.CallToolRequest{Params: mcp.CallToolParams{
-		Name:      "get_query_status",
+		Name:      "get_search_query_status",
 		Arguments: map[string]any{"query_run_id": "qry-missing"},
 	}}
 
@@ -447,7 +447,7 @@ func TestGetQueryStatusHandlerReturnsAPIFailureAsToolError(t *testing.T) {
 
 func TestGetQueryStatusHandlerRejectsMissingQueryRunID(t *testing.T) {
 	request := mcp.CallToolRequest{Params: mcp.CallToolParams{
-		Name:      "get_query_status",
+		Name:      "get_search_query_status",
 		Arguments: map[string]any{"query_run_id": "  "},
 	}}
 
@@ -467,7 +467,7 @@ func TestGetQueryStatusHandlerPreservesCallerCancellation(t *testing.T) {
 	callerErr := errors.New("MCP request canceled")
 	cancel(callerErr)
 	request := mcp.CallToolRequest{Params: mcp.CallToolParams{
-		Name:      "get_query_status",
+		Name:      "get_search_query_status",
 		Arguments: map[string]any{"query_run_id": "qry-test"},
 	}}
 

@@ -39,6 +39,8 @@ func newTestMetricsConfig(t *testing.T) (tfeclient.MetricsConfig, *sdkmetric.Man
 	require.NoError(t, err)
 	clientTypeCounter, err := meter.Int64Counter("mcp_client_type_total")
 	require.NoError(t, err)
+	orgToolCallCounter, err := meter.Int64Counter("mcp_org_tool_calls_total")
+	require.NoError(t, err)
 
 	return tfeclient.MetricsConfig{
 		Enabled:               true,
@@ -49,6 +51,7 @@ func newTestMetricsConfig(t *testing.T) (tfeclient.MetricsConfig, *sdkmetric.Man
 		ErrorCounter:          errorCounter,
 		ToolCallLatencyBucket: latencyHistogram,
 		ClientTypeCounter:     clientTypeCounter,
+		OrgToolCallCounter:    orgToolCallCounter,
 	}, reader
 }
 
@@ -259,4 +262,98 @@ func TestMetricsMiddleware_RecordsClientTypeFromSession(t *testing.T) {
 	assert.Contains(t, attrs, attribute.String("client.version", "1.2.3"))
 	assert.Contains(t, attrs, attribute.String("client.title", "VS Code"))
 	assert.Contains(t, attrs, attribute.String("client.description", "VS Code MCP client"))
+}
+
+// orgCallCounts returns the mcp_org_tool_calls_total value per terraform.org.name.
+// The second result reports whether the instrument exported anything at all.
+func orgCallCounts(t *testing.T, reader *sdkmetric.ManualReader) (map[string]int64, bool) {
+	t.Helper()
+
+	sum, found := findInt64SumMetric(t, collectMetrics(t, reader), "mcp_org_tool_calls_total")
+	if !found {
+		return nil, false
+	}
+	counts := map[string]int64{}
+	for _, dp := range sum.DataPoints {
+		org, ok := dp.Attributes.Value(attribute.Key(tfeclient.OrgAttributeKey))
+		require.True(t, ok, "every data point must carry %s", tfeclient.OrgAttributeKey)
+		counts[org.AsString()] += dp.Value
+	}
+	return counts, true
+}
+
+func callToolWithArgs(t *testing.T, handler mcp.MethodHandler, args map[string]any) (mcp.Result, error) {
+	t.Helper()
+
+	argsJSON, err := json.Marshal(args)
+	require.NoError(t, err)
+	return handler(context.Background(), "tools/call", &mcp.CallToolRequest{
+		Params: &mcp.CallToolParamsRaw{Name: "list_workspaces", Arguments: argsJSON},
+	})
+}
+
+// An org is counted when the call succeeds, and not when the result is an error
+// (IsError result, or a protocol-level error). Each case first makes a successful
+// control call on another org, so a missing series for "acme" can only mean
+// "not counted" and never "the counter is nil".
+func TestMetricsMiddleware_CountsOrgOnSuccessNotOnError(t *testing.T) {
+	logger := log.New()
+	logger.SetLevel(log.ErrorLevel)
+
+	tests := []struct {
+		name   string
+		result mcp.Result
+		err    error
+		want   map[string]int64
+	}{
+		{name: "success is counted", result: &mcp.CallToolResult{}, want: map[string]int64{"control-org": 1, "acme": 1}},
+		{name: "IsError result is not counted", result: &mcp.CallToolResult{IsError: true}, want: map[string]int64{"control-org": 1}},
+		{name: "protocol error is not counted", err: assert.AnError, want: map[string]int64{"control-org": 1}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			metricsConfig, reader := newTestMetricsConfig(t)
+
+			ok := func(ctx context.Context, method string, req mcp.Request) (mcp.Result, error) {
+				return &mcp.CallToolResult{}, nil
+			}
+			_, err := callToolWithArgs(t, Metrics(metricsConfig, logger)(ok), map[string]any{"terraform_org_name": "control-org"})
+			require.NoError(t, err)
+
+			underTest := func(ctx context.Context, method string, req mcp.Request) (mcp.Result, error) {
+				return tt.result, tt.err
+			}
+			_, _ = callToolWithArgs(t, Metrics(metricsConfig, logger)(underTest), map[string]any{"terraform_org_name": "acme"})
+
+			counts, found := orgCallCounts(t, reader)
+			require.True(t, found)
+			assert.Equal(t, tt.want, counts)
+		})
+	}
+}
+
+func TestOrgNameFromArguments(t *testing.T) {
+	tests := []struct {
+		name string
+		raw  json.RawMessage
+		want string
+	}{
+		{name: "org present", raw: json.RawMessage(`{"terraform_org_name":"acme","workspace_name":"w"}`), want: "acme"},
+		{name: "nil arguments", raw: nil, want: ""},
+		{name: "empty arguments", raw: json.RawMessage(``), want: ""},
+		{name: "empty object", raw: json.RawMessage(`{}`), want: ""},
+		{name: "org absent", raw: json.RawMessage(`{"run_id":"run-1"}`), want: ""},
+		{name: "invalid JSON", raw: json.RawMessage(`{not json`), want: ""},
+		{name: "truncated JSON", raw: json.RawMessage(`{"terraform_org_name":"acme"`), want: ""},
+		{name: "JSON that is not an object", raw: json.RawMessage(`["acme"]`), want: ""},
+		{name: "org of the wrong type", raw: json.RawMessage(`{"terraform_org_name":5}`), want: ""},
+		// Go decodes "acme" first and only then fails on the second key, so only the
+		// err check keeps malformed input from yielding an org
+		{name: "duplicate key with a wrong type", raw: json.RawMessage(`{"terraform_org_name":"acme","terraform_org_name":5}`), want: ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, orgNameFromArguments(tt.raw))
+		})
+	}
 }

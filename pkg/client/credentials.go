@@ -62,7 +62,17 @@ func ReadCredentialsFile(hostname string, logger *log.Logger) (string, error) {
 	}
 
 	logger.Debugf("No credentials found for hostname %q in credentials file", hostname)
-	return "", fmt.Errorf("No credentials found for hostname %q in credentials file", hostname)
+	return "", &noCredentialsForHostError{hostname: hostname}
+}
+
+// noCredentialsForHostError means the credentials file is fine but has no
+// token for this host, so callers can treat it the same as no file.
+type noCredentialsForHostError struct {
+	hostname string
+}
+
+func (e *noCredentialsForHostError) Error() string {
+	return fmt.Sprintf("No credentials found for hostname %q in credentials file", e.hostname)
 }
 
 // extractHostname extracts the hostname from a Terraform address URL.

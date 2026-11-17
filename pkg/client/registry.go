@@ -11,7 +11,9 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"regexp"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/hashicorp/go-cleanhttp"
@@ -23,10 +25,93 @@ import (
 
 const DefaultPublicRegistryURL = "https://registry.terraform.io"
 
+// retryLogURLPattern matches absolute URLs and the relative URL forms supported
+// by the Terraform registry protocols.
+var retryLogURLPattern = regexp.MustCompile(`(?:[A-Za-z][A-Za-z0-9+.-]*://|\.\.?/|/)[^\s"<>]+`)
+
+// Signed query parameters contain temporary authorization material and must not
+// be written to retry logs.
+var signedURLQueryKeys = map[string]struct{}{
+	"signature":        {},
+	"sig":              {},
+	"x-amz-signature":  {},
+	"x-goog-signature": {},
+}
+
+type redactingRetryLogger struct {
+	logger *log.Logger
+}
+
+func (l redactingRetryLogger) Printf(format string, args ...interface{}) {
+	message := fmt.Sprintf(format, args...)
+	l.logger.Print(retryLogURLPattern.ReplaceAllStringFunc(message, redactRetryURL))
+}
+
+// redactRetryURL preserves useful URL context while removing sensitive
+// Archivist object paths, signed query values, and embedded credentials.
+func redactRetryURL(raw string) string {
+	trailing := ""
+	for len(raw) > 0 && strings.ContainsRune(".,;:!?)]}", rune(raw[len(raw)-1])) {
+		trailing = string(raw[len(raw)-1]) + trailing
+		raw = raw[:len(raw)-1]
+	}
+
+	u, err := url.Parse(raw)
+	if err != nil {
+		return "[redacted-url]" + trailing
+	}
+
+	if u.User != nil {
+		u.User = url.User("redacted")
+	}
+
+	hostIsArchivist := strings.Contains(strings.ToLower(u.Hostname()), "archivist")
+	objectPath := "/v1/object/"
+	if idx := strings.Index(strings.ToLower(u.Path), objectPath); idx >= 0 {
+		u.Path = u.Path[:idx+len(objectPath)] + "___REDACTED___"
+		u.RawPath = ""
+		u.RawQuery = ""
+		u.Fragment = ""
+		return u.String() + trailing
+	}
+
+	if hostIsArchivist {
+		u.Path = "/___REDACTED___"
+		u.RawPath = ""
+		u.RawQuery = ""
+		u.Fragment = ""
+		return u.String() + trailing
+	}
+
+	for parameter := range strings.SplitSeq(u.RawQuery, "&") {
+		key := parameter
+		if idx := strings.IndexByte(key, '='); idx >= 0 {
+			key = key[:idx]
+		}
+		key, err = url.QueryUnescape(key)
+		if err != nil {
+			continue
+		}
+		if _, ok := signedURLQueryKeys[strings.ToLower(key)]; ok {
+			u.RawQuery = "___REDACTED___"
+			u.Fragment = ""
+			return u.String() + trailing
+		}
+	}
+
+	return u.String() + trailing
+}
+
 // CreateHTTPClient initializes a retryable HTTP client
 func CreateHTTPClient(insecureSkipVerify bool, logger *log.Logger) *http.Client {
 	retryClient := retryablehttp.NewClient()
-	retryClient.Logger = logger
+	if logger == nil {
+		// Assign an untyped nil interface: a typed nil *logrus.Logger would
+		// still satisfy retryablehttp.Logger and panic on the first request.
+		retryClient.Logger = nil
+	} else {
+		retryClient.Logger = redactingRetryLogger{logger: logger}
+	}
 
 	transport := &http.Transport{
 		TLSClientConfig: &tls.Config{InsecureSkipVerify: insecureSkipVerify},
@@ -35,8 +120,11 @@ func CreateHTTPClient(insecureSkipVerify bool, logger *log.Logger) *http.Client 
 
 	retryClient.HTTPClient = cleanhttp.DefaultClient()
 	retryClient.HTTPClient.Timeout = 10 * time.Second
-	retryClient.HTTPClient.Transport = transport
+	retryClient.HTTPClient.Transport = &requestIDTransport{base: transport}
 	retryClient.RetryMax = 3
+	// By default retryablehttp drops the last response once retries run out,
+	// so a 429 would come back as a generic error instead of a RegistryError
+	retryClient.ErrorHandler = retryablehttp.PassthroughErrorHandler
 
 	retryClient.Backoff = func(min, max time.Duration, attemptNum int, resp *http.Response) time.Duration {
 		if resp != nil && resp.StatusCode == http.StatusTooManyRequests {
@@ -62,19 +150,33 @@ func CreateHTTPClient(insecureSkipVerify bool, logger *log.Logger) *http.Client 
 	return retryClient.StandardClient()
 }
 
+// RegistryError is returned for any non-200 from the registry, so we can tell
+// a missing provider or module apart from a rate limit or an outage.
+type RegistryError struct {
+	StatusCode int
+}
+
+func (e *RegistryError) Error() string {
+	return fmt.Sprintf("registry returned %d %s", e.StatusCode, http.StatusText(e.StatusCode))
+}
+
 func SendRegistryCall(ctx context.Context, client *http.Client, method string, uri string, logger *log.Logger, callOptions ...string) ([]byte, error) {
 	ver := "v1"
 	if len(callOptions) > 0 {
 		ver = callOptions[0] // API version will be the first optional arg to this function
 	}
+	baseURL := DefaultPublicRegistryURL
+	if len(callOptions) > 1 && callOptions[1] != "" {
+		baseURL = callOptions[1]
+	}
 
-	url, err := url.Parse(fmt.Sprintf("%s/%s/%s", DefaultPublicRegistryURL, ver, uri))
+	url, err := url.Parse(fmt.Sprintf("%s/%s/%s", baseURL, ver, uri))
 	if err != nil {
 		return nil, fmt.Errorf("error parsing terraform registry URL: %w", err)
 	}
 	logger.Debugf("Requested URL: %s", url)
 
-	req, err := http.NewRequest(method, url.String(), nil)
+	req, err := http.NewRequestWithContext(ctx, method, url.String(), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -89,11 +191,14 @@ func SendRegistryCall(ctx context.Context, client *http.Client, method string, u
 		return nil, err
 	}
 
+	defer resp.Body.Close()
+
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("error: %s", "404 Not Found")
+		// Read some of the body so the connection can be reused.
+		_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 64<<10))
+		return nil, &RegistryError{StatusCode: resp.StatusCode}
 	}
 
-	defer resp.Body.Close()
 	// Read the response body
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {

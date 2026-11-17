@@ -64,7 +64,7 @@ func getLatestProviderVersion(ctx context.Context, request *mcp.CallToolRequest,
 
 	version, err := registryapi.GetLatestProviderVersion(ctx, httpClient, namespace, name, logger)
 	if err != nil {
-		return nil, nil, fmt.Errorf("provider not found: %s/%s - verify the namespace and provider name are correct", namespace, name)
+		return nil, nil, fmt.Errorf("getting latest version for %s/%s: %w - verify the namespace and provider name are correct", namespace, name, err)
 	}
 
 	return textResult(version), nil, nil

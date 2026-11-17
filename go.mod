@@ -3,12 +3,13 @@ module github.com/hashicorp/terraform-mcp-server
 go 1.26.10
 
 require (
+	github.com/google/uuid v1.6.0
 	github.com/hashicorp/go-cleanhttp v0.5.2
 	github.com/hashicorp/go-retryablehttp v0.7.8
 	github.com/hashicorp/go-tfe v1.111.2
 	github.com/hashicorp/jsonapi v1.5.0
 	github.com/instana/go-sensor v1.79.0
-	github.com/mark3labs/mcp-go v0.58.0
+	github.com/mark3labs/mcp-go v1.5.1-0.20261116104810-68b619826416
 	github.com/modelcontextprotocol/go-sdk v1.8.0
 	github.com/sirupsen/logrus v1.10.2
 	github.com/spf13/cobra v1.10.2
@@ -69,7 +70,6 @@ require (
 	github.com/fsnotify/fsnotify v1.9.0 // indirect
 	github.com/go-viper/mapstructure/v2 v2.5.0 // indirect
 	github.com/google/go-querystring v1.2.0 // indirect
-	github.com/google/uuid v1.6.0 // indirect
 	github.com/hashicorp/go-slug v0.16.8 // indirect
 	github.com/hashicorp/go-version v1.9.0
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect

@@ -59,6 +59,10 @@ func TestInitSuccessInitializesInstrumentsAndShutdown(t *testing.T) {
 	assert.NotNil(t, config.ErrorCounter)
 	assert.NotNil(t, config.ToolCallLatencyBucket)
 
+	assert.NotNil(t, config.ClientTypeCounter)
+	// A nil OrgToolCallCounter would silently turn every org-metric call into a no-op
+	assert.NotNil(t, config.OrgToolCallCounter)
+
 	assert.NotPanics(t, shutdown)
 }
 

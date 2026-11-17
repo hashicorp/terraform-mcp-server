@@ -65,7 +65,7 @@ func getPolicyDetails(ctx context.Context, request *mcp.CallToolRequest, input G
 	}).String()
 	policyResponse, err := registryapi.SendRegistryCall(ctx, httpClient, http.MethodGet, uri, logger, "v2")
 	if err != nil {
-		return nil, nil, fmt.Errorf("policy not found: %s - verify the terraform_policy_id is correct or use search_policies to find valid IDs", terraformPolicyID)
+		return nil, nil, fmt.Errorf("getting policy %s: %w - verify the terraform_policy_id is correct or use search_policies to find valid IDs", terraformPolicyID, err)
 	}
 
 	var policyDetails registryapi.TerraformPolicyDetails

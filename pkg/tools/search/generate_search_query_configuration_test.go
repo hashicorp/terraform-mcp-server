@@ -373,9 +373,9 @@ func TestWriteInstructions_ContainsPreConditions(t *testing.T) {
 		"Pre-conditions",
 		"1.14.0",
 		"query_run_id",
-		"execute_query",
-		"get_query_status",
-		"get_query_summary",
+		"execute_search_query",
+		"get_search_query_status",
+		"get_search_query_summary",
 		"terraform_org_name",
 		"workspace_name",
 		"accepted source pair",
@@ -391,7 +391,7 @@ func TestWriteInstructions_ContainsPreConditions(t *testing.T) {
 		"do not invent it",
 		"generate_config_out: true",
 		"capture is requested, not guaranteed",
-		"only fields actually projected by `get_query_summary`",
+		"only fields actually projected by `get_search_query_summary`",
 	}
 	for _, want := range checks {
 		if !strings.Contains(out, want) {
@@ -402,10 +402,10 @@ func TestWriteInstructions_ContainsPreConditions(t *testing.T) {
 		t.Error("instructions should not require callers to construct JSON:API relationships")
 	}
 	if strings.Contains(out, "latest-query-run") {
-		t.Error("instructions must use the projected execute_query response field")
+		t.Error("instructions must use the projected execute_search_query response field")
 	}
 	if strings.Contains(out, "/api/v2/queries") {
-		t.Error("instructions should use get_query_status rather than the raw query API")
+		t.Error("instructions should use get_search_query_status rather than the raw query API")
 	}
 }
 

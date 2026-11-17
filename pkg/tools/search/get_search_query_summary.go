@@ -17,7 +17,7 @@ import (
 // GetQuerySummary retrieves a completed query run's log and summarizes its results.
 func GetQuerySummary(logger *log.Logger) server.ServerTool {
 	return server.ServerTool{
-		Tool: mcp.NewTool("get_query_summary",
+		Tool: mcp.NewTool("get_search_query_summary",
 			mcp.WithDescription(getQuerySummaryDescription),
 			mcp.WithTitleAnnotation("Get HCP Terraform query summary"),
 			mcp.WithOpenWorldHintAnnotation(true),
@@ -25,7 +25,7 @@ func GetQuerySummary(logger *log.Logger) server.ServerTool {
 			mcp.WithDestructiveHintAnnotation(false),
 			mcp.WithString("query_run_id",
 				mcp.Required(),
-				mcp.Description("Finished QueryRun ID from execute_query or an existing authorized QueryRun."),
+				mcp.Description("Finished QueryRun ID from execute_search_query or an existing authorized QueryRun."),
 			),
 			mcp.WithString("resource_type", mcp.Description("Optional exact Search list-resource type filter.")),
 			mcp.WithString("address", mcp.Description("Optional exact list block address filter.")),
@@ -41,12 +41,12 @@ func GetQuerySummary(logger *log.Logger) server.ServerTool {
 func getQuerySummaryHandler(ctx context.Context, request mcp.CallToolRequest, logger *log.Logger) (*mcp.CallToolResult, error) {
 	queryRunID, err := request.RequireString("query_run_id")
 	if err != nil || strings.TrimSpace(queryRunID) == "" {
-		return toolErrorf(logger, "get_query_summary", "missing required input: query_run_id")
+		return toolErrorf(logger, "get_search_query_summary", "missing required input: query_run_id")
 	}
 
 	tfeClient, err := client.GetTfeClientFromContext(ctx, logger)
 	if err != nil {
-		return toolErrorf(logger, "get_query_summary", "failed to get Terraform client; check session configuration")
+		return toolErrorf(logger, "get_search_query_summary", "failed to get Terraform client; check session configuration")
 	}
 	filter := QueryDiscoveryFilter{ResourceType: request.GetString("resource_type", ""), Address: request.GetString("address", ""), NameContains: request.GetString("name_contains", "")}
 	return getQuerySummaryWithClient(ctx, tfeClient, queryRunID, filter, logger)
@@ -55,11 +55,11 @@ func getQuerySummaryHandler(ctx context.Context, request mcp.CallToolRequest, lo
 func getQuerySummaryWithClient(ctx context.Context, tfeClient *tfe.Client, queryRunID string, filter QueryDiscoveryFilter, logger *log.Logger) (*mcp.CallToolResult, error) {
 	summary, err := ReadQueryDiscoverySummary(ctx, tfeClient, queryRunID, filter)
 	if err != nil {
-		return toolErrorf(logger, "get_query_summary", "query summary unavailable: %v", err)
+		return toolErrorf(logger, "get_search_query_summary", "query summary unavailable: %v", err)
 	}
 	text, err := FormatQueryDiscoverySummary(summary)
 	if err != nil {
-		return toolErrorf(logger, "get_query_summary", "query summary unavailable: %v", err)
+		return toolErrorf(logger, "get_search_query_summary", "query summary unavailable: %v", err)
 	}
 	return mcp.NewToolResultStructured(summary, text), nil
 }
@@ -79,7 +79,7 @@ const getQuerySummaryDescription = `Returns one complete parsed Search-result su
 QueryRun and any supplied presentation filters. It does not return raw QueryRun
 logs or backend artifact URLs.
 
-Call get_query_status first and pass the same query_run_id, or use an existing
+Call get_search_query_status first and pass the same query_run_id, or use an existing
 authorized terminal QueryRun ID. The summary reports backend-derived
 generate_config_out. Each selectable result reports configuration_generated and,
 when Terraform emitted generated resource HCL, an optional best-effort

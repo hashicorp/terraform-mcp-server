@@ -21,7 +21,7 @@ import (
 
 // ProviderListSchemaList returns the MCP tool that fetches list_resource_schemas
 // from the HCP Terraform no-code stub endpoint and returns the raw schema blob
-// ready to pass directly into generate_query_configuration.
+// ready to pass directly into generate_search_query_configuration.
 //
 // Endpoints used:
 //
@@ -37,7 +37,7 @@ import (
 // organization context so the agent can pick one and call the tool again.
 func ProviderListSchemaList(logger *log.Logger) server.ServerTool {
 	return server.ServerTool{
-		Tool: mcp.NewTool("provider_list_schema_list",
+		Tool: mcp.NewTool("get_search_list_resource_schemas",
 			mcp.WithDescription(providerListSchemaListDescription),
 			mcp.WithTitleAnnotation("Fetch list_resource_schemas for a search-compatible provider"),
 			mcp.WithOpenWorldHintAnnotation(true),
@@ -77,7 +77,7 @@ func providerListSchemaListHandler(ctx context.Context, request mcp.CallToolRequ
 
 	tfeClient, err := client.GetTfeClientFromContext(ctx, logger)
 	if err != nil {
-		return toolErrorf(logger, "provider_list_schema_list", "%v", TerraformClientUnavailableError(err))
+		return toolErrorf(logger, "get_search_list_resource_schemas", "%v", TerraformClientUnavailableError(err))
 	}
 	return providerListSchemaListWithClient(ctx, tfeClient, orgName, workspaceName, providerNamespace, providerName, logger)
 }
@@ -85,7 +85,7 @@ func providerListSchemaListHandler(ctx context.Context, request mcp.CallToolRequ
 func providerListSchemaListWithClient(ctx context.Context, tfeClient *tfe.Client, orgName, workspaceName, providerNamespace, providerName string, logger *log.Logger) (*mcp.CallToolResult, error) {
 	text, err := ProviderListSchemaListText(ctx, tfeClient, orgName, workspaceName, providerNamespace, providerName)
 	if err != nil {
-		return toolErrorf(logger, "provider_list_schema_list", "%v", ProviderDataUnavailableError(err))
+		return toolErrorf(logger, "get_search_list_resource_schemas", "%v", ProviderDataUnavailableError(err))
 	}
 	return mcp.NewToolResultText(text), nil
 }
@@ -177,7 +177,7 @@ type noCodeProviderSchemaResponse struct {
 func listSupportedProviders(ctx context.Context, tfeClient *tfe.Client, orgName string, logger *log.Logger) (*mcp.CallToolResult, error) {
 	text, err := listSupportedProvidersText(ctx, tfeClient, orgName)
 	if err != nil {
-		return toolErrorf(logger, "provider_list_schema_list", "%v", err)
+		return toolErrorf(logger, "get_search_list_resource_schemas", "%v", err)
 	}
 	return mcp.NewToolResultText(text), nil
 }
@@ -212,7 +212,7 @@ func listSupportedProvidersText(ctx context.Context, tfeClient *tfe.Client, orgN
 
 	out, err := json.MarshalIndent(map[string]any{
 		"supported_providers": summaries,
-		"note":                "Call provider_list_schema_list again with the same terraform_org_name and workspace_name, plus provider_namespace and provider_name, to fetch the full list_resource_schemas for a specific provider. FETCH uses the catalog-selected version.",
+		"note":                "Call get_search_list_resource_schemas again with the same terraform_org_name and workspace_name, plus provider_namespace and provider_name, to fetch the full list_resource_schemas for a specific provider. FETCH uses the catalog-selected version.",
 	}, "", "  ")
 	if err != nil {
 		return "", fmt.Errorf("failed to marshal provider list: %w", err)
@@ -246,8 +246,8 @@ func discoverProviderSelection(ctx context.Context, tfeClient *tfe.Client, orgNa
 
 	return noCodeProviderSelection{}, fmt.Errorf(
 		"provider %s/%s is not in the search-compatible catalog — "+
-			"call provider_list_schema_list with terraform_org_name and workspace_name to see supported providers, "+
-			"or use search_providers to find a provider in the public Terraform Registry",
+			"call get_search_list_resource_schemas with terraform_org_name and workspace_name to see supported providers, "+
+			"or use search_provider_docs to find a provider in the public Terraform Registry",
 		namespace, name,
 	)
 }
@@ -257,7 +257,7 @@ func discoverProviderSelection(ctx context.Context, tfeClient *tfe.Client, orgNa
 func fetchProviderSchema(ctx context.Context, tfeClient *tfe.Client, orgName, namespace, name, version string, logger *log.Logger) (*mcp.CallToolResult, error) {
 	text, err := fetchProviderSchemaText(ctx, tfeClient, orgName, namespace, name, version)
 	if err != nil {
-		return toolErrorf(logger, "provider_list_schema_list", "%v", err)
+		return toolErrorf(logger, "get_search_list_resource_schemas", "%v", err)
 	}
 	return mcp.NewToolResultText(text), nil
 }
@@ -308,10 +308,10 @@ func fetchProviderSchemaText(ctx context.Context, tfeClient *tfe.Client, orgName
 		"version":               version,
 		"list_resource_schemas": lrs,
 		"note": fmt.Sprintf(
-			"Pass list_resource_schemas to generate_query_configuration "+
+			"Pass list_resource_schemas to generate_search_query_configuration "+
 				"(with provider_namespace=%q, provider_name=%q, provider_version=%q) "+
 				"to get a full schema guide and example configuration. Use only exact resource type keys present in list_resource_schemas; "+
-				"ordinary managed resource names are not automatically supported list resources. Then pass the configuration with terraform_org_name and workspace_name to execute_query.",
+				"ordinary managed resource names are not automatically supported list resources. Then pass the configuration with terraform_org_name and workspace_name to execute_search_query.",
 			namespace,
 			name,
 			version,
@@ -369,7 +369,7 @@ be inferred or supplied from model knowledge or the public Registry.
 
 After LIST, choose a catalog provider with the user and call FETCH. After FETCH,
 pass the returned provider metadata and list_resource_schemas to
-generate_query_configuration. A searchable resource_type must be an exact key
+generate_search_query_configuration. A searchable resource_type must be an exact key
 in list_resource_schemas; an ordinary managed-resource name does not establish
 Search list support. List-resource schemas are not target managed-resource
 schemas.`
