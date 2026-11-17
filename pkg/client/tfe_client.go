@@ -38,8 +38,8 @@ type cachedTfeClient struct {
 }
 
 // NewTfeClient creates a new TFE client for the given session
-func NewTfeClient(sessionId string, terraformAddress string, terraformSkipTLSVerify bool, terraformToken string, clientIP string, logger *log.Logger) (*tfe.Client, error) {
-	client, err := newTfeClient(terraformAddress, terraformSkipTLSVerify, terraformToken, clientIP, logger)
+func NewTfeClient(sessionId string, terraformAddress string, terraformSkipTLSVerify bool, terraformToken string, logger *log.Logger) (*tfe.Client, error) {
+	client, err := newTfeClient(terraformAddress, terraformSkipTLSVerify, terraformToken, logger)
 	if err != nil {
 		return nil, err
 	}
@@ -52,18 +52,13 @@ func NewTfeClient(sessionId string, terraformAddress string, terraformSkipTLSVer
 	return client, nil
 }
 
-// NewTfeClientForToken creates a TFE client without storing it in session state.
-func NewTfeClientForToken(terraformAddress string, terraformSkipTLSVerify bool, terraformToken string, clientIP string, logger *log.Logger) (*tfe.Client, error) {
-	return newTfeClient(terraformAddress, terraformSkipTLSVerify, terraformToken, clientIP, logger)
-}
-
-func newTfeClient(terraformAddress string, terraformSkipTLSVerify bool, terraformToken string, clientIP string, logger *log.Logger) (*tfe.Client, error) {
+func newTfeClient(terraformAddress string, terraformSkipTLSVerify bool, terraformToken string, logger *log.Logger) (*tfe.Client, error) {
 	if terraformToken == "" {
 		logger.Warn("No Terraform token provided, TFE client will not be available")
 		return nil, errors.New("required input: no Terraform token provided")
 	}
 
-	config := buildTFEConfig(terraformAddress, terraformSkipTLSVerify, terraformToken, clientIP, logger)
+	config := buildTFEConfig(terraformAddress, terraformSkipTLSVerify, terraformToken, logger)
 
 	client, err := tfe.NewClient(config)
 	if err != nil {
@@ -75,13 +70,14 @@ func newTfeClient(terraformAddress string, terraformSkipTLSVerify bool, terrafor
 }
 
 // buildTFEConfig assembles the go-tfe client configuration, including the outbound
-// headers set on every request (User-Agent, optional X-Forwarded-For, and the
-// optional shared secret).
+// headers that are the same on every request (User-Agent and the optional shared
+// secret). X-Forwarded-For is set per request by requestIDTransport since clients
+// get reused across requests.
 //
 // It is split out from newTfeClient so the header logic can be unit-tested: tfe.NewClient
 // consumes the config and does not expose the headers back, so the tests assert against
 // the *tfe.Config returned here instead.
-func buildTFEConfig(terraformAddress string, terraformSkipTLSVerify bool, terraformToken string, clientIP string, logger *log.Logger) *tfe.Config {
+func buildTFEConfig(terraformAddress string, terraformSkipTLSVerify bool, terraformToken string, logger *log.Logger) *tfe.Config {
 	config := &tfe.Config{
 		Address:           terraformAddress,
 		Token:             terraformToken,
@@ -90,9 +86,6 @@ func buildTFEConfig(terraformAddress string, terraformSkipTLSVerify bool, terraf
 	}
 
 	config.Headers.Set("User-Agent", fmt.Sprintf("terraform-mcp-server/%s", version.GetHumanVersion()))
-	if clientIP != "" {
-		config.Headers.Set("X-Forwarded-For", clientIP)
-	}
 
 	// Attach the shared secret (if configured) so the backend (HCP Terraform / TFE)
 	// can identify requests from a trusted MCP deployment.
@@ -180,11 +173,10 @@ func GetTfeClientForSession(ctx context.Context, sessionID string, logger *log.L
 		return nil, err
 	}
 
-	// In a stateless mode the server does not assign any session ID to requests. We need to create new TF clients for every request in that case
+	// Stateless mode has no session ID, so clients are cached by address, token
+	// and TLS setting instead
 	if sessionID == "" {
-		logger.Info("Session ID is empty. Creating a new TF client")
-		clientIP, _ := ctx.Value(contextKey(ClientIPKey)).(string)
-		return NewTfeClientForToken(terraformAddress, parseTerraformSkipTLSVerify(ctx), terraformToken, clientIP, logger)
+		return statelessTfeClient(terraformAddress, parseTerraformSkipTLSVerify(ctx), terraformToken, logger)
 	}
 
 	// Reuse the session's client as long as the token hasn't changed
@@ -211,9 +203,7 @@ func CreateTfeClientForSession(ctx context.Context, sessionID string, logger *lo
 }
 
 func newSessionTfeClient(ctx context.Context, sessionID, terraformAddress, terraformToken string, logger *log.Logger) (*tfe.Client, error) {
-	// Get client IP from context for X-Forwarded-For header
-	clientIP, _ := ctx.Value(contextKey(ClientIPKey)).(string)
-	return NewTfeClient(sessionID, terraformAddress, parseTerraformSkipTLSVerify(ctx), terraformToken, clientIP, logger)
+	return NewTfeClient(sessionID, terraformAddress, parseTerraformSkipTLSVerify(ctx), terraformToken, logger)
 }
 
 // terraformAddressForRequest returns the address TerraformContextMiddleware put

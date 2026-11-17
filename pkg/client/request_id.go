@@ -47,21 +47,28 @@ func EnsureRequestID(ctx context.Context) (context.Context, string) {
 	return WithRequestID(ctx, id), id
 }
 
-// requestIDTransport sets X-Request-Id on outgoing requests when ctx has a
-// request id. It reads the id on every request instead of setting it once when
-// the client gets built, since tfe and http clients are cached per session and
-// reused.
+// requestIDTransport sets X-Request-Id and X-Forwarded-For from ctx on each
+// request. tfe and http clients get cached and reused, so these can't be set
+// once when the client is built.
 type requestIDTransport struct {
 	base http.RoundTripper
 }
 
 func (t *requestIDTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	id := RequestIDFromContext(req.Context())
-	if id == "" || req.Header.Get(RequestIDHeader) != "" {
+	setID := id != "" && req.Header.Get(RequestIDHeader) == ""
+	clientIP, _ := req.Context().Value(contextKey(ClientIPKey)).(string)
+	setIP := clientIP != "" && req.Header.Get("X-Forwarded-For") == ""
+	if !setID && !setIP {
 		return t.base.RoundTrip(req)
 	}
 	// RoundTrippers shouldn't change the caller's request
 	req = req.Clone(req.Context())
-	req.Header.Set(RequestIDHeader, id)
+	if setID {
+		req.Header.Set(RequestIDHeader, id)
+	}
+	if setIP {
+		req.Header.Set("X-Forwarded-For", clientIP)
+	}
 	return t.base.RoundTrip(req)
 }

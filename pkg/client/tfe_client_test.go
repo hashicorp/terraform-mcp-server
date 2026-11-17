@@ -30,13 +30,13 @@ func TestBuildTFEConfig_SharedSecret(t *testing.T) {
 
 	t.Run("sets shared secret header when env is set", func(t *testing.T) {
 		t.Setenv(SharedSecretEnv, "super-secret-value")
-		cfg := buildTFEConfig("https://app.terraform.io", false, "token", "", logger)
+		cfg := buildTFEConfig("https://app.terraform.io", false, "token", logger)
 		assert.Equal(t, "super-secret-value", cfg.Headers.Get(SharedSecretHeader))
 	})
 
 	t.Run("omits shared secret header when env is unset", func(t *testing.T) {
 		t.Setenv(SharedSecretEnv, "")
-		cfg := buildTFEConfig("https://app.terraform.io", false, "token", "", logger)
+		cfg := buildTFEConfig("https://app.terraform.io", false, "token", logger)
 		assert.Empty(t, cfg.Headers.Get(SharedSecretHeader))
 	})
 }
@@ -45,15 +45,10 @@ func TestBuildTFEConfig_ForwardedFor(t *testing.T) {
 	logger := log.New()
 	logger.SetOutput(io.Discard)
 
-	t.Run("sets X-Forwarded-For when clientIP is provided", func(t *testing.T) {
-		cfg := buildTFEConfig("https://app.terraform.io", false, "token", "203.0.113.5", logger)
-		assert.Equal(t, "203.0.113.5", cfg.Headers.Get("X-Forwarded-For"))
-	})
-
-	t.Run("omits X-Forwarded-For when clientIP is empty", func(t *testing.T) {
-		cfg := buildTFEConfig("https://app.terraform.io", false, "token", "", logger)
-		assert.Empty(t, cfg.Headers.Get("X-Forwarded-For"))
-	})
+	// Clients get reused across requests, so the client IP can't be baked into
+	// the config. Tghe requestIDTransport will set it per request instead.
+	cfg := buildTFEConfig("https://app.terraform.io", false, "token", logger)
+	assert.Empty(t, cfg.Headers.Get("X-Forwarded-For"))
 }
 
 func TestHumanReadableTokenPermissions(t *testing.T) {

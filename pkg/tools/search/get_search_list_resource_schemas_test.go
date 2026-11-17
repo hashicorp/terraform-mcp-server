@@ -584,7 +584,7 @@ func TestProviderListSchemaList_ValidatesWorkspaceBeforeProviderRequest(t *testi
 
 			const token = "test-token"
 			sessionID := t.Name()
-			_, err := client.NewTfeClient(sessionID, tfeServer.URL, false, token, "", silentLogger())
+			_, err := client.NewTfeClient(sessionID, tfeServer.URL, false, token, silentLogger())
 			require.NoError(t, err)
 			t.Cleanup(func() { client.DeleteTfeClient(sessionID) })
 			t.Setenv(client.TerraformToken, token)
