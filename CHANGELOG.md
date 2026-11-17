@@ -5,6 +5,10 @@ FEATURES
 * [New Tools] Terraform Search adds `get_search_list_resource_schemas`, `generate_search_query_configuration`, `execute_search_query`, `get_search_query_status`, and `get_search_query_summary` on both the legacy and official MCP servers. Query status polling is bounded per call.
 * [New Tools] Terraform Search adds read-only `prepare_import` and `verify_import_plan` tools for preparing explicitly selected Search results and verifying the associated plan-only HCP Terraform Run. These tools do not upload configuration, create a Run, or apply imports.
 
+IMPROVEMENTS
+
+* HCP Terraform, Terraform Enterprise and registry calls now share one connection pool instead of each client opening its own, so connections get reused across requests and sessions. This matters most in stateless mode, where a new client was built for every request. HTTP/2 is also back on for these calls, and idle connections are closed after 90 seconds.
+
 # 1.4.2
 
 IMPROVEMENTS
