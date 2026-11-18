@@ -19,6 +19,13 @@ func TestCreateNoCodeWorkspace(t *testing.T) {
 	s := newTestingSession(t)
 	defer s.Close()
 
+	// mcp-go v1.5 uses protocol 2026-07-28, which doesn't let the server send
+	// elicitation requests. We're dropping mark3labs instead of
+	// porting the legacy tool, so this only runs against official.
+	if !officialEndpoint() {
+		t.Skip("legacy create_no_code_workspace uses server-initiated elicitation, which protocol 2026-07-28 removed")
+	}
+
 	client := tfeClient(t)
 
 	project, err := client.Projects.Create(t.Context(), tfeOrgName, tfe.ProjectCreateOptions{
