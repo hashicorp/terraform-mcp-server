@@ -102,7 +102,7 @@ func getProviderCapabilities(ctx context.Context, request *mcp.CallToolRequest, 
 
 		latestVersion, err := registryapi.GetLatestProviderVersion(ctx, httpClient, namespace, name, logger)
 		if err != nil {
-			return nil, nil, fmt.Errorf("provider not found: %s/%s - verify the namespace and provider name are correct", namespace, name)
+			return nil, nil, fmt.Errorf("getting latest version for %s/%s: %w - verify the namespace and provider name are correct", namespace, name, err)
 		}
 		version = latestVersion
 	}
@@ -115,7 +115,7 @@ func getProviderCapabilities(ctx context.Context, request *mcp.CallToolRequest, 
 	uri := fmt.Sprintf("providers/%s/%s/%s", namespace, name, version)
 	response, err := registryapi.SendRegistryCall(ctx, httpClient, "GET", uri, logger)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to fetch provider docs for %s/%s:%s - verify the provider exists", namespace, name, version)
+		return nil, nil, fmt.Errorf("fetching provider docs for %s/%s:%s: %w - verify the provider exists", namespace, name, version, err)
 	}
 
 	var providerDocs registryapi.ProviderDocs

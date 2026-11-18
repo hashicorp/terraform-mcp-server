@@ -108,16 +108,83 @@ func TestProcessNoCodeElicitationResponse(t *testing.T) {
 func TestCollectNoCodeVariablesSkipsElicitationForEmptyModule(t *testing.T) {
 	schema := buildNoCodeElicitationSchema(&tfeclient.ModuleMetadata{}, &tfe.RegistryNoCodeModule{})
 
-	variables, err := collectNoCodeVariables(t.Context(), nil, "nocode-123", schema)
+	variables, inputResult, err := collectNoCodeVariables(nil, "nocode-123", schema)
 	require.NoError(t, err)
 	assert.Nil(t, variables)
+	assert.Nil(t, inputResult)
 }
 
-func TestCollectNoCodeVariablesRequiresSessionWhenVariablesExist(t *testing.T) {
+func TestCollectNoCodeVariablesReturnsInputRequestFirst(t *testing.T) {
 	schema := buildNoCodeElicitationSchema(testNoCodeModuleMetadata(t), &tfe.RegistryNoCodeModule{})
 
-	_, err := collectNoCodeVariables(t.Context(), nil, "nocode-123", schema)
-	require.EqualError(t, err, "request does not have an active MCP server session")
+	for name, request := range map[string]*mcp.CallToolRequest{
+		"nil request":  nil,
+		"no responses": {Params: &mcp.CallToolParamsRaw{}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			variables, inputResult, err := collectNoCodeVariables(request, "nocode-123", schema)
+			require.NoError(t, err)
+			assert.Nil(t, variables)
+			require.NotNil(t, inputResult)
+			form, ok := inputResult.InputRequests[noCodeVariablesInputID].(*mcp.ElicitParams)
+			require.True(t, ok, "expected an elicitation form input request")
+			assert.Equal(t, "form", form.Mode)
+			assert.Same(t, schema.schema, form.RequestedSchema)
+			assert.Contains(t, form.Message, "nocode-123")
+		})
+	}
+}
+
+func TestCollectNoCodeVariablesUsesInputResponse(t *testing.T) {
+	schema := buildNoCodeElicitationSchema(testNoCodeModuleMetadata(t), &tfe.RegistryNoCodeModule{})
+	content := map[string]any{}
+	for _, name := range schema.schema.Required {
+		content[name] = testNoCodeValue(schema.schema.Properties[name].Type)
+	}
+	request := &mcp.CallToolRequest{Params: &mcp.CallToolParamsRaw{
+		InputResponses: mcp.InputResponseMap{
+			noCodeVariablesInputID: &mcp.ElicitResult{Action: "accept", Content: content},
+		},
+	}}
+
+	variables, inputResult, err := collectNoCodeVariables(request, "nocode-123", schema)
+	require.NoError(t, err)
+	assert.Nil(t, inputResult)
+	assert.Len(t, variables, len(content))
+}
+
+func TestCollectNoCodeVariablesDeclined(t *testing.T) {
+	schema := buildNoCodeElicitationSchema(testNoCodeModuleMetadata(t), &tfe.RegistryNoCodeModule{})
+	request := &mcp.CallToolRequest{Params: &mcp.CallToolParamsRaw{
+		InputResponses: mcp.InputResponseMap{
+			noCodeVariablesInputID: &mcp.ElicitResult{Action: "decline"},
+		},
+	}}
+
+	_, inputResult, err := collectNoCodeVariables(request, "nocode-123", schema)
+	assert.Nil(t, inputResult)
+	require.EqualError(t, err, "workspace creation declined by user")
+}
+
+func TestCollectNoCodeVariablesRejectsWrongResponse(t *testing.T) {
+	schema := buildNoCodeElicitationSchema(testNoCodeModuleMetadata(t), &tfe.RegistryNoCodeModule{})
+	request := &mcp.CallToolRequest{Params: &mcp.CallToolParamsRaw{
+		InputResponses: mcp.InputResponseMap{"something_else": &mcp.ElicitResult{Action: "accept"}},
+	}}
+
+	_, _, err := collectNoCodeVariables(request, "nocode-123", schema)
+	require.EqualError(t, err, "missing response for the variables form")
+}
+
+func testNoCodeValue(jsonType string) any {
+	switch jsonType {
+	case "number":
+		return float64(1)
+	case "boolean":
+		return true
+	default:
+		return "value"
+	}
 }
 
 func TestNoCodeWorkspaceResponseUsesWorkspaceValues(t *testing.T) {

@@ -118,13 +118,9 @@ func CreateNoCodeWorkspaceFunc(ctx context.Context, request *mcp.CallToolRequest
 	}
 
 	elicitationSchema := buildNoCodeElicitationSchema(moduleMetadata, noCodeModule)
-	var session *mcp.ServerSession
-	if request != nil {
-		session, _ = request.GetSession().(*mcp.ServerSession)
-	}
-	variables, err := collectNoCodeVariables(ctx, session, noCodeModuleID, elicitationSchema)
-	if err != nil {
-		return nil, nil, err
+	variables, inputResult, err := collectNoCodeVariables(request, noCodeModuleID, elicitationSchema)
+	if err != nil || inputResult != nil {
+		return inputResult, nil, err
 	}
 
 	workspace, err := tfeClient.RegistryNoCodeModules.CreateWorkspace(ctx, noCodeModuleID, &tfe.RegistryNoCodeModuleCreateWorkspaceOptions{
@@ -147,23 +143,66 @@ type noCodeElicitationSchema struct {
 	requiredSet   map[string]struct{}
 }
 
-func collectNoCodeVariables(ctx context.Context, session *mcp.ServerSession, noCodeModuleID string, schema *noCodeElicitationSchema) ([]*tfe.Variable, error) {
+// noCodeVariablesInputID is the input request ID for the variables form.
+const noCodeVariablesInputID = "no_code_variables"
+
+// protocolVersion20260728 is the first protocol version where clients handle
+// input requests themselves.
+const protocolVersion20260728 = "2026-07-28"
+
+// collectNoCodeVariables asks for the module's variables with an input request
+// instead of sending an elicitation, since clients on 2026-07-28 or later don't
+// accept server-initiated requests. The first call returns the form,
+// and the client retries with the answer in InputResponses. go-sdk turns it
+// into a normal elicitation for older clients so both work.
+func collectNoCodeVariables(request *mcp.CallToolRequest, noCodeModuleID string, schema *noCodeElicitationSchema) ([]*tfe.Variable, *mcp.CallToolResult, error) {
 	if len(schema.variableNames) == 0 {
-		return nil, nil
-	}
-	if session == nil {
-		return nil, fmt.Errorf("request does not have an active MCP server session")
+		return nil, nil, nil
 	}
 
-	result, err := session.Elicit(ctx, &mcp.ElicitParams{
-		Message:         fmt.Sprintf("The No Code module '%s' requires %d variable(s) to create the workspace. Please provide values for the required variables.", noCodeModuleID, len(schema.schema.Required)),
-		RequestedSchema: schema.schema,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("requesting variable values: %w", err)
+	if request == nil || request.Params == nil || len(request.Params.InputResponses) == 0 {
+		if !clientCanAnswerForm(request) {
+			return nil, nil, fmt.Errorf("client does not support elicitation")
+		}
+		return nil, &mcp.CallToolResult{
+			InputRequests: mcp.InputRequestMap{
+				noCodeVariablesInputID: &mcp.ElicitParams{
+					Mode:            "form",
+					Message:         fmt.Sprintf("The No Code module '%s' requires %d variable(s) to create the workspace. Please provide values for the required variables.", noCodeModuleID, len(schema.schema.Required)),
+					RequestedSchema: schema.schema,
+				},
+			},
+		}, nil
 	}
 
-	return processNoCodeElicitationResponse(result, schema)
+	response, ok := request.Params.InputResponses[noCodeVariablesInputID].(*mcp.ElicitResult)
+	if !ok || response == nil {
+		return nil, nil, fmt.Errorf("missing response for the variables form")
+	}
+	variables, err := processNoCodeElicitationResponse(response, schema)
+	return variables, nil, err
+}
+
+// clientCanAnswerForm reports whether the client can fill in the form. Clients
+// on 2026-07-28 or later answer input requests directly. Older clients need the
+// elicitation capability and a session to get it, which stateless mode doesn't
+// have.
+func clientCanAnswerForm(request *mcp.CallToolRequest) bool {
+	if request == nil {
+		return true
+	}
+	session, ok := request.GetSession().(*mcp.ServerSession)
+	if !ok || session == nil {
+		return true
+	}
+	params := session.InitializeParams()
+	if params == nil {
+		return false
+	}
+	if params.ProtocolVersion >= protocolVersion20260728 {
+		return true
+	}
+	return params.Capabilities != nil && params.Capabilities.Elicitation != nil
 }
 
 func noCodeWorkspaceResponse(workspace *tfe.Workspace, noCodeModuleID string) CreateNoCodeWorkspaceResponse {

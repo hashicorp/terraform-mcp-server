@@ -6,6 +6,7 @@ package tools
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -120,7 +121,7 @@ func searchProviders(ctx context.Context, request *mcp.CallToolRequest, input Se
 
 	providerDetail, err := resolveProviderDetails(ctx, input, httpClient, logger)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to resolve provider: %v - %s", err, defaultErrorGuide)
+		return nil, nil, fmt.Errorf("failed to resolve provider: %w - %s", err, defaultErrorGuide)
 	}
 
 	serviceSlug := input.ServiceSlug
@@ -129,8 +130,8 @@ func searchProviders(ctx context.Context, request *mcp.CallToolRequest, input Se
 	if utils.IsV2ProviderDocumentType(providerDetail.ProviderDocumentType) {
 		content, err := providerDetailsV2(ctx, httpClient, providerDetail, logger)
 		if err != nil {
-			return nil, nil, fmt.Errorf("failed to find %s documentation for provider '%s' in the '%s' namespace - %s",
-				providerDetail.ProviderDocumentType, providerDetail.ProviderName, providerDetail.ProviderNamespace, defaultErrorGuide)
+			return nil, nil, fmt.Errorf("failed to find %s documentation for provider '%s' in the '%s' namespace: %w - %s",
+				providerDetail.ProviderDocumentType, providerDetail.ProviderName, providerDetail.ProviderNamespace, err, defaultErrorGuide)
 		}
 
 		fullContent := fmt.Sprintf("# %s provider docs\n\n%s",
@@ -143,8 +144,8 @@ func searchProviders(ctx context.Context, request *mcp.CallToolRequest, input Se
 	uri := path.Join("providers", providerDetail.ProviderNamespace, providerDetail.ProviderName, providerDetail.ProviderVersion)
 	response, err := client.SendRegistryCall(ctx, httpClient, "GET", uri, logger)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to get provider '%s' version '%s' in namespace '%s' - %s",
-			providerDetail.ProviderName, providerDetail.ProviderVersion, providerDetail.ProviderNamespace, defaultErrorGuide)
+		return nil, nil, fmt.Errorf("failed to get provider '%s' version '%s' in namespace '%s': %w - %s",
+			providerDetail.ProviderName, providerDetail.ProviderVersion, providerDetail.ProviderNamespace, err, defaultErrorGuide)
 	}
 
 	var providerDocs client.ProviderDocs
@@ -194,6 +195,11 @@ func resolveProviderDetails(ctx context.Context, input SearchProviderDocsArgumen
 	} else {
 		providerVersionValue, err = client.GetLatestProviderVersion(ctx, httpClient, providerNamespace, providerName, logger)
 		if err != nil {
+			// Skip the hashicorp fallback on a rate limit or outage, it'll just
+			// fail again and hide the real error.
+			if isRegistryBusy(err) {
+				return providerDetail, fmt.Errorf("getting latest version for %s/%s: %w", providerNamespace, providerName, err)
+			}
 			providerVersionValue = ""
 			logger.WithField("provider_namespace", providerNamespace).WithError(err).Debug("error getting latest provider version")
 		}
@@ -208,7 +214,7 @@ func resolveProviderDetails(ctx context.Context, input SearchProviderDocsArgumen
 			if providerNamespace != tryProviderNamespace {
 				namespaceTried = fmt.Sprintf("'%s' or '%s'", providerNamespace, tryProviderNamespace)
 			}
-			return providerDetail, fmt.Errorf("provider '%s' version '%s' not found in namespace %s", providerName, providerVersion, namespaceTried)
+			return providerDetail, fmt.Errorf("provider '%s' version '%s' not found in namespace %s: %w", providerName, providerVersion, namespaceTried, err)
 		}
 		providerNamespace = tryProviderNamespace
 	}
@@ -293,4 +299,14 @@ func getContentSnippet(ctx context.Context, httpClient *http.Client, docID strin
 		return desc[:300] + "...", nil
 	}
 	return desc, nil
+}
+
+// isRegistryBusy returns true if the registry rate limited us or is having
+// issues, rather than the provider not existing.
+func isRegistryBusy(err error) bool {
+	var registryErr *client.RegistryError
+	if !errors.As(err, &registryErr) {
+		return false
+	}
+	return registryErr.StatusCode == http.StatusTooManyRequests || registryErr.StatusCode >= http.StatusInternalServerError
 }
