@@ -18,6 +18,7 @@ IMPROVEMENTS
 * Harden CI workflows by updating `actions/checkout` to v7.0.1, which blocks unsafe fork checkouts in privileged workflow contexts, and `dorny/paths-filter` to v4.0.3, which safely escapes multiline filenames in file-list outputs. Other workflow actions now use their current Node.js 24-compatible releases, and artifact uploads include improved rate-limit retry handling.
 * Add a new otel metric to count total number of successful tool calls by an organization.
 * Every request now gets a correlation ID. It's sent as the `X-Request-Id` header on calls to HCP Terraform, Terraform Enterprise and the public registry, returned to the client as `X-Request-Id` in streamable-http mode, and included as `request_id` in tool call logs, so one request can be traced from the MCP client through to HCP Terraform.
+* Add `MCP_DISABLE_LOCALHOST_PROTECTION`. Since 1.3.0, the streamable HTTP server rejects requests on a loopback connection with a non-localhost `Host` header (DNS rebinding protection), which blocks proxies that forward over localhost and keep the original `Host`, such as AWS Bedrock AgentCore Runtime. Set it to `true` to disable the protection on `/mcp` and `/mcp/official`. Defaults to off.
 
 FIXES
 

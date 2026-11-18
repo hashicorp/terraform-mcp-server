@@ -48,9 +48,10 @@ func getOfficialStreamableServer(ctx context.Context, heartbeatInterval time.Dur
 	hcServer := mcpofficial.NewServer(version.Version, instructions.Text, heartbeatInterval, officialLogger, filter, serverOpts...)
 
 	opts := &mcp.StreamableHTTPOptions{
-		Stateless:             isStateless,
-		Logger:                officialLogger,
-		CrossOriginProtection: nil, // disables the SDK's built-in cross-origin protection entirely. CORS already enforced by client.NewSecurityHandler below.
+		Stateless:                  isStateless,
+		Logger:                     officialLogger,
+		CrossOriginProtection:      nil, // disables the SDK's built-in cross-origin protection entirely. CORS already enforced by client.NewSecurityHandler below.
+		DisableLocalhostProtection: shouldDisableLocalhostProtection(),
 	}
 
 	// Create the base MCP handler
