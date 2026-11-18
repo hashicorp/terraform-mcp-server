@@ -57,7 +57,7 @@ The server is configured through the `mcpServer` values, which map to the server
 | `mcpServer.corsMode` | CORS mode: `strict`, `development`, or `disabled` | `strict` |
 | `mcpServer.allowedOrganizations` | Restrict tool calls to these Terraform organizations. Empty allows any organization the token can reach. | `[]` |
 | `mcpServer.sessionMode` | `stateful` or `stateless`. Use `stateless` when running multiple replicas behind a load balancer without session affinity. | `stateful` |
-| `mcpServer.enableTfOperations` | Enables the destructive tools (`delete_team`, `force_unlock_workspace`, and similar). | `false` |
+| `mcpServer.preventDestructiveOperations` | Blocks the destructive tools (`delete_team`, `force_unlock_workspace`, and similar). Set to `false` to allow them. | `true` |
 | `mcpServer.redirectRootURL` | Where to redirect a browser that hits `/`. Defaults to the Terraform MCP docs page when unset. | `""` |
 | `mcpServer.tls.certFile` | Path to a TLS certificate inside the container. Mount it with `volumes` and `volumeMounts`. | `""` |
 | `mcpServer.tls.keyFile` | Path to the matching TLS key inside the container. | `""` |
@@ -115,4 +115,4 @@ The chart sets `OTEL_INSTANCE_ID` from the pod UID so each replica reports a dis
 - **CORS defaults to strict.** With no `allowedOrigins` set, all cross-origin requests are rejected. Set `mcpServer.allowedOrigins` to your client origin(s).
 - **The Terraform address is server-side only.** Clients cannot override `TFE_ADDRESS` via header or query parameter in streamable-http mode; it is fixed by `mcpServer.tfeAddress`.
 - **Use TLS.** Either terminate at an ingress or configure `mcpServer.tls` so the server serves TLS itself. Terraform tokens are sent in request headers and must not traverse plaintext connections.
-- **Destructive tools are off by default.** `mcpServer.enableTfOperations` gates the tools that delete or force-unlock Terraform resources. Leave it `false` unless you specifically want those available.
+- **Destructive tools are blocked by default.** `mcpServer.preventDestructiveOperations` defaults to `true`. Set it to `false` only if you specifically want the tools that delete or force-unlock Terraform resources.
