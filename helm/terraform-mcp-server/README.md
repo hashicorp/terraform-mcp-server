@@ -44,6 +44,8 @@ The server is configured through the `mcpServer` values, which map to the server
 | `service.type` | Kubernetes service type | `ClusterIP` |
 | `service.port` | Service port | `8080` |
 | `resources` | Pod resource requests/limits | see values.yaml |
+| `podSecurityContext` | Pod security context. Runs as non-root user 65532 with the RuntimeDefault seccomp profile. | see values.yaml |
+| `securityContext` | Container security context. Read-only root filesystem, no privilege escalation, all capabilities dropped. | see values.yaml |
 | `autoscaling.enabled` | Enable a HorizontalPodAutoscaler | `false` |
 | `volumes` | Extra volumes for the pod | `[]` |
 | `volumeMounts` | Extra volume mounts for the container | `[]` |
