@@ -1,3 +1,9 @@
+# Unreleased
+
+IMPROVEMENTS
+
+* Helm chart runs the server with secure defaults: non-root user 65532, read-only root filesystem, no privilege escalation, all capabilities dropped and the RuntimeDefault seccomp profile. [663](https://github.com/hashicorp/terraform-mcp-server/pull/663)
+
 # 1.5.0
 
 IMPROVEMENTS
