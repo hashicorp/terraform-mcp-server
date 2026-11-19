@@ -54,6 +54,7 @@ func TestRunToDetails(t *testing.T) {
 		CreatedAt:         createdAt,
 		Status:            tfe.RunPlanning,
 		Message:           "message",
+		MinimalRefresh:    true,
 		InvokeActionAddrs: []string{"action.one"},
 		PolicyPaths:       []string{"policies"},
 		ReplaceAddrs:      []string{"resource.one"},
@@ -67,6 +68,7 @@ func TestRunToDetails(t *testing.T) {
 	details := runToDetails(run)
 	assert.Equal(t, "run-1", details.ID)
 	assert.Equal(t, "planning", details.Status)
+	assert.True(t, details.MinimalRefresh)
 	assert.Equal(t, createdAt.Format(time.RFC3339Nano), details.CreatedAt)
 	assert.Equal(t, []string{"action.one"}, details.InvokeActionAddrs)
 	assert.Equal(t, "ws-1", details.WorkspaceID)
