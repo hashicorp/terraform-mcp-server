@@ -963,6 +963,7 @@ terraform-mcp-server stdio
 | `make docker-build` | Build Docker image |
 | `make run-http` | Run HTTP server locally |
 | `make docker-run-http` | Run HTTP server in Docker |
+| `make loadtest` | Run a load test against an existing StreamableHTTP server |
 | `make test-http` | Test HTTP health endpoint |
 | `make clean` | Remove build artifacts |
 | `make help` | Show all available commands |

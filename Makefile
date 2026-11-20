@@ -7,11 +7,13 @@ GO=go
 DOCKER=docker
 
 TARGET_DIR ?= $(CURDIR)/dist
+LOADTEST_ENDPOINT ?= http://localhost:8080/mcp
+LOADTEST_FLAGS ?= -workers=2 -qps=2 -duration=30s
 
 # Build flags
 LDFLAGS=-ldflags="-s -w"
 
-.PHONY: all build crt-build test test-e2e test-e2e-official-public-registry test-security clean deps docker-build run-http run-http-secure docker-run-http test-http test-hcpt cleanup-test-containers update-server-json-version help
+.PHONY: all build crt-build test test-e2e test-e2e-official-public-registry test-security clean deps docker-build run-http run-http-secure docker-run-http loadtest test-http test-hcpt cleanup-test-containers update-server-json-version help
 
 # Default target
 all: build
@@ -72,6 +74,10 @@ run-http-secure:
 docker-run-http:
 	$(DOCKER) run -p 8080:8080 --rm $(BINARY_NAME):$(VERSION) http --transport-port 8080 --transport-host 0.0.0.0
 
+# Run a load test against an existing StreamableHTTP server
+loadtest:
+	$(GO) run ./cmd/loadtest $(LOADTEST_FLAGS) "$(LOADTEST_ENDPOINT)"
+
 # Synchronise server.json version fields with version/VERSION
 update-json-version:
 	@VERSION_FILE="$(CURDIR)/version/VERSION"; \
@@ -124,6 +130,7 @@ help:
 	@echo "  run-http                - Run StreamableHTTP server locally on port 8080"
 	@echo "  run-http-secure         - Run StreamableHTTP server with security settings"
 	@echo "  docker-run-http         - Run StreamableHTTP server in Docker on port 8080"
+	@echo "  loadtest                - Run a load test (optional: LOADTEST_ENDPOINT=<URL> LOADTEST_FLAGS='<flags>')"
 	@echo "  update-json-version     - Update server.json to match version/VERSION"
 	@echo "  update-gemini-version   - Update gemini-extension.json to match version/VERSION"
 	@echo "  cleanup-test-containers - Stop and remove all test containers"
