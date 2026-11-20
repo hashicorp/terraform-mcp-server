@@ -95,7 +95,7 @@ func TestGetOfficialStreamableServer_SessionLifecycle(t *testing.T) {
 
 	// Seed a per-session rate-limit bucket so we can also prove it gets
 	// cleaned up alongside the cached clients.
-	require.NoError(t, rateLimiter.Allow(sessionID, "list_workspaces"))
+	require.NoError(t, rateLimiter.Allow(context.Background(), sessionID, "list_workspaces"))
 	assert.True(t, hasSessionRateLimiter(t, rateLimiter, sessionID))
 
 	require.NoError(t, clientSession.Close())

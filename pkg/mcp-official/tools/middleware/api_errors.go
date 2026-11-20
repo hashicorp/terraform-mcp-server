@@ -10,6 +10,7 @@ import (
 
 	"github.com/hashicorp/go-tfe"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+	log "github.com/sirupsen/logrus"
 
 	tfeclient "github.com/hashicorp/terraform-mcp-server/pkg/client"
 )
@@ -98,7 +99,7 @@ func classifyRegistryStatus(status int) (apiError, bool) {
 //
 // It uses the error the SDK keeps on the result (GetError), so tools just need
 // to wrap the go-tfe error with %w.
-func APIErrors() mcp.Middleware {
+func APIErrors(logger *log.Logger) mcp.Middleware {
 	return func(next mcp.MethodHandler) mcp.MethodHandler {
 		return func(ctx context.Context, method string, req mcp.Request) (mcp.Result, error) {
 			result, err := next(ctx, method, req)
@@ -113,6 +114,18 @@ func APIErrors() mcp.Middleware {
 			apiErr, ok := classifyAPIError(toolResult.GetError())
 			if !ok {
 				return result, err
+			}
+			// HCPT rejected the token partway through a tool call
+			if apiErr.Code == APIErrorUnauthorized {
+				var tool string
+				if params, ok := req.GetParams().(*mcp.CallToolParamsRaw); ok {
+					tool = params.Name
+				}
+				tfeclient.LogSecurityEvent(ctx, logger, tfeclient.SecurityEvent{
+					Event:  tfeclient.SecurityEventInvalidToken,
+					Tool:   tool,
+					Reason: "HCP Terraform rejected the token",
+				})
 			}
 
 			if len(toolResult.Content) > 0 {

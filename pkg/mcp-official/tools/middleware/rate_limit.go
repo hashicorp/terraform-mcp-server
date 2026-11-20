@@ -30,7 +30,7 @@ func RateLimit(rl *tfeclient.RateLimitMiddleware) mcp.Middleware {
 				sessionID = officialclient.SessionID(session)
 			}
 
-			if err := rl.Allow(sessionID, params.Name); err != nil {
+			if err := rl.Allow(ctx, sessionID, params.Name); err != nil {
 				return &mcp.CallToolResult{
 					IsError: true,
 					Content: []mcp.Content{&mcp.TextContent{Text: err.Error()}},
