@@ -80,7 +80,7 @@ func TestAPIErrors(t *testing.T) {
 				return tt.result, nil
 			}
 
-			result, err := APIErrors()(next)(context.Background(), "tools/call", request)
+			result, err := APIErrors(nil)(next)(context.Background(), "tools/call", request)
 			require.NoError(t, err)
 
 			toolResult := result.(*mcp.CallToolResult)
@@ -104,7 +104,7 @@ func TestAPIErrorsIgnoresOtherMethods(t *testing.T) {
 		return &mcp.ListToolsResult{}, nil
 	}
 
-	result, err := APIErrors()(next)(context.Background(), "tools/list", &mcp.ListToolsRequest{})
+	result, err := APIErrors(nil)(next)(context.Background(), "tools/list", &mcp.ListToolsRequest{})
 	require.NoError(t, err)
 	assert.True(t, called)
 	assert.IsType(t, &mcp.ListToolsResult{}, result)
@@ -117,7 +117,7 @@ func TestAPIErrorsKeepsExistingMeta(t *testing.T) {
 		return result, nil
 	}
 
-	_, err := APIErrors()(next)(context.Background(), "tools/call", &mcp.CallToolRequest{Params: &mcp.CallToolParamsRaw{Name: "x"}})
+	_, err := APIErrors(nil)(next)(context.Background(), "tools/call", &mcp.CallToolRequest{Params: &mcp.CallToolParamsRaw{Name: "x"}})
 	require.NoError(t, err)
 	assert.Equal(t, "value", result.Meta["other"])
 	assert.Equal(t, APIErrorUnauthorized, result.Meta[MetaErrorCode])

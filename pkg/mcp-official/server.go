@@ -14,6 +14,7 @@ import (
 	"github.com/hashicorp/terraform-mcp-server/pkg/toolsets"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+	log "github.com/sirupsen/logrus"
 )
 
 // serverConfig holds server settings, set via Options like WithMiddlewares
@@ -22,6 +23,10 @@ type serverConfig struct {
 	mcpOpts     mcp.ServerOptions
 	middlewares []mcp.Middleware
 	onSession   []func(context.Context, *mcp.ServerSession)
+	// securityLogger logs security events. It's the logrus logger so every
+	// event has the same shape, with component mcp-security instead of the
+	// official logger's component mcp-official.
+	securityLogger *log.Logger
 }
 
 type Option func(*serverConfig)
@@ -33,6 +38,14 @@ type Option func(*serverConfig)
 func WithOnSession(fn func(context.Context, *mcp.ServerSession)) Option {
 	return func(cfg *serverConfig) {
 		cfg.onSession = append(cfg.onSession, fn)
+	}
+}
+
+// WithSecurityLogger sets the logger security events from the server's own
+// middleware are written to.
+func WithSecurityLogger(logger *log.Logger) Option {
+	return func(cfg *serverConfig) {
+		cfg.securityLogger = logger
 	}
 }
 
@@ -71,7 +84,7 @@ func NewServer(version, instructions string, heartbeatInterval time.Duration, lo
 	// APIErrors goes last so it's closest to the tools and labels the result
 	// before it's passed back out through the other middlewares.
 	middlewares := append([]mcp.Middleware{}, cfg.middlewares...)
-	svr.AddReceivingMiddleware(append(middlewares, middleware.APIErrors())...)
+	svr.AddReceivingMiddleware(append(middlewares, middleware.APIErrors(cfg.securityLogger))...)
 
 	tools.RegisterTools(svr, logger, filter)
 	resources.RegisterResources(svr, logger)

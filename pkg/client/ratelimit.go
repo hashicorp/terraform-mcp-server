@@ -126,16 +126,26 @@ func (m *RateLimitMiddleware) getSessionLimiter(sessionID string) *rate.Limiter 
 
 // Allow checks the global and, if sessionID is non-empty, the per-session
 // rate limit for a tool call. It has no dependency on any specific MCP SDK.
-func (m *RateLimitMiddleware) Allow(sessionID, toolName string) error {
+// Rejections are logged as security events with the request id and client IP
+// from ctx.
+func (m *RateLimitMiddleware) Allow(ctx context.Context, sessionID, toolName string) error {
 	if !m.globalLimiter.Allow() {
-		m.logger.Warnf("Global rate limit exceeded for tool: %s", toolName)
+		LogSecurityEvent(ctx, m.logger, SecurityEvent{
+			Event:  SecurityEventRateLimited,
+			Tool:   toolName,
+			Reason: "global rate limit exceeded",
+		})
 		return errors.New("rate limit exceeded: too many requests globally")
 	}
 
 	if sessionID != "" {
 		sessionLimiter := m.getSessionLimiter(sessionID)
 		if !sessionLimiter.Allow() {
-			m.logger.Warnf("Session rate limit exceeded for session: %s, tool: %s", sessionID, toolName)
+			LogSecurityEvent(ctx, m.logger, SecurityEvent{
+				Event:  SecurityEventRateLimited,
+				Tool:   toolName,
+				Reason: "session rate limit exceeded",
+			})
 			return errors.New("rate limit exceeded: too many requests from this session")
 		}
 	}
@@ -148,7 +158,7 @@ func (m *RateLimitMiddleware) Allow(sessionID, toolName string) error {
 func (m *RateLimitMiddleware) Middleware() server.ToolHandlerMiddleware {
 	return func(next server.ToolHandlerFunc) server.ToolHandlerFunc {
 		return func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-			if err := m.Allow(getSessionIDFromContext(ctx), request.Params.Name); err != nil {
+			if err := m.Allow(ctx, getSessionIDFromContext(ctx), request.Params.Name); err != nil {
 				return nil, err
 			}
 			return next(ctx, request)

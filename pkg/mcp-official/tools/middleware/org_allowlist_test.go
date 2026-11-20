@@ -7,10 +7,10 @@ import (
 	"context"
 	"encoding/json"
 	"io"
-	"log/slog"
 	"testing"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -42,7 +42,8 @@ func TestOrganizationAllowlistMiddleware(t *testing.T) {
 		},
 	}
 
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	logger := log.New()
+	logger.SetOutput(io.Discard)
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -82,7 +83,8 @@ func TestOrganizationAllowlistMiddleware_IgnoresNonToolCalls(t *testing.T) {
 		return &mcp.ListToolsResult{}, nil
 	}
 
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	logger := log.New()
+	logger.SetOutput(io.Discard)
 	handler := OrganizationAllowlist([]string{"allowed-org"}, logger)(next)
 	_, err := handler(context.Background(), "tools/list", &mcp.ListToolsRequest{})
 

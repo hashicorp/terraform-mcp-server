@@ -129,7 +129,7 @@ automation and interaction capabilities for Infrastructure as Code (IaC) develop
 | `MCP_RATE_LIMIT_SESSION` | Per-session rate limit (format: `rps:burst`) | `5:10` |
 | `MCP_ORGANIZATION_ALLOWLIST` | CSV list of HCP Terraform organization names allowed to access the HTTP server | `""` (empty) |
 | `MCP_FORWARD_CLIENT_IP` | Forward the client IP to HCP Terraform / TFE via `X-Forwarded-For`. Set to `true` to enable | `false` |
-| `MCP_REMOTE_IP_METHOD` | How the client IP is sourced when forwarding is enabled: `RemoteAddr` (direct connection only), `X-Real-IP`, or `X-Forwarded-For` | `RemoteAddr` |
+| `MCP_REMOTE_IP_METHOD` | How the client IP is sourced for security event logs and, when forwarding is enabled, for `X-Forwarded-For`: `RemoteAddr` (direct connection only), `X-Real-IP`, or `X-Forwarded-For` | `RemoteAddr` |
 | `MCP_XFF_TRUSTED_HOPS` | Number of trusted proxy hops counted from the right of the `X-Forwarded-For` chain. Only used when `MCP_REMOTE_IP_METHOD=X-Forwarded-For` | `0` |
 | `MCP_PPROF_ADDR` | Address to serve Go pprof profiling endpoints on, like `127.0.0.1:6060`. Off when unset. See [Profiling](#profiling) | `""` (empty) |
 | `ENABLE_TF_OPERATIONS` | Enable tools that require explicit approval | `false` |
@@ -711,6 +711,23 @@ When a tool fails because of an HCP Terraform, TFE or public registry API respon
 Other failures, like network errors or validation errors from the API, don't get a code.
 
 These are normal tool results, so the HTTP status is still `200`. A missing token doesn't get a code since it fails before calling the API. To reject requests without a token with an HTTP `401`, set `MCP_REQUIRE_TOKEN=true`.
+
+## Security Events
+
+Rejected requests are logged as a warning with the message `security event` and `component: mcp-security`, so they can be filtered on fields instead of log text:
+
+```json
+{"level":"warning","msg":"security event","component":"mcp-security","event":"invalid_token","request_id":"6f1c...","client_ip":"203.0.113.9","reason":"Terraform token is unauthorized"}
+```
+
+| `event` | When |
+|---------|------|
+| `missing_token` | No bearer token when `MCP_REQUIRE_TOKEN` or the organization allowlist needs one |
+| `invalid_token` | HCP Terraform rejected the token, before or during a tool call |
+| `organization_not_allowed` | The organization allowlist blocked the request or the tool call |
+| `rate_limited` | The server's rate limit rejected the tool call |
+
+`tool`, `organization` and `reason` are included when known. The token is never logged. `client_ip` uses the same `MCP_REMOTE_IP_METHOD` setting as client IP forwarding, so behind a proxy, set it to `X-Forwarded-For` with the right `MCP_XFF_TRUSTED_HOPS` to log the real client.
 
 ## Available Resources
 

@@ -28,8 +28,12 @@ func OrganizationAllowlistToolMiddleware(allowlist []string, logger *log.Logger)
 			}
 
 			if _, allowed := allowedOrganizations[organizationName]; !allowed {
-				logger.Warnf("Rejecting tool call %q: organization %q is not in the configured allowlist",
-					request.Params.Name, organizationName)
+				LogSecurityEvent(ctx, logger, SecurityEvent{
+					Event:        SecurityEventOrganizationNotAllowed,
+					Tool:         request.Params.Name,
+					Organization: organizationName,
+					Reason:       "organization is not in the allowlist",
+				})
 				return mcp.NewToolResultError(fmt.Sprintf(
 					"Terraform organization %q is not allowed by this server", organizationName)), nil
 			}

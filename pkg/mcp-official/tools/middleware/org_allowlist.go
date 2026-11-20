@@ -7,16 +7,16 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log/slog"
 	"strings"
 
 	tfeclient "github.com/hashicorp/terraform-mcp-server/pkg/client"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+	log "github.com/sirupsen/logrus"
 )
 
 // OrganizationAllowlist rejects a tools/call whose terraform_org_name argument is not in allowlist
 // Tool calls without that argument are passed through unchecked
-func OrganizationAllowlist(allowlist []string, logger *slog.Logger) mcp.Middleware {
+func OrganizationAllowlist(allowlist []string, logger *log.Logger) mcp.Middleware {
 	allowedOrganizations := tfeclient.BuildAllowedOrganizationsMap(allowlist)
 
 	return func(next mcp.MethodHandler) mcp.MethodHandler {
@@ -46,8 +46,12 @@ func OrganizationAllowlist(allowlist []string, logger *slog.Logger) mcp.Middlewa
 			}
 
 			if _, ok := allowedOrganizations[organizationName]; !ok {
-				logger.WarnContext(ctx, "rejecting tool call: organization not in allowlist",
-					"tool", params.Name, "organization", organizationName)
+				tfeclient.LogSecurityEvent(ctx, logger, tfeclient.SecurityEvent{
+					Event:        tfeclient.SecurityEventOrganizationNotAllowed,
+					Tool:         params.Name,
+					Organization: organizationName,
+					Reason:       "organization is not in the allowlist",
+				})
 				return &mcp.CallToolResult{
 					IsError: true,
 					Content: []mcp.Content{&mcp.TextContent{

@@ -39,6 +39,7 @@ func newStdioServer(logger *log.Logger, filter toolsets.ToolFilter) *mcp.Server 
 			middleware.ToolLogging(officialLogger),
 		),
 		WithSessionLifecycle(rateLimiter, logger),
+		WithSecurityLogger(logger),
 	)
 }
 

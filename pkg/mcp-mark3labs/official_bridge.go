@@ -37,13 +37,14 @@ func getOfficialStreamableServer(ctx context.Context, heartbeatInterval time.Dur
 		middleware.ToolLogging(officialLogger),
 	}
 	if len(organizationAllowlist) > 0 {
-		middlewares = append(middlewares, middleware.OrganizationAllowlist(organizationAllowlist, officialLogger))
+		middlewares = append(middlewares, middleware.OrganizationAllowlist(organizationAllowlist, logger))
 	}
 	serverOpts := []mcpofficial.Option{
 		mcpofficial.WithMiddlewares(middlewares...),
 		// Creates each session's clients on start and cleans them up when the
 		// client disconnects (shared with the stdio runner)
 		mcpofficial.WithSessionLifecycle(rateLimiter, logger),
+		mcpofficial.WithSecurityLogger(logger),
 	}
 	hcServer := mcpofficial.NewServer(version.Version, instructions.Text, heartbeatInterval, officialLogger, filter, serverOpts...)
 

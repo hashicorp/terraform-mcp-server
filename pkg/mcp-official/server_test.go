@@ -81,7 +81,7 @@ func (s *statusRecorder) last() int {
 // and the session still works after.
 func TestAPIErrorsThroughSDK(t *testing.T) {
 	server := mcp.NewServer(&mcp.Implementation{Name: "test", Version: "1"}, nil)
-	server.AddReceivingMiddleware(middleware.APIErrors())
+	server.AddReceivingMiddleware(middleware.APIErrors(nil))
 
 	var expiredCalls atomic.Int32
 	type noArgs struct{}

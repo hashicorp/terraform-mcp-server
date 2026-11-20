@@ -195,7 +195,10 @@ func OrganizationAllowlistMiddleware(allowlist []string, logger *log.Logger) fun
 
 			token := strings.TrimSpace(getTokenFromAuthHeader(r))
 			if token == "" {
-				logger.Warn("Rejecting request: organization allowlist requires Authorization bearer token")
+				LogSecurityEvent(r.Context(), logger, SecurityEvent{
+					Event:  SecurityEventMissingToken,
+					Reason: "organization allowlist requires Authorization bearer token",
+				})
 				http.Error(w, "Authorization bearer token is required", http.StatusUnauthorized)
 				return
 			}
@@ -210,7 +213,10 @@ func OrganizationAllowlistMiddleware(allowlist []string, logger *log.Logger) fun
 			allowed, err := tokenHasAllowedOrganization(r.Context(), lister, allowedOrganizations)
 			if err != nil {
 				if errors.Is(err, tfe.ErrUnauthorized) {
-					logger.Warn("Rejecting request: Terraform token is unauthorized")
+					LogSecurityEvent(r.Context(), logger, SecurityEvent{
+						Event:  SecurityEventInvalidToken,
+						Reason: "Terraform token is unauthorized",
+					})
 					http.Error(w, "Terraform token is unauthorized", http.StatusUnauthorized)
 					return
 				}
@@ -219,7 +225,10 @@ func OrganizationAllowlistMiddleware(allowlist []string, logger *log.Logger) fun
 				return
 			}
 			if !allowed {
-				logger.Warn("Rejecting request: Supplied authorization token does not have access to any organizations allowed by this server")
+				LogSecurityEvent(r.Context(), logger, SecurityEvent{
+					Event:  SecurityEventOrganizationNotAllowed,
+					Reason: "token does not have access to any organizations allowed by this server",
+				})
 				http.Error(w, "Supplied authorization token does not have access to any organizations allowed by this server", http.StatusForbidden)
 				return
 			}
@@ -244,9 +253,10 @@ func RequireTerraformTokenMiddleware(logger *log.Logger) func(http.Handler) http
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			token := strings.TrimSpace(getTokenFromAuthHeader(r))
 			if token == "" {
-				if logger != nil {
-					logger.Warn("Rejecting request: Authorization bearer token is required")
-				}
+				LogSecurityEvent(r.Context(), logger, SecurityEvent{
+					Event:  SecurityEventMissingToken,
+					Reason: "Authorization bearer token is required",
+				})
 				http.Error(w, "Authorization bearer token is required", http.StatusUnauthorized)
 				return
 			}
@@ -263,9 +273,10 @@ func RequireTerraformTokenMiddleware(logger *log.Logger) func(http.Handler) http
 				ListOptions: tfe.ListOptions{PageSize: 1},
 			}); err != nil {
 				if errors.Is(err, tfe.ErrUnauthorized) {
-					if logger != nil {
-						logger.Warn("Rejecting request: Terraform token is unauthorized")
-					}
+					LogSecurityEvent(r.Context(), logger, SecurityEvent{
+						Event:  SecurityEventInvalidToken,
+						Reason: "Terraform token is unauthorized",
+					})
 					http.Error(w, "Terraform token is unauthorized", http.StatusUnauthorized)
 					return
 				}
@@ -410,13 +421,15 @@ func TerraformContextMiddleware(logger *log.Logger) func(http.Handler) http.Hand
 				}
 			}
 
-			// Capture client IP for X-Forwarded-For header forwarding
-			if utils.GetEnv(ForwardClientIP, "") == "true" {
-				clientIP := getClientIP(r, clientIPCfg)
-				if clientIP != "" {
-					ctx = context.WithValue(ctx, contextKey(ClientIPKey), clientIP)
-					logger.Debugf("Client IP captured for forwarding (method=%s): %s", clientIPCfg.Method, clientIP)
-				}
+			// The client IP always goes in the security event logs. It's only sent
+			// to HCP Terraform as X-Forwarded-For when forwarding is turned on.
+			clientIP := getClientIP(r, clientIPCfg)
+			if clientIP != "" {
+				ctx = context.WithValue(ctx, securityClientIPKey, clientIP)
+			}
+			if utils.GetEnv(ForwardClientIP, "") == "true" && clientIP != "" {
+				ctx = context.WithValue(ctx, contextKey(ClientIPKey), clientIP)
+				logger.Debugf("Client IP captured for forwarding (method=%s): %s", clientIPCfg.Method, clientIP)
 			}
 			// Call the next handler with the enriched context
 			next.ServeHTTP(w, r.WithContext(ctx))
