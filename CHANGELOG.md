@@ -8,6 +8,7 @@ FEATURES
 IMPROVEMENTS
 
 * Bump `github.com/hashicorp/go-tfe` to v1.112.0. On the official SDK server, `get_run_details` now reports whether a run uses minimal refresh in the `minimal_refresh` field.
+* Bump `actions/setup-go` from v7.0.0 to v7.1.0.
 
 FIXES
 
