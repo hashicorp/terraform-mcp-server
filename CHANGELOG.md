@@ -7,6 +7,7 @@ FEATURES
 
 IMPROVEMENTS
 
+* Bump Go to 1.26.11 to address [GO-2026-6859](https://pkg.go.dev/vuln/GO-2026-6859), a `net/http` race that can cause HTTP/1 servers to panic when request-body limits are exceeded.
 * Bump `github.com/hashicorp/go-tfe` to v1.112.0. On the official SDK server, `get_run_details` now reports whether a run uses minimal refresh in the `minimal_refresh` field.
 * Bump `github.com/mark3labs/mcp-go` to v1.6.0.
 * Bump `actions/setup-go` from v7.0.0 to v7.1.0.
