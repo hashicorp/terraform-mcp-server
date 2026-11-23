@@ -26,6 +26,11 @@ type serverConfig struct {
 
 type Option func(*serverConfig)
 
+// cacheTTL is how long clients can cache our list results, server/discover and
+// resource reads. The lists only change on deploy and the resources are public
+// docs, so it's the same for everyone.
+const cacheTTL = time.Hour
+
 // WithOnSession registers fn to run once per session, right after the client
 // finishes MCP initialization ("notifications/initialized"). fn is called
 // synchronously, so any long-running cleanup (e.g. waiting for the session
@@ -54,6 +59,10 @@ func NewServer(version, instructions string, heartbeatInterval time.Duration, lo
 	}
 	for _, opt := range opts {
 		opt(cfg)
+	}
+	cfg.mcpOpts.SetCacheable = func(_ context.Context, _ mcp.Request, c *mcp.Cacheable) {
+		c.TTLMs = int(cacheTTL.Milliseconds())
+		c.CacheScope = "public"
 	}
 
 	if len(cfg.onSession) > 0 {
