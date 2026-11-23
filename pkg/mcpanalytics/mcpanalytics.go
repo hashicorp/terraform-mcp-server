@@ -9,7 +9,6 @@ package mcpanalytics
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"os"
 	"strings"
 	"sync"
@@ -33,13 +32,14 @@ const orgLookupTimeout = 2 * time.Second
 type Analytics struct {
 	client       posthog.Client
 	logger       *log.Logger
+	environment  string
 	orgIDsByName sync.Map
 	lookupOrgID  func(ctx context.Context, req *mcp.CallToolRequest, orgName string) (string, error)
 }
 
-// Start returns the analytics configured by MCP_POSTHOG_PROJECT_TOKEN and
-// MCP_POSTHOG_HOST, or nil when no token is set. Close must run before exit to
-// send queued events.
+// Start returns the analytics configured by MCP_POSTHOG_PROJECT_TOKEN,
+// MCP_POSTHOG_HOST and MCP_POSTHOG_ENVIRONMENT, or nil when no token is set.
+// Close must run before exit to send queued events.
 func Start(logger *log.Logger) *Analytics {
 	projectToken := os.Getenv("MCP_POSTHOG_PROJECT_TOKEN")
 	if projectToken == "" {
@@ -54,7 +54,12 @@ func Start(logger *log.Logger) *Analytics {
 		return nil
 	}
 	logger.Infof("Sending MCP analytics to PostHog")
-	return &Analytics{client: client, logger: logger, lookupOrgID: readOrgID}
+	return &Analytics{
+		client:      client,
+		logger:      logger,
+		environment: strings.TrimSpace(os.Getenv("MCP_POSTHOG_ENVIRONMENT")),
+		lookupOrgID: readOrgID,
+	}
 }
 
 func (a *Analytics) Close() {
@@ -72,36 +77,45 @@ func (a *Analytics) Instrument(srv *mcp.Server) {
 	if a == nil {
 		return
 	}
-	posthogmcpsdk.Instrument(srv, posthogmcp.New(a.client),
+	posthogmcpsdk.Instrument(srv, posthogmcp.New(a.client, posthogmcp.WithCaptureErrorMessages(false)),
 		posthogmcpsdk.WithServerInfo("terraform-mcp-server", version.Version),
 		posthogmcpsdk.WithCaptureParameters(false),
 		posthogmcpsdk.WithCaptureResponses(false),
 		// It would add a conversation_id argument to every tool, and a text
 		// block to tool results in stateless mode.
 		posthogmcpsdk.WithConversationID(false),
-		posthogmcpsdk.WithProperties(a.orgProperties),
+		posthogmcpsdk.WithProperties(a.callProperties),
 		posthogmcpsdk.WithErrorHandler(func(_ context.Context, err error) {
 			a.logger.Warnf("MCP analytics: %v", err)
 		}),
 	)
 }
 
-func (a *Analytics) orgProperties(ctx context.Context, req *mcp.CallToolRequest, _ *mcp.CallToolResult, _ error) (posthog.Properties, error) {
+func (a *Analytics) callProperties(ctx context.Context, req *mcp.CallToolRequest, _ *mcp.CallToolResult, _ error) (posthog.Properties, error) {
+	properties := a.orgProperties(ctx, req)
+	if a.environment != "" {
+		properties["environment"] = a.environment
+	}
+	return properties, nil
+}
+
+func (a *Analytics) orgProperties(ctx context.Context, req *mcp.CallToolRequest) posthog.Properties {
 	var arguments struct {
 		OrgName string `json:"terraform_org_name"`
 	}
 	if req == nil || req.Params == nil || json.Unmarshal(req.Params.Arguments, &arguments) != nil {
-		return nil, nil
+		return posthog.Properties{}
 	}
 	orgName := strings.TrimSpace(arguments.OrgName)
 	if orgName == "" {
-		return nil, nil
+		return posthog.Properties{}
 	}
 	orgID, err := a.orgID(ctx, req, orgName)
 	if err != nil {
-		return nil, fmt.Errorf("reading organization %q: %w", orgName, err)
+		a.logger.Warnf("MCP analytics: reading organization %q: %v", orgName, err)
+		return posthog.Properties{}
 	}
-	return posthog.Properties{"terraform_org_id": orgID, "terraform_org_name": strings.ToLower(orgName)}, nil
+	return posthog.Properties{"terraform_org_id": orgID, "terraform_org_name": strings.ToLower(orgName)}
 }
 
 func (a *Analytics) orgID(ctx context.Context, req *mcp.CallToolRequest, orgName string) (string, error) {

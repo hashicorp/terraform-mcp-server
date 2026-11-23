@@ -102,12 +102,23 @@ spec:
               value: {{ .Values.otel.serviceName | default "terraform-mcp-server" | quote }}
             {{- end }}
             {{- with .Values.posthog }}
-            {{- if .projectToken }}
+            {{- if or .existingSecret .projectToken }}
             - name: MCP_POSTHOG_PROJECT_TOKEN
+              {{- if .existingSecret }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .existingSecret | quote }}
+                  key: {{ .existingSecretKey | default "projectToken" | quote }}
+              {{- else }}
               value: {{ .projectToken | quote }}
+              {{- end }}
             {{- if .host }}
             - name: MCP_POSTHOG_HOST
               value: {{ .host | quote }}
+            {{- end }}
+            {{- if .environment }}
+            - name: MCP_POSTHOG_ENVIRONMENT
+              value: {{ .environment | quote }}
             {{- end }}
             {{- end }}
             {{- end }}

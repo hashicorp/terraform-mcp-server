@@ -114,8 +114,11 @@ The chart sets `OTEL_INSTANCE_ID` from the pod UID so each replica reports a dis
 
 | Key | Description | Default |
 |-----|-------------|---------|
-| `posthog.projectToken` | PostHog project token (`phc_...`). Analytics are off when it is empty. | `""` |
+| `posthog.projectToken` | PostHog project token (`phc_...`). Analytics are off when it and `posthog.existingSecret` are empty. | `""` |
+| `posthog.existingSecret` | Name of an existing Secret holding the project token, read with `secretKeyRef` so the token stays out of the pod spec. Takes precedence over `posthog.projectToken`. | `""` |
+| `posthog.existingSecretKey` | Key of the token in `posthog.existingSecret`. | `"projectToken"` |
 | `posthog.host` | PostHog host, such as `https://eu.i.posthog.com`. If unset, PostHog's US host is used. | `""` |
+| `posthog.environment` | Sent as the `environment` property on each event, such as `staging` or `prod`, to tell deployments apart. | `""` |
 
 See [MCP analytics](../../README.md#mcp-analytics) for what is sent.
 

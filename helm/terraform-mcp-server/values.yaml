@@ -96,9 +96,15 @@ otel:
   metricsEndpoint: ""
   serviceName: "terraform-mcp-server"
 
-# MCP analytics in your own PostHog project. Off unless projectToken is set.
+# MCP analytics in your own PostHog project. Off unless projectToken or existingSecret is set.
 posthog:
   # project token (phc_...).
   projectToken: ""
+  # name of an existing Secret holding the project token. takes precedence over projectToken.
+  existingSecret: ""
+  # key of the token in existingSecret.
+  existingSecretKey: "projectToken"
   # e.g. https://eu.i.posthog.com. empty uses PostHog's US host.
   host: ""
+  # sent as the environment property on each event, e.g. dev, staging or prod.
+  environment: ""

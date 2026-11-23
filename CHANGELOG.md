@@ -6,7 +6,7 @@ BREAKING CHANGES
 
 IMPROVEMENTS
 
-* Add optional MCP analytics through PostHog. Setting `MCP_POSTHOG_PROJECT_TOKEN` (or `posthog.projectToken` in the Helm chart) sends each tool call's name, duration, errors, client, session, organization, and the agent's stated reason to that PostHog project. Tool arguments and results are never sent, and nothing is sent without a token.
+* Add optional MCP analytics through PostHog. Setting `MCP_POSTHOG_PROJECT_TOKEN` (or `posthog.projectToken` or `posthog.existingSecret` in the Helm chart) sends each tool call's name, duration, whether it failed, client, session, organization, optional environment, and the agent's stated reason to that PostHog project. Tool arguments, results and error messages are never sent, and nothing is sent without a token.
 
 # 1.4.1
 

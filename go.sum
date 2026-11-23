@@ -85,10 +85,10 @@ github.com/opentracing/opentracing-go v1.2.0/go.mod h1:GxEUsuufX4nBwe+T+Wl9TAgYr
 github.com/pelletier/go-toml/v2 v2.2.4 h1:mye9XuhQ6gvn5h28+VilKrrPoQVanw5PMw/TB0t5Ec4=
 github.com/pelletier/go-toml/v2 v2.2.4/go.mod h1:2gIqNv+qfxSVS7cM2xJQKtLSTLUE9V8t9Stt+h56mCY=
 github.com/pmezard/go-difflib v1.0.0/go.mod h1:iKH77koFhYxTK1pcRnkKkqfTogsbg7gZNVY4sRDYZ/4=
-github.com/posthog/posthog-go v1.41.0 h1:LE4UFadaLQUc1cGV/EFTXrvrUw4O9N16X5//EzKFALk=
-github.com/posthog/posthog-go v1.41.0/go.mod h1:rN0C9Urenhytgo3KQ/QVorGkyGfpouquDTSs2Ujzr+g=
-github.com/posthog/posthog-go/posthogmcpsdk v1.41.0 h1:KT8Iw9tXWV87bpdA+5iFccockslO/opOqCORgzluLs0=
-github.com/posthog/posthog-go/posthogmcpsdk v1.41.0/go.mod h1:9HOonbmCtLejRY7oU2IGqnuJj8NTDFrX26KpghZIYFU=
+github.com/posthog/posthog-go v1.44.1 h1:0EWi9vEXwW0u6NGtCYArOsPGPLiFuMFLyvTs+7a9X9o=
+github.com/posthog/posthog-go v1.44.1/go.mod h1:rN0C9Urenhytgo3KQ/QVorGkyGfpouquDTSs2Ujzr+g=
+github.com/posthog/posthog-go/posthogmcpsdk v1.44.1 h1:CNtzvk7//28dDzgKB1hTeooU+9d3TbSGKZgWmFK4nu0=
+github.com/posthog/posthog-go/posthogmcpsdk v1.44.1/go.mod h1:PAPvcUT+CYECSMm7Q5B24BVdiC97sqHMewqxMYJu5L8=
 github.com/rogpeppe/go-internal v1.14.1 h1:UQB4HGPB6osV0SQTLymcB4TgvyWu6ZyliaW0tI/otEQ=
 github.com/rogpeppe/go-internal v1.14.1/go.mod h1:MaRKkUm5W0goXpeCfT7UZI6fk/L7L7so1lCWt35ZSgc=
 github.com/russross/blackfriday/v2 v2.1.0/go.mod h1:+Rmxgy9KzJVeS9/2gXHxylqXiyQDYRxCVz55jmeOWTM=

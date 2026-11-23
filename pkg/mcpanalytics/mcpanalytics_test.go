@@ -127,6 +127,10 @@ func connectToInstrumentedServer(t *testing.T, analytics *Analytics) *mcp.Client
 		}) (*mcp.CallToolResult, any, error) {
 			return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: "workspace details"}}}, nil, nil
 		})
+	mcp.AddTool(srv, &mcp.Tool{Name: "get_run"},
+		func(context.Context, *mcp.CallToolRequest, struct{}) (*mcp.CallToolResult, any, error) {
+			return nil, nil, errors.New("workspace acme-secret-prod not found")
+		})
 	analytics.Instrument(srv)
 	serverTransport, clientTransport := mcp.NewInMemoryTransports()
 	_, err := srv.Connect(t.Context(), serverTransport, nil)
@@ -149,7 +153,8 @@ func TestToolCallsReachPostHogWithoutArguments(t *testing.T) {
 
 	listed, err := session.ListTools(t.Context(), nil)
 	require.NoError(t, err)
-	schema, err := json.Marshal(listed.Tools[0].InputSchema)
+	workspaceTool := listed.Tools[slices.IndexFunc(listed.Tools, func(tool *mcp.Tool) bool { return tool.Name == "get_workspace" })]
+	schema, err := json.Marshal(workspaceTool.InputSchema)
 	require.NoError(t, err)
 	var advertised struct {
 		Properties map[string]any `json:"properties"`
@@ -170,6 +175,65 @@ func TestToolCallsReachPostHogWithoutArguments(t *testing.T) {
 	assert.Equal(t, "Checking a workspace before a change", event["$mcp_intent"])
 	assert.NotContains(t, event, "$mcp_parameters")
 	assert.NotContains(t, event, "$mcp_response")
+}
+
+func TestFailedCallsDoNotSendTheErrorText(t *testing.T) {
+	posthogServer := &fakePostHog{}
+	endpoint := httptest.NewServer(posthogServer)
+	defer endpoint.Close()
+	t.Setenv("MCP_POSTHOG_PROJECT_TOKEN", "phc_test")
+	t.Setenv("MCP_POSTHOG_HOST", endpoint.URL)
+
+	analytics := Start(testLogger())
+	session := connectToInstrumentedServer(t, analytics)
+	defer session.Close()
+
+	result, err := session.CallTool(t.Context(), &mcp.CallToolParams{Name: "get_run", Arguments: map[string]any{}})
+	require.NoError(t, err)
+	require.True(t, result.IsError)
+	analytics.Close()
+
+	assert.Equal(t, true, posthogServer.eventProperties(t, "$mcp_tool_call")[0]["$mcp_is_error"])
+	sent, err := json.Marshal(posthogServer.allEvents())
+	require.NoError(t, err)
+	assert.NotContains(t, string(sent), "acme-secret-prod")
+}
+
+func TestEventsCarryTheEnvironment(t *testing.T) {
+	for _, test := range []struct {
+		name        string
+		environment string
+		want        any
+	}{
+		{name: "no environment set"},
+		{name: "an environment", environment: "staging", want: "staging"},
+		{name: "an environment with spaces", environment: " prod ", want: "prod"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			posthogServer := &fakePostHog{}
+			endpoint := httptest.NewServer(posthogServer)
+			defer endpoint.Close()
+			t.Setenv("MCP_POSTHOG_PROJECT_TOKEN", "phc_test")
+			t.Setenv("MCP_POSTHOG_HOST", endpoint.URL)
+			t.Setenv("MCP_POSTHOG_ENVIRONMENT", test.environment)
+
+			analytics := Start(testLogger())
+			analytics.lookupOrgID = func(context.Context, *mcp.CallToolRequest, string) (string, error) {
+				return "", errors.New("not found")
+			}
+			session := connectToInstrumentedServer(t, analytics)
+			defer session.Close()
+
+			_, err := session.CallTool(t.Context(), &mcp.CallToolParams{
+				Name:      "get_workspace",
+				Arguments: map[string]any{"workspace": "prod-network", "terraform_org_name": "acme-typo"},
+			})
+			require.NoError(t, err)
+			analytics.Close()
+
+			assert.Equal(t, test.want, posthogServer.eventProperties(t, "$mcp_tool_call")[0]["environment"])
+		})
+	}
 }
 
 type fakePostHog struct {
@@ -198,6 +262,12 @@ func (f *fakePostHog) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	defer f.mu.Unlock()
 	f.events = append(f.events, batch.Batch...)
 	_, _ = w.Write([]byte(`{"status":1}`))
+}
+
+func (f *fakePostHog) allEvents() []map[string]any {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return slices.Clone(f.events)
 }
 
 func (f *fakePostHog) eventProperties(t *testing.T, name string) []map[string]any {

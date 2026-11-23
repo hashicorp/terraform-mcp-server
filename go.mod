@@ -26,8 +26,8 @@ require (
 
 require (
 	github.com/google/jsonschema-go v0.4.3
-	github.com/posthog/posthog-go v1.41.0
-	github.com/posthog/posthog-go/posthogmcpsdk v1.41.0
+	github.com/posthog/posthog-go v1.44.1
+	github.com/posthog/posthog-go/posthogmcpsdk v1.44.1
 )
 
 require (
