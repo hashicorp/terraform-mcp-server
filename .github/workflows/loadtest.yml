@@ -28,9 +28,6 @@ jobs:
       - name: Build server
         run: go build -o terraform-mcp-server ./cmd/terraform-mcp-server
 
-      - name: Build loadtest
-        run: go build -o loadtest ./cmd/loadtest
-
       - name: Start server
         run: |
           ./terraform-mcp-server http -p 8080 &
@@ -41,4 +38,4 @@ jobs:
         env:
           TFE_TOKEN: ${{ secrets.TFE_TOKEN }}
         run: |
-          ./loadtest -workers=2 -qps=2 -duration=30s http://localhost:8080/mcp
+          make loadtest
