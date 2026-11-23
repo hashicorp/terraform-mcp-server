@@ -31,6 +31,7 @@ automation and interaction capabilities for Infrastructure as Code (IaC) develop
 <a href="#usage-with-opencode">OpenCode</a>
 </td>
 <td width="33%" valign="top">
+<a href="#download-a-binary">Download a binary</a><br>
 <a href="#install-from-source">Install from source</a><br>
 <a href="#building-the-docker-image-locally">Building the Docker Image locally</a><br>
 <a href="#transport-support">Transport Support</a><br>
@@ -570,6 +571,10 @@ More about using and adding MCP servers in OpenCode [user documentation](https:/
 ### Kubernetes (Helm)
 
 A Helm chart for deploying the server on Kubernetes is available under [`helm/terraform-mcp-server`](helm/terraform-mcp-server/README.md).
+
+## Download a binary
+
+Prebuilt binaries for Linux, macOS, Windows, FreeBSD and Solaris are published on [releases.hashicorp.com](https://releases.hashicorp.com/terraform-mcp-server/), along with signed SHA256 checksums. Download the zip for your platform, unzip it, and point your MCP client at the `terraform-mcp-server` binary.
 
 ## Install from source
 

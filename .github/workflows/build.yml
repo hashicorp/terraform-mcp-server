@@ -102,6 +102,7 @@ jobs:
           - {goos: "freebsd", goarch: "amd64"}
           - {goos: "windows", goarch: "386"}
           - {goos: "windows", goarch: "amd64"}
+          - {goos: "windows", goarch: "arm64"}
           - {goos: "solaris", goarch: "amd64"}
 
     name: Go ${{ needs.get-go-version.outputs.go-version }} ${{ matrix.goos }} ${{ matrix.goarch }} build
