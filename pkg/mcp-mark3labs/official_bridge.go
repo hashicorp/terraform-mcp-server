@@ -13,6 +13,7 @@ import (
 	"github.com/hashicorp/terraform-mcp-server/pkg/instructions"
 	mcpofficial "github.com/hashicorp/terraform-mcp-server/pkg/mcp-official"
 	"github.com/hashicorp/terraform-mcp-server/pkg/mcp-official/tools/middleware"
+	"github.com/hashicorp/terraform-mcp-server/pkg/mcpanalytics"
 	"github.com/hashicorp/terraform-mcp-server/pkg/toolsets"
 	"github.com/hashicorp/terraform-mcp-server/version"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -24,7 +25,7 @@ import (
 // TF_X_OFFICIAL_SDK_ENABLED is set. It bridges rate limiting, session
 // cleanup, metrics, and security wrapping to the go-sdk server so it behaves
 // the same as the mark3labs server it sits alongside.
-func getOfficialStreamableServer(ctx context.Context, heartbeatInterval time.Duration, isStateless bool, corsConfig client.CORSConfig, logger *log.Logger, officialLogger *slog.Logger, organizationAllowlist []string, filter toolsets.ToolFilter, rateLimiter *client.RateLimitMiddleware, metricsConfig client.MetricsConfig) http.Handler {
+func getOfficialStreamableServer(ctx context.Context, heartbeatInterval time.Duration, isStateless bool, corsConfig client.CORSConfig, logger *log.Logger, officialLogger *slog.Logger, organizationAllowlist []string, filter toolsets.ToolFilter, rateLimiter *client.RateLimitMiddleware, metricsConfig client.MetricsConfig, analytics *mcpanalytics.Analytics) http.Handler {
 	officialLogger.Info("Creating a go-sdk StreamableHTTP server...")
 
 	// Metrics is added first so it wraps every other middleware, measuring
@@ -46,6 +47,7 @@ func getOfficialStreamableServer(ctx context.Context, heartbeatInterval time.Dur
 		mcpofficial.WithSessionLifecycle(rateLimiter, logger),
 	}
 	hcServer := mcpofficial.NewServer(version.Version, instructions.Text, heartbeatInterval, officialLogger, filter, serverOpts...)
+	analytics.Instrument(hcServer)
 
 	opts := &mcp.StreamableHTTPOptions{
 		Stateless:             isStateless,

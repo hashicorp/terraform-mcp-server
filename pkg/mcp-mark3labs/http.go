@@ -20,6 +20,7 @@ import (
 	"github.com/hashicorp/terraform-mcp-server/pkg/instana"
 	"github.com/hashicorp/terraform-mcp-server/pkg/logging"
 	mcpofficial "github.com/hashicorp/terraform-mcp-server/pkg/mcp-official"
+	"github.com/hashicorp/terraform-mcp-server/pkg/mcpanalytics"
 	"github.com/hashicorp/terraform-mcp-server/pkg/toolsets"
 	"github.com/hashicorp/terraform-mcp-server/version"
 	instanasdk "github.com/instana/go-sensor"
@@ -269,7 +270,9 @@ func streamableHTTPServerInit(ctx context.Context, hcServer *server.MCPServer, l
 		}
 
 		officialLogger = officialLogger.With("component", "mcp-official")
-		officialStreamableServer := getOfficialStreamableServer(ctx, heartbeatInterval, isStateless, corsConfig, logger, officialLogger, organizationAllowlist, filter, rateLimiter, metricsConfig)
+		analytics := mcpanalytics.Start(logger)
+		defer analytics.Close()
+		officialStreamableServer := getOfficialStreamableServer(ctx, heartbeatInterval, isStateless, corsConfig, logger, officialLogger, organizationAllowlist, filter, rateLimiter, metricsConfig, analytics)
 		// Serve the official go-sdk streamable server (with security wrapper) on the MCP endpoint
 		mux.Handle(endpointPath, officialStreamableServer)
 		mux.Handle(endpointPath+"/", officialStreamableServer)

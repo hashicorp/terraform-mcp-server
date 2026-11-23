@@ -134,6 +134,9 @@ automation and interaction capabilities for Infrastructure as Code (IaC) develop
 | `OTEL_METRICS_ENDPOINT` | URL of your OTel Collector or backend | `localhost:4318` |
 | `INSTANA_ENABLED` | Enable Instana instrumentation (metrics and HTTP request tracing) for the streamable-http server. Requires an Instana agent that is reachable by the server. | `false` |
 | `INSTANA_SERVICE_NAME` | If Instana instrumentation is enabled, the service name to use for the MCP server | `terraform-mcp-server` |
+| `MCP_POSTHOG_PROJECT_TOKEN` | PostHog project token (`phc_...`). When set, the server sends [MCP analytics](#mcp-analytics) to that project | `""` (off) |
+| `MCP_POSTHOG_HOST` | PostHog host, such as `https://eu.i.posthog.com` | PostHog's US host |
+| `MCP_POSTHOG_ENVIRONMENT` | Sent as the `environment` property on each event, such as `staging` or `prod`, to tell deployments apart | `""` (not sent) |
 
 ```bash
 # Stdio mode
@@ -635,6 +638,27 @@ Second, the MCP server records custom tool metrics around tool execution using M
 2. mcp_tool_errors_total
 3. mcp_tool_duration_seconds
 
+
+## MCP analytics
+
+The server can send analytics about its tool calls to a [PostHog](https://posthog.com/docs/mcp-analytics) project you own. It is off unless you set `MCP_POSTHOG_PROJECT_TOKEN`, and nothing goes to HashiCorp or PostHog without it.
+
+```bash
+MCP_POSTHOG_PROJECT_TOKEN=phc_your_project_token terraform-mcp-server streamable-http
+```
+
+Each tool call is sent with:
+
+- The tool name, duration, and whether it failed, with the error's type but not its message, since error messages can include customer values such as a workspace or organization name.
+- The MCP client (for example Claude Code or VS Code) and its session. In stateless mode (`MCP_SESSION_MODE=stateless`) every request is its own session, so each call gets its own session ID and the calls of one conversation can't be grouped by session.
+- A short reason for the call. The server adds a `context` argument to each tool, where the agent says why it is calling the tool. The agent is told to leave out personal details, and patterns such as email addresses and phone numbers are redacted. Names and other free text are sent as written.
+- The model making the call, from the client or an added `llm_model` argument.
+- The HCP Terraform organization, for calls that take a `terraform_org_name` argument: its ID as `terraform_org_id` and its lowercased name as `terraform_org_name`. The server reads each organization's ID once and caches it.
+- The deployment's environment as `environment`, when `MCP_POSTHOG_ENVIRONMENT` is set.
+
+Tool handlers never see the added arguments. Tool arguments, results and error messages, and the user's prompt, are never sent.
+
+Analytics cover the official go-sdk server, which is the default. The previous server (`TF_X_OFFICIAL_SDK_ENABLED=false`) sends nothing.
 
 ### Tool Filtering
 

@@ -110,6 +110,18 @@ Metrics are disabled by default, and none of the `OTEL_` environment variables a
 
 The chart sets `OTEL_INSTANCE_ID` from the pod UID so each replica reports a distinct `service.instance.id`. Without it, telemetry from every replica is attributed to a single instance.
 
+### MCP analytics
+
+| Key | Description | Default |
+|-----|-------------|---------|
+| `posthog.projectToken` | PostHog project token (`phc_...`). Analytics are off when it and `posthog.existingSecret` are empty. | `""` |
+| `posthog.existingSecret` | Name of an existing Secret holding the project token, read with `secretKeyRef` so the token stays out of the pod spec. Takes precedence over `posthog.projectToken`. | `""` |
+| `posthog.existingSecretKey` | Key of the token in `posthog.existingSecret`. | `"projectToken"` |
+| `posthog.host` | PostHog host, such as `https://eu.i.posthog.com`. If unset, PostHog's US host is used. | `""` |
+| `posthog.environment` | Sent as the `environment` property on each event, such as `staging` or `prod`, to tell deployments apart. | `""` |
+
+See [MCP analytics](../../README.md#mcp-analytics) for what is sent.
+
 ## Security notes
 
 - **CORS defaults to strict.** With no `allowedOrigins` set, all cross-origin requests are rejected. Set `mcpServer.allowedOrigins` to your client origin(s).

@@ -17,6 +17,7 @@ import (
 	"github.com/hashicorp/terraform-mcp-server/pkg/logging"
 	officialclient "github.com/hashicorp/terraform-mcp-server/pkg/mcp-official/client"
 	"github.com/hashicorp/terraform-mcp-server/pkg/mcp-official/tools/middleware"
+	"github.com/hashicorp/terraform-mcp-server/pkg/mcpanalytics"
 	"github.com/hashicorp/terraform-mcp-server/pkg/toolsets"
 	"github.com/hashicorp/terraform-mcp-server/version"
 	"github.com/modelcontextprotocol/go-sdk/jsonrpc"
@@ -53,6 +54,9 @@ func RunStdioServer(logger *log.Logger, filter toolsets.ToolFilter) error {
 	officialclient.SetFallbackSessionID(stdioSessionID)
 
 	srv := newStdioServer(logger, filter)
+	analytics := mcpanalytics.Start(logger)
+	defer analytics.Close()
+	analytics.Instrument(srv)
 	_, _ = fmt.Fprintf(os.Stderr, "Terraform MCP Server (go-sdk) running on stdio\n")
 
 	// Run blocks until the client disconnects or ctx is cancelled. A client
