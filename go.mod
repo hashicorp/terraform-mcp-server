@@ -9,7 +9,7 @@ require (
 	github.com/hashicorp/go-tfe v1.112.0
 	github.com/hashicorp/jsonapi v1.5.0
 	github.com/instana/go-sensor v1.79.0
-	github.com/mark3labs/mcp-go v1.5.1-0.20261116104810-68b619826416
+	github.com/mark3labs/mcp-go v1.6.0
 	github.com/modelcontextprotocol/go-sdk v1.8.0
 	github.com/sirupsen/logrus v1.10.2
 	github.com/spf13/cobra v1.10.2
