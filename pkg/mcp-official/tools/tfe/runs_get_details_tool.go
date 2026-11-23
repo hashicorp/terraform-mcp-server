@@ -78,6 +78,7 @@ type RunDetails struct {
 	IsDestroy              bool                       `json:"is_destroy"`
 	InvokeActionAddrs      []string                   `json:"invoke_action_addrs"`
 	Message                string                     `json:"message"`
+	MinimalRefresh         bool                       `json:"minimal_refresh"`
 	Permissions            *RunPermissionDetails      `json:"permissions,omitempty"`
 	PolicyPaths            []string                   `json:"policy_paths"`
 	PositionInQueue        int                        `json:"position_in_queue"`
@@ -158,6 +159,7 @@ func runToDetails(run *tfe.Run) RunDetails {
 	details.IsDestroy = run.IsDestroy
 	details.InvokeActionAddrs = append(details.InvokeActionAddrs, run.InvokeActionAddrs...)
 	details.Message = run.Message
+	details.MinimalRefresh = run.MinimalRefresh
 	details.PolicyPaths = append(details.PolicyPaths, run.PolicyPaths...)
 	details.PositionInQueue = run.PositionInQueue
 	details.PlanOnly = run.PlanOnly
@@ -274,6 +276,7 @@ func runDetailsSchema() *jsonschema.Schema {
 		"is_destroy":                {Type: "boolean"},
 		"invoke_action_addrs":       stringArray(),
 		"message":                   {Type: "string"},
+		"minimal_refresh":           {Type: "boolean"},
 		"permissions":               runPermissionDetailsSchema(),
 		"policy_paths":              stringArray(),
 		"position_in_queue":         {Type: "integer"},
@@ -299,14 +302,14 @@ func runDetailsSchema() *jsonschema.Schema {
 
 	required := []string{
 		"id", "auto_apply", "allow_empty_apply", "created_at", "has_changes", "is_destroy",
-		"invoke_action_addrs", "message", "policy_paths", "position_in_queue", "plan_only",
+		"invoke_action_addrs", "message", "minimal_refresh", "policy_paths", "position_in_queue", "plan_only",
 		"refresh", "refresh_only", "replace_addrs", "save_plan", "source", "status",
 		"target_addrs", "terraform_version", "trigger_reason",
 	}
 	order := []string{
 		"id", "actions", "auto_apply", "allow_config_generation", "allow_empty_apply", "canceled_at",
 		"created_at", "force_cancel_available_at", "has_changes", "is_destroy", "invoke_action_addrs",
-		"message", "permissions", "policy_paths", "position_in_queue", "plan_only", "refresh",
+		"message", "minimal_refresh", "permissions", "policy_paths", "position_in_queue", "plan_only", "refresh",
 		"refresh_only", "replace_addrs", "save_plan", "source", "status", "status_timestamps",
 		"target_addrs", "terraform_version", "trigger_reason", "apply_id", "configuration_version_id",
 		"cost_estimate_id", "created_by_id", "confirmed_by_id", "plan_id", "workspace_id",
