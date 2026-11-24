@@ -15,7 +15,8 @@ permissions:
 
 jobs:
   test:
-    name: test (${{ matrix.sdk }})
+    # Stateful jobs keep their old names so required checks still match
+    name: test (${{ matrix.sdk }}${{ matrix.session_mode == 'stateless' && ', stateless' || '' }})
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -27,6 +28,11 @@ jobs:
           - sdk: official
             endpoint: /mcp/official
             official_enabled: "true"
+          # mark3labs is being removed, so only official runs stateless
+          - sdk: official
+            endpoint: /mcp/official
+            official_enabled: "true"
+            session_mode: stateless
 
     steps:
       - name: Check out code
@@ -45,6 +51,7 @@ jobs:
         env:
           ENABLE_TF_OPERATIONS: true
           TF_X_OFFICIAL_SDK_ENABLED: ${{ matrix.official_enabled }}
+          MCP_SESSION_MODE: ${{ matrix.session_mode }}
         run: |
           nohup ./bin/terraform-mcp-server streamable-http --transport-host 0.0.0.0 --transport-port 8080 2>&1 &
 
