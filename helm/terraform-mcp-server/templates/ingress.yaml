@@ -1,3 +1,6 @@
+# Copyright IBM Corp. 2025, 2026
+# SPDX-License-Identifier: MPL-2.0
+
 {{- if .Values.ingress.enabled -}}
 apiVersion: networking.k8s.io/v1
 kind: Ingress
