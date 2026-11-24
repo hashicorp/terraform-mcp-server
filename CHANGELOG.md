@@ -11,6 +11,7 @@ IMPROVEMENTS
 * Bump `github.com/hashicorp/go-tfe` to v1.112.0. On the official SDK server, `get_run_details` now reports whether a run uses minimal refresh in the `minimal_refresh` field.
 * Bump `github.com/mark3labs/mcp-go` to v1.6.0.
 * Bump `actions/setup-go` from v7.0.0 to v7.1.0.
+* On the official server, `tools/list`, `prompts/list`, `resources/list`, `resources/templates/list`, `resources/read` and `server/discover` return the `ttlMs` and `cacheScope` cache hints from MCP protocol 2026-07-28, so clients can cache them for an hour instead of asking again on every connection. Older clients ignore the fields.
 
 FIXES
 
