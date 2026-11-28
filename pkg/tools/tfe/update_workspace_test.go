@@ -4,14 +4,17 @@
 package tools
 
 import (
+	"context"
 	"encoding/json"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/hashicorp/go-tfe"
+	"github.com/mark3labs/mcp-go/mcp"
 	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestUpdateWorkspace(t *testing.T) {
@@ -34,6 +37,27 @@ func TestUpdateWorkspace(t *testing.T) {
 		// Check that required parameters are defined
 		assert.Contains(t, tool.Tool.InputSchema.Required, "terraform_org_name")
 		assert.Contains(t, tool.Tool.InputSchema.Required, "workspace_name")
+	})
+
+	t.Run("tags are rejected instead of ignored", func(t *testing.T) {
+		tool := UpdateWorkspace(logger)
+		assert.NotContains(t, tool.Tool.InputSchema.Properties, "tags")
+		assert.Contains(t, tool.Tool.Description, "create_workspace_tags")
+
+		request := mcp.CallToolRequest{}
+		request.Params.Arguments = map[string]interface{}{
+			"terraform_org_name": "test-org",
+			"workspace_name":     "test-workspace",
+			"description":        "new description",
+			"tags":               "env:prod",
+		}
+
+		result, err := updateWorkspaceHandler(context.Background(), request, logger)
+		require.NoError(t, err)
+		require.True(t, result.IsError)
+		text, ok := result.Content[0].(mcp.TextContent)
+		require.True(t, ok)
+		assert.Contains(t, text.Text, "create_workspace_tags")
 	})
 
 	t.Run("parameter validation", func(t *testing.T) {
