@@ -21,7 +21,7 @@ import (
 func UpdateWorkspace(logger *log.Logger) server.ServerTool {
 	return server.ServerTool{
 		Tool: mcp.NewTool("update_workspace",
-			mcp.WithDescription(`Updates an existing Terraform workspace configuration. This is a potentially destructive operation that may affect infrastructure resources.`),
+			mcp.WithDescription(`Updates an existing Terraform workspace configuration. This is a potentially destructive operation that may affect infrastructure resources. To add or update workspace tags, use create_workspace_tags.`),
 			mcp.WithTitleAnnotation("Update an existing Terraform workspace"),
 			mcp.WithOpenWorldHintAnnotation(true),
 			mcp.WithReadOnlyHintAnnotation(false),
@@ -64,9 +64,6 @@ func UpdateWorkspace(logger *log.Logger) server.ServerTool {
 			mcp.WithString("file_triggers_enabled",
 				mcp.Description("Whether file triggers are enabled: 'true' or 'false'"),
 			),
-			mcp.WithString("tags",
-				mcp.Description("Optional comma-separated list of tags to replace existing tags"),
-			),
 		),
 		Handler: func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			return updateWorkspaceHandler(ctx, request, logger)
@@ -87,6 +84,11 @@ func updateWorkspaceHandler(ctx context.Context, request mcp.CallToolRequest, lo
 	}
 	workspaceName = strings.TrimSpace(workspaceName)
 
+	// Fail before updating anything rather than silently dropping tags.
+	if request.GetString("tags", "") != "" {
+		return ToolErrorf(logger, "update_workspace does not support tags, no changes were made - use create_workspace_tags to add or update workspace tags")
+	}
+
 	newName := request.GetString("new_name", "")
 	description := request.GetString("description", "")
 	terraformVersion := request.GetString("terraform_version", "")
@@ -97,7 +99,6 @@ func updateWorkspaceHandler(ctx context.Context, request mcp.CallToolRequest, lo
 	speculativeEnabledStr := request.GetString("speculative_enabled", "")
 	triggerPrefixesStr := request.GetString("trigger_prefixes", "")
 	fileTriggersEnabledStr := request.GetString("file_triggers_enabled", "")
-	tagsStr := request.GetString("tags", "")
 
 	tfeClient, err := client.GetTfeClientFromContext(ctx, logger)
 	if err != nil {
@@ -158,10 +159,6 @@ func updateWorkspaceHandler(ctx context.Context, request mcp.CallToolRequest, lo
 			}
 			options.TriggerPrefixes = prefixes
 		}
-	}
-
-	if tagsStr != "" {
-		logger.Warnf("Tag updates are not supported via workspace update - tags parameter ignored")
 	}
 
 	workspace, err := tfeClient.Workspaces.Update(ctx, terraformOrgName, workspaceName, *options)
